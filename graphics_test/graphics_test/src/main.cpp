@@ -39,6 +39,8 @@ AppGame::AppGame()
 {
 	// ウィンドウ作成
 	window_.initialize(_T("Test Window"), 1280, 720);
+
+	// TODO. Windowクラスの破棄時にUnregisterClassを呼んでいないのが若干不安なので対応予定.
 }
 AppGame::~AppGame()
 {
