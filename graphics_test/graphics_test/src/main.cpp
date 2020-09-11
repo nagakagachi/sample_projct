@@ -26,9 +26,11 @@ int main()
 {
 	std::cout << "Hello World!" << std::endl;
 
-	ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::create();
-	AppGame app;
-	boot->run(&app);
+	{
+		ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::create();
+		AppGame app;
+		boot->run(&app);
+	}
 
 	return 0;
 }

@@ -50,7 +50,7 @@ namespace ngl
 			{
 				// 破棄時にはセットしておいた自分自身をクリア
 				SetPointer(hwnd_, NULL);
-				CloseWindow(hwnd_);
+				DestroyWindow(hwnd_);
 			}
 		}
 
