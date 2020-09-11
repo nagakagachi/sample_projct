@@ -78,9 +78,11 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Users\nagak\git\github\sample_project\graphics_test\graphics_test\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>C:\Users\nagak\git\github\sample_project\graphics_test\graphics_test\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -140,6 +142,39 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\ngl\boot\win\boot_application.win.cpp" />
+    <ClCompile Include="src\ngl\file\file.cpp" />
+    <ClCompile Include="src\ngl\memory\boundary_tag_block.cpp" />
+    <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
+    <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />
+    <ClCompile Include="src\ngl\platform\win\window.win.cpp" />
+    <ClCompile Include="src\ngl\util\bit_operation.cpp" />
+    <ClCompile Include="src\ngl\util\time\timer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\ngl\boot\boot_application.h" />
+    <ClInclude Include="src\ngl\boot\win\boot_application.win.h" />
+    <ClInclude Include="src\ngl\file\file.h" />
+    <ClInclude Include="src\ngl\memory\boundary_tag_block.h" />
+    <ClInclude Include="src\ngl\memory\tlsf_allocator.h" />
+    <ClInclude Include="src\ngl\memory\tlsf_allocator_core.h" />
+    <ClInclude Include="src\ngl\memory\tlsf_memory_pool.h" />
+    <ClInclude Include="src\ngl\platform\window.h" />
+    <ClInclude Include="src\ngl\platform\win\window.win.h" />
+    <ClInclude Include="src\ngl\text\hashText.h" />
+    <ClInclude Include="src\ngl\util\bit_operation.h" />
+    <ClInclude Include="src\ngl\util\instance_handle.h" />
+    <ClInclude Include="src\ngl\util\lock_free_stack.h" />
+    <ClInclude Include="src\ngl\util\noncopyable.h" />
+    <ClInclude Include="src\ngl\util\shared_count.h" />
+    <ClInclude Include="src\ngl\util\shared_ptr.h" />
+    <ClInclude Include="src\ngl\util\singleton.h" />
+    <ClInclude Include="src\ngl\util\time\timer.h" />
+    <ClInclude Include="src\ngl\util\types.h" />
+    <ClInclude Include="src\ngl\util\unique_ptr.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\ngl\text\hashText.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
