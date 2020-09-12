@@ -161,7 +161,7 @@
     <ClInclude Include="src\ngl\memory\tlsf_memory_pool.h" />
     <ClInclude Include="src\ngl\platform\window.h" />
     <ClInclude Include="src\ngl\platform\win\window.win.h" />
-    <ClInclude Include="src\ngl\text\hashText.h" />
+    <ClInclude Include="src\ngl\text\hash_text.h" />
     <ClInclude Include="src\ngl\util\bit_operation.h" />
     <ClInclude Include="src\ngl\util\instance_handle.h" />
     <ClInclude Include="src\ngl\util\lock_free_stack.h" />
@@ -174,7 +174,7 @@
     <ClInclude Include="src\ngl\util\unique_ptr.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\ngl\text\hashText.inl" />
+    <None Include="src\ngl\text\hash_text.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

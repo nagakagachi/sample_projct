@@ -30,6 +30,7 @@ private:
 int main()
 {
 	std::cout << "Hello World!" << std::endl;
+	ngl::time::Timer::instance().StartTimer("AppGameTime");
 
 	{
 		ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::Create();
@@ -37,6 +38,7 @@ int main()
 		boot->Run(&app);
 	}
 
+	std::cout << "App Time: " << ngl::time::Timer::instance().GetElapsedSec("AppGameTime") << std::endl;
 	return 0;
 }
 
@@ -46,7 +48,6 @@ AppGame::AppGame()
 {
 	// ウィンドウ作成
 	window_.Initialize(_T("Test Window"), 1280, 720);
-	ngl::time::Timer::instance().StartTimer("AppGameTime");
 }
 AppGame::~AppGame()
 {
@@ -58,6 +59,7 @@ bool AppGame::Execute()
 	// ウィンドウが無効になったら終了
 	if (!window_.IsValid())
 	{
+
 		return false;
 	}
 

@@ -7,7 +7,7 @@ namespace ngl
 	namespace text
 	{
 		template< unsigned int SIZE >
-		inline void HashText<SIZE>::reset()
+		inline void HashText<SIZE>::Reset()
 		{
 			memset(text_, 0, SIZE + 1);
 		}
@@ -16,7 +16,7 @@ namespace ngl
 		HashText<SIZE>::HashText()
 			: hash_(0)
 		{
-			reset();
+			Reset();
 		}
 
 		template< unsigned int SIZE >
@@ -27,31 +27,31 @@ namespace ngl
 		template< unsigned int SIZE >
 		HashText<SIZE>::HashText(const char* str)
 		{
-			set(str, getMaxLen());
+			Set(str, GetMaxLen());
 		}
 		template< unsigned int SIZE >
 		HashText<SIZE>::HashText(const HashText<SIZE>& obj)
 		{
-			set(obj.get(), getMaxLen());
+			Set(obj.Get(), GetMaxLen());
 		}
 
 		template< unsigned int SIZE >
 		inline HashText<SIZE>& HashText<SIZE>::operator = (const char* str)
 		{
-			set(str, getMaxLen());
+			Set(str, GetMaxLen());
 			return *this;
 		}
 		template< unsigned int SIZE >
 		inline HashText<SIZE>& HashText<SIZE>::operator = (const HashText<SIZE>& obj)
 		{
-			set(obj.get(), getMaxLen());
+			Set(obj.Get(), GetMaxLen());
 			return *this;
 		}
 
 		template< unsigned int SIZE >
 		inline bool HashText<SIZE>::operator == (const HashText<SIZE>& obj) const
 		{
-			return hash_ != obj.getHash() ? false : 0==strncmp(text_, obj.get(), getMaxLen());
+			return hash_ != obj.GetHash() ? false : 0==strncmp(text_, obj.get(), GetMaxLen());
 		}
 		template< unsigned int SIZE >
 		inline bool HashText<SIZE>::operator == (const char* str) const
@@ -63,7 +63,7 @@ namespace ngl
 		template< unsigned int SIZE >
 		inline bool HashText<SIZE>::operator<(const HashText& rhs) const
 		{
-			return hash_<rhs.getHash();
+			return hash_<rhs.GetHash();
 		}
 		template< unsigned int SIZE >
 		inline bool HashText<SIZE>::operator>(const HashText& rhs) const
@@ -72,32 +72,30 @@ namespace ngl
 		}
 
 		template< unsigned int SIZE >
-		inline void HashText<SIZE>::set(const char* str, unsigned int size)
+		inline void HashText<SIZE>::Set(const char* str, unsigned int size)
 		{
-			unsigned int minLen = size < getMaxLen() ? size : getMaxLen();
-			strncpy_s(text_, getMaxLen() + 1, str, minLen);
-			//strncpy(text_, str, min(size, getMaxLen()) );
+			unsigned int minLen = size < GetMaxLen() ? size : GetMaxLen();
+			strncpy_s(text_, GetMaxLen() + 1, str, minLen);
 			hash_ = 0;
 			unsigned int L = static_cast<unsigned int>(strlen(text_));
 			for (unsigned int i = 0; i < L; ++i)
 			{
-				//hash_ += static_cast<unsigned int>(pow(static_cast<float>(text_[i]), (1+i)%32));
 				hash_ += (i+1) * 37 * text_[i];
 			}
 		}
 		template< unsigned int SIZE >
-		inline const char* HashText<SIZE>::get() const
+		inline const char* HashText<SIZE>::Get() const
 		{
 			return text_;
 		}
 		template< unsigned int SIZE >
-		inline unsigned int HashText<SIZE>::getHash() const
+		inline unsigned int HashText<SIZE>::GetHash() const
 		{
 			return hash_;
 		}
 
 		template< unsigned int SIZE >
-		unsigned int HashText<SIZE>::getMaxLen() const
+		unsigned int HashText<SIZE>::GetMaxLen() const
 		{
 			return SIZE;
 		}

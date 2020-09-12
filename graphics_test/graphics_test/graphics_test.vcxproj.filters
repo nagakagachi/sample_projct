@@ -101,12 +101,12 @@
     <ClInclude Include="src\ngl\platform\win\window.win.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\text\hashText.h">
+    <ClInclude Include="src\ngl\text\hash_text.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\ngl\text\hashText.inl">
+    <None Include="src\ngl\text\hash_text.inl">
       <Filter>ヘッダー ファイル</Filter>
     </None>
   </ItemGroup>

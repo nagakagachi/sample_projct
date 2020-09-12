@@ -24,7 +24,7 @@
 
 #include "ngl/util/types.h"
 #include "ngl/util/singleton.h"
-#include "ngl/text/hashText.h"
+#include "ngl/text/hash_text.h"
 
 namespace ngl
 {

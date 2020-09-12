@@ -35,24 +35,25 @@ namespace ngl
 			bool operator < (const HashText& rhs) const;
 			bool operator > (const HashText& rhs) const;
 
-			void set( const char* str, unsigned int size );
-			const char* get() const;
-			unsigned int getHash() const;
+			void Set( const char* str, unsigned int size );
+			const char* Get() const;
+			unsigned int GetHash() const;
 
-			unsigned int getMaxLen() const;
+			unsigned int GetMaxLen() const;
 			static unsigned int MaxLength() { return SIZE; }
 
 		private:
-			void reset();
+			void Reset();
 
-			unsigned int hash_;
-			char text_[SIZE+1];
+		private:
+			unsigned int hash_		= 0;
+			char text_[SIZE + 1]	= {};
 		};
 
 
 	}
 }
 
-#include "hashText.inl"
+#include "hash_text.inl"
 
 #endif // _NGL_UTIL_HASH_TEXT_

@@ -88,7 +88,7 @@ namespace time
 		QueryPerformanceCounter(&time);
 
 		s64 pc = it->second.time_suspemd_total.QuadPart;
-		pc += 0 <= it->second.time_stop_start_.QuadPart ? time.QuadPart - it->second.time_stop_start_.QuadPart : 0;
+		pc += (0 <= it->second.time_stop_start_.QuadPart) ? time.QuadPart - it->second.time_stop_start_.QuadPart : 0;
 		return pc;
 	}
 }
