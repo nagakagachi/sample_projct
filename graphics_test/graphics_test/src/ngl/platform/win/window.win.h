@@ -22,9 +22,10 @@ namespace ngl
 			CoreWindowImplDep();
 			virtual ~CoreWindowImplDep();
 
-			virtual bool Initialize(const TCHAR* title, int w, int h);
-			virtual void Destroy();
-			virtual bool IsValid() const;
+			virtual bool Initialize(const TCHAR* title, int w, int h) override;
+			virtual void Destroy() override;
+			virtual bool IsValid() const override;
+
 
 			// クライアントサイズからウィンドウのサイズを計算
 			void GetWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh);

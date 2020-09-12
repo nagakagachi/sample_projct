@@ -23,7 +23,7 @@ public:
 	~AppGame();
 
 	// メイン
-	bool Execute();
+	bool Execute() override;
 
 private:
 	ngl::platform::CoreWindow window_;
