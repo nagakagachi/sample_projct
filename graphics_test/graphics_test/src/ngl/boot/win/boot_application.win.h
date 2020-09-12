@@ -14,6 +14,9 @@ namespace ngl
 			BootApplicationDep()
 			{
 			}
+			~BootApplicationDep()
+			{
+			}
 			void Run(ApplicationBase* app) override;
 		};
 

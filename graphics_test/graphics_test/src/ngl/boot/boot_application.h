@@ -39,6 +39,10 @@ namespace ngl
 			{
 			}
 
+			virtual ~BootApplication()
+			{
+			}
+
 			// BootApplicationのプラットフォーム依存派生クラスで実装
 			// app->execute()が偽を返すまで無限ループを実行する
 			// Windowsならこの中でメッセージループを回してメッセージが無いループで app->execute() を呼ぶ
