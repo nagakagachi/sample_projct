@@ -160,6 +160,51 @@ private:
 };
 
 
+class RhiGraphicsCommandQueue
+{
+public:
+	RhiGraphicsCommandQueue()
+	{
+	}
+	~RhiGraphicsCommandQueue()
+	{
+		Finalize();
+	}
+
+	// TODO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味は不明.
+	bool Initialize(RhiDeviceDX12* p_device)
+	{
+		if (!p_device)
+			return false;
+
+		D3D12_COMMAND_QUEUE_DESC desc = {};
+		// Graphics用
+		desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+		desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+		desc.NodeMask = 0;
+		desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+
+		if (FAILED(p_device->GetD3D12Device()->CreateCommandQueue(&desc, IID_PPV_ARGS(&p_command_queue_))))
+		{
+			std::cout << "ERROR: Create Command Queue" << std::endl;
+			return false;
+		}
+
+		return true;
+	}
+
+	void Finalize()
+	{
+		if (p_command_queue_)
+		{
+			p_command_queue_->Release();
+			p_command_queue_ = nullptr;
+		}
+	}
+private:
+	ID3D12CommandQueue* p_command_queue_ = nullptr;
+};
 
 
 
@@ -177,6 +222,7 @@ private:
 	ngl::platform::CoreWindow	window_;
 
 	RhiDeviceDX12			device_;
+	RhiGraphicsCommandQueue	graphics_queue_;
 
 	RhiGraphicsCommandListDX12	gfx_command_list_;
 };
@@ -208,6 +254,9 @@ AppGame::AppGame()
 AppGame::~AppGame()
 {
 	gfx_command_list_.Finalize();
+
+
+	graphics_queue_.Finalize();
 	device_.Finalize();
 }
 
@@ -222,6 +271,12 @@ bool AppGame::Initialize()
 	if (!device_.Initialize(&window_))
 	{
 		std::cout << "ERROR: Device Initialize" << std::endl;
+		return false;
+	}
+
+	if (!graphics_queue_.Initialize(&device_))
+	{
+		std::cout << "ERROR: Command Queue Initialize" << std::endl;
 		return false;
 	}
 
