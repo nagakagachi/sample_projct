@@ -42,11 +42,7 @@ namespace ngl
 		friend Factory;
 
 		InstanceHandle()
-			: handleId_(NUM_INSTANCE)
 		{
-			// とりあえず既定でハンドル取得しておく
-			// 確保しない
-			//Factory::instance().newHandle(*this);
 		}
 
 
@@ -59,14 +55,14 @@ namespace ngl
 		InstanceHandle& operator=(const InstanceHandle& obj)
 		{
 			// 今までのハンドルのカウントを減算して
-			release();
+			Release();
 			
 			// 新しいハンドルをコピーして
-			handleId_ = obj.handleId_;
+			handle_id_ = obj.handle_id_;
 
 
 			// 新しい方でカウント加算
-			Factory::instance().addRef(*this);
+			Factory::Instance().AddRef(*this);
 			return *this;
 		}
 
@@ -75,14 +71,14 @@ namespace ngl
 		{
 			*this = std::move(obj);
 		}
-		InstanceHandle & operator=(InstanceHandle&& obj)
+		InstanceHandle & operator=(InstanceHandle&& obj) noexcept
 		{
 			// 持っていたハンドルは無効にして
-			release();
+			Release();
 			// ハンドルIDだけコピーして
-			handleId_ = obj.handleId_;
+			handle_id_ = obj.handle_id_;
 			// ハンドルを委譲するためobj側のハンドルは直接無効化
-			obj.handleId_ = NUM_INSTANCE;
+			obj.handle_id_ = NUM_INSTANCE;
 			
 			return *this;
 		}
@@ -90,43 +86,43 @@ namespace ngl
 		~InstanceHandle()
 		{
 			// デストラクタで参照カウント減算
-			release();
+			Release();
 		}
 
 		T* operator->()
 		{
-			return Factory::instance().getObject(*this);
+			return Factory::Instance().GetObject(*this);
 		}
 
 		// インスタンス取得
-		T* get()
+		T* Get()
 		{
-			return Factory::instance().getObject(*this);
+			return Factory::Instance().GetObject(*this);
 		}
 
-		bool isValidHandle()
+		bool IsValidHandle()
 		{
-			return Factory::instance().isValidHandle(*this);
+			return Factory::Instance().IsValidHandle(*this);
 		}
 		// 新規ハンドル
-		bool newHandle()
+		bool NewHandle()
 		{
 			// 現在のハンドルを解放して
-			release();
+			Release();
 			// 新規取得
-			Factory::instance().newHandle(*this);
-			return isValidHandle();
+			Factory::Instance().NewHandle(*this);
+			return IsValidHandle();
 		}
 		// ハンドル解放
-		void release()
+		void Release()
 		{
 			// 参照カウント減算して無効なハンドルにする
-			Factory::instance().release(*this);
-			handleId_ = NUM_INSTANCE;
+			Factory::Instance().release(*this);
+			handle_id_ = NUM_INSTANCE;
 		}
 
 	private:
-		u16 handleId_;
+		u16 handle_id_	= NUM_INSTANCE;
 	};
 
 	template<typename T, u16 NUM_INSTANCE>
@@ -138,51 +134,51 @@ namespace ngl
 		InstanceHandleFactory()
 		{
 			for (u32 i = 0; i < NUM_INSTANCE; ++i)
-				refCount_[i] = 0;
+				ref_count_[i] = 0;
 		}
 
-		T* getObject(const HandleType& handle)
+		T* GetObject(const HandleType& handle)
 		{
-			if (isValidHandle(handle))
-				return &instance_[handle.handleId_];
+			if (IsValidHandle(handle))
+				return &instance_[handle.handle_id_];
 			return NULL;
 		}
 
 
-		void newHandle(HandleType& handle)
+		void NewHandle(HandleType& handle)
 		{
-			handle.handleId_ = NUM_INSTANCE;
+			handle.handle_id_ = NUM_INSTANCE;
 			for (u32 i = 0; i < NUM_INSTANCE; ++i)
 			{
-				if (0 == refCount_[i])
+				if (0 == ref_count_[i])
 				{
 					// 参照1で開始
-					refCount_[i] = 1;
-					handle.handleId_ = i;
+					ref_count_[i] = 1;
+					handle.handle_id_ = i;
 					break;
 				}
 			}
 		}
-		bool isValidHandle(const HandleType& handle)
+		bool IsValidHandle(const HandleType& handle)
 		{
-			if (NUM_INSTANCE > handle.handleId_ && 1 <= refCount_[handle.handleId_])
+			if (NUM_INSTANCE > handle.handle_id_ && 1 <= ref_count_[handle.handle_id_])
 				return true;
 			return false;
 		}
 		// 参照カウント加算
-		void addRef(const HandleType& handle)
+		void AddRef(const HandleType& handle)
 		{
-			if (isValidHandle(handle))
+			if (IsValidHandle(handle))
 			{
-				++refCount_[handle.handleId_];
+				++ref_count_[handle.handle_id_];
 			}
 		}
 		// 参照カウント減算
 		void release(const HandleType& handle)
 		{
-			if (isValidHandle(handle))
+			if (IsValidHandle(handle))
 			{
-				if (0 == --refCount_[handle.handleId_])
+				if (0 == --ref_count_[handle.handle_id_])
 				{
 					// 参照がゼロになった
 				}
@@ -190,8 +186,8 @@ namespace ngl
 		}
 
 	private:
-		T	instance_[NUM_INSTANCE];
-		u16	refCount_[NUM_INSTANCE];
+		T	instance_[NUM_INSTANCE]		= {};
+		u16	ref_count_[NUM_INSTANCE]	= {};
 	};
 }
 

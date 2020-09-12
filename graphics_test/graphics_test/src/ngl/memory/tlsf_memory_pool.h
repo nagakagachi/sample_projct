@@ -27,22 +27,22 @@
 		// 内部メモリ確保
 		memPool.Initialize(32 * 1024 * 1024);
 #endif
-		const ngl::u32 ALLOCATE_LOOP = 1000000;
-		ngl::time::Timer::instance().StartTimer("memory_pool_1byte");
+		const ngl::u32 ALLOCATE_LOOP = 1000;
+		ngl::time::Timer::Instance().StartTimer("memory_pool_1byte");
 		for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
 		{
 			ngl::memory::TlsfMemoryPtr<ngl::u8> ptrPool1 = memPool.Allocate<ngl::u8>(1);
 		}
-		std::cout << "memory_pool_1byte Sec   = " << ngl::time::Timer::instance().GetElapsedSec("memory_pool_1byte") << std::endl;
+		std::cout << "memory_pool_1byte Sec   = " << ngl::time::Timer::Instance().GetElapsedSec("memory_pool_1byte") << std::endl;
 
-		ngl::time::Timer::instance().StartTimer("memory_pool_64byte");
+		ngl::time::Timer::Instance().StartTimer("memory_pool_64byte");
 		for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
 		{
 			auto ptrPool0 = memPool.Allocate<float>(1);
 		}
-		std::cout << "memory_pool_64byte Sec   = " << ngl::time::Timer::instance().GetElapsedSec("memory_pool_64byte") << std::endl;
+		std::cout << "memory_pool_64byte Sec   = " << ngl::time::Timer::Instance().GetElapsedSec("memory_pool_64byte") << std::endl;
 
-		ngl::time::Timer::instance().StartTimer("memory_pool_1024byte");
+		ngl::time::Timer::Instance().StartTimer("memory_pool_1024byte");
 		for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
 		{
 			auto ptrPool0 = memPool.Allocate<float[16]>(1);
@@ -52,7 +52,7 @@
 			(*ptrPool0.Get())[1] = 2.2f;
 
 		}
-		std::cout << "memory_pool_1024byte Sec   = " << ngl::time::Timer::instance().GetElapsedSec("memory_pool_1024byte") << std::endl;
+		std::cout << "memory_pool_1024byte Sec   = " << ngl::time::Timer::Instance().GetElapsedSec("memory_pool_1024byte") << std::endl;
 	}
 */
 

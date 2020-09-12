@@ -57,8 +57,6 @@ namespace ngl
 	public:
 
 		SharedPtr()
-			: count_()
-			, ptr_(nullptr)
 		{}
 
 		
@@ -84,19 +82,19 @@ namespace ngl
 		}
 
 		template<typename U, typename DeleterT>
-		void reset(U* ptr, DeleterT deleter)
+		void Reset(U* ptr, DeleterT deleter)
 		{
 			count_ = SharedCount( ptr, deleter );
 			ptr_ = ptr;
 		}
 		template<typename U>
-		void reset(U* ptr)
+		void Reset(U* ptr)
 		{
-			reset( ptr, DefaultDeleterT() );
+			Reset( ptr, DefaultDeleterT() );
 		}
-		void reset()
+		void Reset()
 		{
-			reset(nullptr, DefaultDeleterT());
+			Reset(nullptr, DefaultDeleterT());
 		}
 
 		TypePtr operator->() const
@@ -110,9 +108,9 @@ namespace ngl
 		}
 
 	private:
-		SharedCount count_;
+		SharedCount count_		= {};
 
 		// 外部アクセス用
-		TypePtr			ptr_;
+		TypePtr			ptr_	= nullptr;
 	};
 }

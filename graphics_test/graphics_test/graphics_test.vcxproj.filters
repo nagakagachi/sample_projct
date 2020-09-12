@@ -50,9 +50,6 @@
     <ClInclude Include="src\ngl\util\instance_handle.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\util\lock_free_stack.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="src\ngl\util\noncopyable.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

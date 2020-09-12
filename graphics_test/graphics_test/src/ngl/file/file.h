@@ -18,22 +18,22 @@ namespace ngl
 			FileObject( const char* filePath );
 			~FileObject();
 			// ファイルリード
-			bool readFile(const char* filePath);
+			bool ReadFile(const char* filePath);
 			// 解放
-			void release();
+			void Release();
 
-			u32 getFileSize() const
+			u32 GetFileSize() const
 			{
 				return fileSize_;
 			}
-			const u8* getFileData() const
+			const u8* GetFileData() const
 			{
-				return fileData_.get();
+				return fileData_.Get();
 			}
 
 		private:
-			u32 fileSize_;
-			UniquePtr< u8[] > fileData_;
+			u32 fileSize_				= 0;
+			UniquePtr< u8[] > fileData_ = {};
 		};
 	}
 }

@@ -25,7 +25,7 @@ namespace ngl
 		{
 		}
 		// 参照カウント加算
-		void addRef()
+		void AddRef()
 		{
 			++count_;
 		}
@@ -34,15 +34,15 @@ namespace ngl
 			if (--count_ == 0)
 			{
 				// 管理ポインタの実削除処理
-				dispose();
+				Dispose();
 				// 参照カウンタの削除
 				delete this;
 			}
 		}
 		// 実削除処理
-		virtual void dispose() = 0;
+		virtual void Dispose() = 0;
 
-		virtual void* get() = 0;
+		virtual void* Get() = 0;
 
 	private:
 		s32 count_;
@@ -58,12 +58,12 @@ namespace ngl
 			: ptr_(ptr), deleter_(deleter)
 		{
 		}
-		void dispose()
+		void Dispose() override
 		{
 			// Deleterで削除
 			deleter_(ptr_);
 		}
-		void* get()
+		void* Get() override
 		{
 			return ptr_;
 		}
@@ -100,7 +100,7 @@ namespace ngl
 			: count_(sc.count_)
 		{
 			if (count_)
-				count_->addRef();
+				count_->AddRef();
 		}
 
 		// 既存をデクリメント、ソース側をインクリメント
@@ -109,7 +109,7 @@ namespace ngl
 			if (sc.count_ != count_)
 			{
 				if (sc.count_)
-					sc.count_->addRef();
+					sc.count_->AddRef();
 				if (count_)
 					count_->release();
 				count_ = sc.count_;
@@ -119,10 +119,10 @@ namespace ngl
 
 		// 参照取得
 		template<typename T>
-		T* get() const
+		T* Get() const
 		{
 			if (count_)
-				return static_cast<T*>(count_->get());
+				return static_cast<T*>(count_->Get());
 			else
 				return NULL;
 		}

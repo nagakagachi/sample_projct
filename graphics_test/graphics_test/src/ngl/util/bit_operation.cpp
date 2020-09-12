@@ -77,6 +77,7 @@ namespace ngl
 
 #ifdef NGL_LSB_MODE
 	// 一応こっちの方が速い
+	// https://zariganitosh.hatenablog.jp/entry/20090708/1247093403
 
 	// 最下位ビット計算用テーブル
 	u32* _LeastSignificantBitTable64()

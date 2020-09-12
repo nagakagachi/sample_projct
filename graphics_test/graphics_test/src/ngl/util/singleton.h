@@ -16,7 +16,7 @@ namespace ngl
 	{
 	public:
 		// インスタンス取得
-		static Derived& instance();
+		static Derived& Instance();
 
 	protected:
 		virtual ~Singleton() {}
@@ -26,7 +26,7 @@ namespace ngl
 
 	template< typename Derived >
 	inline
-		Derived& Singleton<Derived>::instance()
+		Derived& Singleton<Derived>::Instance()
 	{
 		// C++11以降では静的変数初期化がスレッドセーフらしいので
 		static Derived instance;

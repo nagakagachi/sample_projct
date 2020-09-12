@@ -26,25 +26,24 @@ namespace ngl
 
 		FileObject::FileObject()
 		{
-			fileSize_ = 0;
 		}
 		FileObject::FileObject(const char* filePath)
 			: FileObject()
 		{
-			readFile(filePath);
+			ReadFile(filePath);
 		}
 		FileObject::~FileObject()
 		{
-			release();
+			Release();
 		}
-		void FileObject::release()
+		void FileObject::Release()
 		{
-			fileData_.reset();
+			fileData_.Reset();
 			fileSize_ = 0;
 		}
-		bool FileObject::readFile(const char* filePath)
+		bool FileObject::ReadFile(const char* filePath)
 		{
-			release();
+			Release();
 			u32 size = calcFileSize(filePath);
 			if (0 >= size)
 				return false;
@@ -54,8 +53,8 @@ namespace ngl
 				return false;
 
 			fileSize_ = size;
-			fileData_.reset(new u8[fileSize_]);
-			ifs.read(reinterpret_cast<char*>(fileData_.get()), fileSize_);
+			fileData_.Reset(new u8[fileSize_]);
+			ifs.read(reinterpret_cast<char*>(fileData_.Get()), fileSize_);
 			return true;
 		}
 	}

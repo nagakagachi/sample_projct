@@ -58,7 +58,6 @@ namespace ngl
 
 		// コンストラクタ
 		UniquePtr()
-			: ptr_(nullptr)
 		{
 		}
 		UniquePtr(TypePtr ptr)
@@ -73,12 +72,12 @@ namespace ngl
 		// デストラクタ
 		~UniquePtr()
 		{
-			reset();
+			Reset();
 		}
 		// moveオペレータ
 		UniquePtr& operator=(UniquePtr&& obj)
 		{
-			reset(obj.get());
+			Reset(obj.get());
 			obj.ptr_ = nullptr;
 			return *this;
 		}
@@ -110,7 +109,7 @@ namespace ngl
 
 	public:
 		// メソッド
-		void reset(TypePtr ptr = nullptr)
+		void Reset(TypePtr ptr = nullptr)
 		{
 			if (nullptr != ptr_)
 			{
@@ -119,21 +118,21 @@ namespace ngl
 			}
 			ptr_ = ptr;
 		}
-		TypePtr get()
+		TypePtr Get()
 		{
 			return ptr_;
 		}
-		TypePtr get() const
+		TypePtr Get() const
 		{
 			return ptr_;
 		}
-		bool isValid() const
+		bool IsValid() const
 		{
 			return nullptr != ptr_;
 		}
 	private:
 		//T* ptr_;
-		TypePtr ptr_;
+		TypePtr ptr_ = nullptr;
 		Deleter deleter_;
 	};
 }

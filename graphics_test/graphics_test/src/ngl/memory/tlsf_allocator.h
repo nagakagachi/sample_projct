@@ -56,7 +56,7 @@ namespace ngl
 				}
 
 				// ハンドルの生成
-				if (!tlsf_core_.newHandle())
+				if (!tlsf_core_.NewHandle())
 				{
 					// アロケータのハンドル生成に失敗
 					return false;
@@ -80,7 +80,7 @@ namespace ngl
 			void Destroy()
 			{
 				tlsf_core_->Destroy();
-				tlsf_core_.release();// ハンドル解放
+				tlsf_core_.Release();// ハンドル解放
 				if (nullptr != pool_memory_)
 				{
 					delete pool_memory_;
@@ -112,7 +112,7 @@ namespace ngl
 				*this = std::move(obj);
 			}
 			// moveオペレータ
-			TlsfAllocator & operator=(TlsfAllocator&& obj)
+			TlsfAllocator & operator=(TlsfAllocator&& obj) noexcept
 			{
 				// 内容をコピーしつつ移動元は無効にしていく
 				pool_size_ = obj.pool_size_;

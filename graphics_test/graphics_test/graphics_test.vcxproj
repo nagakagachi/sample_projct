@@ -164,7 +164,6 @@
     <ClInclude Include="src\ngl\text\hash_text.h" />
     <ClInclude Include="src\ngl\util\bit_operation.h" />
     <ClInclude Include="src\ngl\util\instance_handle.h" />
-    <ClInclude Include="src\ngl\util\lock_free_stack.h" />
     <ClInclude Include="src\ngl\util\noncopyable.h" />
     <ClInclude Include="src\ngl\util\shared_count.h" />
     <ClInclude Include="src\ngl\util\shared_ptr.h" />
