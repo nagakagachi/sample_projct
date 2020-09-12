@@ -8,13 +8,13 @@ namespace ngl
 	namespace boot
 	{
 
-		BootApplication* BootApplication::create()
+		BootApplication* BootApplication::Create()
 		{
 			return new BootApplicationDep();
 		}
 
 
-		void BootApplicationDep::run(ApplicationBase* app)
+		void BootApplicationDep::Run(ApplicationBase* app)
 		{
 			// Windowsメッセージループ
 			MSG msg;
@@ -26,7 +26,7 @@ namespace ngl
 				else
 				{
 					// アプリケーション実行
-					if (!app->execute())
+					if (!app->Execute())
 					{
 						break;
 					}

@@ -22,10 +22,10 @@ namespace ngl
 		public:
 			CoreWindowImpl() {};
 			virtual ~CoreWindowImpl() {};
-			virtual bool initialize(const TCHAR* title, int w, int h) = 0;
-			virtual void destroy() = 0;
+			virtual bool Initialize(const TCHAR* title, int w, int h) = 0;
+			virtual void Destroy() = 0;
 
-			virtual bool isValid() = 0;
+			virtual bool IsValid() const = 0;
 		protected:
 		};
 
@@ -33,37 +33,39 @@ namespace ngl
 		{
 		public:
 			CoreWindow()
-				: windowImpl_(nullptr)
 			{
 			}
 			virtual ~CoreWindow()
 			{
-				destroy();
+				Destroy();
 			}
-
-			bool initialize(const TCHAR* title, int w, int h)
+			// 初期化
+			bool Initialize(const TCHAR* title, int w, int h)
 			{
 				// 生成済みなら失敗
-				if (nullptr != windowImpl_)
+				if (nullptr != window_impl_)
 					return false;
-				// 生成
-				createImplement();
-				// 初期化
-				windowImpl_->initialize(title, w, h);
+				// 実装部生成
+				CreateImplement();
+				// 実装部初期化
+				window_impl_->Initialize(title, w, h);
 				return true;
 			}
-			void destroy()
+			// 破棄
+			void Destroy()
 			{
-				if (nullptr != windowImpl_)
+				if (nullptr != window_impl_)
 				{
 					// 破棄
-					windowImpl_->destroy();
-					delete windowImpl_;
+					window_impl_->Destroy();
+					delete window_impl_;
+					window_impl_ = nullptr;
 				}
 			}
-			bool isValid()
+			// 有効チェック
+			bool IsValid()
 			{
-				if (nullptr != windowImpl_ && windowImpl_->isValid())
+				if (nullptr != window_impl_ && window_impl_->IsValid())
 				{
 					return true;
 				}
@@ -71,28 +73,30 @@ namespace ngl
 			}
 
 			// 実装部取得
-			CoreWindowImpl* impl()
+			CoreWindowImpl* Impl()
 			{
-				return windowImpl_;
+				return window_impl_;
 			}
 			// 実装依存部取得
-			CoreWindowImplDep& dep()
+			CoreWindowImplDep& Dep()
 			{
-				return *(CoreWindowImplDep*)(windowImpl_);
+				return *(CoreWindowImplDep*)(window_impl_);
 			}
 
 		protected:
+			// 実装部生成
+			//	環境毎の実装コード側で実装する.
+			bool CreateImplement();
 
-			bool createImplement();
-
+			// 実装部生成ヘルパー
 			template<typename T>
-			bool createImplementT()
+			bool CreateImplementT()
 			{
-				windowImpl_ = new T();
+				window_impl_ = new T();
 				return true;
 			}
-
-			CoreWindowImpl*  windowImpl_;
+			// 実装部
+			CoreWindowImpl* window_impl_ = nullptr;
 		};
 	}
 }

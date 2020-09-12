@@ -21,23 +21,24 @@ namespace ngl
 		public:
 			CoreWindowImplDep();
 			virtual ~CoreWindowImplDep();
-			virtual bool initialize(const TCHAR* title, int w, int h);
-			virtual void destroy();
 
-			virtual bool isValid();
+			virtual bool Initialize(const TCHAR* title, int w, int h);
+			virtual void Destroy();
+			virtual bool IsValid() const;
 
-			HWND getWindowHandle()
+			// クライアントサイズからウィンドウのサイズを計算
+			void GetWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh);
+
+			// ウィンドウサイズ(実際はクライアントサイズ)を設定
+			void SetWindowSize(unsigned int w, unsigned int h);
+
+			// 有効なWindowか.
+			bool IsValidWindow() const;
+
+			HWND GetWindowHandle() const
 			{
 				return hwnd_;
 			}
-
-			// クライアントサイズからウィンドウのサイズを計算
-			void getWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh);
-			// ウィンドウサイズ(実際はクライアントサイズ)を設定
-			void setWindowSize(unsigned int w, unsigned int h);
-			// 有効か?
-			bool isValidWindow();
-
 
 			// ウィンドウプロシージャの呼び出し
 			static LRESULT CALLBACK CallProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -47,9 +48,11 @@ namespace ngl
 			// ポインタの設定
 			void SetPointer(HWND hWnd, CoreWindowImplDep* ptr);
 
-			HWND hwnd_ = {};
-			unsigned int screenWidth_ = {};
-			unsigned int screenHeight_ = {};
+			WNDCLASSEX		wcex_ = {};
+			HWND			hwnd_ = {};
+			bool			is_valid_window_ = false;
+			unsigned int	screen_w_ = {};
+			unsigned int	screen_h_ = {};
 		};
 
 	}

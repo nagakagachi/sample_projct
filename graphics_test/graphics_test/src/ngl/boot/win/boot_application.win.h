@@ -14,7 +14,7 @@ namespace ngl
 			BootApplicationDep()
 			{
 			}
-			void run(ApplicationBase* app);
+			void Run(ApplicationBase* app);
 		};
 
 	}

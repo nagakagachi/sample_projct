@@ -12,9 +12,9 @@ namespace ngl
 			このクラスを継承して execute() で任意のゲームループを実装する
 			BootApplication実体の run() に引数として渡すことでプラットフォーム毎のメインループでコールされる
 			
-			ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::create();
+			ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::Create();
 			AppGame app;
-			boot->run(&app);
+			boot->Run(&app);
 		*/
 		class ApplicationBase
 		{
@@ -23,7 +23,7 @@ namespace ngl
 
 			// アプリケーションのフレーム処理の実行
 			// false で終了
-			virtual bool execute() = 0;
+			virtual bool Execute() = 0;
 		};
 
 
@@ -33,7 +33,7 @@ namespace ngl
 		{
 		public:
 			// プラットフォーム依存派生クラス生成
-			static class BootApplication* create();
+			static class BootApplication* Create();
 		public:
 			BootApplication()
 			{
@@ -42,7 +42,7 @@ namespace ngl
 			// BootApplicationのプラットフォーム依存派生クラスで実装
 			// app->execute()が偽を返すまで無限ループを実行する
 			// Windowsならこの中でメッセージループを回してメッセージが無いループで app->execute() を呼ぶ
-			virtual void run(ApplicationBase* app) = 0;
+			virtual void Run(ApplicationBase* app) = 0;
 
 		protected:
 		};

@@ -7,9 +7,9 @@ namespace ngl
 	namespace platform
 	{
 		// 生成部を実装
-		bool CoreWindow::createImplement()
+		bool CoreWindow::CreateImplement()
 		{
-			return createImplementT<CoreWindowImplDep>();
+			return CreateImplementT<CoreWindowImplDep>();
 		}
 
 
@@ -18,19 +18,34 @@ namespace ngl
 		}
 		CoreWindowImplDep::~CoreWindowImplDep()
 		{
-			destroy();
+			Destroy();
 		}
 
 		// ウィンドウ生成
-		bool CoreWindowImplDep::initialize(const TCHAR* title, int w, int h)
+		bool CoreWindowImplDep::Initialize(const TCHAR* title, int w, int h)
 		{
 			// 初期化済みなら帰る
-			if (isValidWindow())
+			if (IsValidWindow())
 				return false;
 
-			WNDCLASSEX wcex = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, CoreWindowImplDep::CallProc, 0, 0, 0, NULL, NULL,
-				(HBRUSH)(COLOR_WINDOW + 1), NULL, (_TCHAR*)title, NULL };
-			if (!RegisterClassEx(&wcex)) {
+			HINSTANCE hinstance = GetModuleHandle(nullptr);
+
+			wcex_ = {};
+			wcex_.cbSize		= sizeof(WNDCLASSEX);
+			wcex_.style			= CS_HREDRAW | CS_VREDRAW;
+			wcex_.lpfnWndProc	= CoreWindowImplDep::CallProc;
+			wcex_.cbClsExtra	= 0;
+			wcex_.cbWndExtra	= 0;
+			wcex_.hInstance		= hinstance;
+			wcex_.hIcon			= nullptr;
+			wcex_.hCursor		= nullptr;
+			wcex_.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+			wcex_.lpszMenuName	= nullptr;
+			wcex_.lpszClassName = (_TCHAR*)title;
+			wcex_.hIconSm		= nullptr;
+
+
+			if (!RegisterClassEx(&wcex_)) {
 				return false;
 			}
 
@@ -40,40 +55,49 @@ namespace ngl
 				return false;
 			}
 
-			setWindowSize(w, h);
+			// 有効化
+			is_valid_window_ = true;
+
+			SetWindowSize(w, h);
 			ShowWindow(hwnd_, SW_SHOW);
 			return true;
 		}
-		void CoreWindowImplDep::destroy()
+		void CoreWindowImplDep::Destroy()
 		{
-			if (isValidWindow())
+			if (IsValidWindow())
 			{
+				is_valid_window_ = false;
 				// 破棄時にはセットしておいた自分自身をクリア
 				SetPointer(hwnd_, NULL);
 				DestroyWindow(hwnd_);
+				UnregisterClassW(wcex_.lpszClassName, wcex_.hInstance);
 			}
+
+			wcex_ = {};
+			hwnd_ = {};
 		}
 
 		// 有効か？
-		bool CoreWindowImplDep::isValid()
+		bool CoreWindowImplDep::IsValid() const
 		{
-			return isValidWindow();
+			return IsValidWindow();
 		}
 
-		bool CoreWindowImplDep::isValidWindow()
+		bool CoreWindowImplDep::IsValidWindow() const
 		{
-			return TRUE == IsWindowEnabled(hwnd_);
+			//return TRUE == IsWindowEnabled(hwnd_);
+			return is_valid_window_;
 		}
-		void CoreWindowImplDep::setWindowSize(unsigned int w, unsigned int h)
+		void CoreWindowImplDep::SetWindowSize(unsigned int w, unsigned int h)
 		{
-			screenWidth_ = w;
-			screenHeight_ = h;
+			screen_w_ = w;
+			screen_h_ = h;
 			unsigned int ww, wh;
-			getWindowSizeFromClientSize(screenWidth_, screenHeight_, ww, wh);
+			GetWindowSizeFromClientSize(screen_w_, screen_h_, ww, wh);
 			::SetWindowPos(hwnd_, NULL, 0, 0, ww, wh, SWP_NOMOVE | SWP_NOZORDER);
 		}
 
-		void CoreWindowImplDep::getWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh)
+		void CoreWindowImplDep::GetWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh)
 		{
 			RECT rw, rc;
 			GetWindowRect(hwnd_, &rw);
@@ -142,6 +166,9 @@ namespace ngl
 			case WM_DESTROY:
 			{
 				PostQuitMessage(0);
+
+				// フラグのリセットなどのために破棄処理呼び出し.
+				Destroy();
 			}
 			return 0;
 

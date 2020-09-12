@@ -4,6 +4,8 @@
 #include "ngl/util/unique_ptr.h"
 #include "ngl/platform/window.h"
 
+#include "ngl/util/time/timer.h"
+
 
 // アプリ本体.
 class AppGame : public ngl::boot::ApplicationBase
@@ -13,7 +15,7 @@ public:
 	~AppGame();
 
 	// メイン
-	bool execute();
+	bool Execute();
 
 private:
 	ngl::platform::CoreWindow window_;
@@ -27,9 +29,9 @@ int main()
 	std::cout << "Hello World!" << std::endl;
 
 	{
-		ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::create();
+		ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::Create();
 		AppGame app;
-		boot->run(&app);
+		boot->Run(&app);
 	}
 
 	return 0;
@@ -40,19 +42,19 @@ int main()
 AppGame::AppGame()
 {
 	// ウィンドウ作成
-	window_.initialize(_T("Test Window"), 1280, 720);
+	window_.Initialize(_T("Test Window"), 1280, 720);
 
-	// TODO. Windowクラスの破棄時にUnregisterClassを呼んでいないのが若干不安なので対応予定.
+	ngl::time::Timer::instance().startTimer("AppGameTime");
 }
 AppGame::~AppGame()
 {
 }
 
 // メインループから呼ばれる
-bool AppGame::execute()
+bool AppGame::Execute()
 {
 	// ウィンドウが無効になったら終了
-	if (!window_.isValid())
+	if (!window_.IsValid())
 	{
 		return false;
 	}
