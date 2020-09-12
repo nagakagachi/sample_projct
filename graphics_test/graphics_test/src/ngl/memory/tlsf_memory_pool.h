@@ -9,62 +9,51 @@
 
 	// tlslメモリプールテスト
 	{
-	#define TLSF_POOL_HEAP_MEM___
+#define TLSF_POOL_HEAP_MEM___
 
-	ngl::memory::TlsfMemoryPool memPool;
+		ngl::memory::TlsfMemoryPool memPool;
 
-	#ifdef TLSF_POOL_HEAP_MEM
-	// 外部メモリ確保
-	const ngl::u32 bSize = 32 * 1024 * 1024;
-	struct MemHolder
-	{
-	ngl::u8 data_[bSize];
-	};
-	ngl::SharedPtr<MemHolder> heapMem(new MemHolder());
+#ifdef TLSF_POOL_HEAP_MEM
+		// 外部メモリ確保
+		const ngl::u32 bSize = 32 * 1024 * 1024;
+		struct MemHolder
+		{
+			ngl::u8 data_[bSize];
+		};
+		ngl::SharedPtr<MemHolder> heapMem(new MemHolder());
 
-	memPool.initialize(heapMem.get(), bSize);
-	#else
-	// 内部メモリ確保
-	memPool.initialize( 32 * 1024 * 1024 );
-	#endif
-	const ngl::u32 ALLOCATE_LOOP = 1000000;
-	ngl::time::Timer::instance().startTimer("memory_pool_1byte");
-	for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
-	{
-	ngl::memory::TlsfMemoryPtr<ngl::u8> ptrPool1 = memPool.allocate<ngl::u8>(1);
+		memPool.initialize(heapMem.get(), bSize);
+#else
+		// 内部メモリ確保
+		memPool.Initialize(32 * 1024 * 1024);
+#endif
+		const ngl::u32 ALLOCATE_LOOP = 1000000;
+		ngl::time::Timer::instance().StartTimer("memory_pool_1byte");
+		for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
+		{
+			ngl::memory::TlsfMemoryPtr<ngl::u8> ptrPool1 = memPool.Allocate<ngl::u8>(1);
+		}
+		std::cout << "memory_pool_1byte Sec   = " << ngl::time::Timer::instance().GetElapsedSec("memory_pool_1byte") << std::endl;
+
+		ngl::time::Timer::instance().StartTimer("memory_pool_64byte");
+		for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
+		{
+			auto ptrPool0 = memPool.Allocate<float>(1);
+		}
+		std::cout << "memory_pool_64byte Sec   = " << ngl::time::Timer::instance().GetElapsedSec("memory_pool_64byte") << std::endl;
+
+		ngl::time::Timer::instance().StartTimer("memory_pool_1024byte");
+		for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
+		{
+			auto ptrPool0 = memPool.Allocate<float[16]>(1);
+
+			(*ptrPool0.Get())[0] = 1.1f;
+
+			(*ptrPool0.Get())[1] = 2.2f;
+
+		}
+		std::cout << "memory_pool_1024byte Sec   = " << ngl::time::Timer::instance().GetElapsedSec("memory_pool_1024byte") << std::endl;
 	}
-	std::cout << "memory_pool_1byte Sec   = " << ngl::time::Timer::instance().getElapsedSec("memory_pool_1byte") << std::endl;
-
-	ngl::time::Timer::instance().startTimer("memory_pool_64byte");
-	for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
-	{
-	ngl::memory::TlsfMemoryPtr<ngl::math::Mtx44> ptrPool0 = memPool.allocate<ngl::math::Mtx44>(1);
-	}
-	std::cout << "memory_pool_64byte Sec   = " << ngl::time::Timer::instance().getElapsedSec("memory_pool_64byte") << std::endl;
-
-	ngl::time::Timer::instance().startTimer("memory_pool_1024byte");
-	for (ngl::u32 i = 0; i < ALLOCATE_LOOP; ++i)
-	{
-	ngl::memory::TlsfMemoryPtr<ngl::math::Mtx44[16]> ptrPool0 = memPool.allocate<ngl::math::Mtx44[16]>(1);
-	}
-	std::cout << "memory_pool_1024byte Sec   = " << ngl::time::Timer::instance().getElapsedSec("memory_pool_1024byte") << std::endl;
-
-	ngl::memory::TlsfMemoryPtr<NoDefalutConstructorClass> ptrPool00;
-
-	ngl::memory::TlsfMemoryPtr<NoDefalutConstructorClass> intPoolPtr0 = memPool.allocate<NoDefalutConstructorClass>();
-	intPoolPtr0->x_ = 11;
-
-	ngl::memory::TlsfMemoryPtr<NoDefalutConstructorClass> intPoolPtr1 = memPool.allocate<NoDefalutConstructorClass>();
-	intPoolPtr1->x_ = 22;
-
-	ptrPool00 = intPoolPtr0;
-
-	// intPoolPtr0 が格納していたメモリは解放されて新しく確保されたメモリを管理する
-	intPoolPtr0 = memPool.allocate<NoDefalutConstructorClass>();
-	intPoolPtr0->x_ = 33;
-	}
-
-	
 */
 
 #include "ngl/util/types.h"
@@ -83,7 +72,6 @@ namespace ngl
 		{
 		public:
 			TlsfMemoryPtrRefCountCoreBase()
-				: count_(1)
 			{
 			}
 			// 継承先でオーバーライド
@@ -91,16 +79,16 @@ namespace ngl
 			{
 			}
 			// 参照カウント加算
-			void addRef()
+			void AddRef()
 			{
 				++count_;
 			}
-			bool release()
+			bool Release()
 			{
 				if (--count_ == 0)
 				{
 					// 管理ポインタの実削除処理
-					dispose();
+					Dispose();
 
 					// 参照カウンタの削除
 					//	delete this;
@@ -110,13 +98,13 @@ namespace ngl
 				return false;
 			}
 			// 実削除処理
-			virtual void dispose() = 0;
+			virtual void Dispose() = 0;
 
-			virtual void* get() const = 0;
-			virtual u32 size() const = 0;
+			virtual void* Get() const = 0;
+			virtual u32 Size() const = 0;
 
 		private:
-			s32 count_;
+			s32 count_	= 1;
 		};
 
 		//--------------------------------------------------------------------------
@@ -130,23 +118,23 @@ namespace ngl
 				: ptr_(ptr), size_(size), deleter_(deleter)
 			{
 			}
-			void dispose()
+			void Dispose() override
 			{
 				// Deleterで削除
 				deleter_(ptr_);
 			}
-			void* get() const
+			void* Get() const override
 			{
 				return ptr_;
 			}
-			u32 size() const
+			u32 Size() const override
 			{
 				return size_;
 			}
 		private:
-			T* ptr_;
-			u32 size_;
-			DeleterT deleter_;
+			T* ptr_				= nullptr;
+			u32 size_			= 0;
+			DeleterT deleter_	= {};
 		};
 
 		//--------------------------------------------------------------------------
@@ -156,8 +144,6 @@ namespace ngl
 		public:
 			
 			TlsfMemoryPtrRefCount()
-				: count_(NULL)
-				, allocator_(NULL)
 			{
 			}
 			
@@ -165,8 +151,6 @@ namespace ngl
 			template<typename T, typename DeleterT>
 			TlsfMemoryPtrRefCount(T* ptr, u32 size, DeleterT deleter, TlsfAllocatorCore* allocator)
 			{
-				//count_ = new TlsfMemoryPtrRefCountImpl<T, DeleterT>(ptr, size, deleter);
-
 				// アロケート
 				allocator_ = allocator;
 				void* mem = allocator_->Allocate(sizeof(TlsfMemoryPtrRefCountImpl<T, DeleterT>));
@@ -176,7 +160,7 @@ namespace ngl
 			~TlsfMemoryPtrRefCount()
 			{
 				// カウンタ減算して0なら解放
-				releaseCount();
+				ReleaseCount();
 			}
 
 			// 参照加算
@@ -185,16 +169,16 @@ namespace ngl
 				, allocator_(sc.allocator_)
 			{
 				if (count_)
-					count_->addRef();
+					count_->AddRef();
 			}
 
-			void releaseCount()
+			void ReleaseCount()
 			{
 				if (count_)
 				{
 					// カウンタデクリメント
 					// デクリメントした結果が 0 なら真が返るので解放する
-					if (count_->release())
+					if (count_->Release())
 					{
 						// デアロケート
 						allocator_->Deallocate(count_);
@@ -209,10 +193,10 @@ namespace ngl
 				if (sc.count_ != count_)
 				{
 					if (sc.count_)
-						sc.count_->addRef();
+						sc.count_->AddRef();
 
 					// カウンタ減算して0なら解放
-					releaseCount();
+					ReleaseCount();
 
 					count_ = sc.count_;
 					allocator_ = sc.allocator_;
@@ -221,26 +205,26 @@ namespace ngl
 			}
 			// 参照取得
 			template<typename T>
-			T* get() const
+			T* Get() const
 			{
 				if (count_)
-					return static_cast<T*>(count_->get());
+					return static_cast<T*>(count_->Get());
 				else
 					return NULL;
 			}
-			u32 size() const
+			u32 Size() const
 			{
 				if (count_)
-					return count_->size();
+					return count_->Size();
 				else
 					return 0;
 			}
 		private:
 			// カウンタ実部
-			TlsfMemoryPtrRefCountCoreBase* count_;
+			TlsfMemoryPtrRefCountCoreBase* count_	= nullptr;
 
 			// カウンタのメモリ確保解放用
-			TlsfAllocatorCore*				allocator_;
+			TlsfAllocatorCore* allocator_			= nullptr;
 		};
 
 		//--------------------------------------------------------------------------
@@ -257,7 +241,7 @@ namespace ngl
 			void operator()(void* ptr);
 		private:
 			// メモリを確保したプールへのポインタ
-			TlsfMemoryPool* pool_;
+			TlsfMemoryPool* pool_	= nullptr;
 		};
 
 
@@ -295,8 +279,6 @@ namespace ngl
 
 		public:
 			TlsfMemoryPtr()
-				: count_()
-				, ptr_(NULL)
 			{}
 
 			// コピーコンストラクタ
@@ -308,26 +290,47 @@ namespace ngl
 			}
 
 			// アクセサ
-			u32 size() const
+			u32 Size() const
 			{
 				return count_.size();
 			}
+
 			reference operator*() const
 			{
 				return *ptr_;
 			}
+			reference operator*()
+			{
+				return *ptr_;
+			}
+
 			T* operator->() const
 			{
 				return ptr_;
 			}
-			T* get() const
+			T* operator->()
 			{
 				return ptr_;
 			}
+
+			T* Get() const
+			{
+				return ptr_;
+			}
+			T* Get()
+			{
+				return ptr_;
+			}
+
 			T& operator[](u32 i) const
 			{
 				return ptr_[i];
 			}
+			T& operator[](u32 i)
+			{
+				return ptr_[i];
+			}
+
 		private:
 
 			// 構築
@@ -341,8 +344,8 @@ namespace ngl
 			}
 
 		private:
-			TlsfMemoryPtrRefCount	count_;
-			T*						ptr_;	// 外部からのアクセス用　count_も同様に保持しており、そちらが参照0で解放に使われる
+			TlsfMemoryPtrRefCount	count_	= {};
+			T*						ptr_	= nullptr;	// 外部からのアクセス用　count_も同様に保持しており、そちらが参照0で解放に使われる
 		};
 
 
@@ -365,26 +368,30 @@ namespace ngl
 
 			// 外部から管理メモリを渡す
 			// 解放責任は外
-			bool initialize(void* manageMemory, u32 size);
+			bool Initialize(void* manageMemory, u32 size);
 			// 内部で管理用メモリ確保
 			// 解放責任は内部
-			bool initialize(u32 size);
+			bool Initialize(u32 size);
 
 			//
-			void destroy();
+			void Destroy();
 
 			template<typename T>
-			TlsfMemoryPtr<T> allocate(u32 size = 1);
+			TlsfMemoryPtr<T> Allocate(u32 size = 1);
+
+			// メモリリークのチェック
+			// 標準出力にリーク情報を出力する
+			void LeakReport();
 
 		private:
-			void deallocate(void* ptr);
+			void Deallocate(void* ptr);
 
 		private:
-			TlsfAllocatorCore	allocator_;
+			TlsfAllocatorCore	allocator_				= {};
 			// アロケータ管理メモリが外部確保か?
 			// 外部確保の場合はdestroy()内部で解放しない
-			bool				isOuterManageMemory_;
-			void*				manageMemory_;
+			bool				is_outer_manage_memory_	= false;
+			void*				manage_memory_			= nullptr;
 		};
 
 		// 実装
@@ -394,7 +401,7 @@ namespace ngl
 		//
 		//	ngl::memory::TlsfMemoryPtr<ngl::math::Mtx44> ptrPool0 = memPool.allocate<ngl::math::Mtx44>(1);
 		//
-		inline TlsfMemoryPtr<T> TlsfMemoryPool::allocate(u32 size)
+		inline TlsfMemoryPtr<T> TlsfMemoryPool::Allocate(u32 size)
 		{
 			void* mem = allocator_.Allocate(sizeof(T) * size);
 			TlsfMemoryPtr<T> ptr(reinterpret_cast<T*>( mem ), size, TlsfMemoryDeleter(this), &allocator_);
@@ -402,13 +409,12 @@ namespace ngl
 			return ptr;
 		}
 
-
 		//--------------------------------------------------------------------------
 		// デリータ実装
 		// 確保したアロケータで解放する
 		inline void TlsfMemoryDeleter::operator()(void* ptr)
 		{
-			pool_->deallocate(ptr);
+			pool_->Deallocate(ptr);
 		}
 	}
 }

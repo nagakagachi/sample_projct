@@ -4,7 +4,10 @@
 #include "ngl/util/unique_ptr.h"
 #include "ngl/platform/window.h"
 
+
 #include "ngl/util/time/timer.h"
+
+#include "ngl/memory/tlsf_memory_pool.h"
 
 
 // アプリ本体.
@@ -43,7 +46,6 @@ AppGame::AppGame()
 {
 	// ウィンドウ作成
 	window_.Initialize(_T("Test Window"), 1280, 720);
-
 	ngl::time::Timer::instance().StartTimer("AppGameTime");
 }
 AppGame::~AppGame()
