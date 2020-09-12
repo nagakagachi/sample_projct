@@ -39,22 +39,22 @@ namespace ngl
 			~Timer();
 
 			// タイマー開始
-			void	startTimer(const char* str = "default");
+			void	StartTimer(const char* str = "default");
 			// 経過時間[秒]取得
-			double	getElapsedSec(const char* str = "default");
+			double	GetElapsedSec(const char* str = "default");
 			// タイマー削除
-			void	removeTimer(const char* str);
+			void	RemoveTimer(const char* str);
 			// 経過時間をパフォーマンスカウンタのまま取得
-			ngl::s64 getPerformanceCounter(const char* str = "default");
+			ngl::s64 GetPerformanceCounter(const char* str = "default");
 
 			// タイマーを一時停止
-			void	suspendTimer(const char* str = "default");
+			void	SuspendTimer(const char* str = "default");
 			// タイマーを再開
-			void	resumeTimer(const char* str = "default");
+			void	ResumeTimer(const char* str = "default");
 
 
 			// 経過時間をパフォーマンスカウンタのまま取得
-			ngl::s64 getSuspendTotalPerformanceCounter(const char* str = "default");
+			ngl::s64 GetSuspendTotalPerformanceCounter(const char* str = "default");
 
 		private:
 			struct TimerEntity
@@ -62,30 +62,30 @@ namespace ngl
 				struct TimerConstruct
 				{
 					TimerConstruct() {
-						static LARGE_INTEGER freq;
+						static LARGE_INTEGER freq = {};
 						QueryPerformanceFrequency(&freq);
-						friqInv_ = 1.0 / (double)(freq.QuadPart);
+						friq_inv_ = 1.0 / (double)(freq.QuadPart);
 					}
-					double			friqInv_;
+					double			friq_inv_;
 				};
-				static double getFriqInv() {
+				static double GetFriqInv() {
 					static TimerConstruct c;
-					return c.friqInv_;
+					return c.friq_inv_;
 				}
-				TimerEntity() : time_begin_(), time_end_()
-					//, time_stop_start_()
+				TimerEntity()
 				{
 				}
 
-				LARGE_INTEGER time_begin_;
-				LARGE_INTEGER time_end_;
-
-				LARGE_INTEGER time_stop_start_;// 一時停止開始の時間
-				LARGE_INTEGER time_suspemd_total;// 一時停止の総時間 時間の取得時にこの時間を引いたものを返すように
+				LARGE_INTEGER time_begin_ = {};
+				LARGE_INTEGER time_end_ = {};
+				// 一時停止開始の時間
+				LARGE_INTEGER time_stop_start_ = {};
+				// 一時停止の総時間 時間の取得時にこの時間を引いたものを返すように
+				LARGE_INTEGER time_suspemd_total = {};
 			};
 
 			//std::map<std::string, TimerEntity> timers_;
-			std::map<TimerName, TimerEntity> timers_;
+			std::map<TimerName, TimerEntity> timers_ = {};
 		};
 	}
 }

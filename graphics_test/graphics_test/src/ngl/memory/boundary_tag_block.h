@@ -33,15 +33,6 @@ namespace ngl
 		u32 GetDataSize() const;
 
 
-		/*
-		// メモリ管理用に付加するデータのサイズ　データ部のサイズ以外に必要な部分のサイズ
-		// 先頭と末尾のタグサイズの合計
-		static u32 GetAppendInfoDataSize();
-		// メモリ管理用の先頭タグサイズ
-		static u32 GetHeadTagSize();
-		// メモリ管理用の末端タグサイズ
-		static u32 GetTailTagSize();
-		*/
 		// メモリ管理用に付加するデータのサイズ　データ部のサイズ以外に必要な部分のサイズ
 		// 先頭と末尾のタグサイズの合計
 		static inline u32 GetAppendInfoDataSize()
@@ -60,53 +51,33 @@ namespace ngl
 			return sizeof(u32);
 		}
 
-
-
-
 		void SetIsUsed( bool f );
 		bool IsUsed() const;
 
 		// 渡されたオブジェクトを自身の後ろに追加する
-		BoundaryTagBlock* InsertNext(BoundaryTagBlock* newObject);
+		BoundaryTagBlock* InsertNext(BoundaryTagBlock* new_object);
 		// 渡されたオブジェクトを自身の前に追加する
-		BoundaryTagBlock* InsertPrev(BoundaryTagBlock* newObject);
+		BoundaryTagBlock* InsertPrev(BoundaryTagBlock* new_object);
 		// リストから離脱
 		BoundaryTagBlock* Remove();
 
 		BoundaryTagBlock* GetNext() const;
 		BoundaryTagBlock* GetPrev() const;
 
-	//	template<typename T>
-	//	// 指定されたメモリにBoundaryTagオブジェクトを配置して初期化しそのポインタとして返す
-	//	static BoundaryTagBlock* Placement(T* placementMemory, u32 dataSize, u32 offset = 0);
-
 		// 指定されたメモリにBoundaryTagオブジェクトを配置して初期化しそのポインタとして返す
-		static BoundaryTagBlock* Placement(void* placementMemory, u32 dataSize, u32 offset = 0);
+		static BoundaryTagBlock* Placement(void* placement_memory, u32 dataSize, u32 offset = 0);
 
 	protected:
-		u8*		dataHeadPtr_;// データ部の先頭へのポインタ
+		u8* data_head_ptr_			= nullptr;// データ部の先頭へのポインタ
 
-		BoundaryTagBlock* prev_;// 双方向リスト用
-		BoundaryTagBlock* next_;
+		BoundaryTagBlock* prev_		= nullptr;// 双方向リスト用
+		BoundaryTagBlock* next_		= nullptr;
 
 		// データサイズ部へのポインタ
-		u32*	dataSizeTagPtr_;
-		u8		isUsed_;// 使用フラグ
+		u32*	data_size_tag_ptr_	= nullptr;
+		// 使用フラグ
+		u8		is_used_ = 0;
 	};
-
-	/*
-	template<typename T>
-	// 指定されたメモリにBoundaryTagオブジェクトを配置して初期化しそのポインタとして返す
-	BoundaryTagBlock* BoundaryTagBlock::Placement(T* placementMemory, u32 dataSize, u32 offset)
-	{
-		void* m = reinterpret_cast<void*>( placementMemory );
-
-		BoundaryTagBlock* obj = new(m)
-			BoundaryTagBlock(reinterpret_cast<u8*>(m) + offset + sizeof(BoundaryTagBlock), dataSize);
-		return obj;
-	}
-	*/
-
 }
 
 #endif // _NGL_BOUNDARY_TAG_BLOCK_

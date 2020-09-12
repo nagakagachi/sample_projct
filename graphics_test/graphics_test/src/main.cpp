@@ -44,7 +44,7 @@ AppGame::AppGame()
 	// ウィンドウ作成
 	window_.Initialize(_T("Test Window"), 1280, 720);
 
-	ngl::time::Timer::instance().startTimer("AppGameTime");
+	ngl::time::Timer::instance().StartTimer("AppGameTime");
 }
 AppGame::~AppGame()
 {

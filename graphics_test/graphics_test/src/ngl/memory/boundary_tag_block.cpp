@@ -5,24 +5,18 @@ namespace ngl
 {
 
 	// 指定されたメモリにBoundaryTagオブジェクトを配置して初期化しそのポインタとして返す
-	BoundaryTagBlock* BoundaryTagBlock::Placement(void* placementMemory, u32 dataSize, u32 offset)
+	BoundaryTagBlock* BoundaryTagBlock::Placement(void* placement_memory, u32 data_size, u32 offset)
 	{
-		u8* m = reinterpret_cast<u8*>(placementMemory);
+		u8* m = reinterpret_cast<u8*>(placement_memory);
 
 		u8* headPtr = m + offset;
 
 		// アライメント対応はここでやる 
-		BoundaryTagBlock* obj = new(headPtr)BoundaryTagBlock(headPtr + GetHeadTagSize(), dataSize);
+		BoundaryTagBlock* obj = new(headPtr)BoundaryTagBlock(headPtr + GetHeadTagSize(), data_size);
 		return obj;
 	}
 
 	BoundaryTagBlock::BoundaryTagBlock()
-		: 
-		dataHeadPtr_(nullptr)
-
-		, isUsed_(false)
-		, prev_(nullptr)
-		, next_(nullptr)
 	{
 	}
 
@@ -33,59 +27,43 @@ namespace ngl
 
 	BoundaryTagBlock::~BoundaryTagBlock()
 	{
+		data_head_ptr_		= nullptr;
+		prev_				= nullptr;
+		next_				= nullptr;
+		data_size_tag_ptr_	= nullptr;
+		is_used_			= 0;
 	}
 
 	void BoundaryTagBlock::Initialize(u8* data, u32 size)
 	{
-		dataHeadPtr_ = data;
+		data_head_ptr_ = data;
 	
 		// データ部の前方4バイトにサイズが書き込まれる
-		dataSizeTagPtr_ = reinterpret_cast<u32*>( data - sizeof(u32) );
-		(*dataSizeTagPtr_) = size;
+		data_size_tag_ptr_ = reinterpret_cast<u32*>( data - sizeof(u32) );
+		(*data_size_tag_ptr_) = size;
 	
 		u32* endTag = GetTailTagPtr();
 		*endTag = GetAppendInfoDataSize() + GetDataSize();
 
-		isUsed_ = false;
+		is_used_ = false;
 		prev_ = next_ = nullptr;
 	}
 
 	u8* BoundaryTagBlock::GetDataPtr() const
 	{
-		return dataHeadPtr_;
+		return data_head_ptr_;
 	}
 
 	// ブロック占有サイズの格納されたポインタ
 	u32* BoundaryTagBlock::GetTailTagPtr() const
 	{
-		return reinterpret_cast<u32*>(dataHeadPtr_ + GetDataSize());
+		return reinterpret_cast<u32*>(data_head_ptr_ + GetDataSize());
 	}
-
-	/*
-	// メモリ管理用に付加するデータのサイズ　データ部のサイズ以外に必要な部分のサイズ
-	// 先頭と末尾のタグサイズの合計
-	u32 BoundaryTagBlock::GetAppendInfoDataSize()
-	{
-		return GetHeadTagSize() + GetTailTagSize();
-	}
-
-	// メモリ管理用の先頭タグサイズ
-	u32 BoundaryTagBlock::GetHeadTagSize()
-	{
-		return sizeof(BoundaryTagBlock) + sizeof(u32); // サイズ部もずらした
-	}
-	// メモリ管理用の末端タグサイズ
-	u32 BoundaryTagBlock::GetTailTagSize()
-	{
-		return sizeof(u32);
-	}
-	*/
-
 
 	// データ部のサイズ
 	u32 BoundaryTagBlock::GetDataSize() const
 	{
-		return *dataSizeTagPtr_;
+		return *data_size_tag_ptr_;
 	}
 	// オブジェクトが占有する全サイズを取得
 	u32 BoundaryTagBlock::GetAllSize() const
@@ -95,31 +73,31 @@ namespace ngl
 
 	void BoundaryTagBlock::SetIsUsed(bool f)
 	{
-		isUsed_ = f;
+		is_used_ = f;
 	}
 	bool BoundaryTagBlock::IsUsed() const
 	{
-		return 0!=isUsed_;
+		return 0!=is_used_;
 	}
 
 	// 渡されたオブジェクトを自身の後ろに追加する
-	BoundaryTagBlock* BoundaryTagBlock::InsertNext(BoundaryTagBlock* newObject)
+	BoundaryTagBlock* BoundaryTagBlock::InsertNext(BoundaryTagBlock* new_object)
 	{
-		newObject->next_ = next_;
-		newObject->prev_ = this;
+		new_object->next_ = next_;
+		new_object->prev_ = this;
 		if (nullptr != next_)
-			next_->prev_ = newObject;
-		next_ = newObject;
+			next_->prev_ = new_object;
+		next_ = new_object;
 		return this;
 	}
 	// 渡されたオブジェクトを自身の前に追加する
-	BoundaryTagBlock* BoundaryTagBlock::InsertPrev(BoundaryTagBlock* newObject)
+	BoundaryTagBlock* BoundaryTagBlock::InsertPrev(BoundaryTagBlock* new_object)
 	{
-		newObject->next_ = this;
-		newObject->prev_ = prev_;
+		new_object->next_ = this;
+		new_object->prev_ = prev_;
 		if (nullptr != prev_)
-			prev_->next_ = newObject;
-		prev_ = newObject;
+			prev_->next_ = new_object;
+		prev_ = new_object;
 		return this;
 	}
 	// リストから離脱

@@ -17,7 +17,7 @@ namespace time
 		timers_.clear();
 	}
 
-	void	Timer::startTimer(const char* name)
+	void	Timer::StartTimer(const char* name)
 	{
 		std::map<TimerName, Timer::TimerEntity>::iterator it = timers_.find(name);
 		if (timers_.end() == it)
@@ -30,12 +30,12 @@ namespace time
 		it->second.time_stop_start_.QuadPart = -1;
 		memset(&it->second.time_suspemd_total, 0x00, sizeof(LARGE_INTEGER));
 	}
-	double	Timer::getElapsedSec(const char* name)
+	double	Timer::GetElapsedSec(const char* name)
 	{
-		return getPerformanceCounter(name) * TimerEntity::getFriqInv();
+		return GetPerformanceCounter(name) * TimerEntity::GetFriqInv();
 	}
 	// 経過時間をパフォーマンスカウンタのまま取得
-	ngl::s64 Timer::getPerformanceCounter(const char* name)
+	ngl::s64 Timer::GetPerformanceCounter(const char* name)
 	{
 		std::map<TimerName, Timer::TimerEntity>::iterator it = timers_.find(name);
 		if (timers_.end() == it)
@@ -43,9 +43,9 @@ namespace time
 			return 0;
 		}
 		QueryPerformanceCounter(&it->second.time_end_);
-		return (it->second.time_end_.QuadPart - it->second.time_begin_.QuadPart - getSuspendTotalPerformanceCounter(name));
+		return (it->second.time_end_.QuadPart - it->second.time_begin_.QuadPart - GetSuspendTotalPerformanceCounter(name));
 	}
-	void	Timer::removeTimer(const char* name)
+	void	Timer::RemoveTimer(const char* name)
 	{
 		std::map<TimerName, Timer::TimerEntity>::iterator it = timers_.find(name);
 		if (timers_.end() == it)
@@ -56,7 +56,7 @@ namespace time
 	}
 
 	// タイマーを一時停止
-	void	Timer::suspendTimer(const char* name)
+	void	Timer::SuspendTimer(const char* name)
 	{
 		std::map<TimerName, Timer::TimerEntity>::iterator it = timers_.find(name);
 		if (timers_.end() == it)
@@ -66,7 +66,7 @@ namespace time
 		QueryPerformanceCounter(&it->second.time_stop_start_);
 	}
 	// タイマーを再開
-	void	Timer::resumeTimer(const char* name)
+	void	Timer::ResumeTimer(const char* name)
 	{
 		std::map<TimerName, Timer::TimerEntity>::iterator it = timers_.find(name);
 		if (timers_.end() == it)
@@ -79,7 +79,7 @@ namespace time
 		it->second.time_stop_start_.QuadPart = -1;
 	}
 	// 
-	ngl::s64 Timer::getSuspendTotalPerformanceCounter(const char* name)
+	ngl::s64 Timer::GetSuspendTotalPerformanceCounter(const char* name)
 	{
 		std::map<TimerName, Timer::TimerEntity>::iterator it = timers_.find(name);
 		if (timers_.end() == it)
