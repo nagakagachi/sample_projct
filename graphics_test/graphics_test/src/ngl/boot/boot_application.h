@@ -21,6 +21,9 @@ namespace ngl
 		public:
 			virtual ~ApplicationBase() {}
 
+			// アプリケーションの初期化
+			virtual bool Initialize() = 0;
+
 			// アプリケーションのフレーム処理の実行
 			// false で終了
 			virtual bool Execute() = 0;

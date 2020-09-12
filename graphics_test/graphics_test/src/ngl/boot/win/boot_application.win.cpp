@@ -16,6 +16,10 @@ namespace ngl
 
 		void BootApplicationDep::Run(ApplicationBase* app)
 		{
+			// 初期化
+			if (!app->Initialize())
+				return;
+
 			// Windowsメッセージループ
 			MSG msg;
 			do {
@@ -25,7 +29,7 @@ namespace ngl
 				}
 				else
 				{
-					// アプリケーション実行
+					// フレーム処理
 					if (!app->Execute())
 					{
 						break;
