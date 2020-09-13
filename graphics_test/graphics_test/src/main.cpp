@@ -1,4 +1,6 @@
 ﻿#include <iostream>
+#include <vector>
+
 
 #include "ngl/boot/boot_application.h"
 #include "ngl/util/unique_ptr.h"
@@ -32,7 +34,9 @@ private:
 
 	ngl::rhi::DeviceDep					device_;
 	ngl::rhi::GraphicsCommandQueueDep		graphics_queue_;
-	ngl::rhi::SwapChainDep					swap_chain_;
+	ngl::rhi::SwapChainDep					swapchain_;
+
+	std::vector<ngl::rhi::RenderTargetView> swapchain_rtvs_;
 
 	ngl::rhi::GraphicsCommandListDep	gfx_command_list_;
 };
@@ -65,7 +69,7 @@ AppGame::~AppGame()
 {
 	gfx_command_list_.Finalize();
 
-	swap_chain_.Finalize();
+	swapchain_.Finalize();
 	graphics_queue_.Finalize();
 	device_.Finalize();
 }
@@ -89,14 +93,22 @@ bool AppGame::Initialize()
 		std::cout << "ERROR: Command Queue Initialize" << std::endl;
 		return false;
 	}
-
-	ngl::rhi::SwapChainDep::Desc swap_chain_desc;
-	swap_chain_desc.buffer_count = 2;
-	swap_chain_desc.format = DXGI_FORMAT_R10G10B10A2_UNORM;
-	if (!swap_chain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
 	{
-		std::cout << "ERROR: SwapChain Initialize" << std::endl;
-		return false;
+		ngl::rhi::SwapChainDep::Desc swap_chain_desc;
+		swap_chain_desc.buffer_count = 2;
+		swap_chain_desc.format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		if (!swapchain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
+		{
+			std::cout << "ERROR: SwapChain Initialize" << std::endl;
+			return false;
+		}
+
+		swapchain_rtvs_.resize(swapchain_.NumBuffer());
+		for (auto i = 0u; i < swapchain_.NumBuffer(); ++i)
+		{
+			swapchain_rtvs_[i].Initialize( &device_, &swapchain_, i );
+		}
+
 	}
 
 	if (!gfx_command_list_.Initialize(&device_))
@@ -114,8 +126,30 @@ bool AppGame::Execute()
 	// ウィンドウが無効になったら終了
 	if (!window_.IsValid())
 	{
-
 		return false;
+	}
+
+
+	
+	// Render Loop
+	{
+		gfx_command_list_.Begin();
+
+		gfx_command_list_.SetRenderTargetSingle(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()]);
+
+		float clear_color[] = {1.0f, 0.0f, 0.0f, 1.0f};
+		gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color);
+
+		gfx_command_list_.End();
+
+		ngl::rhi::GraphicsCommandListDep* command_lists[] =
+		{
+			&gfx_command_list_
+		};
+		graphics_queue_.ExecuteCommandLists(std::size(command_lists), command_lists);
+
+		swapchain_.GetDxgiSwapChain()->Present(1, 0);
+
 	}
 
 	return true;

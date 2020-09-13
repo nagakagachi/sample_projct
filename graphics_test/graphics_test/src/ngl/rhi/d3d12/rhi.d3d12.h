@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include <iostream>
-
+#include <vector>
 
 
 #include "ngl/platform/win/window.win.h"
@@ -22,6 +22,9 @@ namespace ngl
 {
 	namespace rhi
 	{
+		class RenderTargetView;
+
+
 		// Test Rhi Device
 		class DeviceDep
 		{
@@ -120,47 +123,20 @@ namespace ngl
 		class GraphicsCommandListDep
 		{
 		public:
-			GraphicsCommandListDep()
-			{
-			}
-			~GraphicsCommandListDep()
-			{
-				Finalize();
-			}
-			bool Initialize(DeviceDep* p_device)
-			{
-				if (!p_device)
-					return false;
+			GraphicsCommandListDep();
+			~GraphicsCommandListDep();
+			bool Initialize(DeviceDep* p_device);
+			void Finalize();
 
-				// Command Allocator
-				if (FAILED(p_device->GetD3D12Device()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&p_command_allocator_))))
-				{
-					std::cout << "ERROR: Create Command Allocator" << std::endl;
-					return false;
-				}
-
-				// Command List
-				if (FAILED(p_device->GetD3D12Device()->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, p_command_allocator_, nullptr, IID_PPV_ARGS(&p_command_list_))))
-				{
-					std::cout << "ERROR: Create Command List" << std::endl;
-					return false;
-				}
-				return true;
-			}
-			void Finalize()
+			ID3D12GraphicsCommandList* GetD3D12GraphicsCommandList()
 			{
-				if (p_command_list_)
-				{
-					p_command_list_->Release();
-					p_command_list_ = nullptr;
-				}
-				if (p_command_allocator_)
-				{
-					p_command_allocator_->Release();
-					p_command_allocator_ = nullptr;
-				}
+				return p_command_list_;
 			}
 
+			void Begin();
+			void End();
+			void SetRenderTargetSingle(RenderTargetView* p_rtv);
+			void ClearRenderTarget(RenderTargetView* p_rtv, float(color)[4]);
 		private:
 			ID3D12CommandAllocator* p_command_allocator_ = nullptr;
 			ID3D12GraphicsCommandList* p_command_list_ = nullptr;
@@ -215,14 +191,29 @@ namespace ngl
 				return p_command_queue_;
 			}
 
+			void ExecuteCommandLists(unsigned int num_command_list, GraphicsCommandListDep** p_command_lists)
+			{
+				// 一時バッファに詰める
+				p_command_list_array_.clear();
+				for (auto i = 0u; i < num_command_list; ++i)
+				{
+					p_command_list_array_.push_back(p_command_lists[i]->GetD3D12GraphicsCommandList());
+				}
+
+				p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array_[0]));
+			}
+
 		private:
 			ID3D12CommandQueue* p_command_queue_ = nullptr;
+			std::vector<ID3D12CommandList*> p_command_list_array_;
 		};
 
 
 		class SwapChainDep
 		{
 		public:
+			using DXGI_SWAPCHAIN_TYPE = IDXGISwapChain4;
+
 			struct Desc
 			{
 				DXGI_FORMAT		format = {};
@@ -272,20 +263,130 @@ namespace ngl
 					return false;
 				}
 
+				// Resource取得
+				num_resource_ = desc.buffer_count;
+				p_resources_ = new ID3D12Resource * [num_resource_];
+				memset(p_resources_, 0x00, sizeof(*p_resources_) * num_resource_);
+				for (auto i = 0u; i < num_resource_; ++i)
+				{
+					if (FAILED(p_swapchain_->GetBuffer(i, IID_PPV_ARGS(&p_resources_[i]))))
+					{
+						std::cout << "ERROR: Get SwapChain Buffer " << i << std::endl;
+					}
+				}
+
 				return true;
 			}
 			void Finalize()
 			{
+				if(p_resources_)
+				{
+					for (auto i = 0u; i < num_resource_; ++i)
+					{
+						if (p_resources_[i])
+						{
+							p_resources_[i]->Release();
+							p_resources_[i] = nullptr;
+						}
+					}
+					delete[] p_resources_;
+					p_resources_ = nullptr;
+				}
 				if (p_swapchain_)
 				{
 					p_swapchain_->Release();
 					p_swapchain_ = nullptr;
 				}
 			}
+			DXGI_SWAPCHAIN_TYPE* GetDxgiSwapChain()
+			{
+				return p_swapchain_;
+			}
+			unsigned int NumBuffer() const
+			{
+				return num_resource_;
+			}
+			ID3D12Resource* GetBuffer(unsigned int index)
+			{
+				if (num_resource_ <= index)
+					return nullptr;
+				return p_resources_[index];
+			}
+
+			unsigned int GetCurrentBufferIndex() const
+			{
+				return p_swapchain_->GetCurrentBackBufferIndex();
+			}
+
 		private:
-			IDXGISwapChain4* p_swapchain_ = nullptr;
+			DXGI_SWAPCHAIN_TYPE* p_swapchain_ = nullptr;
+
+			ID3D12Resource** p_resources_ = nullptr;
+			unsigned int num_resource_ = 0;
 		};
 
+		// TODO. 現状はView一つに付きHeap一つを確保している. 最終的にはHeapプールから確保するようにしたい.
+		class RenderTargetView
+		{
+		public:
+			RenderTargetView()
+			{
+			}
+			~RenderTargetView()
+			{
+				Finalize();
+			}
+			// SwapChainからRTV作成.
+			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
+			{
+				if (!p_device || !p_swapchain)
+					return false;
+
+				{
+					D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+					desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+					desc.NumDescriptors = 1;
+					desc.NodeMask = 0;
+					desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+					if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
+					{
+						std::cout << "ERROR: Create DescriptorHeap" << std::endl;
+						return false;
+					}
+				}
+				{
+					auto* buffer = p_swapchain->GetBuffer(buffer_index);
+					if (!buffer)
+					{
+						std::cout << "ERROR: Invalid Buffer Index" << std::endl;
+						return false;
+					}
+
+					auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
+					p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
+				}
+
+				return true;
+			}
+
+			void Finalize()
+			{
+				if (p_heap_)
+				{
+					p_heap_->Release();
+					p_heap_ = nullptr;
+				}
+			}
+
+			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const
+			{
+				return p_heap_->GetCPUDescriptorHandleForHeapStart();
+			}
+
+		private:
+			ID3D12DescriptorHeap* p_heap_ = nullptr;
+		};
 
 	}
 }
