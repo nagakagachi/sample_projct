@@ -416,9 +416,9 @@ namespace ngl
 
 		void GraphicsCommandListDep::Begin()
 		{
+			// アロケータリセット
 			p_command_allocator_->Reset();
-
-			// 初回フレームのここでComError
+			// コマンドリストリセット
 			p_command_list_->Reset(p_command_allocator_, nullptr);
 		}
 		void GraphicsCommandListDep::End()
