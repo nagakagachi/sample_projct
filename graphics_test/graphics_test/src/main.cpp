@@ -28,17 +28,28 @@ public:
 	bool Execute() override;
 
 private:
+	double						app_sec_ = 0.0f;
+	double						frame_sec_ = 0.0f;
+
 	ngl::platform::CoreWindow	window_;
 
 
+	float clear_color_[4] = {0.0f};
 
-	ngl::rhi::DeviceDep					device_;
-	ngl::rhi::GraphicsCommandQueueDep		graphics_queue_;
-	ngl::rhi::SwapChainDep					swapchain_;
+	ngl::rhi::DeviceDep							device_;
+	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
+	ngl::rhi::SwapChainDep						swapchain_;
 
-	std::vector<ngl::rhi::RenderTargetView> swapchain_rtvs_;
+	std::vector<ngl::rhi::RenderTargetViewDep>	swapchain_rtvs_;
+	std::vector <ngl::rhi::ResourceState>		swapchain_resource_state_;
 
-	ngl::rhi::GraphicsCommandListDep	gfx_command_list_;
+	ngl::rhi::GraphicsCommandListDep			gfx_command_list_;
+
+
+	// CommandQueue実行完了待機用オブジェクト
+	ngl::types::u64								wait_fence_value_ = 1;// Fenceの初期値がゼロであるため待機用の値は1から開始.
+	ngl::rhi::FenceDep							wait_fence_;
+	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
 };
 
 
@@ -82,7 +93,7 @@ bool AppGame::Initialize()
 		return false;
 	}
 
-	if (!device_.Initialize(&window_))
+	if (!device_.Initialize(&window_, true))
 	{
 		std::cout << "ERROR: Device Initialize" << std::endl;
 		return false;
@@ -104,9 +115,11 @@ bool AppGame::Initialize()
 		}
 
 		swapchain_rtvs_.resize(swapchain_.NumBuffer());
+		swapchain_resource_state_.resize(swapchain_.NumBuffer());
 		for (auto i = 0u; i < swapchain_.NumBuffer(); ++i)
 		{
 			swapchain_rtvs_[i].Initialize( &device_, &swapchain_, i );
+			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;
 		}
 
 	}
@@ -117,6 +130,18 @@ bool AppGame::Initialize()
 		return false;
 	}
 
+	if (!wait_fence_.Initialize(&device_))
+	{
+		std::cout << "ERROR: Fence Initialize" << std::endl;
+		return false;
+	}
+
+	clear_color_[0] = 0.0f;
+	clear_color_[1] = 0.0f;
+	clear_color_[2] = 0.0f;
+	clear_color_[3] = 1.0f;
+
+	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
 }
 
@@ -129,26 +154,65 @@ bool AppGame::Execute()
 		return false;
 	}
 
+	{
+		frame_sec_ = ngl::time::Timer::Instance().GetElapsedSec("app_frame_sec");
+		app_sec_ += frame_sec_;
 
-	
+		std::cout << "Frame Second: " << frame_sec_ << std::endl;
+
+		// 再スタート
+		ngl::time::Timer::Instance().StartTimer("app_frame_sec");
+	}
+
+	{
+		auto c0 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.0f));
+		auto c1 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.25f));
+		auto c2 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.5f));
+
+		clear_color_[0] = c0 * 0.5f + 0.5f;
+		clear_color_[1] = c1 * 0.5f + 0.5f;
+		clear_color_[2] = c2 * 0.5f + 0.5f;
+	}
+
 	// Render Loop
 	{
-		gfx_command_list_.Begin();
+		const auto swapchain_index = swapchain_.GetCurrentBufferIndex();
 
-		gfx_command_list_.SetRenderTargetSingle(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()]);
+		{
+			gfx_command_list_.Begin();
 
-		float clear_color[] = {1.0f, 0.0f, 0.0f, 1.0f};
-		gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color);
+			// Swapchain State to RenderTarget
+			gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
+			swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 
-		gfx_command_list_.End();
+			gfx_command_list_.SetRenderTargetSingle(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()]);
 
+			gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_);
+
+			// Swapchain State to Present
+			gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
+			swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
+
+			gfx_command_list_.End();
+		}
+
+		// CommandList Submit
 		ngl::rhi::GraphicsCommandListDep* command_lists[] =
 		{
 			&gfx_command_list_
 		};
-		graphics_queue_.ExecuteCommandLists(std::size(command_lists), command_lists);
+		graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(command_lists)), command_lists);
 
+		// Present
 		swapchain_.GetDxgiSwapChain()->Present(1, 0);
+
+		// 完了シグナル
+		graphics_queue_.Signal(&wait_fence_, wait_fence_value_);
+		// 待機
+		{
+			wait_signal_.Wait(&wait_fence_, wait_fence_value_);
+			++wait_fence_value_;
+		}
 
 	}
 
