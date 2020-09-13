@@ -23,15 +23,15 @@ namespace ngl
 	namespace rhi
 	{
 		// Test Rhi Device
-		class RhiDeviceDX12
+		class DeviceDep
 		{
 		public:
 			using DXGI_FACTORY_TYPE = IDXGIFactory6;
 
-			RhiDeviceDX12()
+			DeviceDep()
 			{
 			}
-			~RhiDeviceDX12()
+			~DeviceDep()
 			{
 				Finalize();
 			}
@@ -117,17 +117,17 @@ namespace ngl
 		};
 
 		// Test Rhi CommandList
-		class RhiGraphicsCommandListDX12
+		class GraphicsCommandListDep
 		{
 		public:
-			RhiGraphicsCommandListDX12()
+			GraphicsCommandListDep()
 			{
 			}
-			~RhiGraphicsCommandListDX12()
+			~GraphicsCommandListDep()
 			{
 				Finalize();
 			}
-			bool Initialize(RhiDeviceDX12* p_device)
+			bool Initialize(DeviceDep* p_device)
 			{
 				if (!p_device)
 					return false;
@@ -167,19 +167,19 @@ namespace ngl
 		};
 
 
-		class RhiGraphicsCommandQueue
+		class GraphicsCommandQueueDep
 		{
 		public:
-			RhiGraphicsCommandQueue()
+			GraphicsCommandQueueDep()
 			{
 			}
-			~RhiGraphicsCommandQueue()
+			~GraphicsCommandQueueDep()
 			{
 				Finalize();
 			}
 
 			// TODO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
-			bool Initialize(RhiDeviceDX12* p_device)
+			bool Initialize(DeviceDep* p_device)
 			{
 				if (!p_device)
 					return false;
@@ -220,7 +220,7 @@ namespace ngl
 		};
 
 
-		class RhiSwapChain
+		class SwapChainDep
 		{
 		public:
 			struct Desc
@@ -229,14 +229,14 @@ namespace ngl
 				unsigned int	buffer_count = 2;
 			};
 
-			RhiSwapChain()
+			SwapChainDep()
 			{
 			}
-			~RhiSwapChain()
+			~SwapChainDep()
 			{
 				Finalize();
 			}
-			bool Initialize(RhiDeviceDX12* p_device, RhiGraphicsCommandQueue* p_graphics_command_queu, const Desc& desc)
+			bool Initialize(DeviceDep* p_device, GraphicsCommandQueueDep* p_graphics_command_queu, const Desc& desc)
 			{
 				if (!p_device || !p_graphics_command_queu)
 					return false;
@@ -285,5 +285,7 @@ namespace ngl
 		private:
 			IDXGISwapChain4* p_swapchain_ = nullptr;
 		};
+
+
 	}
 }

@@ -30,11 +30,11 @@ private:
 
 
 
-	ngl::rhi::RhiDeviceDX12					device_;
-	ngl::rhi::RhiGraphicsCommandQueue		graphics_queue_;
-	ngl::rhi::RhiSwapChain					swap_chain_;
+	ngl::rhi::DeviceDep					device_;
+	ngl::rhi::GraphicsCommandQueueDep		graphics_queue_;
+	ngl::rhi::SwapChainDep					swap_chain_;
 
-	ngl::rhi::RhiGraphicsCommandListDX12	gfx_command_list_;
+	ngl::rhi::GraphicsCommandListDep	gfx_command_list_;
 };
 
 
@@ -90,7 +90,7 @@ bool AppGame::Initialize()
 		return false;
 	}
 
-	ngl::rhi::RhiSwapChain::Desc swap_chain_desc;
+	ngl::rhi::SwapChainDep::Desc swap_chain_desc;
 	swap_chain_desc.buffer_count = 2;
 	swap_chain_desc.format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	if (!swap_chain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
