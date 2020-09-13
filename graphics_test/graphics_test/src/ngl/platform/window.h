@@ -25,6 +25,10 @@ namespace ngl
 			virtual bool Initialize(const TCHAR* title, int w, int h) = 0;
 			virtual void Destroy() = 0;
 			virtual bool IsValid() const = 0;
+
+
+			virtual void GetScreenSize( unsigned int& w, unsigned int& h ) const = 0;
+
 		protected:
 		};
 

@@ -88,6 +88,14 @@ namespace ngl
 			//return TRUE == IsWindowEnabled(hwnd_);
 			return is_valid_window_;
 		}
+
+		void CoreWindowImplDep::GetScreenSize(unsigned int& w, unsigned int& h) const
+		{
+			w = screen_w_;
+			h = screen_h_;
+		}
+
+
 		void CoreWindowImplDep::SetWindowSize(unsigned int w, unsigned int h)
 		{
 			screen_w_ = w;

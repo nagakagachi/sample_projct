@@ -19,6 +19,8 @@
 
 // ------------------------------------------------------------
 // ------------------------------------------------------------
+#include "ngl/platform/win/window.win.h"
+
 #include <d3d12.h>
 #if 1
 #include <dxgi1_6.h>
@@ -36,6 +38,8 @@
 class RhiDeviceDX12
 {
 public:
+	using DXGI_FACTORY_TYPE = IDXGIFactory6;
+
 	RhiDeviceDX12()
 	{
 	}
@@ -46,6 +50,11 @@ public:
 
 	bool Initialize(ngl::platform::CoreWindow* window)
 	{
+		if (!window)
+			return false;
+
+		p_window_ = window;
+
 		{
 			if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&p_factory_))))
 			{
@@ -97,16 +106,26 @@ public:
 		}
 	}
 
+	ngl::platform::CoreWindow* GetWindow()
+	{
+		return p_window_;
+	}
+
 	ID3D12Device* GetD3D12Device()
 	{
 		return p_device_;
 	}
+	DXGI_FACTORY_TYPE* GetDxgiFactory()
+	{
+		return p_factory_;
+	}
 
 private:
+	ngl::platform::CoreWindow* p_window_ = nullptr;
+
 	D3D_FEATURE_LEVEL device_feature_level_ = {};
 	ID3D12Device* p_device_ = nullptr;
-	IDXGIFactory6* p_factory_ = nullptr;
-	IDXGISwapChain4* p_swapchain_ = nullptr;
+	DXGI_FACTORY_TYPE* p_factory_ = nullptr;
 };
 
 // Test Rhi CommandList
@@ -171,7 +190,7 @@ public:
 		Finalize();
 	}
 
-	// TODO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味は不明.
+	// TODO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
 	bool Initialize(RhiDeviceDX12* p_device)
 	{
 		if (!p_device)
@@ -202,8 +221,81 @@ public:
 			p_command_queue_ = nullptr;
 		}
 	}
+
+	ID3D12CommandQueue* GetD3D12CommandQueue()
+	{
+		return p_command_queue_;
+	}
+
 private:
 	ID3D12CommandQueue* p_command_queue_ = nullptr;
+};
+
+
+class RhiSwapChain
+{
+public:
+	struct Desc
+	{
+		DXGI_FORMAT		format	= {};
+		unsigned int	buffer_count = 2;
+	};
+
+	RhiSwapChain()
+	{
+	}
+	~RhiSwapChain()
+	{
+		Finalize();
+	}
+	bool Initialize(RhiDeviceDX12* p_device, RhiGraphicsCommandQueue* p_graphics_command_queu, const Desc& desc)
+	{
+		if (!p_device || !p_graphics_command_queu)
+			return false;
+
+		// 依存部からHWND取得
+		auto&& window_dep = p_device->GetWindow()->Dep();
+		auto&& hwnd = window_dep.GetWindowHandle();
+		unsigned int screen_w = 0;
+		unsigned int screen_h = 0;
+		p_device->GetWindow()->Impl()->GetScreenSize(screen_w, screen_h);
+
+
+		DXGI_SWAP_CHAIN_DESC1 obj_desc = {};
+		obj_desc.Width = screen_w;
+		obj_desc.Height = screen_h;
+		obj_desc.Format = desc.format;
+		obj_desc.Stereo = false;
+		obj_desc.SampleDesc.Count = 1;
+		obj_desc.SampleDesc.Quality = 0;
+		obj_desc.BufferUsage = DXGI_USAGE_BACK_BUFFER;
+		obj_desc.BufferCount = desc.buffer_count;
+
+		obj_desc.Scaling = DXGI_SCALING_STRETCH;
+		obj_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		obj_desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+
+		obj_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+
+
+		if (FAILED(p_device->GetDxgiFactory()->CreateSwapChainForHwnd(p_graphics_command_queu->GetD3D12CommandQueue(), hwnd, &obj_desc, nullptr, nullptr, (IDXGISwapChain1**)(&p_swapchain_))))
+		{
+			std::cout << "ERROR: Create Command Queue" << std::endl;
+			return false;
+		}
+
+		return true;
+	}
+	void Finalize()
+	{
+		if (p_swapchain_)
+		{
+			p_swapchain_->Release();
+			p_swapchain_ = nullptr;
+		}
+	}
+private:
+	IDXGISwapChain4* p_swapchain_ = nullptr;
 };
 
 
@@ -221,8 +313,10 @@ public:
 private:
 	ngl::platform::CoreWindow	window_;
 
-	RhiDeviceDX12			device_;
-	RhiGraphicsCommandQueue	graphics_queue_;
+	RhiDeviceDX12				device_;
+	RhiGraphicsCommandQueue		graphics_queue_;
+	RhiSwapChain				swap_chain_;
+
 
 	RhiGraphicsCommandListDX12	gfx_command_list_;
 };
@@ -255,7 +349,7 @@ AppGame::~AppGame()
 {
 	gfx_command_list_.Finalize();
 
-
+	swap_chain_.Finalize();
 	graphics_queue_.Finalize();
 	device_.Finalize();
 }
@@ -279,6 +373,17 @@ bool AppGame::Initialize()
 		std::cout << "ERROR: Command Queue Initialize" << std::endl;
 		return false;
 	}
+
+	RhiSwapChain::Desc swap_chain_desc;
+	swap_chain_desc.buffer_count = 2;
+	swap_chain_desc.format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	if (!swap_chain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
+	{
+		std::cout << "ERROR: SwapChain Initialize" << std::endl;
+		return false;
+	}
+
+
 
 	if (!gfx_command_list_.Initialize(&device_))
 	{

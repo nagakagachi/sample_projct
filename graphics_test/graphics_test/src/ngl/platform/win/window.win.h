@@ -26,6 +26,7 @@ namespace ngl
 			virtual void Destroy() override;
 			virtual bool IsValid() const override;
 
+			virtual void GetScreenSize(unsigned int& w, unsigned int& h) const override;
 
 			// クライアントサイズからウィンドウのサイズを計算
 			void GetWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh);
