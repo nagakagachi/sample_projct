@@ -114,9 +114,9 @@ bool AppGame::Initialize()
 			return false;
 		}
 
-		swapchain_rtvs_.resize(swapchain_.NumBuffer());
-		swapchain_resource_state_.resize(swapchain_.NumBuffer());
-		for (auto i = 0u; i < swapchain_.NumBuffer(); ++i)
+		swapchain_rtvs_.resize(swapchain_.NumResource());
+		swapchain_resource_state_.resize(swapchain_.NumResource());
+		for (auto i = 0u; i < swapchain_.NumResource(); ++i)
 		{
 			swapchain_rtvs_[i].Initialize( &device_, &swapchain_, i );
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;
@@ -140,6 +140,69 @@ bool AppGame::Initialize()
 	clear_color_[1] = 0.0f;
 	clear_color_[2] = 0.0f;
 	clear_color_[3] = 1.0f;
+
+	{
+		{
+			// Buffer生成テスト
+			ngl::rhi::BufferDep buffer0;
+			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
+			buffer_desc0.element_byte_size = sizeof(ngl::u64);
+			buffer_desc0.element_count = 1;
+			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Readback;	// GPU->CPU Readbackリソース
+			buffer_desc0.initial_state = ngl::rhi::ResourceState::CopyDst;
+
+			if (!buffer0.Initialize(&device_, buffer_desc0))
+			{
+				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+			}
+
+			if (auto* buffer0_map = buffer0.Map<ngl::u64>())
+			{
+				*buffer0_map = 111u;
+				buffer0.Unmap();
+			}
+		}
+		{
+			// Buffer生成テスト
+			ngl::rhi::BufferDep buffer0;
+			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
+			buffer_desc0.element_byte_size = sizeof(ngl::u64);
+			buffer_desc0.element_count = 1;
+			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;	// CPU->GPU Uploadリソース
+			buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
+
+			if (!buffer0.Initialize(&device_, buffer_desc0))
+			{
+				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+			}
+
+			if (auto* buffer0_map = buffer0.Map<ngl::u64>())
+			{
+				*buffer0_map = 111u;
+				buffer0.Unmap();
+			}
+		}
+		{
+			// Buffer生成テスト
+			ngl::rhi::BufferDep buffer0;
+			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
+			buffer_desc0.element_byte_size = sizeof(ngl::u64);
+			buffer_desc0.element_count = 1;
+			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Default;	// Defaultリソース
+			buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
+
+			if (!buffer0.Initialize(&device_, buffer_desc0))
+			{
+				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+			}
+
+			if (auto* buffer0_map = buffer0.Map<ngl::u64>())
+			{
+				*buffer0_map = 111u;
+				buffer0.Unmap();
+			}
+		}
+	}
 
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;

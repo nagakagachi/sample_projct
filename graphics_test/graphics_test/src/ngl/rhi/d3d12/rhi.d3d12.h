@@ -25,6 +25,7 @@ namespace ngl
 		class SwapChainDep;
 		class RenderTargetViewDep;
 
+
 		class GraphicsCommandListDep;
 		class GraphicsCommandQueueDep;
 
@@ -36,6 +37,7 @@ namespace ngl
 		enum class ResourceState
 		{
 			Common,
+			General,
 			ConstantBuffer,
 			VertexBuffer,
 			IndexBuffer,
@@ -50,6 +52,14 @@ namespace ngl
 			Present,
 		};
 		D3D12_RESOURCE_STATES ConvertResourceState(ngl::rhi::ResourceState v);
+
+
+		enum class ResourceHeapType
+		{
+			Default,
+			Upload,
+			Readback,
+		};
 
 
 		// Device
@@ -127,56 +137,6 @@ namespace ngl
 			ID3D12GraphicsCommandList* p_command_list_ = nullptr;
 		};
 
-
-		// スワップチェイン
-		class SwapChainDep
-		{
-		public:
-			using DXGI_SWAPCHAIN_TYPE = IDXGISwapChain4;
-
-			struct Desc
-			{
-				DXGI_FORMAT		format = {};
-				unsigned int	buffer_count = 2;
-			};
-
-			SwapChainDep();
-			~SwapChainDep();
-			bool Initialize(DeviceDep* p_device, GraphicsCommandQueueDep* p_graphics_command_queu, const Desc& desc);
-			void Finalize();
-
-			unsigned int GetCurrentBufferIndex() const;
-
-			DXGI_SWAPCHAIN_TYPE* GetDxgiSwapChain();
-			unsigned int NumBuffer() const;
-			ID3D12Resource* GetBuffer(unsigned int index);
-
-		private:
-			DXGI_SWAPCHAIN_TYPE* p_swapchain_ = nullptr;
-
-			ID3D12Resource** p_resources_ = nullptr;
-			unsigned int num_resource_ = 0;
-		};
-
-
-		// RenderTargetView
-		// TODO. 現状はView一つに付きHeap一つを確保している. 最終的にはHeapプールから確保するようにしたい.
-		class RenderTargetViewDep
-		{
-		public:
-			RenderTargetViewDep();
-			~RenderTargetViewDep();
-
-			// SwapChainからRTV作成.
-			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index);
-			void Finalize();
-
-			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const;
-		private:
-			ID3D12DescriptorHeap* p_heap_ = nullptr;
-		};
-
-
 		// フェンス
 		class FenceDep
 		{
@@ -205,6 +165,116 @@ namespace ngl
 
 		private:
 			HANDLE win_event_;
+		};
+
+
+		// スワップチェイン
+		class SwapChainDep
+		{
+		public:
+			using DXGI_SWAPCHAIN_TYPE = IDXGISwapChain4;
+
+			struct Desc
+			{
+				DXGI_FORMAT		format = {};
+				unsigned int	buffer_count = 2;
+			};
+
+			SwapChainDep();
+			~SwapChainDep();
+			bool Initialize(DeviceDep* p_device, GraphicsCommandQueueDep* p_graphics_command_queu, const Desc& desc);
+			void Finalize();
+
+			unsigned int GetCurrentBufferIndex() const;
+
+			DXGI_SWAPCHAIN_TYPE* GetDxgiSwapChain();
+			unsigned int NumResource() const;
+			ID3D12Resource* GetD3D12Resource(unsigned int index);
+
+		private:
+			DXGI_SWAPCHAIN_TYPE* p_swapchain_ = nullptr;
+
+			ID3D12Resource** p_resources_ = nullptr;
+			unsigned int num_resource_ = 0;
+		};
+
+
+		// RenderTargetView
+		// TODO. 現状はView一つに付きHeap一つを確保している. 最終的にはHeapプールから確保するようにしたい.
+		class RenderTargetViewDep
+		{
+		public:
+			RenderTargetViewDep();
+			~RenderTargetViewDep();
+
+			// SwapChainからRTV作成.
+			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index);
+			void Finalize();
+
+			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const;
+		private:
+			ID3D12DescriptorHeap* p_heap_ = nullptr;
+		};
+
+		// Buffer
+		class BufferDep
+		{
+		public:
+			struct Desc
+			{
+				ngl::u32			element_byte_size = 0;
+				ngl::u32			element_count = 0;
+				ResourceHeapType	heap_type = ResourceHeapType::Default;
+				ResourceState		initial_state = ResourceState::General;
+			};
+
+			BufferDep();
+			~BufferDep();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			template<typename T = void>
+			T* Map()
+			{
+				// DefaultヒープリソースはMap不可
+				if (ResourceHeapType::Default == desc_.heap_type)
+				{
+					std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
+					return nullptr;
+				}
+				if (map_ptr_)
+				{
+					// Map済みの場合はそのまま返す.
+					return reinterpret_cast<T*>(map_ptr_);
+				}
+
+				// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
+				D3D12_RANGE read_range = { 0, 0 };
+				if (ResourceHeapType::Readback == desc_.heap_type)
+				{
+					read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
+				}
+
+				if (FAILED(resource_->Map(0, &read_range, &map_ptr_)))
+				{
+					std::cout << "ERROR: Resouce Map" << std::endl;
+					map_ptr_ = nullptr;
+					return nullptr;
+				}
+				return reinterpret_cast<T*>(map_ptr_);
+			}
+
+			void Unmap();
+
+			ID3D12Resource* GetD3D12Resource();
+
+		private:
+			Desc	desc_ = {};
+
+			void*		map_ptr_ = nullptr;
+
+			ID3D12Resource* resource_ = nullptr;
 		};
 	}
 }

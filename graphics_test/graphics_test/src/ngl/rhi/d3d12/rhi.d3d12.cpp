@@ -15,6 +15,11 @@ namespace ngl
 				ret = D3D12_RESOURCE_STATE_COMMON;
 				break;
 			}
+			case ResourceState::General:
+			{
+				ret = D3D12_RESOURCE_STATE_GENERIC_READ;
+				break;
+			}
 			case ResourceState::ConstantBuffer:
 			{
 				ret = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
@@ -280,11 +285,11 @@ namespace ngl
 		{
 			return p_swapchain_;
 		}
-		unsigned int SwapChainDep::NumBuffer() const
+		unsigned int SwapChainDep::NumResource() const
 		{
 			return num_resource_;
 		}
-		ID3D12Resource* SwapChainDep::GetBuffer(unsigned int index)
+		ID3D12Resource* SwapChainDep::GetD3D12Resource(unsigned int index)
 		{
 			if (num_resource_ <= index)
 				return nullptr;
@@ -444,7 +449,7 @@ namespace ngl
 				return;
 			if (prev == next)
 				return;
-			auto* resource = p_swapchain->GetBuffer(buffer_index);
+			auto* resource = p_swapchain->GetD3D12Resource(buffer_index);
 
 			D3D12_RESOURCE_STATES state_before = ConvertResourceState(prev);
 			D3D12_RESOURCE_STATES state_after = ConvertResourceState(next);
@@ -493,7 +498,7 @@ namespace ngl
 				}
 			}
 			{
-				auto* buffer = p_swapchain->GetBuffer(buffer_index);
+				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
 				if (!buffer)
 				{
 					std::cout << "ERROR: Invalid Buffer Index" << std::endl;
@@ -588,6 +593,133 @@ namespace ngl
 				// イベント発火待機
 				WaitForSingleObject(win_event_, INFINITE);
 			}
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		BufferDep::BufferDep()
+		{
+		}
+		BufferDep::~BufferDep()
+		{
+			Finalize();
+		}
+
+		bool BufferDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+			desc_ = desc;
+
+			if (0 >= desc_.element_byte_size || 0 >= desc_.element_count)
+				return false;
+
+			D3D12_HEAP_FLAGS heap_flag = D3D12_HEAP_FLAG_NONE;
+			D3D12_RESOURCE_STATES initial_state = ConvertResourceState(desc_.initial_state);
+			D3D12_HEAP_PROPERTIES heap_prop = {};
+			{
+				switch (desc_.heap_type)
+				{
+				case ResourceHeapType::Default:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_DEFAULT;
+					break;
+				}
+				case ResourceHeapType::Upload:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_UPLOAD;
+					break;
+				}
+				case ResourceHeapType::Readback:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_READBACK;
+					break;
+				}
+				default:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_DEFAULT;
+				}
+				}
+				heap_prop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+				heap_prop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+				heap_prop.VisibleNodeMask = 0;
+			}
+
+			D3D12_RESOURCE_DESC resource_desc = {};
+			{
+				resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+				resource_desc.Alignment = 0;
+				resource_desc.Width = static_cast<UINT64>(desc_.element_byte_size) * static_cast<UINT64>(desc_.element_count);
+				resource_desc.Height = 1u;
+				resource_desc.DepthOrArraySize = 1u;
+				resource_desc.MipLevels = 1u;
+				resource_desc.Format = DXGI_FORMAT_UNKNOWN;
+				resource_desc.SampleDesc.Count = 1;
+				resource_desc.SampleDesc.Quality = 0;
+				resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+				resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+			}
+
+			/*
+				ステート制限
+					Upload -> D3D12_RESOURCE_STATE_GENERIC_READ
+					Readback -> D3D12_RESOURCE_STATE_COPY_DEST
+					テクスチャ配置専用予約バッファ -> D3D12_RESOURCE_STATE_COMMON
+			*/
+			if (D3D12_HEAP_TYPE_UPLOAD == heap_prop.Type)
+			{
+				if (D3D12_RESOURCE_STATE_GENERIC_READ != initial_state)
+				{
+					std::cout << "ERROR: State of Upload Buffer must be ResourceState::General" << std::endl;
+					return false;
+				}
+			}
+			else if (D3D12_HEAP_TYPE_READBACK == heap_prop.Type)
+			{
+				if (D3D12_RESOURCE_STATE_COPY_DEST != initial_state)
+				{
+					std::cout << "ERROR: State of Readback Buffer must be ResourceState::CopyDst" << std::endl;
+					return false;
+				}
+			}
+
+			if (FAILED(p_device->GetD3D12Device()->CreateCommittedResource(&heap_prop, heap_flag, &resource_desc, initial_state, nullptr, IID_PPV_ARGS(&resource_))))
+			{
+				std::cout << "ERROR: CreateCommittedResource" << std::endl;
+				return false;
+			}
+
+			return true;
+		}
+		void BufferDep::Finalize()
+		{
+			if (resource_)
+			{
+				resource_->Release();
+				resource_ = nullptr;
+			}
+		}
+		void BufferDep::Unmap()
+		{
+			if (!map_ptr_)
+				return;
+
+			// Uploadバッファ以外の場合はUnmap時に書き戻さないのでZero-Range指定.
+			D3D12_RANGE write_range = {0, 0};
+			if (ResourceHeapType::Upload == desc_.heap_type)
+			{
+				write_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
+			}
+
+			resource_->Unmap(0, &write_range);
+			map_ptr_ = nullptr;
+		}
+		ID3D12Resource* BufferDep::GetD3D12Resource()
+		{
+			return resource_;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 	}
