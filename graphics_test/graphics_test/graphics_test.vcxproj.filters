@@ -113,4 +113,8 @@
       <Filter>ヘッダー ファイル</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="src\ngl\resource\shader\sample_vs.hlsl" />
+    <FxCompile Include="src\ngl\resource\shader\sample_ps.hlsl" />
+  </ItemGroup>
 </Project>
