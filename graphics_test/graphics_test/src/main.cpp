@@ -17,6 +17,7 @@
 
 
 
+
 // アプリ本体.
 class AppGame : public ngl::boot::ApplicationBase
 {
@@ -38,18 +39,27 @@ private:
 
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
+	
+	// SwapChain
 	ngl::rhi::SwapChainDep						swapchain_;
-
 	std::vector<ngl::rhi::RenderTargetViewDep>	swapchain_rtvs_;
 	std::vector <ngl::rhi::ResourceState>		swapchain_resource_state_;
+
+	// CommandQueue実行完了待機用Fence
+	ngl::rhi::FenceDep							wait_fence_;
+	// Fenceの初期値がゼロであるため待機用の値は1から開始.
+	ngl::types::u64								wait_fence_value_ = 1;
+	// CommandQueue実行完了待機用オブジェクト
+	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
+
+
 
 	ngl::rhi::GraphicsCommandListDep			gfx_command_list_;
 
 
-	// CommandQueue実行完了待機用オブジェクト
-	ngl::types::u64								wait_fence_value_ = 1;// Fenceの初期値がゼロであるため待機用の値は1から開始.
-	ngl::rhi::FenceDep							wait_fence_;
-	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
+	ngl::rhi::ShaderDep							vs_sample_;
+	ngl::rhi::ShaderDep							ps_sample_;
+
 };
 
 
@@ -148,26 +158,6 @@ bool AppGame::Initialize()
 			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 			buffer_desc0.element_byte_size = sizeof(ngl::u64);
 			buffer_desc0.element_count = 1;
-			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Readback;	// GPU->CPU Readbackリソース
-			buffer_desc0.initial_state = ngl::rhi::ResourceState::CopyDst;
-
-			if (!buffer0.Initialize(&device_, buffer_desc0))
-			{
-				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
-			}
-
-			if (auto* buffer0_map = buffer0.Map<ngl::u64>())
-			{
-				*buffer0_map = 111u;
-				buffer0.Unmap();
-			}
-		}
-		{
-			// Buffer生成テスト
-			ngl::rhi::BufferDep buffer0;
-			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
-			buffer_desc0.element_byte_size = sizeof(ngl::u64);
-			buffer_desc0.element_count = 1;
 			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;	// CPU->GPU Uploadリソース
 			buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
 
@@ -182,24 +172,26 @@ bool AppGame::Initialize()
 				buffer0.Unmap();
 			}
 		}
+	}
+
+
+	// シェーダ
+	{
+		// バイナリ読み込み.
 		{
-			// Buffer生成テスト
-			ngl::rhi::BufferDep buffer0;
-			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
-			buffer_desc0.element_byte_size = sizeof(ngl::u64);
-			buffer_desc0.element_count = 1;
-			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Default;	// Defaultリソース
-			buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
-
-			if (!buffer0.Initialize(&device_, buffer_desc0))
+			ngl::file::FileObject file_obj;
+			file_obj.ReadFile("./data/sample_vs.cso");
+			if (!vs_sample_.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
-				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
-
-			if (auto* buffer0_map = buffer0.Map<ngl::u64>())
+		}
+		{
+			ngl::file::FileObject file_obj;
+			file_obj.ReadFile("./data/sample_ps.cso");
+			if (!ps_sample_.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
-				*buffer0_map = 111u;
-				buffer0.Unmap();
+				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
 		}
 	}

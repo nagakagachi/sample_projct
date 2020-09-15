@@ -276,5 +276,23 @@ namespace ngl
 
 			ID3D12Resource* resource_ = nullptr;
 		};
+
+
+
+		// D3D12では単純にシェーダバイナリを保持するだけ
+		class ShaderDep
+		{
+		public:
+			ShaderDep();
+			virtual ~ShaderDep();
+
+			// コンパイル済みシェーダバイナリから初期化
+			bool Initialize(DeviceDep* p_device, const void* shader_binary_ptr, u32 shader_binary_size);
+			void Finalize();
+		private:
+
+			std::vector<u8>	data_;
+		};
+
 	}
 }
