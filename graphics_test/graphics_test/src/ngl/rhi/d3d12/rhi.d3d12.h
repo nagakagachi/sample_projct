@@ -14,8 +14,6 @@
 #endif
 
 
-#pragma comment(lib, "d3d12.lib")
-#pragma comment(lib, "dxgi.lib")
 
 
 namespace ngl
@@ -59,6 +57,14 @@ namespace ngl
 			Default,
 			Upload,
 			Readback,
+		};
+
+		enum class ShaderStage
+		{
+			Vertex,
+			Pixel,
+			Mesh,			// 未実装
+			Amplification,	// 未実装
 		};
 
 
@@ -288,9 +294,36 @@ namespace ngl
 
 			// コンパイル済みシェーダバイナリから初期化
 			bool Initialize(DeviceDep* p_device, const void* shader_binary_ptr, u32 shader_binary_size);
+
+			struct Desc
+			{
+				// シェーダファイルパス.
+				// "./sample.hlsl"
+				const wchar_t*	shader_file_path = nullptr;
+				// エントリポイント名. 
+				// "main_ps"
+				const char*		entry_point_name = nullptr;
+				// シェーダステージ.
+				ShaderStage		stage = ShaderStage::Vertex;
+				// シェーダモデル文字列.
+				// "4_0", "5_0", "5_1" etc.
+				const char*		shader_model_version = nullptr;
+
+				// コンパイルオプション設定.
+				bool			option_debug_mode = false;
+				bool			option_enable_validation = false;
+				bool			option_enable_optimization = false;
+				bool			option_matrix_row_major = false;
+
+				// TODO. インクルードやDefineオプションなど
+
+			};
+			// ファイルから
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+
+
 			void Finalize();
 		private:
-
 			std::vector<u8>	data_;
 		};
 

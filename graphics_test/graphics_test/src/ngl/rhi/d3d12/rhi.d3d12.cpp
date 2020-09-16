@@ -1,5 +1,15 @@
 ﻿
 #include "rhi.d3d12.h"
+// lib
+#pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxgi.lib")
+
+
+// for compiler
+#include <d3dcompiler.h>
+// lib
+#pragma comment(lib, "d3dcompiler.lib")
+
 
 namespace ngl
 {
@@ -745,6 +755,94 @@ namespace ngl
 			// 内部でメモリ確保
 			data_.resize(shader_binary_size);
 			memcpy(data_.data(), shader_binary_ptr, shader_binary_size);
+			return true;
+		}
+		// ファイルからコンパイル.
+		bool ShaderDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			auto include_object = D3D_COMPILE_STANDARD_FILE_INCLUDE;
+
+			auto stage_id = static_cast<int>(desc.stage);
+
+			if (!p_device || !desc.shader_file_path || !desc.entry_point_name || !desc.shader_model_version)
+			{
+				return false;
+			}
+
+			char shader_model_name[32];
+			{
+				static const char* shader_stage_names[] =
+				{
+					"vs",
+					"ps",
+					"ms",
+					"as"
+				};
+				size_t shader_model_name_len = 0;
+
+				const auto shader_model_base_len = strlen(shader_stage_names[stage_id]);
+				const auto shader_model_version_len = strlen(desc.shader_model_version);
+				if (sizeof(shader_model_name) <= (shader_model_base_len + 1 + shader_model_version_len + 1))
+				{
+					return false;
+				}
+
+				
+				std::copy_n(shader_stage_names[stage_id], shader_model_base_len, shader_model_name);
+				shader_model_name_len += shader_model_base_len;
+
+				std::copy_n("_", 1, shader_model_name + shader_model_name_len);
+				shader_model_name_len += 1;
+
+				std::copy_n(desc.shader_model_version, shader_model_version_len, shader_model_name + shader_model_name_len);
+				shader_model_name_len += shader_model_version_len;
+
+				shader_model_name[shader_model_name_len] = 0;
+				shader_model_name_len += 1;
+			}
+
+
+			const int flag_debug = (!desc.option_debug_mode) ? 0 : D3DCOMPILE_DEBUG;
+			const int flag_validation = (!desc.option_enable_validation) ? D3DCOMPILE_SKIP_VALIDATION : 0;
+			const int flag_optimization = (!desc.option_enable_optimization) ? D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+			const int flag_matrix_row_major = (!desc.option_matrix_row_major) ? D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR : D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
+
+			const int commpile_flag = flag_debug | flag_validation | flag_optimization | flag_matrix_row_major;
+
+			ID3DBlob* p_compile_data = nullptr;
+			ID3DBlob* error_blob = nullptr;
+			auto hr = D3DCompileFromFile(desc.shader_file_path, nullptr, include_object, desc.entry_point_name, shader_model_name, commpile_flag, 0, &p_compile_data, &error_blob);
+			if (FAILED(hr))
+			{
+				// 失敗.
+				if ( HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) == hr)
+				{
+					// ファイルパス不正
+					std::cout << "ERROR : Shader File not found." << std::endl;
+				}
+				if (error_blob)
+				{
+					std::string error_message;
+					error_message.resize(error_blob->GetBufferSize());
+					std::copy_n(static_cast<char*>(error_blob->GetBufferPointer()), error_blob->GetBufferSize(), error_message.begin());
+
+					std::cout << "ERROR : " << error_message << std::endl;
+
+					error_blob->Release();
+					error_blob = nullptr;
+				}
+
+				return false;
+			}
+
+			{
+				// 成功したのでBlobから取り出し
+				Initialize(p_device, p_compile_data->GetBufferPointer(), static_cast<u32>(p_compile_data->GetBufferSize()));
+
+				// Blobは解放
+				p_compile_data->Release();
+				p_compile_data = nullptr;
+			}
 			return true;
 		}
 		void ShaderDep::Finalize()

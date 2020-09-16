@@ -186,10 +186,24 @@ bool AppGame::Initialize()
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
 		}
+		// バイナリ読み込み.
 		{
 			ngl::file::FileObject file_obj;
 			file_obj.ReadFile("./data/sample_ps.cso");
 			if (!ps_sample_.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
+			{
+				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+			}
+		}
+		// HLSLからコンパイルして初期化.
+		{
+			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.entry_point_name = "main_ps";
+			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+			shader_desc.shader_model_version = "5_0";
+
+			if (!ps_sample_.Initialize(&device_, shader_desc))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
