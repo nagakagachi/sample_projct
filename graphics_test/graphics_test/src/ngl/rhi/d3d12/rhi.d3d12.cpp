@@ -1,4 +1,5 @@
 ﻿
+
 #include "rhi.d3d12.h"
 // lib
 #pragma comment(lib, "d3d12.lib")
@@ -10,6 +11,8 @@
 // lib
 #pragma comment(lib, "d3dcompiler.lib")
 
+#include <dxcapi.h>
+#pragma comment(lib, "dxcompiler.lib")
 
 namespace ngl
 {
@@ -119,11 +122,10 @@ namespace ngl
 			// DebugLayer有効化
 			if (enable_debug_layer)
 			{
-				ID3D12Debug* debugController;
+				CComPtr<ID3D12Debug> debugController;
 				if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
 				{
 					debugController->EnableDebugLayer();
-					debugController->Release();
 				}
 			}
 #endif
@@ -183,16 +185,8 @@ namespace ngl
 		}
 		void DeviceDep::Finalize()
 		{
-			if (p_device_)
-			{
-				p_device_->Release();
-				p_device_ = nullptr;
-			}
-			if (p_factory_)
-			{
-				p_factory_->Release();
-				p_factory_ = nullptr;
-			}
+			p_device_ = nullptr;
+			p_factory_ = nullptr;
 		}
 
 		ngl::platform::CoreWindow* DeviceDep::GetWindow()
@@ -258,8 +252,7 @@ namespace ngl
 
 			// Resource取得
 			num_resource_ = desc.buffer_count;
-			p_resources_ = new ID3D12Resource * [num_resource_];
-			memset(p_resources_, 0x00, sizeof(*p_resources_) * num_resource_);
+			p_resources_ = new CComPtr<ID3D12Resource> [num_resource_];
 			for (auto i = 0u; i < num_resource_; ++i)
 			{
 				if (FAILED(p_swapchain_->GetBuffer(i, IID_PPV_ARGS(&p_resources_[i]))))
@@ -276,20 +269,12 @@ namespace ngl
 			{
 				for (auto i = 0u; i < num_resource_; ++i)
 				{
-					if (p_resources_[i])
-					{
-						p_resources_[i]->Release();
-						p_resources_[i] = nullptr;
-					}
+					p_resources_[i] = nullptr;
 				}
 				delete[] p_resources_;
 				p_resources_ = nullptr;
 			}
-			if (p_swapchain_)
-			{
-				p_swapchain_->Release();
-				p_swapchain_ = nullptr;
-			}
+			p_swapchain_ = nullptr;
 		}
 		SwapChainDep::DXGI_SWAPCHAIN_TYPE* SwapChainDep::GetDxgiSwapChain()
 		{
@@ -348,11 +333,7 @@ namespace ngl
 
 		void GraphicsCommandQueueDep::Finalize()
 		{
-			if (p_command_queue_)
-			{
-				p_command_queue_->Release();
-				p_command_queue_ = nullptr;
-			}
+			p_command_queue_ = nullptr;
 		}
 
 		void GraphicsCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, GraphicsCommandListDep** p_command_lists)
@@ -365,6 +346,7 @@ namespace ngl
 			}
 
 			p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array_[0]));
+			p_command_list_array_.clear();
 		}
 
 		void GraphicsCommandQueueDep::Signal(FenceDep* p_fence, ngl::types::u64 fence_value)
@@ -417,16 +399,8 @@ namespace ngl
 		}
 		void GraphicsCommandListDep::Finalize()
 		{
-			if (p_command_list_)
-			{
-				p_command_list_->Release();
-				p_command_list_ = nullptr;
-			}
-			if (p_command_allocator_)
-			{
-				p_command_allocator_->Release();
-				p_command_allocator_ = nullptr;
-			}
+			p_command_list_ = nullptr;
+			p_command_allocator_ = nullptr;
 		}
 
 		void GraphicsCommandListDep::Begin()
@@ -524,11 +498,7 @@ namespace ngl
 
 		void RenderTargetViewDep::Finalize()
 		{
-			if (p_heap_)
-			{
-				p_heap_->Release();
-				p_heap_ = nullptr;
-			}
+			p_heap_ = nullptr;
 		}
 
 		D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetViewDep::GetD3D12DescriptorHandle() const
@@ -563,11 +533,7 @@ namespace ngl
 		}
 		void FenceDep::Finalize()
 		{
-			if (p_fence_)
-			{
-				p_fence_->Release();
-				p_fence_ = nullptr;
-			}
+			p_fence_ = nullptr;
 		}
 		ID3D12Fence* FenceDep::GetD3D12Fence()
 		{
@@ -706,11 +672,7 @@ namespace ngl
 		}
 		void BufferDep::Finalize()
 		{
-			if (resource_)
-			{
-				resource_->Release();
-				resource_ = nullptr;
-			}
+			resource_ = nullptr;
 		}
 		void BufferDep::Unmap()
 		{
@@ -755,6 +717,12 @@ namespace ngl
 			// 内部でメモリ確保
 			data_.resize(shader_binary_size);
 			memcpy(data_.data(), shader_binary_ptr, shader_binary_size);
+
+
+			// reflection取得
+			// fxcとdxcで取得方法が違う
+			// ヘッダ部にある DXC などの文字列で切り替えができるか？
+
 			return true;
 		}
 		// ファイルからコンパイル.
@@ -769,6 +737,7 @@ namespace ngl
 				return false;
 			}
 
+			// シェーダステージ名_シェーダモデル名 の文字列を生成.
 			char shader_model_name[32];
 			{
 				static const char* shader_stage_names[] =
@@ -802,48 +771,138 @@ namespace ngl
 			}
 
 
-			const int flag_debug = (!desc.option_debug_mode) ? 0 : D3DCOMPILE_DEBUG;
-			const int flag_validation = (!desc.option_enable_validation) ? D3DCOMPILE_SKIP_VALIDATION : 0;
-			const int flag_optimization = (!desc.option_enable_optimization) ? D3DCOMPILE_SKIP_OPTIMIZATION : 0;
-			const int flag_matrix_row_major = (!desc.option_matrix_row_major) ? D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR : D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
+			bool result = true;
 
-			const int commpile_flag = flag_debug | flag_validation | flag_optimization | flag_matrix_row_major;
-
-			ID3DBlob* p_compile_data = nullptr;
-			ID3DBlob* error_blob = nullptr;
-			auto hr = D3DCompileFromFile(desc.shader_file_path, nullptr, include_object, desc.entry_point_name, shader_model_name, commpile_flag, 0, &p_compile_data, &error_blob);
-			if (FAILED(hr))
+			// 先にdxcによるコンパイルを試みる.
 			{
-				// 失敗.
-				if ( HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) == hr)
+				bool compile_success = true;
+
+				auto char2wchar = [](wchar_t* dst, size_t dst_size, const char* src)
 				{
-					// ファイルパス不正
-					std::cout << "ERROR : Shader File not found." << std::endl;
-				}
-				if (error_blob)
+					size_t convertedChars = 0;
+					mbstowcs_s(&convertedChars, dst, dst_size, src, _TRUNCATE);
+				};
+				// shader model profile name.  char -> wchar
+				wchar_t shader_model_name_w[64];
+				char2wchar(shader_model_name_w, std::size(shader_model_name_w), shader_model_name);
+
+				// entry point name. char -> wchar
+				wchar_t shader_entry_point_name_w[128];
+				char2wchar(shader_entry_point_name_w, std::size(shader_entry_point_name_w), desc.entry_point_name);
+
+
+				CComPtr<IDxcLibrary> dxc_library;
+				HRESULT hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&dxc_library));
+				if (FAILED(hr))
+					compile_success &= false;
+
+				CComPtr<IDxcCompiler> dxc_compiler;
+				if (compile_success)
 				{
-					std::string error_message;
-					error_message.resize(error_blob->GetBufferSize());
-					std::copy_n(static_cast<char*>(error_blob->GetBufferPointer()), error_blob->GetBufferSize(), error_message.begin());
-
-					std::cout << "ERROR : " << error_message << std::endl;
-
-					error_blob->Release();
-					error_blob = nullptr;
+					hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
+					if (FAILED(hr))
+						compile_success &= false;
 				}
 
-				return false;
+				CComPtr<IDxcBlobEncoding> sourceBlob;
+				if (compile_success)
+				{
+					uint32_t codePage = CP_UTF8;
+					hr = dxc_library->CreateBlobFromFile(desc.shader_file_path, &codePage, &sourceBlob);
+					if (FAILED(hr))
+						compile_success &= false;
+				}
+
+				CComPtr<IDxcOperationResult> dxc_result;
+				if (compile_success)
+				{
+					hr = dxc_compiler->Compile(
+						sourceBlob,
+						desc.shader_file_path,
+						shader_entry_point_name_w,
+						shader_model_name_w,	// "PS_6_0"
+						NULL, 0,				// pArguments, argCount
+						NULL, 0,				// pDefines, defineCount
+						NULL,					// pIncludeHandler
+						&dxc_result				// ppResult
+					);
+
+					if (SUCCEEDED(hr))
+						dxc_result->GetStatus(&hr);
+					if (FAILED(hr))
+					{
+						if (dxc_result)
+						{
+							CComPtr<IDxcBlobEncoding> errorsBlob;
+							hr = dxc_result->GetErrorBuffer(&errorsBlob);
+							if (SUCCEEDED(hr) && errorsBlob)
+							{
+								wprintf(L"Compilation failed with errors:\n%hs\n",
+									(const char*)errorsBlob->GetBufferPointer());
+							}
+						}
+
+						compile_success &= false;
+					}
+				}
+				if (compile_success)
+				{
+					// 成功
+					CComPtr<IDxcBlob> code;
+					dxc_result->GetResult(&code);
+
+					// コンパイル済みバイナリを内部メモリにコピー
+					data_.resize(code->GetBufferSize());
+					memcpy(data_.data(), code->GetBufferPointer(), code->GetBufferSize());
+				}
+
+				result = compile_success;
+			}
+			// dxcでのコンパイルに失敗した場合はd3dcompilerでのコンパイルを試みる
+			if (!result)
+			{
+				bool compile_success = true;
+
+				const int flag_debug = (!desc.option_debug_mode) ? 0 : D3DCOMPILE_DEBUG;
+				const int flag_validation = (!desc.option_enable_validation) ? D3DCOMPILE_SKIP_VALIDATION : 0;
+				const int flag_optimization = (!desc.option_enable_optimization) ? D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+				const int flag_matrix_row_major = (!desc.option_matrix_row_major) ? D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR : D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
+
+				const int commpile_flag = flag_debug | flag_validation | flag_optimization | flag_matrix_row_major;
+
+				CComPtr<ID3DBlob> p_compile_data;
+				CComPtr<ID3DBlob>  error_blob;
+				auto hr = D3DCompileFromFile(desc.shader_file_path, nullptr, include_object, desc.entry_point_name, shader_model_name, commpile_flag, 0, &p_compile_data, &error_blob);
+				if (FAILED(hr))
+				{
+					// 失敗.
+					if (HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) == hr)
+					{
+						// ファイルパス不正
+						std::cout << "ERROR : Shader File not found." << std::endl;
+					}
+					if (error_blob)
+					{
+						std::string error_message;
+						error_message.resize(error_blob->GetBufferSize());
+						std::copy_n(static_cast<char*>(error_blob->GetBufferPointer()), error_blob->GetBufferSize(), error_message.begin());
+
+						std::cout << "ERROR : " << error_message << std::endl;
+					}
+
+					compile_success = false;
+				}
+				if (compile_success)
+				{
+					// コンパイル済みバイナリを内部メモリにコピー
+					data_.resize(p_compile_data->GetBufferSize());
+					memcpy(data_.data(), p_compile_data->GetBufferPointer(), p_compile_data->GetBufferSize());
+				}
+
+				result = compile_success;
 			}
 
-			{
-				// 成功したのでBlobから取り出し
-				Initialize(p_device, p_compile_data->GetBufferPointer(), static_cast<u32>(p_compile_data->GetBufferSize()));
-
-				// Blobは解放
-				p_compile_data->Release();
-				p_compile_data = nullptr;
-			}
-			return true;
+			return result;
 		}
 		void ShaderDep::Finalize()
 		{

@@ -14,6 +14,7 @@
 #endif
 
 
+#include <atlbase.h>
 
 
 namespace ngl
@@ -89,8 +90,8 @@ namespace ngl
 			ngl::platform::CoreWindow* p_window_ = nullptr;
 
 			D3D_FEATURE_LEVEL device_feature_level_ = {};
-			ID3D12Device* p_device_ = nullptr;
-			DXGI_FACTORY_TYPE* p_factory_ = nullptr;
+			CComPtr<ID3D12Device> p_device_;
+			CComPtr<DXGI_FACTORY_TYPE> p_factory_;
 		};
 
 
@@ -111,7 +112,7 @@ namespace ngl
 
 			ID3D12CommandQueue* GetD3D12CommandQueue();
 		private:
-			ID3D12CommandQueue* p_command_queue_ = nullptr;
+			CComPtr<ID3D12CommandQueue> p_command_queue_;
 			std::vector<ID3D12CommandList*> p_command_list_array_;
 		};
 
@@ -139,8 +140,8 @@ namespace ngl
 
 			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
 		private:
-			ID3D12CommandAllocator* p_command_allocator_ = nullptr;
-			ID3D12GraphicsCommandList* p_command_list_ = nullptr;
+			CComPtr<ID3D12CommandAllocator>		p_command_allocator_;
+			CComPtr<ID3D12GraphicsCommandList>	p_command_list_;
 		};
 
 		// フェンス
@@ -155,7 +156,7 @@ namespace ngl
 
 			ID3D12Fence* GetD3D12Fence();
 		private:
-			ID3D12Fence* p_fence_			= nullptr;
+			CComPtr<ID3D12Fence> p_fence_;
 		};
 
 
@@ -198,9 +199,9 @@ namespace ngl
 			ID3D12Resource* GetD3D12Resource(unsigned int index);
 
 		private:
-			DXGI_SWAPCHAIN_TYPE* p_swapchain_ = nullptr;
+			CComPtr<DXGI_SWAPCHAIN_TYPE> p_swapchain_;
 
-			ID3D12Resource** p_resources_ = nullptr;
+			CComPtr<ID3D12Resource>* p_resources_ = nullptr;
 			unsigned int num_resource_ = 0;
 		};
 
@@ -219,7 +220,7 @@ namespace ngl
 
 			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const;
 		private:
-			ID3D12DescriptorHeap* p_heap_ = nullptr;
+			CComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
 		// Buffer
@@ -280,7 +281,7 @@ namespace ngl
 
 			void*		map_ptr_ = nullptr;
 
-			ID3D12Resource* resource_ = nullptr;
+			CComPtr<ID3D12Resource> resource_;
 		};
 
 
