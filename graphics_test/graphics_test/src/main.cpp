@@ -180,22 +180,31 @@ bool AppGame::Initialize()
 		// バイナリ読み込み.
 		{
 			ngl::file::FileObject file_obj;
+			ngl::rhi::ShaderReflectionDep reflect00;
 			file_obj.ReadFile("./data/sample_vs.cso");
 			if (!vs_sample_.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
+			reflect00.Initialize(&device_, &vs_sample_);
+			std::cout << "_" << std::endl;
 		}
 		// バイナリ読み込み.
 		{
 			ngl::file::FileObject file_obj;
+			ngl::rhi::ShaderReflectionDep reflect00;
 			file_obj.ReadFile("./data/sample_ps.cso");
 			if (!ps_sample_.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
+			reflect00.Initialize(&device_, &ps_sample_);
+			std::cout << "_" << std::endl;
 		}
+
 		// HLSLからコンパイルして初期化.
+		ngl::rhi::ShaderDep shader00;
+		ngl::rhi::ShaderReflectionDep reflect00;
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
@@ -203,11 +212,30 @@ bool AppGame::Initialize()
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "5_0";
 
-			if (!ps_sample_.Initialize(&device_, shader_desc))
+			if (!shader00.Initialize(&device_, shader_desc))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
+			reflect00.Initialize(&device_, &shader00);
 		}
+		// HLSLからコンパイルして初期化.
+		ngl::rhi::ShaderDep shader01;
+		ngl::rhi::ShaderReflectionDep reflect01;
+		{
+			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.entry_point_name = "main_ps";
+			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+			shader_desc.shader_model_version = "6_0";
+
+			if (!shader01.Initialize(&device_, shader_desc))
+			{
+				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+			}
+			reflect01.Initialize(&device_, &shader01);
+		}
+
+		std::cout << "_" << std::endl;
 	}
 
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");

@@ -912,6 +912,103 @@ namespace ngl
 				data_.swap(temp);
 			}
 		}
+		u32		ShaderDep::GetShaderBinarySize() const
+		{
+			return static_cast<u32>(data_.size());
+		}
+		const void* ShaderDep::GetShaderBinaryPtr() const
+		{
+			if(0 < GetShaderBinarySize())
+				return reinterpret_cast<const void*>(data_.data());
+			return nullptr;
+		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		ShaderReflectionDep::ShaderReflectionDep()
+		{
+		}
+		ShaderReflectionDep::~ShaderReflectionDep()
+		{
+		}
+
+
+		bool ShaderReflectionDep::Initialize(DeviceDep* p_device, ShaderDep* p_shader)
+		{
+			if (!p_device || !p_shader || !p_shader->GetShaderBinaryPtr())
+				return true;
+
+			const auto bin_size = p_shader->GetShaderBinarySize();
+			const auto bin_ptr = p_shader->GetShaderBinaryPtr();
+
+			// Refrection
+
+			bool hresult = true;
+			CComPtr<ID3D12ShaderReflection> shader_reflect;
+
+			// 最初にDxcApiを試行する
+			// ShaderModel6以降はDxcAPIを利用する
+			{
+				CComPtr<IDxcLibrary> lib;
+				hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&lib)));
+
+				CComPtr<IDxcBlobEncoding> binBlob{};
+				if (hresult)
+				{
+					hresult = SUCCEEDED(lib->CreateBlobWithEncodingOnHeapCopy(bin_ptr, bin_size, CP_ACP, &binBlob));
+				}
+				CComPtr<IDxcContainerReflection> refl;
+				if (hresult)
+				{
+					hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&refl)));
+				}
+				UINT shdIndex = 0;
+				if(hresult)
+				{
+					// シェーダーバイナリデータをロードし、DXILチャンクブロック（のインデックス）を得る.
+					hresult = SUCCEEDED(refl->Load(binBlob));
+					if (hresult)
+					{
+#ifndef MAKEFOURCC
+#define MAKEFOURCC(a, b, c, d) (unsigned int)((unsigned char)(a) | (unsigned char)(b) << 8 | (unsigned char)(c) << 16 | (unsigned char)(d) << 24)
+#endif
+						hresult = SUCCEEDED(refl->FindFirstPartKind(MAKEFOURCC('D', 'X', 'I', 'L'), &shdIndex));
+#undef MAKEFOURCC
+					}
+				}
+				// シェーダーリフレクションインターフェース取得.
+				if (hresult)
+				{
+					hresult = SUCCEEDED(refl->GetPartReflection(shdIndex, IID_PPV_ARGS(&shader_reflect)));
+				}
+
+			}
+			// DxcApiで取得できなかった場合はD3DRefrectを試行する
+			// ShaderModel5以前はD3DReflectを利用する
+			if(!hresult)
+			{
+				hresult = SUCCEEDED(D3DReflect(bin_ptr, bin_size, IID_PPV_ARGS(&shader_reflect)));
+			}
+
+			// ID3D12ShaderReflectionが取得できればそこから情報取得
+			if (hresult)
+			{
+				D3D12_SHADER_DESC shader_desc = {};
+				if (hresult)
+				{
+					hresult = SUCCEEDED(shader_reflect->GetDesc(&shader_desc));
+				}
+				if (hresult)
+				{
+					std::cout << "ShaderReflect: " << shader_desc.ConstantBuffers << std::endl;
+				}
+			}
+
+			return true;
+		}
+		void ShaderReflectionDep::Finalize()
+		{
+		}
+
 	}
 }

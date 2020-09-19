@@ -321,12 +321,24 @@ namespace ngl
 			};
 			// ファイルから
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
-
-
 			void Finalize();
+
+			u32		GetShaderBinarySize() const;
+			const void*	GetShaderBinaryPtr() const;
 		private:
 			std::vector<u8>	data_;
 		};
 
+
+		class ShaderReflectionDep
+		{
+		public:
+			ShaderReflectionDep();
+			~ShaderReflectionDep();
+
+			bool Initialize(DeviceDep* p_device, ShaderDep* p_shader);
+			void Finalize();
+		private:
+		};
 	}
 }
