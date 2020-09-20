@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 
+#include "ngl/rhi/rhi.h"
+
 #include "ngl/util/types.h"
 #include "ngl/platform/win/window.win.h"
 
@@ -32,41 +34,6 @@ namespace ngl
 
 		class DeviceDep;
 
-
-		enum class ResourceState
-		{
-			Common,
-			General,
-			ConstantBuffer,
-			VertexBuffer,
-			IndexBuffer,
-			RenderTarget,
-			ShaderRead,
-			UnorderedAccess,
-			DepthWrite,
-			DepthRead,
-			IndirectArgument,
-			CopyDst,
-			CopySrc,
-			Present,
-		};
-		D3D12_RESOURCE_STATES ConvertResourceState(ngl::rhi::ResourceState v);
-
-
-		enum class ResourceHeapType
-		{
-			Default,
-			Upload,
-			Readback,
-		};
-
-		enum class ShaderStage
-		{
-			Vertex,
-			Pixel,
-			Mesh,			// 未実装
-			Amplification,	// 未実装
-		};
 
 
 		// Device
@@ -231,8 +198,8 @@ namespace ngl
 			{
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
-				ResourceHeapType	heap_type = ResourceHeapType::Default;
-				ResourceState		initial_state = ResourceState::General;
+				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
+				ResourceState		initial_state = ResourceState::GENERAL;
 			};
 
 			BufferDep();
@@ -245,7 +212,7 @@ namespace ngl
 			T* Map()
 			{
 				// DefaultヒープリソースはMap不可
-				if (ResourceHeapType::Default == desc_.heap_type)
+				if (ResourceHeapType::DEFAULT == desc_.heap_type)
 				{
 					std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
 					return nullptr;
@@ -258,7 +225,7 @@ namespace ngl
 
 				// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
 				D3D12_RANGE read_range = { 0, 0 };
-				if (ResourceHeapType::Readback == desc_.heap_type)
+				if (ResourceHeapType::READBACK == desc_.heap_type)
 				{
 					read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
 				}
@@ -305,7 +272,7 @@ namespace ngl
 				// "main_ps"
 				const char*		entry_point_name = nullptr;
 				// シェーダステージ.
-				ShaderStage		stage = ShaderStage::Vertex;
+				ShaderStage		stage = ShaderStage::VERTEX;
 				// シェーダモデル文字列.
 				// "4_0", "5_0", "5_1" etc.
 				const char*		shader_model_version = nullptr;
@@ -403,9 +370,45 @@ namespace ngl
 			// デフォルト値バッファ.
 			std::vector<u8> cb_default_value_buffer_;
 
-
 			// Input Output
 			std::vector<InputParamInfo>	input_param_;
+		};
+
+
+		class GraphicsPipelineState
+		{
+		public:
+			struct Desc
+			{
+				ShaderDep*	vs = nullptr;
+				ShaderDep*	ps = nullptr;
+				ShaderDep*	ds = nullptr;
+				ShaderDep*	hs = nullptr;
+				ShaderDep*	gs = nullptr;
+
+				BlendState			blend_state = {};
+				u32					sample_mask = ~(u32(0));
+				RasterizerState		rasterizer_staet = {};
+				DepthStencilState	depth_stencil_state = {};
+
+				InputLayout				input_layout = {};
+				PrimitiveTopologyType	primitive_topology_type = PrimitiveTopologyType::PRIMITIVE_TOPOLOGY_TRIANGLE;
+
+				u32					num_render_targets = 0;
+				ResourceFormat		render_target_formats[8] = {};
+				ResourceFormat		depth_stencil_format = ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT;
+				SampleDesc			sample_desc = {};
+				u32					node_mask = 0;
+			};
+
+			GraphicsPipelineState();
+			~GraphicsPipelineState();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+		private:
+			CComPtr<ID3D12PipelineState>	pso_;
 		};
 	}
 }

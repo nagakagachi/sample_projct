@@ -1,7 +1,7 @@
 ﻿
 
 #include "rhi.d3d12.h"
-
+#include "rhi_util.d3d12.h"
 
 #include <algorithm>
 
@@ -22,90 +22,6 @@ namespace ngl
 {
 	namespace rhi
 	{
-		D3D12_RESOURCE_STATES ConvertResourceState(ngl::rhi::ResourceState v)
-		{
-			D3D12_RESOURCE_STATES ret = {};
-			switch (v)
-			{
-			case ResourceState::Common:
-			{
-				ret = D3D12_RESOURCE_STATE_COMMON;
-				break;
-			}
-			case ResourceState::General:
-			{
-				ret = D3D12_RESOURCE_STATE_GENERIC_READ;
-				break;
-			}
-			case ResourceState::ConstantBuffer:
-			{
-				ret = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-				break;
-			}
-			case ResourceState::VertexBuffer:
-			{
-				ret = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-				break;
-			}
-			case ResourceState::IndexBuffer:
-			{
-				ret = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-				break;
-			}
-			case ResourceState::RenderTarget:
-			{
-				ret = D3D12_RESOURCE_STATE_RENDER_TARGET;
-				break;
-			}
-			case ResourceState::ShaderRead:
-			{
-				ret = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-				break;
-			}
-			case ResourceState::UnorderedAccess:
-			{
-				ret = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-				break;
-			}
-			case ResourceState::DepthWrite:
-			{
-				ret = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-				break;
-			}
-			case ResourceState::DepthRead:
-			{
-				ret = D3D12_RESOURCE_STATE_DEPTH_READ;
-				break;
-			}
-			case ResourceState::IndirectArgument:
-			{
-				ret = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
-				break;
-			}
-			case ResourceState::CopyDst:
-			{
-				ret = D3D12_RESOURCE_STATE_COPY_DEST;
-				break;
-			}
-			case ResourceState::CopySrc:
-			{
-				ret = D3D12_RESOURCE_STATE_COPY_SOURCE;
-				break;
-			}
-			case ResourceState::Present:
-			{
-				ret = D3D12_RESOURCE_STATE_PRESENT;
-				break;
-			}
-			default:
-			{
-				std::cout << "ERROR : Invalid Resource State" << std::endl;
-			}
-			}
-			return ret;
-		}
-
-
 		static uint8_t MaskCount(uint8_t V)
 		{
 			static const uint8_t Count[16] = 
@@ -119,8 +35,6 @@ namespace ngl
 				return Count[V];
 			return 0;
 		}
-
-
 
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -621,17 +535,17 @@ namespace ngl
 			{
 				switch (desc_.heap_type)
 				{
-				case ResourceHeapType::Default:
+				case ResourceHeapType::DEFAULT:
 				{
 					heap_prop.Type = D3D12_HEAP_TYPE_DEFAULT;
 					break;
 				}
-				case ResourceHeapType::Upload:
+				case ResourceHeapType::UPLOAD:
 				{
 					heap_prop.Type = D3D12_HEAP_TYPE_UPLOAD;
 					break;
 				}
-				case ResourceHeapType::Readback:
+				case ResourceHeapType::READBACK:
 				{
 					heap_prop.Type = D3D12_HEAP_TYPE_READBACK;
 					break;
@@ -703,7 +617,7 @@ namespace ngl
 
 			// Uploadバッファ以外の場合はUnmap時に書き戻さないのでZero-Range指定.
 			D3D12_RANGE write_range = {0, 0};
-			if (ResourceHeapType::Upload == desc_.heap_type)
+			if (ResourceHeapType::UPLOAD == desc_.heap_type)
 			{
 				write_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
 			}
@@ -1160,5 +1074,190 @@ namespace ngl
 			const auto i = cb_variable_offset_[index] + variable_index;
 			return &cb_variable_[i];
 		}
+
+
+
+
+		GraphicsPipelineState::GraphicsPipelineState()
+		{
+		}
+		GraphicsPipelineState::~GraphicsPipelineState()
+		{
+		}
+
+		bool GraphicsPipelineState::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+			// 入力エレメント定義配列を一時的に確保して設定し,そのメモリを指定する.
+			std::vector<D3D12_INPUT_ELEMENT_DESC> input_elem_descs;
+			input_elem_descs.resize(desc.input_layout.num_elements);
+
+			
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
+			if (desc.vs)
+			{
+				pso_desc.VS.BytecodeLength = desc.vs->GetShaderBinarySize();
+				pso_desc.VS.pShaderBytecode = desc.vs->GetShaderBinaryPtr();
+			}
+			if (desc.ps)
+			{
+				pso_desc.PS.BytecodeLength = desc.ps->GetShaderBinarySize();
+				pso_desc.PS.pShaderBytecode = desc.ps->GetShaderBinaryPtr();
+			}
+			if (desc.ds)
+			{
+				pso_desc.DS.BytecodeLength = desc.ds->GetShaderBinarySize();
+				pso_desc.DS.pShaderBytecode = desc.ds->GetShaderBinaryPtr();
+			}
+			if (desc.hs)
+			{
+				pso_desc.HS.BytecodeLength = desc.hs->GetShaderBinarySize();
+				pso_desc.HS.pShaderBytecode = desc.hs->GetShaderBinaryPtr();
+			}
+			if (desc.gs)
+			{
+				pso_desc.GS.BytecodeLength = desc.gs->GetShaderBinarySize();
+				pso_desc.GS.pShaderBytecode = desc.gs->GetShaderBinaryPtr();
+			}
+			pso_desc.StreamOutput = {};
+			// BlendState
+			{
+				pso_desc.BlendState.AlphaToCoverageEnable = desc.blend_state.alpha_to_coverage_enable;
+				pso_desc.BlendState.IndependentBlendEnable = desc.blend_state.independent_blend_enable;
+				for (auto i = 0u; i < std::size(pso_desc.BlendState.RenderTarget); ++i)
+				{
+					const auto& src = desc.blend_state.target_blend_states[i];
+					auto& dst = pso_desc.BlendState.RenderTarget[i];
+
+					dst.BlendEnable = src.blend_enable;
+					dst.BlendOp = ConvertBlendOp(src.color_op);
+					dst.SrcBlend = ConvertBlendFactor(src.src_color_blend);
+					dst.DestBlend = ConvertBlendFactor(src.dst_color_blend);
+
+					dst.BlendOpAlpha = ConvertBlendOp(src.alpha_op);
+					dst.SrcBlendAlpha = ConvertBlendFactor(src.src_alpha_blend);
+					dst.DestBlendAlpha = ConvertBlendFactor(src.dst_alpha_blend);
+
+					dst.RenderTargetWriteMask = src.write_mask;
+
+					// LogicOpは現状サポート外.
+					dst.LogicOp = {};
+					dst.LogicOpEnable = false;
+				}
+			}
+
+			pso_desc.SampleMask = desc.sample_mask;
+			// RasterizerState
+			{
+				const auto& src = desc.rasterizer_staet;
+				auto& dst = pso_desc.RasterizerState;
+
+				dst.AntialiasedLineEnable = src.antialiased_line_enable;
+				dst.ConservativeRaster = (0 != src.conservative_raster)? D3D12_CONSERVATIVE_RASTERIZATION_MODE_ON : D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+				dst.FillMode = ConvertFillMode(src.fill_mode);
+				dst.CullMode = ConvertCullMode(src.cull_mode);
+				dst.FrontCounterClockwise = src.front_counter_clockwise;
+
+				dst.DepthBias = src.depth_bias;
+				dst.DepthBiasClamp = src.depth_bias_clamp;
+				dst.DepthClipEnable = src.depth_clip_enable;
+				dst.SlopeScaledDepthBias = src.slope_scale_depth_bias;
+
+				dst.ForcedSampleCount = src.force_sample_count;
+				dst.MultisampleEnable = src.multi_sample_enable;
+			}
+
+			// DepthStencilState
+			{
+				const auto& src = desc.depth_stencil_state;
+				auto& dst = pso_desc.DepthStencilState;
+				{
+					dst.BackFace.StencilDepthFailOp = ConvertStencilOp(src.back_face.stencil_depth_fail_op);
+					dst.BackFace.StencilFailOp = ConvertStencilOp(src.back_face.stencil_fail_op);
+					dst.BackFace.StencilPassOp = ConvertStencilOp(src.back_face.stencil_pass_op);
+					dst.BackFace.StencilFunc = ConvertComparisonFunc(src.back_face.stencil_func);
+				}
+				{
+					dst.FrontFace.StencilDepthFailOp = ConvertStencilOp(src.front_face.stencil_depth_fail_op);
+					dst.FrontFace.StencilFailOp = ConvertStencilOp(src.front_face.stencil_fail_op);
+					dst.FrontFace.StencilPassOp = ConvertStencilOp(src.front_face.stencil_pass_op);
+					dst.FrontFace.StencilFunc = ConvertComparisonFunc(src.front_face.stencil_func);
+				}
+
+				dst.DepthEnable = src.depth_enable;
+				dst.DepthFunc = ConvertComparisonFunc(src.depth_func);
+				dst.DepthWriteMask = (src.depth_write_mask)? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+				
+				dst.StencilEnable = src.stencil_enable;
+				dst.StencilReadMask = src.stencil_read_mask;
+				dst.StencilWriteMask = src.stencil_write_mask;
+			}
+
+			// InputLayout
+			{
+				const auto& src = desc.input_layout;
+				auto& dst = pso_desc.InputLayout;
+
+				dst.NumElements = src.num_elements;
+				for (auto i = 0u; i < src.num_elements; ++i)
+				{
+					const auto& s_elem = src.p_input_elements[i];
+					auto& d_elem = input_elem_descs[i];
+
+					d_elem.SemanticName = s_elem.semantic_name;
+					d_elem.SemanticIndex = s_elem.semantic_index;
+					d_elem.Format = ConvertResourceFormat(s_elem.format);
+					d_elem.InputSlot = s_elem.stream_slot;
+					d_elem.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+					d_elem.AlignedByteOffset = s_elem.element_offset;
+					d_elem.InstanceDataStepRate = 0;
+				}
+				// メモリを指定.
+				dst.pInputElementDescs = input_elem_descs.data();
+			}
+
+			pso_desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+
+			pso_desc.PrimitiveTopologyType = ConvertPrimitiveTopologyType(desc.primitive_topology_type);
+
+			pso_desc.NumRenderTargets = desc.num_render_targets;
+			for (auto i = 0u; i < desc.num_render_targets; ++i)
+			{
+				pso_desc.RTVFormats[i] = ConvertResourceFormat(desc.render_target_formats[i]);
+			}
+			pso_desc.DSVFormat = ConvertResourceFormat(desc.depth_stencil_format);
+
+			pso_desc.SampleDesc.Count = desc.sample_desc.count;
+			pso_desc.SampleDesc.Quality = desc.sample_desc.quality;
+
+			pso_desc.NodeMask = desc.node_mask;
+
+			pso_desc.CachedPSO.CachedBlobSizeInBytes = 0;
+			pso_desc.CachedPSO.pCachedBlob = nullptr;
+
+			pso_desc.Flags = D3D12_PIPELINE_STATE_FLAGS::D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			// RootSig
+			{
+				// TODO. 
+				pso_desc.pRootSignature;
+			}
+
+			if (FAILED(p_device->GetD3D12Device()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))
+			{
+				std::cout << "ERROR: CreateGraphicsPipelineState" << std::endl;
+				return false;
+			}
+
+			return true;
+		}
+		void GraphicsPipelineState::Finalize()
+		{
+			pso_ = nullptr;
+		}
+
 	}
 }

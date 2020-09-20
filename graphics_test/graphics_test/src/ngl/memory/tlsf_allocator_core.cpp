@@ -322,7 +322,7 @@ namespace ngl
 			const unsigned mask = (1 << fli) - 1;   // 1000 0000 -> 0111 1111
 
 			// 右へのシフト数を算出
-			const unsigned rs = fli - second_level_exp;    // 7 - 3 = 4 （8分割ならN=3です）
+			const unsigned rs = fli - second_level_exp;	// 7 - 3 = 4 （8分割ならN=3です）
 
 			// 引数sizeにマスクをかけて、右へシフトすればインデックスに
 			return (require_size & mask) >> rs;
