@@ -329,16 +329,81 @@ namespace ngl
 			std::vector<u8>	data_;
 		};
 
+		/*
+			ShaderReflectionによって取得した情報
 
+			note: 現時点ではDXCでコンパイルしたシェーダの定数バッファデフォルト値が取得できない(ShaderModel5以下の場合はD3DCompilerによるコンパイルをしてデフォルト値も取得できる)
+		*/
 		class ShaderReflectionDep
 		{
 		public:
+			struct Cb
+			{
+				// Cb名
+				char	name[64];
+				// cb Slot Index
+				u16		index;
+				// cb Byte Size
+				u16		size;
+				u16		num_member;
+			};
+			struct CbVariable
+			{
+				// CbVariable名
+				char	name[64];
+				// Constant Buffer内のByte Size
+				u16		offset;
+				// Constant Buffer内のByte Offset
+				u16		size;
+				// 外部のデフォルト値バッファ内の対応する位置へのオフセット.
+				u16		default_value_offset;
+			};
+
+
 			ShaderReflectionDep();
 			~ShaderReflectionDep();
 
 			bool Initialize(DeviceDep* p_device, ShaderDep* p_shader);
 			void Finalize();
+
+			const Cb* GetCbInfo(u32 index)
+			{
+				if (cb_.size() <= index)
+					return nullptr;
+				return &cb_[index];
+			}
+			const CbVariable* GetCbVariableInfo(u32 index, u32 variable_index)
+			{
+				auto* cb = GetCbInfo(index);
+				if (!cb || cb->num_member <= variable_index)
+					return nullptr;
+				return &cb_variable_[ cb_variable_offset_[index] + variable_index ];
+			}
+
+			template<typename T>
+			bool GetCbDefaultValue(u32 index, u32 variable_index, T& out)
+			{
+				if (cb_.size() <= index || cb_[index].num_member <= variable_index)
+					return false;
+				const auto cb_var_offset = cb_variable_offset_[index] + variable_index;
+				if (cb_variable_[cb_var_offset].size != sizeof(T))
+					return false;
+
+				const auto* src = &cb_default_value_buffer_[cb_variable_[cb_var_offset].default_value_offset];
+				std::memcpy(&out, src, cb_variable_[cb_var_offset].size );
+				return true;
+			}
+
+
 		private:
+			// cb
+			std::vector<Cb> cb_;
+			// cb index to start index on variable_.
+			std::vector<u16> cb_variable_offset_;
+			// variable array.
+			std::vector<CbVariable> cb_variable_;
+			// デフォルト値バッファ.
+			std::vector<u8> cb_default_value_buffer_;
 		};
 	}
 }

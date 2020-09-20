@@ -1,6 +1,10 @@
 ﻿
 
 #include "rhi.d3d12.h"
+
+
+#include <algorithm>
+
 // lib
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -981,7 +985,6 @@ namespace ngl
 				{
 					hresult = SUCCEEDED(refl->GetPartReflection(shdIndex, IID_PPV_ARGS(&shader_reflect)));
 				}
-
 			}
 			// DxcApiで取得できなかった場合はD3DRefrectを試行する
 			// ShaderModel5以前はD3DReflectを利用する
@@ -990,6 +993,7 @@ namespace ngl
 				hresult = SUCCEEDED(D3DReflect(bin_ptr, bin_size, IID_PPV_ARGS(&shader_reflect)));
 			}
 
+			// ----------------------------------------------------------------
 			// ID3D12ShaderReflectionが取得できればそこから情報取得
 			if (hresult)
 			{
@@ -1000,7 +1004,94 @@ namespace ngl
 				}
 				if (hresult)
 				{
-					std::cout << "ShaderReflect: " << shader_desc.ConstantBuffers << std::endl;
+					// Constant Buffer
+					cb_.resize(shader_desc.ConstantBuffers);
+					cb_variable_offset_.resize(shader_desc.ConstantBuffers);
+					// 事前に必要なVariable数を計算
+					int num_var_total = 0;
+					int size_default_var_total = 0;
+					for (auto i = 0u; i < cb_.size(); ++i)
+					{
+						cb_[i] = {};
+						cb_variable_offset_[i] = 0;
+						if (auto&& cb_info = shader_reflect->GetConstantBufferByIndex(i))
+						{
+							D3D12_SHADER_BUFFER_DESC cb_desc;
+							if (SUCCEEDED(cb_info->GetDesc(&cb_desc)))
+							{
+								cb_[i].index = i;
+								cb_[i].size = cb_desc.Size;
+								cb_[i].num_member = cb_desc.Variables;
+								size_t copy_name_len = std::min<>(std::strlen(cb_desc.Name), sizeof(cb_[i].name));
+								std::copy_n(cb_desc.Name, copy_name_len, cb_[i].name);
+
+								cb_variable_offset_[i] = num_var_total;
+								num_var_total += cb_[i].num_member;
+
+								size_default_var_total += cb_[i].size;
+							}
+						}
+					}
+
+					// variable数分確保
+					cb_variable_.resize(num_var_total);
+					// デフォルト値バッファ確保
+					cb_default_value_buffer_.resize(size_default_var_total);
+
+					// 改めてVariable情報を取得.
+					int variable_index = 0;
+					int default_value_buffer_offset = 0;
+					for (auto i = 0u; i < cb_.size(); ++i)
+					{
+						if (auto&& cb_info = shader_reflect->GetConstantBufferByIndex(i))
+						{
+							D3D12_SHADER_BUFFER_DESC cb_desc;
+							if (SUCCEEDED(cb_info->GetDesc(&cb_desc)))
+							{
+								// Variables
+								for (auto mi = 0u; mi < cb_desc.Variables; ++mi)
+								{
+									if (auto* cb_member = cb_info->GetVariableByIndex(mi))
+									{
+										D3D12_SHADER_VARIABLE_DESC var_desc;
+										if (SUCCEEDED(cb_member->GetDesc(&var_desc)))
+										{
+											// ConstantBuffer内変数のオフセット
+											cb_variable_[variable_index].offset = var_desc.StartOffset;
+											cb_variable_[variable_index].size = var_desc.Size;
+											size_t copy_name_len = std::min<>(std::strlen(var_desc.Name), sizeof(cb_variable_[variable_index].name));
+											std::copy_n(var_desc.Name, copy_name_len, cb_variable_[variable_index].name);
+
+											// デフォルト値バッファ内の開始オフセット保存
+											cb_variable_[variable_index].default_value_offset = default_value_buffer_offset;
+											// オフセットすすめる
+											default_value_buffer_offset += cb_variable_[variable_index].size;
+
+											// デフォルト値を確保したバッファに詰めていく.
+											{
+												u8* dst_ptr = &cb_default_value_buffer_[cb_variable_[variable_index].default_value_offset];
+												const auto size = cb_variable_[variable_index].size;
+												if (var_desc.DefaultValue)
+												{
+													// デフォルト値があればコピー
+													const u8* src_ptr = reinterpret_cast<const u8*>(var_desc.DefaultValue);
+													std::copy(src_ptr, src_ptr + size, dst_ptr);
+												}
+												else
+												{
+													// デフォルト値がなければゼロセット
+													std::memset(dst_ptr, 0x00, size);
+												}
+											}
+										}
+									}
+
+									++variable_index;
+								}
+							}
+						}
+					}
+
 				}
 			}
 

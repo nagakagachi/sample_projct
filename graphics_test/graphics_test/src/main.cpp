@@ -217,6 +217,17 @@ bool AppGame::Initialize()
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
 			reflect00.Initialize(&device_, &shader00);
+
+			auto cb0 = reflect00.GetCbInfo(0);
+			auto cb1 = reflect00.GetCbInfo(1);
+			auto cb0_var0 = reflect00.GetCbVariableInfo(0, 0);
+			auto cb0_var1 = reflect00.GetCbVariableInfo(0, 1);
+			auto cb0_var2 = reflect00.GetCbVariableInfo(0, 2);
+			auto cb1_var0 = reflect00.GetCbVariableInfo(1, 0);
+
+			float default_value;
+			reflect00.GetCbDefaultValue(0, 0, default_value);
+			std::cout << "cb default value " << default_value << std::endl;
 		}
 		// HLSLからコンパイルして初期化.
 		ngl::rhi::ShaderDep shader01;
@@ -233,6 +244,10 @@ bool AppGame::Initialize()
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
 			reflect01.Initialize(&device_, &shader01);
+			
+			float default_value;
+			reflect01.GetCbDefaultValue(0, 0, default_value);
+			std::cout << "cb default value " << default_value << std::endl;
 		}
 
 		std::cout << "_" << std::endl;
