@@ -1101,5 +1101,19 @@ namespace ngl
 		{
 		}
 
+		const ShaderReflectionDep::Cb* ShaderReflectionDep::GetCbInfo(u32 index)
+		{
+			if (cb_.size() <= index)
+				return nullptr;
+			return &cb_[index];
+		}
+		const ShaderReflectionDep::CbVariable* ShaderReflectionDep::GetCbVariableInfo(u32 index, u32 variable_index)
+		{
+			auto* cb = GetCbInfo(index);
+			if (!cb || cb->num_member <= variable_index)
+				return nullptr;
+			const auto i = cb_variable_offset_[index] + variable_index;
+			return &cb_variable_[i];
+		}
 	}
 }

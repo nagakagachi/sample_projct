@@ -366,19 +366,8 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, ShaderDep* p_shader);
 			void Finalize();
 
-			const Cb* GetCbInfo(u32 index)
-			{
-				if (cb_.size() <= index)
-					return nullptr;
-				return &cb_[index];
-			}
-			const CbVariable* GetCbVariableInfo(u32 index, u32 variable_index)
-			{
-				auto* cb = GetCbInfo(index);
-				if (!cb || cb->num_member <= variable_index)
-					return nullptr;
-				return &cb_variable_[ cb_variable_offset_[index] + variable_index ];
-			}
+			const Cb* GetCbInfo(u32 index);
+			const CbVariable* GetCbVariableInfo(u32 index, u32 variable_index);
 
 			template<typename T>
 			bool GetCbDefaultValue(u32 index, u32 variable_index, T& out)
@@ -399,7 +388,7 @@ namespace ngl
 			// cb
 			std::vector<Cb> cb_;
 			// cb index to start index on variable_.
-			std::vector<u16> cb_variable_offset_;
+			std::vector<u32> cb_variable_offset_;
 			// variable array.
 			std::vector<CbVariable> cb_variable_;
 			// デフォルト値バッファ.
