@@ -337,7 +337,7 @@ namespace ngl
 		class ShaderReflectionDep
 		{
 		public:
-			struct Cb
+			struct CbInfo
 			{
 				// Cb名
 				char	name[64];
@@ -347,7 +347,7 @@ namespace ngl
 				u16		size;
 				u16		num_member;
 			};
-			struct CbVariable
+			struct CbVariableInfo
 			{
 				// CbVariable名
 				char	name[64];
@@ -359,6 +359,14 @@ namespace ngl
 				u16		default_value_offset;
 			};
 
+			struct InputParamInfo
+			{
+				char	semantic_name[32];
+				u8		semantic_index;
+
+				// if float3 then 3. if int4 then 4.
+				u8		num_component;
+			};
 
 			ShaderReflectionDep();
 			~ShaderReflectionDep();
@@ -366,8 +374,8 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, ShaderDep* p_shader);
 			void Finalize();
 
-			const Cb* GetCbInfo(u32 index);
-			const CbVariable* GetCbVariableInfo(u32 index, u32 variable_index);
+			const CbInfo* GetCbInfo(u32 index);
+			const CbVariableInfo* GetCbVariableInfo(u32 index, u32 variable_index);
 
 			template<typename T>
 			bool GetCbDefaultValue(u32 index, u32 variable_index, T& out)
@@ -385,14 +393,19 @@ namespace ngl
 
 
 		private:
+			// Constant Buffer
 			// cb
-			std::vector<Cb> cb_;
+			std::vector<CbInfo> cb_;
 			// cb index to start index on variable_.
 			std::vector<u32> cb_variable_offset_;
 			// variable array.
-			std::vector<CbVariable> cb_variable_;
+			std::vector<CbVariableInfo> cb_variable_;
 			// デフォルト値バッファ.
 			std::vector<u8> cb_default_value_buffer_;
+
+
+			// Input Output
+			std::vector<InputParamInfo>	input_param_;
 		};
 	}
 }

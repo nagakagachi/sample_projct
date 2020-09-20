@@ -250,6 +250,27 @@ bool AppGame::Initialize()
 			std::cout << "cb default value " << default_value << std::endl;
 		}
 
+		// HLSLからコンパイルして初期化.
+		ngl::rhi::ShaderDep shader02;
+		ngl::rhi::ShaderReflectionDep reflect02;
+		{
+			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_vs.hlsl";
+			shader_desc.entry_point_name = "main_vs";
+			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
+			shader_desc.shader_model_version = "5_0";
+
+			if (!shader02.Initialize(&device_, shader_desc))
+			{
+				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+			}
+			reflect02.Initialize(&device_, &shader02);
+
+			float default_value;
+			reflect02.GetCbDefaultValue(0, 0, default_value);
+			std::cout << "cb default value " << default_value << std::endl;
+		}
+
 		std::cout << "_" << std::endl;
 	}
 

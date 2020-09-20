@@ -105,6 +105,24 @@ namespace ngl
 			return ret;
 		}
 
+
+		static uint8_t MaskCount(uint8_t V)
+		{
+			static const uint8_t Count[16] = 
+			{
+			  0, 1, 1, 2,
+			  1, 2, 2, 3,
+			  1, 2, 2, 3,
+			  2, 3, 3, 4
+			};
+			if(0 <= V && V <= 0xF)
+				return Count[V];
+			return 0;
+		}
+
+
+
+
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		DeviceDep::DeviceDep()
@@ -1005,93 +1023,120 @@ namespace ngl
 				if (hresult)
 				{
 					// Constant Buffer
-					cb_.resize(shader_desc.ConstantBuffers);
-					cb_variable_offset_.resize(shader_desc.ConstantBuffers);
-					// 事前に必要なVariable数を計算
-					int num_var_total = 0;
-					int size_default_var_total = 0;
-					for (auto i = 0u; i < cb_.size(); ++i)
 					{
-						cb_[i] = {};
-						cb_variable_offset_[i] = 0;
-						if (auto&& cb_info = shader_reflect->GetConstantBufferByIndex(i))
+						cb_.resize(shader_desc.ConstantBuffers);
+						cb_variable_offset_.resize(shader_desc.ConstantBuffers);
+						// 事前に必要なVariable数を計算
+						int num_var_total = 0;
+						int size_default_var_total = 0;
+						for (auto i = 0u; i < cb_.size(); ++i)
 						{
-							D3D12_SHADER_BUFFER_DESC cb_desc;
-							if (SUCCEEDED(cb_info->GetDesc(&cb_desc)))
+							cb_[i] = {};
+							cb_variable_offset_[i] = 0;
+							if (auto* cb_info = shader_reflect->GetConstantBufferByIndex(i))
 							{
-								cb_[i].index = i;
-								cb_[i].size = cb_desc.Size;
-								cb_[i].num_member = cb_desc.Variables;
-								size_t copy_name_len = std::min<>(std::strlen(cb_desc.Name), sizeof(cb_[i].name));
-								std::copy_n(cb_desc.Name, copy_name_len, cb_[i].name);
+								D3D12_SHADER_BUFFER_DESC cb_desc;
+								if (SUCCEEDED(cb_info->GetDesc(&cb_desc)))
+								{
+									cb_[i].index = i;
+									cb_[i].size = cb_desc.Size;
+									cb_[i].num_member = cb_desc.Variables;
+									size_t copy_name_len = std::min<>(std::strlen(cb_desc.Name), sizeof(cb_[i].name));
+									std::copy_n(cb_desc.Name, copy_name_len, cb_[i].name);
 
-								cb_variable_offset_[i] = num_var_total;
-								num_var_total += cb_[i].num_member;
+									cb_variable_offset_[i] = num_var_total;
+									num_var_total += cb_[i].num_member;
 
-								size_default_var_total += cb_[i].size;
+									size_default_var_total += cb_[i].size;
+								}
 							}
 						}
-					}
 
-					// variable数分確保
-					cb_variable_.resize(num_var_total);
-					// デフォルト値バッファ確保
-					cb_default_value_buffer_.resize(size_default_var_total);
+						// variable数分確保
+						cb_variable_.resize(num_var_total);
+						// デフォルト値バッファ確保
+						cb_default_value_buffer_.resize(size_default_var_total);
 
-					// 改めてVariable情報を取得.
-					int variable_index = 0;
-					int default_value_buffer_offset = 0;
-					for (auto i = 0u; i < cb_.size(); ++i)
-					{
-						if (auto&& cb_info = shader_reflect->GetConstantBufferByIndex(i))
+						// 改めてVariable情報を取得.
+						int variable_index = 0;
+						int default_value_buffer_offset = 0;
+						for (auto i = 0u; i < cb_.size(); ++i)
 						{
-							D3D12_SHADER_BUFFER_DESC cb_desc;
-							if (SUCCEEDED(cb_info->GetDesc(&cb_desc)))
+							if (auto* cb_info = shader_reflect->GetConstantBufferByIndex(i))
 							{
-								// Variables
-								for (auto mi = 0u; mi < cb_desc.Variables; ++mi)
+								D3D12_SHADER_BUFFER_DESC cb_desc;
+								if (SUCCEEDED(cb_info->GetDesc(&cb_desc)))
 								{
-									if (auto* cb_member = cb_info->GetVariableByIndex(mi))
+									// Variables
+									for (auto mi = 0u; mi < cb_desc.Variables; ++mi)
 									{
-										D3D12_SHADER_VARIABLE_DESC var_desc;
-										if (SUCCEEDED(cb_member->GetDesc(&var_desc)))
+										if (auto* cb_member = cb_info->GetVariableByIndex(mi))
 										{
-											// ConstantBuffer内変数のオフセット
-											cb_variable_[variable_index].offset = var_desc.StartOffset;
-											cb_variable_[variable_index].size = var_desc.Size;
-											size_t copy_name_len = std::min<>(std::strlen(var_desc.Name), sizeof(cb_variable_[variable_index].name));
-											std::copy_n(var_desc.Name, copy_name_len, cb_variable_[variable_index].name);
-
-											// デフォルト値バッファ内の開始オフセット保存
-											cb_variable_[variable_index].default_value_offset = default_value_buffer_offset;
-											// オフセットすすめる
-											default_value_buffer_offset += cb_variable_[variable_index].size;
-
-											// デフォルト値を確保したバッファに詰めていく.
+											D3D12_SHADER_VARIABLE_DESC var_desc;
+											if (SUCCEEDED(cb_member->GetDesc(&var_desc)))
 											{
-												u8* dst_ptr = &cb_default_value_buffer_[cb_variable_[variable_index].default_value_offset];
-												const auto size = cb_variable_[variable_index].size;
-												if (var_desc.DefaultValue)
+												// ConstantBuffer内変数のオフセット
+												cb_variable_[variable_index].offset = var_desc.StartOffset;
+												cb_variable_[variable_index].size = var_desc.Size;
+												size_t copy_name_len = std::min<>(std::strlen(var_desc.Name), sizeof(cb_variable_[variable_index].name));
+												std::copy_n(var_desc.Name, copy_name_len, cb_variable_[variable_index].name);
+
+												// デフォルト値バッファ内の開始オフセット保存
+												cb_variable_[variable_index].default_value_offset = default_value_buffer_offset;
+												// オフセットすすめる
+												default_value_buffer_offset += cb_variable_[variable_index].size;
+
+												// デフォルト値を確保したバッファに詰めていく.
 												{
-													// デフォルト値があればコピー
-													const u8* src_ptr = reinterpret_cast<const u8*>(var_desc.DefaultValue);
-													std::copy(src_ptr, src_ptr + size, dst_ptr);
-												}
-												else
-												{
-													// デフォルト値がなければゼロセット
-													std::memset(dst_ptr, 0x00, size);
+													u8* dst_ptr = &cb_default_value_buffer_[cb_variable_[variable_index].default_value_offset];
+													const auto size = cb_variable_[variable_index].size;
+													if (var_desc.DefaultValue)
+													{
+														// デフォルト値があればコピー
+														const u8* src_ptr = reinterpret_cast<const u8*>(var_desc.DefaultValue);
+														std::copy(src_ptr, src_ptr + size, dst_ptr);
+													}
+													else
+													{
+														// デフォルト値がなければゼロセット
+														std::memset(dst_ptr, 0x00, size);
+													}
 												}
 											}
 										}
-									}
 
-									++variable_index;
+										++variable_index;
+									}
 								}
 							}
 						}
 					}
 
+					// Input Output
+					{
+						std::cout << "Shader Input Param" << std::endl;
+						std::cout << "	Num Param = " << shader_desc.InputParameters << std::endl;
+						input_param_.resize(shader_desc.InputParameters);
+						for (auto i = 0u; i < shader_desc.InputParameters; ++i)
+						{
+							auto& tar = input_param_[i];
+
+							std::cout << "	Param " << i << std::endl;
+							D3D12_SIGNATURE_PARAMETER_DESC input_desc;
+							if (SUCCEEDED(shader_reflect->GetInputParameterDesc(i, &input_desc)))
+							{
+								std::cout << "		SemanticName = " << input_desc.SemanticName << std::endl;
+								std::cout << "		SemanticIndex = " << input_desc.SemanticIndex << std::endl;
+								std::cout << "		ComponentType = " << input_desc.ComponentType << std::endl;
+
+								tar.semantic_index = input_desc.SemanticIndex;
+								size_t copy_name_len = std::min<>(std::strlen(input_desc.SemanticName), sizeof(tar.semantic_name));
+								std::copy_n(input_desc.SemanticName, copy_name_len, tar.semantic_name);
+
+								tar.num_component = MaskCount(input_desc.Mask);
+							}
+						}
+					}
 				}
 			}
 
@@ -1101,13 +1146,13 @@ namespace ngl
 		{
 		}
 
-		const ShaderReflectionDep::Cb* ShaderReflectionDep::GetCbInfo(u32 index)
+		const ShaderReflectionDep::CbInfo* ShaderReflectionDep::GetCbInfo(u32 index)
 		{
 			if (cb_.size() <= index)
 				return nullptr;
 			return &cb_[index];
 		}
-		const ShaderReflectionDep::CbVariable* ShaderReflectionDep::GetCbVariableInfo(u32 index, u32 variable_index)
+		const ShaderReflectionDep::CbVariableInfo* ShaderReflectionDep::GetCbVariableInfo(u32 index, u32 variable_index)
 		{
 			auto* cb = GetCbInfo(index);
 			if (!cb || cb->num_member <= variable_index)
