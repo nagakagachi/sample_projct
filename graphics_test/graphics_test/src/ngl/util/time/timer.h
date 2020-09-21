@@ -17,6 +17,7 @@
 */
 
 
+#define NOMINMAX
 #include <windows.h>
 
 #include <string>

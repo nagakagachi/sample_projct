@@ -1,7 +1,7 @@
 ﻿#include <iostream>
 #include <vector>
 #include <array>
-
+#include <unordered_map>
 
 #include "ngl/boot/boot_application.h"
 #include "ngl/util/unique_ptr.h"
@@ -189,9 +189,9 @@ bool AppGame::Initialize()
 	}
 
 	// PSO
-	ngl::rhi::GraphicsPipelineState pso;
+	ngl::rhi::GraphicsPipelineStateDep pso;
 	{
-		ngl::rhi::GraphicsPipelineState::Desc desc = {};
+		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
 		desc.vs = &sample_vs_;
 		desc.ps = &sample_ps_;
 
@@ -305,6 +305,24 @@ bool AppGame::Execute()
 
 void AppGame::TestCode()
 {
+	ngl::text::FixedString<8> fixed_text0("abc");
+	ngl::text::FixedString<8> fixed_text1("abcd");
+	ngl::text::FixedString<8> fixed_text2("01234567");
+	ngl::text::FixedString<8> fixed_text3("012345678");
+
+	std::unordered_map<ngl::text::FixedString<8>, int> fixstr_map;
+	auto in0 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text0, 0));
+	auto in1 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text1, 1));
+	auto in2 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text2, 2));
+	auto in3 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text3, 3));
+
+	auto find0 = fixstr_map.find("");
+	auto find1 = fixstr_map.find("a");
+	auto find2 = fixstr_map.find("abc");
+	auto find3 = fixstr_map.find("01234567");
+	auto find4 = fixstr_map.find("012345678");
+
+
 	{
 		// Buffer生成テスト
 		ngl::rhi::BufferDep buffer0;

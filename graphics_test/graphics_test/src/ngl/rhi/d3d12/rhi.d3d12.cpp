@@ -892,6 +892,7 @@ namespace ngl
 		}
 		ShaderReflectionDep::~ShaderReflectionDep()
 		{
+			Finalize();
 		}
 
 
@@ -1114,18 +1115,217 @@ namespace ngl
 			const auto i = cb_variable_offset_[index] + variable_index;
 			return &cb_variable_[i];
 		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
-
-		GraphicsPipelineState::GraphicsPipelineState()
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		PipelineViewLayoutDep::PipelineViewLayoutDep()
 		{
 		}
-		GraphicsPipelineState::~GraphicsPipelineState()
+		PipelineViewLayoutDep::~PipelineViewLayoutDep()
 		{
+			Finalize();
 		}
 
-		bool GraphicsPipelineState::Initialize(DeviceDep* p_device, const Desc& desc)
+		bool PipelineViewLayoutDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+			D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+
+			/*
+				RootSignatureのDescriptorTableはもんしょさんのコピー戦略を参考.
+				一律で
+						Table2 : CBV 16個
+						Table0 : SRV 48個
+						Table3 : Sampler 16個
+						Table1 : UAV 16個
+
+				というレイアウトとし、実行時には適切なサイズのHeapの適切な位置にCopyDescriptorsをする
+			*/
+			constexpr auto num_shader_stage = static_cast<int>(ShaderStage::_MAX);
+
+			const std::array<D3D12_DESCRIPTOR_RANGE, 4> fixed_range_infos =
+			{
+				{
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 16, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 16, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 16, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				}
+			};
+			auto func_set_table_to_param = []
+			(D3D12_DESCRIPTOR_RANGE* p_range_array, D3D12_ROOT_PARAMETER* p_param_array, u32 table, ShaderStage stage, const D3D12_DESCRIPTOR_RANGE& descriptor_range)
+			{
+				p_range_array[table] = descriptor_range;
+				p_param_array[table].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+				p_param_array[table].DescriptorTable.NumDescriptorRanges = 1;
+				p_param_array[table].DescriptorTable.pDescriptorRanges = &p_range_array[table];
+				p_param_array[table].ShaderVisibility = ConvertShaderVisibility(stage);
+			};
+
+			std::array<D3D12_DESCRIPTOR_RANGE, num_shader_stage* fixed_range_infos.size()> ranges;
+			std::array<D3D12_ROOT_PARAMETER, num_shader_stage* fixed_range_infos.size()>  rootParameters;
+			{
+				// フラグ初期化. 全シェーダステージ無視フラグで初期化しておき, 有効なシェーダステージがあれば無視フラグを除去していく.
+				root_signature_desc.Flags =
+					D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS
+					| D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
+					| D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
+					| D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS
+					| D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS
+					;
+
+				// 頂点シェーダリフレクション取得
+				ShaderReflectionDep vs_ref;
+				if (vs_ref.Initialize(p_device, desc.vs))
+				{
+					// 頂点入力の有無フラグ追加.
+					root_signature_desc.Flags |= (0 < vs_ref.NumInputParamInfo()) ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
+				}
+				// Descriptor
+				int root_table = 0;
+				{
+					// VS
+					if (desc.vs)
+					{
+						resource_table_.vs_cbv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::VERTEX_SHADER, fixed_range_infos[0]);
+						++root_table;
+						resource_table_.vs_srv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::VERTEX_SHADER, fixed_range_infos[1]);
+						++root_table;
+						resource_table_.vs_sampler_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::VERTEX_SHADER, fixed_range_infos[2]);
+						++root_table;
+						// VSはUAV無し
+
+						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS;
+					}
+
+					// HS
+					if (desc.hs)
+					{
+						resource_table_.hs_cbv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::HULL_SHADER, fixed_range_infos[0]);
+						++root_table;
+						resource_table_.hs_srv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::HULL_SHADER, fixed_range_infos[1]);
+						++root_table;
+						resource_table_.hs_sampler_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::HULL_SHADER, fixed_range_infos[2]);
+						++root_table;
+						// HSはUAV無し
+
+						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS;
+					}
+
+					// DS
+					if (desc.ds)
+					{
+						resource_table_.ds_cbv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::DOMAIN_SHADER, fixed_range_infos[0]);
+						++root_table;
+						resource_table_.ds_srv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::DOMAIN_SHADER, fixed_range_infos[1]);
+						++root_table;
+						resource_table_.ds_sampler_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::DOMAIN_SHADER, fixed_range_infos[2]);
+						++root_table;
+						// DSはUAV無し
+
+						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS;
+					}
+
+					// GS
+					if (desc.gs)
+					{
+						resource_table_.gs_cbv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[0]);
+						++root_table;
+						resource_table_.gs_srv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[1]);
+						++root_table;
+						resource_table_.gs_sampler_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[2]);
+						++root_table;
+						// GSはUAV無し
+
+						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
+					}
+
+					// PS
+					if (desc.ps)
+					{
+						resource_table_.ps_cbv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[0]);
+						++root_table;
+						resource_table_.ps_srv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[1]);
+						++root_table;
+						resource_table_.ps_sampler_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[2]);
+						++root_table;
+						resource_table_.ps_uav_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[3]);
+						++root_table;
+
+						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
+					}
+				}
+				root_signature_desc.NumParameters = root_table;
+				root_signature_desc.pParameters = rootParameters.data();
+			}
+
+			// TODO. Descriptor
+			CComPtr<ID3DBlob> root_signature_blob;
+			CComPtr<ID3DBlob> root_signature_error_blob;
+			auto hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &root_signature_blob, &root_signature_error_blob);
+			if (FAILED(hr) && root_signature_error_blob)
+			{
+				wprintf(L"ERROR : D3D12SerializeRootSignature:\n%hs\n",
+					(const char*)root_signature_error_blob->GetBufferPointer());
+				
+				return false;
+			}
+			if (SUCCEEDED(hr))
+			{
+				hr = p_device->GetD3D12Device()->CreateRootSignature(0, root_signature_blob->GetBufferPointer(), root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature_));
+				if (FAILED(hr))
+				{
+					root_signature_ = nullptr;
+					std::cout << "ERROR : CreateRootSignature" << std::endl;
+
+					return false;
+				}
+			}
+
+			return true;
+		}
+		void PipelineViewLayoutDep::Finalize()
+		{
+			root_signature_ = nullptr;
+		}
+		ID3D12RootSignature* PipelineViewLayoutDep::GetD3D12RootSignature()
+		{
+			return root_signature_;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		GraphicsPipelineStateDep::GraphicsPipelineStateDep()
+		{
+		}
+		GraphicsPipelineStateDep::~GraphicsPipelineStateDep()
+		{
+			Finalize();
+		}
+
+		bool GraphicsPipelineStateDep::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
 			if (!p_device)
 				return false;
@@ -1280,102 +1480,18 @@ namespace ngl
 
 			pso_desc.Flags = D3D12_PIPELINE_STATE_FLAGS::D3D12_PIPELINE_STATE_FLAG_NONE;
 
-			// RootSig
-			CComPtr<ID3D12RootSignature> root_signature;
+			// RootSignature
 			{
-				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+				PipelineViewLayoutDep::Desc root_signature_desc = {};
+				root_signature_desc.vs = desc.vs;
+				root_signature_desc.hs = desc.hs;
+				root_signature_desc.ds = desc.ds;
+				root_signature_desc.gs = desc.gs;
+				root_signature_desc.ps = desc.ps;
+				view_layout_.Initialize(p_device, root_signature_desc);
 
-				/*
-					RootSignatureのDescriptorTableはもんしょさんのコピー戦略を参考.
-					一律で
-							Table0 : VS用SRV 48個
-							Table1 : VS用UAV 16個
-							Table2 : VS用CBV 16個
-							Table3 : VS用Sampler 16個
-
-							Table4 : HS用SRV 48個
-							---
-							Table8 : DS用SRV 48個
-							---
-							Table12 : GS用SRV 48個
-							---
-							Table16 : PS用SRV 48個
-							---
-
-					というレイアウトとし、実行時には適切なサイズのHeapの適切な位置にCopyDescriptorsをする
-				*/
-				constexpr auto num_shader_stage = static_cast<int>(ShaderStage::_MAX);
-				struct RangeInfo
-				{
-					D3D12_DESCRIPTOR_RANGE_TYPE range_type;
-					int							count;
-				};
-				// リソースタイプ毎に大きなテーブルを用意する.
-				std::array<RangeInfo, 4> range_infos =
-				{
-					{
-						{D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48},
-						{D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 16},
-						{D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 16},
-						{D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 16}
-					},
-				};
-				std::array<D3D12_DESCRIPTOR_RANGE, num_shader_stage * range_infos.size()> ranges;
-				std::array<D3D12_ROOT_PARAMETER, num_shader_stage * range_infos.size()>  rootParameters;
-				{
-					// 頂点シェーダリフレクション取得
-					ShaderReflectionDep vs_ref;
-					if (vs_ref.Initialize(p_device, desc.vs))
-					{
-						// 頂点入力の有無.
-						root_signature_desc.Flags |= (0 < vs_ref.NumInputParamInfo()) ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
-					}
-					// Descriptor
-					{
-						int root_param_index = 0;
-						for(auto i = 0u; i < num_shader_stage; ++i)
-						{
-							for (auto ri = 0u; ri < range_infos.size(); ++ri)
-							{
-								ranges[root_param_index].RangeType = range_infos[ri].range_type;
-								ranges[root_param_index].NumDescriptors = range_infos[ri].count;
-								ranges[root_param_index].BaseShaderRegister = 0;
-								ranges[root_param_index].RegisterSpace = 0;
-								ranges[root_param_index].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-							
-
-								rootParameters[root_param_index].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-								rootParameters[root_param_index].DescriptorTable.NumDescriptorRanges = 1;
-								rootParameters[root_param_index].DescriptorTable.pDescriptorRanges = &ranges[root_param_index];
-								rootParameters[root_param_index].ShaderVisibility = ConvertShaderVisibility(ShaderStage(i));
-								++root_param_index;
-							}
-						}
-					}
-					root_signature_desc.NumParameters = static_cast<u32>(rootParameters.size());
-					root_signature_desc.pParameters = rootParameters.data();
-				}
-
-				// TODO. Descriptor
-				CComPtr<ID3DBlob> root_signature_blob;
-				CComPtr<ID3DBlob> root_signature_error_blob;
-				auto hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &root_signature_blob, &root_signature_error_blob);
-				if (FAILED(hr) && root_signature_error_blob)
-				{
-					wprintf(L"ERROR : D3D12SerializeRootSignature:\n%hs\n",
-						(const char*)root_signature_error_blob->GetBufferPointer());
-				}
-				if (SUCCEEDED(hr))
-				{
-					hr = p_device->GetD3D12Device()->CreateRootSignature(0, root_signature_blob->GetBufferPointer(), root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
-					if (FAILED(hr))
-					{
-						root_signature = nullptr;
-						std::cout << "ERROR : CreateRootSignature" << std::endl;
-					}
-				}
 				// RootSignature設定
-				pso_desc.pRootSignature = root_signature;
+				pso_desc.pRootSignature = view_layout_.GetD3D12RootSignature();
 			}
 
 			if (FAILED(p_device->GetD3D12Device()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))
@@ -1386,9 +1502,10 @@ namespace ngl
 
 			return true;
 		}
-		void GraphicsPipelineState::Finalize()
+		void GraphicsPipelineStateDep::Finalize()
 		{
 			pso_ = nullptr;
+			view_layout_.Finalize();
 		}
 
 	}

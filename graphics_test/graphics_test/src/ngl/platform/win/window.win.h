@@ -7,6 +7,8 @@
 #ifndef _NGL_GRAPHICS_WINDOW_WIN_
 #define _NGL_GRAPHICS_WINDOW_WIN_
 
+
+#define NOMINMAX
 #include <Windows.h>
 
 #include "ngl/platform/window.h"

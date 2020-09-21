@@ -1,4 +1,6 @@
 ﻿
+
+#define NOMINMAX
 #include <Windows.h>
 
 #include "boot_application.win.h"

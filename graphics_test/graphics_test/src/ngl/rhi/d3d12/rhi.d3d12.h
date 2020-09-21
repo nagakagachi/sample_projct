@@ -1,9 +1,12 @@
 ﻿#pragma once
 
+#include "ngl/rhi/rhi.h"
+
+
 #include <iostream>
 #include <vector>
+#include <unordered_map>
 
-#include "ngl/rhi/rhi.h"
 
 #include "ngl/util/types.h"
 #include "ngl/platform/win/window.win.h"
@@ -379,8 +382,76 @@ namespace ngl
 			std::vector<InputParamInfo>	input_param_;
 		};
 
+		// ResourceViewとレジスタのマッピング
+		// 実質RootSignature.
+		class PipelineViewLayoutDep
+		{
+		public:
+			struct Desc
+			{
+				ShaderDep* vs = nullptr;
+				ShaderDep* ps = nullptr;
+				ShaderDep* ds = nullptr;
+				ShaderDep* hs = nullptr;
+				ShaderDep* gs = nullptr;
+			};
 
-		class GraphicsPipelineState
+			// RootSignatureで定義されたあるシェーダステージのあるリソースタイプのテーブルインデックスを保持
+			//	commandlist->SetGraphicsRootDescriptorTable での書き込み先テーブル番号となる.
+			struct ResourceTable
+			{
+				// 何番目のDescriptorTableがVSのCBVテーブルか
+				s8		vs_cbv_table = -1;
+				// 何番目のDescriptorTableがVSのSRVテーブルか
+				s8		vs_srv_table = -1;
+				// 何番目のDescriptorTableがVSのSamplerテーブルか
+				s8		vs_sampler_table = -1;
+
+				s8		hs_cbv_table = -1;
+				s8		hs_srv_table = -1;
+				s8		hs_sampler_table = -1;
+
+				s8		ds_cbv_table = -1;
+				s8		ds_srv_table = -1;
+				s8		ds_sampler_table = -1;
+
+				s8		gs_cbv_table = -1;
+				s8		gs_srv_table = -1;
+				s8		gs_sampler_table = -1;
+
+				// 何番目のDescriptorTableがPSのCBVテーブルか
+				s8		ps_cbv_table = -1;
+				// 何番目のDescriptorTableがPSのSRVテーブルか
+				s8		ps_srv_table = -1;
+				// 何番目のDescriptorTableがPSのSamplerテーブルか
+				s8		ps_sampler_table = -1;
+				// 何番目のDescriptorTableがPSのUAVテーブルか
+				s8		ps_uav_table = -1;
+
+				s8		cs_cbv_table = -1;
+				s8		cs_srv_table = -1;
+				s8		cs_sampler_table = -1;
+				s8		cs_uav_table = -1;
+
+			};	// struct InputIndex
+
+			PipelineViewLayoutDep();
+			~PipelineViewLayoutDep();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			ID3D12RootSignature* GetD3D12RootSignature();
+
+		private:
+			CComPtr<ID3D12RootSignature>	root_signature_;
+
+			ResourceTable					resource_table_;
+
+			// TODO. ShaderReflectionによる名前->RegisterIndexのMapを作成する.
+		};
+
+		class GraphicsPipelineStateDep
 		{
 		public:
 			struct Desc
@@ -406,14 +477,16 @@ namespace ngl
 				u32					node_mask = 0;
 			};
 
-			GraphicsPipelineState();
-			~GraphicsPipelineState();
+
+			GraphicsPipelineStateDep();
+			~GraphicsPipelineStateDep();
 
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
 		private:
 			CComPtr<ID3D12PipelineState>	pso_;
+			PipelineViewLayoutDep			view_layout_;
 		};
 	}
 }
