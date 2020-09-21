@@ -1196,10 +1196,8 @@ namespace ngl
 
 
 			// Layout情報取得
-			auto func_setup_slot = [](ShaderStage stage, DeviceDep* p_device, const ShaderDep* p_shader, std::unordered_map<ResourceViewName, Slot>& slot_map)
+			auto func_setup_slot = [](ShaderStage stage, DeviceDep* p_device, const ShaderReflectionDep& p_reflection, std::unordered_map<ResourceViewName, Slot>& slot_map)
 			{
-				assert(p_shader);
-
 				auto SetRegisterIndex = [](Slot& slot, u32 bind_point, RootParameterType type, ShaderStage shader_stage)
 				{
 					switch (shader_stage)
@@ -1213,14 +1211,10 @@ namespace ngl
 					}
 				};
 
-				ShaderReflectionDep ref;
-				if (!ref.Initialize(p_device, p_shader))
-					return false;
-
-				const auto num_slot = ref.NumResourceSlotInfo();
+				const auto num_slot = p_reflection.NumResourceSlotInfo();
 				for (auto i = 0u; i < num_slot; ++i)
 				{
-					if (const auto* slot_info = ref.GetResourceSlotInfo(i))
+					if (const auto* slot_info = p_reflection.GetResourceSlotInfo(i))
 					{
 						auto itr = slot_map.find(slot_info->name);
 						if (itr != slot_map.end())
@@ -1241,29 +1235,41 @@ namespace ngl
 				return true;
 			};
 			{
-				if (desc.vs && !func_setup_slot(ShaderStage::VERTEX_SHADER, p_device, desc.vs, slot_map_))
+				if (desc.vs)
 				{
-					return false;
+					// vsの入力レイアウト情報が必要なのでvsのreflectionはメンバ変数に保持
+					if( !vs_reflection_.Initialize(p_device, desc.vs) || !func_setup_slot(ShaderStage::VERTEX_SHADER, p_device, vs_reflection_, slot_map_))
+						return false;
 				}
-				if (desc.hs && !func_setup_slot(ShaderStage::HULL_SHADER, p_device, desc.hs, slot_map_))
+				if (desc.hs)
 				{
-					return false;
+					ShaderReflectionDep		reflection;
+					if (!reflection.Initialize(p_device, desc.hs) || !func_setup_slot(ShaderStage::HULL_SHADER, p_device, reflection, slot_map_))
+						return false;
 				}
-				if (desc.ds && !func_setup_slot(ShaderStage::DOMAIN_SHADER, p_device, desc.ds, slot_map_))
+				if (desc.ds)
 				{
-					return false;
+					ShaderReflectionDep		reflection;
+					if (!reflection.Initialize(p_device, desc.ds) || !func_setup_slot(ShaderStage::DOMAIN_SHADER, p_device, reflection, slot_map_))
+						return false;
 				}
-				if (desc.gs && !func_setup_slot(ShaderStage::GEOMETRY_SHADER, p_device, desc.gs, slot_map_))
+				if (desc.gs)
 				{
-					return false;
+					ShaderReflectionDep		reflection;
+					if (!reflection.Initialize(p_device, desc.gs) || !func_setup_slot(ShaderStage::GEOMETRY_SHADER, p_device, reflection, slot_map_))
+						return false;
 				}
-				if (desc.ps && !func_setup_slot(ShaderStage::PIXEL_SHADER, p_device, desc.ps, slot_map_))
+				if (desc.ps)
 				{
-					return false;
+					ShaderReflectionDep		reflection;
+					if (!reflection.Initialize(p_device, desc.ps) || !func_setup_slot(ShaderStage::PIXEL_SHADER, p_device, reflection, slot_map_))
+						return false;
 				}
-				if (desc.cs && !func_setup_slot(ShaderStage::COMPUTE_SHADER, p_device, desc.cs, slot_map_))
+				if (desc.cs)
 				{
-					return false;
+					ShaderReflectionDep		reflection;
+					if (!reflection.Initialize(p_device, desc.cs) || !func_setup_slot(ShaderStage::COMPUTE_SHADER, p_device, reflection, slot_map_))
+						return false;
 				}
 			}
 
@@ -1285,10 +1291,10 @@ namespace ngl
 			const std::array<D3D12_DESCRIPTOR_RANGE, 4> fixed_range_infos =
 			{
 				{
-				{ D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 16, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
-				{ D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
-				{ D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 16, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
-				{ D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 16, 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_CBV, RootParameterTableSize(RootParameterType::ConstantBuffer), 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_SRV, RootParameterTableSize(RootParameterType::ShaderResource), 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, RootParameterTableSize(RootParameterType::Sampler), 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
+				{ D3D12_DESCRIPTOR_RANGE_TYPE_UAV, RootParameterTableSize(RootParameterType::UnorderedAccess), 0, 0, D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND },
 				}
 			};
 			auto func_set_table_to_param = []
@@ -1313,12 +1319,11 @@ namespace ngl
 					| D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS
 					;
 
-				// 頂点シェーダリフレクション取得
-				ShaderReflectionDep vs_ref;
-				if (vs_ref.Initialize(p_device, desc.vs))
+				// 頂点シェーダリフレクションの入力レイアウト情報からフラグ追加.
+				if(desc.vs)
 				{
 					// 頂点入力の有無フラグ追加.
-					root_signature_desc.Flags |= (0 < vs_ref.NumInputParamInfo()) ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
+					root_signature_desc.Flags |= (0 < vs_reflection_.NumInputParamInfo()) ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
 				}
 				// Descriptor
 				int root_table = 0;
@@ -1441,7 +1446,7 @@ namespace ngl
 			{
 				wprintf(L"ERROR : D3D12SerializeRootSignature:\n%hs\n",
 					(const char*)root_signature_error_blob->GetBufferPointer());
-				
+				assert(false);
 				return false;
 			}
 			if (SUCCEEDED(hr))
@@ -1451,7 +1456,7 @@ namespace ngl
 				{
 					root_signature_ = nullptr;
 					std::cout << "ERROR : CreateRootSignature" << std::endl;
-
+					assert(false);
 					return false;
 				}
 			}
