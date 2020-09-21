@@ -3,6 +3,7 @@
 #include "rhi.d3d12.h"
 #include "rhi_util.d3d12.h"
 
+#include <array>
 #include <algorithm>
 
 // lib
@@ -36,6 +37,28 @@ namespace ngl
 			return 0;
 		}
 
+		static D3D12_SHADER_VISIBILITY ConvertShaderVisibility(ShaderStage v)
+		{
+			switch (v)
+			{
+			case ShaderStage::VERTEX_SHADER:
+				return D3D12_SHADER_VISIBILITY_VERTEX;
+
+			case ShaderStage::HULL_SHADER:
+				return D3D12_SHADER_VISIBILITY_HULL;
+
+			case ShaderStage::DOMAIN_SHADER:
+				return D3D12_SHADER_VISIBILITY_DOMAIN;
+
+			case ShaderStage::GEOMETRY_SHADER:
+				return D3D12_SHADER_VISIBILITY_GEOMETRY;
+
+			case ShaderStage::PIXEL_SHADER:
+				return D3D12_SHADER_VISIBILITY_PIXEL;
+			default:
+				return D3D12_SHADER_VISIBILITY_ALL;
+			}
+		}
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -679,10 +702,13 @@ namespace ngl
 				static const char* shader_stage_names[] =
 				{
 					"vs",
+					"hs",
+					"ds",
+					"gs",
 					"ps",
-					"ms",
-					"as"
 				};
+				static_assert(static_cast<int>(ShaderStage::_MAX) == std::size(shader_stage_names),"Shader Stage Name Array Size is Invalid");
+
 				size_t shader_model_name_len = 0;
 
 				const auto shader_model_base_len = strlen(shader_stage_names[stage_id]);
@@ -773,7 +799,7 @@ namespace ngl
 							hr = dxc_result->GetErrorBuffer(&errorsBlob);
 							if (SUCCEEDED(hr) && errorsBlob)
 							{
-								wprintf(L"Compilation failed with errors:\n%hs\n",
+								wprintf(L"ERROR : Compilation failed with errors:\n%hs\n",
 									(const char*)errorsBlob->GetBufferPointer());
 							}
 						}
@@ -815,7 +841,7 @@ namespace ngl
 					if (HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) == hr)
 					{
 						// ファイルパス不正
-						std::cout << "ERROR : Shader File not found." << std::endl;
+						std::cout << "ERROR : Shader File not found" << std::endl;
 					}
 					if (error_blob)
 					{
@@ -1060,13 +1086,27 @@ namespace ngl
 		{
 		}
 
-		const ShaderReflectionDep::CbInfo* ShaderReflectionDep::GetCbInfo(u32 index)
+		u32 ShaderReflectionDep::NumInputParamInfo() const
+		{
+			return static_cast<u32>(input_param_.size());
+		}
+		const ShaderReflectionDep::InputParamInfo* ShaderReflectionDep::GetInputParamInfo(u32 index) const
+		{
+			if (input_param_.size() <= index)
+				return nullptr;
+			return &input_param_[index];
+		}
+		u32 ShaderReflectionDep::NumCbInfo() const
+		{
+			return static_cast<u32>(cb_.size());
+		}
+		const ShaderReflectionDep::CbInfo* ShaderReflectionDep::GetCbInfo(u32 index) const
 		{
 			if (cb_.size() <= index)
 				return nullptr;
 			return &cb_[index];
 		}
-		const ShaderReflectionDep::CbVariableInfo* ShaderReflectionDep::GetCbVariableInfo(u32 index, u32 variable_index)
+		const ShaderReflectionDep::CbVariableInfo* ShaderReflectionDep::GetCbVariableInfo(u32 index, u32 variable_index) const
 		{
 			auto* cb = GetCbInfo(index);
 			if (!cb || cb->num_member <= variable_index)
@@ -1241,9 +1281,101 @@ namespace ngl
 			pso_desc.Flags = D3D12_PIPELINE_STATE_FLAGS::D3D12_PIPELINE_STATE_FLAG_NONE;
 
 			// RootSig
+			CComPtr<ID3D12RootSignature> root_signature;
 			{
-				// TODO. 
-				pso_desc.pRootSignature;
+				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+
+				/*
+					RootSignatureのDescriptorTableはもんしょさんのコピー戦略を参考.
+					一律で
+							Table0 : VS用SRV 48個
+							Table1 : VS用UAV 16個
+							Table2 : VS用CBV 16個
+							Table3 : VS用Sampler 16個
+
+							Table4 : HS用SRV 48個
+							---
+							Table8 : DS用SRV 48個
+							---
+							Table12 : GS用SRV 48個
+							---
+							Table16 : PS用SRV 48個
+							---
+
+					というレイアウトとし、実行時には適切なサイズのHeapの適切な位置にCopyDescriptorsをする
+				*/
+				constexpr auto num_shader_stage = static_cast<int>(ShaderStage::_MAX);
+				struct RangeInfo
+				{
+					D3D12_DESCRIPTOR_RANGE_TYPE range_type;
+					int							count;
+				};
+				// リソースタイプ毎に大きなテーブルを用意する.
+				std::array<RangeInfo, 4> range_infos =
+				{
+					{
+						{D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48},
+						{D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 16},
+						{D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 16},
+						{D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 16}
+					},
+				};
+				std::array<D3D12_DESCRIPTOR_RANGE, num_shader_stage * range_infos.size()> ranges;
+				std::array<D3D12_ROOT_PARAMETER, num_shader_stage * range_infos.size()>  rootParameters;
+				{
+					// 頂点シェーダリフレクション取得
+					ShaderReflectionDep vs_ref;
+					if (vs_ref.Initialize(p_device, desc.vs))
+					{
+						// 頂点入力の有無.
+						root_signature_desc.Flags |= (0 < vs_ref.NumInputParamInfo()) ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
+					}
+					// Descriptor
+					{
+						int root_param_index = 0;
+						for(auto i = 0u; i < num_shader_stage; ++i)
+						{
+							for (auto ri = 0u; ri < range_infos.size(); ++ri)
+							{
+								ranges[root_param_index].RangeType = range_infos[ri].range_type;
+								ranges[root_param_index].NumDescriptors = range_infos[ri].count;
+								ranges[root_param_index].BaseShaderRegister = 0;
+								ranges[root_param_index].RegisterSpace = 0;
+								ranges[root_param_index].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+							
+
+								rootParameters[root_param_index].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+								rootParameters[root_param_index].DescriptorTable.NumDescriptorRanges = 1;
+								rootParameters[root_param_index].DescriptorTable.pDescriptorRanges = &ranges[root_param_index];
+								rootParameters[root_param_index].ShaderVisibility = ConvertShaderVisibility(ShaderStage(i));
+								++root_param_index;
+							}
+						}
+					}
+					root_signature_desc.NumParameters = static_cast<u32>(rootParameters.size());
+					root_signature_desc.pParameters = rootParameters.data();
+				}
+
+				// TODO. Descriptor
+				CComPtr<ID3DBlob> root_signature_blob;
+				CComPtr<ID3DBlob> root_signature_error_blob;
+				auto hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &root_signature_blob, &root_signature_error_blob);
+				if (FAILED(hr) && root_signature_error_blob)
+				{
+					wprintf(L"ERROR : D3D12SerializeRootSignature:\n%hs\n",
+						(const char*)root_signature_error_blob->GetBufferPointer());
+				}
+				if (SUCCEEDED(hr))
+				{
+					hr = p_device->GetD3D12Device()->CreateRootSignature(0, root_signature_blob->GetBufferPointer(), root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
+					if (FAILED(hr))
+					{
+						root_signature = nullptr;
+						std::cout << "ERROR : CreateRootSignature" << std::endl;
+					}
+				}
+				// RootSignature設定
+				pso_desc.pRootSignature = root_signature;
 			}
 
 			if (FAILED(p_device->GetD3D12Device()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))

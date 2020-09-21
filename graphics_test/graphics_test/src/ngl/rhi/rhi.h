@@ -129,7 +129,7 @@ namespace ngl
 			NGL_FORMAT_P8,
 			NGL_FORMAT_A8P8,
 			NGL_FORMAT_B4G4R4A4_UNORM,
-			_MAX
+			_MAX,
 		};
 
 		enum class ResourceState
@@ -160,10 +160,13 @@ namespace ngl
 
 		enum class ShaderStage
 		{
-			VERTEX,
-			PIXEL,
-			MESH,			// 未実装
-			AMPLIFICATION,	// 未実装
+			VERTEX_SHADER,
+			HULL_SHADER,
+			DOMAIN_SHADER,
+			GEOMETRY_SHADER,
+			PIXEL_SHADER,
+
+			_MAX,
 		};
 
 		// ブレンド要素

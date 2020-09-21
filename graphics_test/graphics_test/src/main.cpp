@@ -1,5 +1,6 @@
 ﻿#include <iostream>
 #include <vector>
+#include <array>
 
 
 #include "ngl/boot/boot_application.h"
@@ -161,7 +162,7 @@ bool AppGame::Initialize()
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
-			shader_desc.stage = ngl::rhi::ShaderStage::VERTEX;
+			shader_desc.stage = ngl::rhi::ShaderStage::VERTEX_SHADER;
 			shader_desc.shader_model_version = "5_0";
 
 			if (!sample_vs_.Initialize(&device_, shader_desc))
@@ -176,7 +177,7 @@ bool AppGame::Initialize()
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::PIXEL;
+			shader_desc.stage = ngl::rhi::ShaderStage::PIXEL_SHADER;
 			shader_desc.shader_model_version = "5_0";
 
 			if (!sample_ps_.Initialize(&device_, shader_desc))
@@ -202,12 +203,21 @@ bool AppGame::Initialize()
 
 		desc.blend_state.target_blend_states[0].blend_enable = false;;
 
-		desc.input_layout;
+		// 入力レイアウト
+		std::array<ngl::rhi::InputElement, 1> input_elem_data;
+		desc.input_layout.num_elements = input_elem_data.size();
+		desc.input_layout.p_input_elements = input_elem_data.data();
+		input_elem_data[0].semantic_name = "POSITION";
+		input_elem_data[0].semantic_index = 0;
+		input_elem_data[0].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32B32A32_FLOAT;
+		input_elem_data[0].stream_slot = 0;
+		input_elem_data[0].element_offset = 0;
 
 		if (!pso.Initialize(&device_, desc))
 		{
 			std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
 		}
+
 	}
 
 
@@ -352,7 +362,7 @@ void AppGame::TestCode()
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::PIXEL;
+			shader_desc.stage = ngl::rhi::ShaderStage::PIXEL_SHADER;
 			shader_desc.shader_model_version = "5_0";
 
 			if (!shader00.Initialize(&device_, shader_desc))
@@ -379,7 +389,7 @@ void AppGame::TestCode()
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::PIXEL;
+			shader_desc.stage = ngl::rhi::ShaderStage::PIXEL_SHADER;
 			shader_desc.shader_model_version = "6_0";
 
 			if (!shader01.Initialize(&device_, shader_desc))
@@ -400,7 +410,7 @@ void AppGame::TestCode()
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
-			shader_desc.stage = ngl::rhi::ShaderStage::VERTEX;
+			shader_desc.stage = ngl::rhi::ShaderStage::VERTEX_SHADER;
 			shader_desc.shader_model_version = "5_0";
 
 			if (!shader02.Initialize(&device_, shader_desc))

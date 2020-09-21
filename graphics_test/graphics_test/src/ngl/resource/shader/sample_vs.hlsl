@@ -10,7 +10,6 @@ cbuffer CbTest
 struct VS_INPUT
 {
 	float4 pos	:	POSITION;
-	float2 uv	:	TEXCOORD;
 };
 
 struct VS_OUTPUT
@@ -26,9 +25,9 @@ VS_OUTPUT main_vs(VS_INPUT input)
 
 	output.pos = input.pos;
 
-	if (cb_param0)
+	//if (cb_param0)
 	{
-		output.uv = float2(1, 1);
+		output.uv = float2(0, 0);
 	}
 
 	return output;

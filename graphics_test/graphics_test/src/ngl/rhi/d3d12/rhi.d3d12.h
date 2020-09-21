@@ -272,7 +272,7 @@ namespace ngl
 				// "main_ps"
 				const char*		entry_point_name = nullptr;
 				// シェーダステージ.
-				ShaderStage		stage = ShaderStage::VERTEX;
+				ShaderStage		stage = ShaderStage::VERTEX_SHADER;
 				// シェーダモデル文字列.
 				// "4_0", "5_0", "5_1" etc.
 				const char*		shader_model_version = nullptr;
@@ -341,11 +341,16 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, ShaderDep* p_shader);
 			void Finalize();
 
-			const CbInfo* GetCbInfo(u32 index);
-			const CbVariableInfo* GetCbVariableInfo(u32 index, u32 variable_index);
+
+			u32 NumInputParamInfo() const;
+			const InputParamInfo* GetInputParamInfo(u32 index) const;
+
+			u32 NumCbInfo() const;
+			const CbInfo* GetCbInfo(u32 index) const;
+			const CbVariableInfo* GetCbVariableInfo(u32 index, u32 variable_index) const;
 
 			template<typename T>
-			bool GetCbDefaultValue(u32 index, u32 variable_index, T& out)
+			bool GetCbDefaultValue(u32 index, u32 variable_index, T& out) const
 			{
 				if (cb_.size() <= index || cb_[index].num_member <= variable_index)
 					return false;
