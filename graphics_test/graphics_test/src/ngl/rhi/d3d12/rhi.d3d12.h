@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ngl/rhi/rhi.h"
+#include "ngl/text/hash_text.h"
 
 
 #include <iostream>
@@ -37,7 +38,17 @@ namespace ngl
 
 		class DeviceDep;
 
+		using ResourceViewName = ngl::text::FixedString<32>;
 
+		enum class RootParameterType : u16
+		{
+			ConstantBuffer,
+			ShaderResource,
+			UnorderedAccess,
+			Sampler,
+
+			_Max
+		};
 
 		// Device
 		class DeviceDep
@@ -338,10 +349,18 @@ namespace ngl
 				u8		num_component;
 			};
 
+			struct ResourceSlotInfo
+			{
+				ResourceViewName			name;
+				RootParameterType			type = RootParameterType::_Max;
+				s32							bind_point = -1;
+
+			};
+
 			ShaderReflectionDep();
 			~ShaderReflectionDep();
 
-			bool Initialize(DeviceDep* p_device, ShaderDep* p_shader);
+			bool Initialize(DeviceDep* p_device, const ShaderDep* p_shader);
 			void Finalize();
 
 
@@ -366,6 +385,9 @@ namespace ngl
 				return true;
 			}
 
+			u32 NumResourceSlotInfo() const;
+			const ResourceSlotInfo* GetResourceSlotInfo(u32 index) const;
+
 
 		private:
 			// Constant Buffer
@@ -380,20 +402,31 @@ namespace ngl
 
 			// Input Output
 			std::vector<InputParamInfo>	input_param_;
+
+			std::vector<ResourceSlotInfo>	resource_slot_;
 		};
 
-		// ResourceViewとレジスタのマッピング
-		// 実質RootSignature.
-		class PipelineViewLayoutDep
+		/*
+			ResourceViewとレジスタのマッピング
+			実質RootSignature.
+			このシステムで利用するシェーダリソースのレジスタ番号は以下のような制限とする.
+
+				CBV		0-15
+				SRV		0-47
+				UAV		0-15
+				Sampler	0-15
+		*/
+		class PipelineResourceViewLayoutDep
 		{
 		public:
 			struct Desc
 			{
 				ShaderDep* vs = nullptr;
-				ShaderDep* ps = nullptr;
-				ShaderDep* ds = nullptr;
 				ShaderDep* hs = nullptr;
+				ShaderDep* ds = nullptr;
 				ShaderDep* gs = nullptr;
+				ShaderDep* ps = nullptr;
+				ShaderDep* cs = nullptr;
 			};
 
 			// RootSignatureで定義されたあるシェーダステージのあるリソースタイプのテーブルインデックスを保持
@@ -435,8 +468,25 @@ namespace ngl
 
 			};	// struct InputIndex
 
-			PipelineViewLayoutDep();
-			~PipelineViewLayoutDep();
+
+
+			struct ShaderStageSlot
+			{
+				RootParameterType	type = RootParameterType::_Max;
+				s16					slot = -1;
+			};
+			struct Slot
+			{
+				ShaderStageSlot vs_stage = {};
+				ShaderStageSlot hs_stage = {};
+				ShaderStageSlot ds_stage = {};
+				ShaderStageSlot gs_stage = {};
+				ShaderStageSlot ps_stage = {};
+				ShaderStageSlot cs_stage = {};
+			};
+
+			PipelineResourceViewLayoutDep();
+			~PipelineResourceViewLayoutDep();
 
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
@@ -449,6 +499,7 @@ namespace ngl
 			ResourceTable					resource_table_;
 
 			// TODO. ShaderReflectionによる名前->RegisterIndexのMapを作成する.
+			std::unordered_map<ResourceViewName, Slot> slot_map_;
 		};
 
 		class GraphicsPipelineStateDep
@@ -486,7 +537,7 @@ namespace ngl
 
 		private:
 			CComPtr<ID3D12PipelineState>	pso_;
-			PipelineViewLayoutDep			view_layout_;
+			PipelineResourceViewLayoutDep			view_layout_;
 		};
 	}
 }

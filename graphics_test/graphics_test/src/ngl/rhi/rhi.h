@@ -165,6 +165,7 @@ namespace ngl
 			DOMAIN_SHADER,
 			GEOMETRY_SHADER,
 			PIXEL_SHADER,
+			COMPUTE_SHADER,
 
 			_MAX,
 		};

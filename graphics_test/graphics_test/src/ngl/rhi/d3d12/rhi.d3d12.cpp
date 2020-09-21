@@ -55,6 +55,10 @@ namespace ngl
 
 			case ShaderStage::PIXEL_SHADER:
 				return D3D12_SHADER_VISIBILITY_PIXEL;
+
+			case ShaderStage::COMPUTE_SHADER:
+				return D3D12_SHADER_VISIBILITY_ALL;
+
 			default:
 				return D3D12_SHADER_VISIBILITY_ALL;
 			}
@@ -706,6 +710,7 @@ namespace ngl
 					"ds",
 					"gs",
 					"ps",
+					"cs",
 				};
 				static_assert(static_cast<int>(ShaderStage::_MAX) == std::size(shader_stage_names),"Shader Stage Name Array Size is Invalid");
 
@@ -896,7 +901,7 @@ namespace ngl
 		}
 
 
-		bool ShaderReflectionDep::Initialize(DeviceDep* p_device, ShaderDep* p_shader)
+		bool ShaderReflectionDep::Initialize(DeviceDep* p_device, const ShaderDep* p_shader)
 		{
 			if (!p_device || !p_shader || !p_shader->GetShaderBinaryPtr())
 				return true;
@@ -1078,6 +1083,52 @@ namespace ngl
 							}
 						}
 					}
+
+					// リソーススロット一覧作成.
+					{
+						int valid_slot_count = 0;
+						resource_slot_.resize(shader_desc.BoundResources);
+						for (u32 i = 0; i < shader_desc.BoundResources; i++)
+						{
+							D3D12_SHADER_INPUT_BIND_DESC bd;
+							shader_reflect->GetResourceBindingDesc(i, &bd);
+
+							// リソース種別取得
+							RootParameterType paramType = RootParameterType::_Max;
+							switch (bd.Type)
+							{
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_CBUFFER:
+								paramType = RootParameterType::ConstantBuffer; break;
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_SAMPLER:
+								paramType = RootParameterType::Sampler; break;
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_TEXTURE:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_STRUCTURED:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_BYTEADDRESS:
+								paramType = RootParameterType::ShaderResource; break;
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_RWTYPED:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_RWSTRUCTURED:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_RWBYTEADDRESS:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_APPEND_STRUCTURED:
+							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_CONSUME_STRUCTURED:
+								paramType = RootParameterType::UnorderedAccess; break;
+							default:
+								std::cout << "ERROR : ShaderReflection. Failed to Get BoundResources " << i << " ." << std::endl;
+								break;;
+							}
+
+							if (RootParameterType::_Max != paramType)
+							{
+								resource_slot_[valid_slot_count].type = paramType;
+								resource_slot_[valid_slot_count].bind_point = bd.BindPoint;
+								resource_slot_[valid_slot_count].name.Set(bd.Name, static_cast<unsigned int>(std::strlen(bd.Name)));
+
+								++valid_slot_count;
+							}
+						}
+						// 取得できなかったリソースがあった場合に切り詰める.
+						resource_slot_.resize(valid_slot_count);
+					}
 				}
 			}
 
@@ -1115,26 +1166,110 @@ namespace ngl
 			const auto i = cb_variable_offset_[index] + variable_index;
 			return &cb_variable_[i];
 		}
+		u32 ShaderReflectionDep::NumResourceSlotInfo() const
+		{
+			return static_cast<u32>(resource_slot_.size());
+		}
+		const ShaderReflectionDep::ResourceSlotInfo* ShaderReflectionDep::GetResourceSlotInfo(u32 index) const
+		{
+			if (resource_slot_.size() <= index)
+				return nullptr;
+			return &resource_slot_[index];
+		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		PipelineViewLayoutDep::PipelineViewLayoutDep()
+		PipelineResourceViewLayoutDep::PipelineResourceViewLayoutDep()
 		{
 		}
-		PipelineViewLayoutDep::~PipelineViewLayoutDep()
+		PipelineResourceViewLayoutDep::~PipelineResourceViewLayoutDep()
 		{
 			Finalize();
 		}
 
-		bool PipelineViewLayoutDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		bool PipelineResourceViewLayoutDep::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
 			if (!p_device)
 				return false;
 
-			D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 
+			// Layout情報取得
+			auto func_setup_slot = [](ShaderStage stage, DeviceDep* p_device, const ShaderDep* p_shader, std::unordered_map<ResourceViewName, Slot>& slot_map)
+			{
+				assert(p_shader);
+
+				auto SetRegisterIndex = [](Slot& slot, u32 bind_point, RootParameterType type, ShaderStage shader_stage)
+				{
+					switch (shader_stage)
+					{
+					case ShaderStage::VERTEX_SHADER:   slot.vs_stage.slot = bind_point; slot.vs_stage.type = type; break;
+					case ShaderStage::PIXEL_SHADER:    slot.ps_stage.slot = bind_point; slot.ps_stage.type = type; break;
+					case ShaderStage::GEOMETRY_SHADER: slot.gs_stage.slot = bind_point; slot.gs_stage.type = type; break;
+					case ShaderStage::HULL_SHADER:     slot.hs_stage.slot = bind_point; slot.hs_stage.type = type; break;
+					case ShaderStage::DOMAIN_SHADER:   slot.ds_stage.slot = bind_point; slot.ds_stage.type = type; break;
+					case ShaderStage::COMPUTE_SHADER:  slot.cs_stage.slot = bind_point; slot.cs_stage.type = type; break;
+					}
+				};
+
+				ShaderReflectionDep ref;
+				if (!ref.Initialize(p_device, p_shader))
+					return false;
+
+				const auto num_slot = ref.NumResourceSlotInfo();
+				for (auto i = 0u; i < num_slot; ++i)
+				{
+					if (const auto* slot_info = ref.GetResourceSlotInfo(i))
+					{
+						auto itr = slot_map.find(slot_info->name);
+						if (itr != slot_map.end())
+						{
+							// 登録済み
+							SetRegisterIndex(itr->second, slot_info->bind_point, slot_info->type, stage);
+						}
+						else
+						{
+							// 未登録
+							Slot new_slot;
+							SetRegisterIndex(new_slot, slot_info->bind_point, slot_info->type, stage);
+							slot_map[slot_info->name] = new_slot;
+						}
+					}
+				}
+
+				return true;
+			};
+			{
+				if (desc.vs && !func_setup_slot(ShaderStage::VERTEX_SHADER, p_device, desc.vs, slot_map_))
+				{
+					return false;
+				}
+				if (desc.hs && !func_setup_slot(ShaderStage::HULL_SHADER, p_device, desc.hs, slot_map_))
+				{
+					return false;
+				}
+				if (desc.ds && !func_setup_slot(ShaderStage::DOMAIN_SHADER, p_device, desc.ds, slot_map_))
+				{
+					return false;
+				}
+				if (desc.gs && !func_setup_slot(ShaderStage::GEOMETRY_SHADER, p_device, desc.gs, slot_map_))
+				{
+					return false;
+				}
+				if (desc.ps && !func_setup_slot(ShaderStage::PIXEL_SHADER, p_device, desc.ps, slot_map_))
+				{
+					return false;
+				}
+				if (desc.cs && !func_setup_slot(ShaderStage::COMPUTE_SHADER, p_device, desc.cs, slot_map_))
+				{
+					return false;
+				}
+			}
+
+
+
+			D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 			/*
 				RootSignatureのDescriptorTableはもんしょさんのコピー戦略を参考.
 				一律で
@@ -1274,6 +1409,25 @@ namespace ngl
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 					}
+
+					// CS
+					if (desc.cs)
+					{
+						resource_table_.cs_cbv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[0]);
+						++root_table;
+						resource_table_.cs_srv_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[1]);
+						++root_table;
+						resource_table_.cs_sampler_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[2]);
+						++root_table;
+						resource_table_.cs_uav_table = root_table;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[3]);
+						++root_table;
+
+						root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+					}
 				}
 				root_signature_desc.NumParameters = root_table;
 				root_signature_desc.pParameters = rootParameters.data();
@@ -1304,11 +1458,11 @@ namespace ngl
 
 			return true;
 		}
-		void PipelineViewLayoutDep::Finalize()
+		void PipelineResourceViewLayoutDep::Finalize()
 		{
 			root_signature_ = nullptr;
 		}
-		ID3D12RootSignature* PipelineViewLayoutDep::GetD3D12RootSignature()
+		ID3D12RootSignature* PipelineResourceViewLayoutDep::GetD3D12RootSignature()
 		{
 			return root_signature_;
 		}
@@ -1482,7 +1636,7 @@ namespace ngl
 
 			// RootSignature
 			{
-				PipelineViewLayoutDep::Desc root_signature_desc = {};
+				PipelineResourceViewLayoutDep::Desc root_signature_desc = {};
 				root_signature_desc.vs = desc.vs;
 				root_signature_desc.hs = desc.hs;
 				root_signature_desc.ds = desc.ds;
