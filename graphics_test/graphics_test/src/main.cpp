@@ -15,6 +15,7 @@
 
 // rhi
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
+#include "ngl/rhi/d3d12/rhi_descriptor.d3d12.h"
 
 
 
@@ -346,18 +347,18 @@ void AppGame::TestCode()
 
 	// シェーダテスト
 	{
-		// バイナリ読み込み.
+// バイナリ読み込み.
 		{
-			ngl::file::FileObject file_obj;
-			ngl::rhi::ShaderDep	shader00;
-			ngl::rhi::ShaderReflectionDep reflect00;
-			file_obj.ReadFile("./data/sample_vs.cso");
-			if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
-			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
-			}
-			reflect00.Initialize(&device_, &shader00);
-			std::cout << "_" << std::endl;
+		ngl::file::FileObject file_obj;
+		ngl::rhi::ShaderDep	shader00;
+		ngl::rhi::ShaderReflectionDep reflect00;
+		file_obj.ReadFile("./data/sample_vs.cso");
+		if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
+		{
+			std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+		}
+		reflect00.Initialize(&device_, &shader00);
+		std::cout << "_" << std::endl;
 		}
 		// バイナリ読み込み.
 		{
@@ -444,4 +445,43 @@ void AppGame::TestCode()
 
 		std::cout << "_" << std::endl;
 	}
+
+	// PersistentDescriptorAllocatorテスト. 適当なサイズで初期化して確保と解放を繰り返す.
+	{
+		ngl::time::Timer::Instance().StartTimer("PersistentDescriptorAllocatorTest");
+
+		ngl::rhi::PersistentDescriptorAllocator persistent_desc_allocator0;
+
+		ngl::rhi::PersistentDescriptorAllocator::Desc pda_desc;
+		pda_desc.size = 65535;
+		pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		if (!persistent_desc_allocator0.Initialize(&device_, pda_desc))
+		{
+			std::cout << "ERROR: Create rhi::PersistentDescriptorAllocator" << std::endl;
+		}
+		std::vector<ngl::rhi::PersistentDescriptorInfo> debug_alloc_pd;
+		for (ngl::u32 i = 0u; i  < (pda_desc.size); ++i)
+		{
+			auto pd0 = persistent_desc_allocator0.Allocate();
+
+			if (0 != pd0.allocator)
+			{
+				debug_alloc_pd.push_back(pd0);
+			}
+
+			const auto dealloc_index = std::rand() % debug_alloc_pd.size();
+#if 1
+			if (debug_alloc_pd[dealloc_index].allocator)
+			{
+				// ランダムに選んだものがまだDeallocされていなければDealloc
+				persistent_desc_allocator0.Deallocate(debug_alloc_pd[dealloc_index]);
+				debug_alloc_pd[dealloc_index] = {};
+			}
+#endif
+		}
+
+		std::cout << "PersistentDescriptorAllocatorTest time -> " << ngl::time::Timer::Instance().GetElapsedSec("PersistentDescriptorAllocatorTest") << std::endl;
+		std::cout << "_" << std::endl;
+	}
+
 }

@@ -22,6 +22,17 @@
 
 #include <atlbase.h>
 
+/*
+	実装メモ
+
+		DeviceDep
+			各種リソース用Viewを作成するDescriptorHeapを保持(スレッドセーフに注意)
+				CBV SRV UAV共用のHeap
+				RTV用のHeap
+				DSV用のHeap
+				Sampler用のHeap(SamplerはD3D的に上限が低いのでキャッシュして使い回す対応が必要)
+
+*/
 
 namespace ngl
 {

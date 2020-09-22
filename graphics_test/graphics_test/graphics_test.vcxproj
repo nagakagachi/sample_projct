@@ -159,6 +159,7 @@ copy /Y "C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\D3D\\x64\\dxil.dll" 
     <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />
     <ClCompile Include="src\ngl\platform\win\window.win.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi.d3d12.cpp" />
+    <ClCompile Include="src\ngl\rhi\d3d12\rhi_descriptor.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_util.d3d12.cpp" />
     <ClCompile Include="src\ngl\util\bit_operation.cpp" />
     <ClCompile Include="src\ngl\util\time\timer.cpp" />
@@ -174,6 +175,7 @@ copy /Y "C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\D3D\\x64\\dxil.dll" 
     <ClInclude Include="src\ngl\platform\window.h" />
     <ClInclude Include="src\ngl\platform\win\window.win.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi.d3d12.h" />
+    <ClInclude Include="src\ngl\rhi\d3d12\rhi_descriptor.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_util.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\rhi.h" />
     <ClInclude Include="src\ngl\text\hash_text.h" />
