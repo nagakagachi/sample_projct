@@ -64,6 +64,9 @@ private:
 	ngl::rhi::ShaderDep							sample_vs_;
 	ngl::rhi::ShaderDep							sample_ps_;
 
+
+	// cbv srv uav用PersistentDescriptorAllocator
+	ngl::rhi::PersistentDescriptorAllocator persistent_cbv_srv_uav_allocator_;
 };
 
 
@@ -148,6 +151,18 @@ bool AppGame::Initialize()
 	{
 		std::cout << "ERROR: Fence Initialize" << std::endl;
 		return false;
+	}
+
+	// cbv srv uav用PersistentDescriptorAllocator初期化
+	{
+		ngl::rhi::PersistentDescriptorAllocator::Desc pda_desc;
+		pda_desc.size = 65535;
+		pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		if (!persistent_cbv_srv_uav_allocator_.Initialize(&device_, pda_desc))
+		{
+			std::cout << "ERROR: PersistentDescriptorAllocator Initialize" << std::endl;
+			return false;
+		}
 	}
 
 	clear_color_[0] = 0.0f;
@@ -325,13 +340,27 @@ void AppGame::TestCode()
 
 
 	{
+		bool is_uav_test = false;
+
+
 		// Buffer生成テスト
 		ngl::rhi::BufferDep buffer0;
 		ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 		buffer_desc0.element_byte_size = sizeof(ngl::u64);
 		buffer_desc0.element_count = 1;
-		buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;	// CPU->GPU Uploadリソース
 		buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
+		if(is_uav_test)
+		{
+			// UAV用設定.
+			buffer_desc0.allow_uav = true;
+			// UAVはDefaultHeap必須
+			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::DEFAULT;
+		}
+		else
+		{
+			// CPU->GPU Uploadリソース
+			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+		}
 
 		if (!buffer0.Initialize(&device_, buffer_desc0))
 		{
@@ -342,6 +371,60 @@ void AppGame::TestCode()
 		{
 			*buffer0_map = 111u;
 			buffer0.Unmap();
+		}
+
+
+		// CBV生成テスト.
+		auto pd_cbv = persistent_cbv_srv_uav_allocator_.Allocate();
+		if (pd_cbv.allocator)
+		{
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
+			cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
+			cbv_desc.SizeInBytes = buffer0.GetBufferSize();
+			device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
+
+			// 解放
+			persistent_cbv_srv_uav_allocator_.Deallocate(pd_cbv);
+		}
+
+		// SRV生成テスト
+		auto pd_srv = persistent_cbv_srv_uav_allocator_.Allocate();
+		if (pd_srv.allocator)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+			srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+			srv_desc.Buffer.FirstElement = 0;
+			srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+			srv_desc.Buffer.NumElements = 1;
+			srv_desc.Buffer.StructureByteStride = sizeof(ngl::u64);
+
+			device_.GetD3D12Device()->CreateShaderResourceView(buffer0.GetD3D12Resource() , &srv_desc, pd_srv.cpu_handle);
+
+			// 解放
+			persistent_cbv_srv_uav_allocator_.Deallocate(pd_srv);
+		}
+		// UAV生成テスト.
+		if (is_uav_test)
+		{
+			auto pd_uav = persistent_cbv_srv_uav_allocator_.Allocate();
+			if (pd_uav.allocator)
+			{
+				D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
+				uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+				uav_desc.Format = DXGI_FORMAT_UNKNOWN;
+				uav_desc.Buffer.CounterOffsetInBytes = 0;// カウンタバッファ不使用の場合はゼロ
+				uav_desc.Buffer.FirstElement = 0;
+				uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+				uav_desc.Buffer.NumElements = 1;
+				uav_desc.Buffer.StructureByteStride = sizeof(ngl::u64);
+
+				device_.GetD3D12Device()->CreateUnorderedAccessView(buffer0.GetD3D12Resource(), nullptr, &uav_desc, pd_uav.cpu_handle);
+
+				// 解放
+				persistent_cbv_srv_uav_allocator_.Deallocate(pd_uav);
+			}
 		}
 	}
 
@@ -446,7 +529,8 @@ void AppGame::TestCode()
 		std::cout << "_" << std::endl;
 	}
 
-	// PersistentDescriptorAllocatorテスト. 適当なサイズで初期化して確保と解放を繰り返す.
+
+	// PersistentDescriptorAllocatorテスト. 適当なサイズで初期化して確保と解放を繰り返すテスト.
 	{
 		ngl::time::Timer::Instance().StartTimer("PersistentDescriptorAllocatorTest");
 

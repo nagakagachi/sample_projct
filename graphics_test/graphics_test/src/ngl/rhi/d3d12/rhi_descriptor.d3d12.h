@@ -47,8 +47,6 @@ namespace ngl
 				u32							size = 128;
 			};
 
-
-
 			PersistentDescriptorAllocator();
 			~PersistentDescriptorAllocator();
 

@@ -587,11 +587,25 @@ namespace ngl
 				heap_prop.VisibleNodeMask = 0;
 			}
 
+			D3D12_RESOURCE_FLAGS need_flags = D3D12_RESOURCE_FLAG_NONE;
+			// 必要な最大のAlignment
+			u32 need_alignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+			if (desc.allow_uav)
+			{
+				need_alignment = std::max(need_alignment, static_cast<u32>(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT));
+				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+			}
+
+			// 現状はとりあえずConstantBufferのアラインメントに従ってみる
+			// 確保するサイズはDirectX12のConstantBufferサイズAlignmentにしたがう(256)
+			const auto minimum_size = (desc_.element_byte_size) * (desc_.element_count);
+			allocated_byte_size_ = need_alignment * ((minimum_size + need_alignment - 1) / need_alignment);
+
 			D3D12_RESOURCE_DESC resource_desc = {};
 			{
 				resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 				resource_desc.Alignment = 0;
-				resource_desc.Width = static_cast<UINT64>(desc_.element_byte_size) * static_cast<UINT64>(desc_.element_count);
+				resource_desc.Width = static_cast<UINT64>(allocated_byte_size_);
 				resource_desc.Height = 1u;
 				resource_desc.DepthOrArraySize = 1u;
 				resource_desc.MipLevels = 1u;
@@ -599,7 +613,15 @@ namespace ngl
 				resource_desc.SampleDesc.Count = 1;
 				resource_desc.SampleDesc.Quality = 0;
 				resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-				resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+				resource_desc.Flags = need_flags;
+			}
+
+			// パラメータチェック
+			if ((D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS & resource_desc.Flags) && (D3D12_HEAP_TYPE_DEFAULT != heap_prop.Type))
+			{
+				// UAVリソースはDefaultHeap以外許可されない.
+				std::cout << "ERROR: Heap of UAV Resource must be ResourceHeapType::DEFAULT" << std::endl;
+				return false;
 			}
 
 			/*

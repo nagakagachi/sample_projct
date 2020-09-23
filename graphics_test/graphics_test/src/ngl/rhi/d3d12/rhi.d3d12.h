@@ -246,6 +246,7 @@ namespace ngl
 				ngl::u32			element_count = 0;
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
+				bool				allow_uav = false;
 			};
 
 			BufferDep();
@@ -287,10 +288,14 @@ namespace ngl
 
 			void Unmap();
 
+			const u32 GetBufferSize() const { return allocated_byte_size_; }
+			const Desc& GetDesc() const { return desc_; }
+
 			ID3D12Resource* GetD3D12Resource();
 
 		private:
 			Desc	desc_ = {};
+			u32		allocated_byte_size_ = 0;
 
 			void*		map_ptr_ = nullptr;
 

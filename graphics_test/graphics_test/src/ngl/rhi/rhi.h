@@ -158,6 +158,7 @@ namespace ngl
 			READBACK,
 		};
 
+
 		enum class ShaderStage
 		{
 			VERTEX_SHADER,
