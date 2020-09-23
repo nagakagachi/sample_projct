@@ -588,7 +588,7 @@ namespace ngl
 			}
 
 			D3D12_RESOURCE_FLAGS need_flags = D3D12_RESOURCE_FLAG_NONE;
-			// 必要な最大のAlignment
+			// 必要な最大のAlignment. ひとまずConstantBufferのサイズAlignを初期値(256).
 			u32 need_alignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
 			if (desc.allow_uav)
 			{

@@ -374,7 +374,7 @@ void AppGame::TestCode()
 		}
 
 
-		// CBV生成テスト.
+		// CBV生成テスト. persistent上に作成.
 		auto pd_cbv = persistent_cbv_srv_uav_allocator_.Allocate();
 		if (pd_cbv.allocator)
 		{
@@ -387,7 +387,7 @@ void AppGame::TestCode()
 			persistent_cbv_srv_uav_allocator_.Deallocate(pd_cbv);
 		}
 
-		// SRV生成テスト
+		// SRV生成テスト. persistent上に作成.
 		auto pd_srv = persistent_cbv_srv_uav_allocator_.Allocate();
 		if (pd_srv.allocator)
 		{
@@ -405,7 +405,7 @@ void AppGame::TestCode()
 			// 解放
 			persistent_cbv_srv_uav_allocator_.Deallocate(pd_srv);
 		}
-		// UAV生成テスト.
+		// UAV生成テスト. persistent上に作成.
 		if (is_uav_test)
 		{
 			auto pd_uav = persistent_cbv_srv_uav_allocator_.Allocate();
