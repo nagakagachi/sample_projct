@@ -238,7 +238,7 @@ namespace ngl
 				heap_desc_.Type = desc.type;
 				heap_desc_.NumDescriptors = desc.allocate_descriptor_count_;
 				heap_desc_.NodeMask = 0;
-				// このHeap上のDescriptorは直接描画に利用しないためNone指定.
+				// このHeap上のDescriptorは描画に利用するためVISIBLE設定.
 				heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
 				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
