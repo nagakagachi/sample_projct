@@ -568,4 +568,44 @@ void AppGame::TestCode()
 		std::cout << "_" << std::endl;
 	}
 
+	{
+		// フレームでのDescriptorマネージャ初期化
+		ngl::rhi::FrameDescriptorManager	frame_desc_man;
+		ngl::rhi::FrameDescriptorManager::Desc frame_desc_man_desc = {};
+		frame_desc_man_desc.allocate_descriptor_count_ = 100000;
+		frame_desc_man_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		frame_desc_man.Initialize(&device_, frame_desc_man_desc);
+
+		// バッファリング数分のフレームDescriptorインターフェース初期化
+		const ngl::u32 buffer_count = 3;
+		std::vector<ngl::rhi::FrameDescriptorInterface> frame_desc_interface;
+		frame_desc_interface.resize(buffer_count);
+		for (auto&& e : frame_desc_interface)
+		{
+			ngl::rhi::FrameDescriptorInterface::Desc frame_desc_interface_desc = {};
+			frame_desc_interface_desc.stack_size = 2000;
+			e.Initialize( &frame_desc_man, frame_desc_interface_desc);
+		}
+
+		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
+		ngl::u32 frame_index = 0;
+		for (auto f_i = 0u; f_i < 5; ++f_i)
+		{
+			frame_desc_interface[frame_index].ReadyToNewFrame(frame_index);
+
+			for (auto alloc_i = 0u; alloc_i < 200; ++alloc_i)
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
+				D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
+				frame_desc_interface[frame_index].Allocate(16, cpu_handle, gpu_handle);
+
+				// TODO. 取得したハンドルから16個分の連続したDescriptorにViewをコピーして描画に使う.
+
+				std::cout << "_" << std::endl;
+			}
+			frame_index = (frame_index + 1) % buffer_count;
+		}
+
+		std::cout << "_" << std::endl;
+	}
 }
