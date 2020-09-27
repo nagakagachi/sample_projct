@@ -222,6 +222,55 @@ bool AppGame::Initialize()
 		{
 			std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
 		}
+
+		// DescriptorSet設定テスト
+		{
+			// Buffer生成テスト
+			struct CbTest
+			{
+				float cb_param0 = 1.111f;
+				ngl::u32 cb_param1 = 0;
+			};
+			ngl::rhi::BufferDep buffer0;
+			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
+			buffer_desc0.element_byte_size = sizeof(CbTest);
+			buffer_desc0.element_count = 1;
+			buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
+			// CPU->GPU Uploadリソース
+			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+
+			if (!buffer0.Initialize(&device_, buffer_desc0))
+			{
+				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+			}
+
+			if (auto* buffer0_map = buffer0.Map<CbTest>())
+			{
+				buffer0_map->cb_param0 = 2.0f;
+				buffer0_map->cb_param1 = 1;
+				buffer0.Unmap();
+			}
+
+			auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
+			// CBV生成テスト. persistent上に作成.
+			auto pd_cbv = persistent_desc_allocator->Allocate();
+			if (pd_cbv.allocator)
+			{
+				D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
+				cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
+				cbv_desc.SizeInBytes = buffer0.GetBufferSize();
+				device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
+
+			}
+			// psoで名前解決をしてDescSetにハンドルを設定するテスト.
+			ngl::rhi::DescriptorSetDep desc_set;
+			pso.SetDescriptorHandle(&desc_set, "CbTest", pd_cbv.cpu_handle);
+
+			// TODO. psoで名前解決してdesc_setの適切なスロットにDescriptorをセットし、完成したdesc_setをCommandListで描画用Descriptorにセットする.
+
+			// 一応解放しておく
+			persistent_desc_allocator->Deallocate(pd_cbv);
+		}
 	}
 
 

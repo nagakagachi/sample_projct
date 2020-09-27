@@ -1439,6 +1439,185 @@ namespace ngl
 		{
 			root_signature_ = nullptr;
 		}
+		// 名前でDescriptorSetへハンドル設定
+		void PipelineResourceViewLayoutDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
+		{
+			assert(p_desc_set);
+
+			auto find = slot_map_.find(name);
+			if (find != slot_map_.end())
+			{
+				// VS
+				{
+					const auto& slot_info = find->second.vs_stage;
+					if (0 <= slot_info.slot)
+					{
+						switch (slot_info.type)
+						{
+						case RootParameterType::ConstantBuffer:
+						{
+							p_desc_set->SetVsCbv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::ShaderResource:
+						{
+							p_desc_set->SetVsSrv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::UnorderedAccess:
+						{
+							assert(false); break;
+						}
+						case RootParameterType::Sampler:
+						{
+							p_desc_set->SetVsSampler(slot_info.slot, cpu_handle); break;
+						}
+						default:
+							break;
+						}
+					}
+				}
+				// HS
+				{
+					const auto& slot_info = find->second.hs_stage;
+					if (0 <= slot_info.slot)
+					{
+						switch (slot_info.type)
+						{
+						case RootParameterType::ConstantBuffer:
+						{
+							p_desc_set->SetHsCbv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::ShaderResource:
+						{
+							p_desc_set->SetHsSrv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::UnorderedAccess:
+						{
+							assert(false); break;
+						}
+						case RootParameterType::Sampler:
+						{
+							p_desc_set->SetHsSampler(slot_info.slot, cpu_handle); break;
+						}
+						default:
+							break;
+						}
+					}
+				}
+				// DS
+				{
+					const auto& slot_info = find->second.ds_stage;
+					if (0 <= slot_info.slot)
+					{
+						switch (slot_info.type)
+						{
+						case RootParameterType::ConstantBuffer:
+						{
+							p_desc_set->SetDsCbv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::ShaderResource:
+						{
+							p_desc_set->SetDsSrv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::UnorderedAccess:
+						{
+							assert(false); break;
+						}
+						case RootParameterType::Sampler:
+						{
+							p_desc_set->SetDsSampler(slot_info.slot, cpu_handle); break;
+						}
+						default:
+							break;
+						}
+					}
+				}
+				// GS
+				{
+					const auto& slot_info = find->second.gs_stage;
+					if (0 <= slot_info.slot)
+					{
+						switch (slot_info.type)
+						{
+						case RootParameterType::ConstantBuffer:
+						{
+							p_desc_set->SetGsCbv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::ShaderResource:
+						{
+							p_desc_set->SetGsSrv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::UnorderedAccess:
+						{
+							assert(false); break;
+						}
+						case RootParameterType::Sampler:
+						{
+							p_desc_set->SetGsSampler(slot_info.slot, cpu_handle); break;
+						}
+						default:
+							break;
+						}
+					}
+				}
+				// PS
+				{
+					const auto& slot_info = find->second.ps_stage;
+					if (0 <= slot_info.slot)
+					{
+						switch (slot_info.type)
+						{
+						case RootParameterType::ConstantBuffer:
+						{
+							p_desc_set->SetPsCbv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::ShaderResource:
+						{
+							p_desc_set->SetPsSrv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::UnorderedAccess:
+						{
+							p_desc_set->SetPsUav(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::Sampler:
+						{
+							p_desc_set->SetPsSampler(slot_info.slot, cpu_handle); break;
+						}
+						default:
+							break;
+						}
+					}
+				}
+				// CS
+				{
+					const auto& slot_info = find->second.cs_stage;
+					if (0 <= slot_info.slot)
+					{
+						switch (slot_info.type)
+						{
+						case RootParameterType::ConstantBuffer:
+						{
+							p_desc_set->SetCsCbv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::ShaderResource:
+						{
+							p_desc_set->SetCsSrv(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::UnorderedAccess:
+						{
+							p_desc_set->SetCsUav(slot_info.slot, cpu_handle); break;
+						}
+						case RootParameterType::Sampler:
+						{
+							p_desc_set->SetCsSampler(slot_info.slot, cpu_handle); break;
+						}
+						default:
+							break;
+						}
+					}
+				}
+			}
+		}
+
 		ID3D12RootSignature* PipelineResourceViewLayoutDep::GetD3D12RootSignature()
 		{
 			return root_signature_;
@@ -1639,5 +1818,10 @@ namespace ngl
 			view_layout_.Finalize();
 		}
 
+		// 名前でDescriptorSetへハンドル設定
+		void GraphicsPipelineStateDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
+		{
+			view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
+		}
 	}
 }

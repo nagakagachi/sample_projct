@@ -261,11 +261,11 @@ namespace ngl
 				range_node_pool_[i].end_index = 0;
 				if (i > 0)
 				{
-					range_node_pool_[i].prev = &range_node_pool_[i - 1];
+					range_node_pool_[i].prev = &range_node_pool_[static_cast<s64>(i) - 1];
 				}
 				if (i < range_node_pool_.size() - 1)
 				{
-					range_node_pool_[i].next = &range_node_pool_[i + 1];
+					range_node_pool_[i].next = &range_node_pool_[static_cast<s64>(i) + 1];
 				}
 			}
 			// フリーノードリスト登録.
@@ -535,10 +535,12 @@ namespace ngl
 				return false;
 			
 			const auto increment_size = p_manager_->GetHeapIncrementSize();
+			const auto increment_offset = increment_size * cur_stack_use_count_;
+
 			alloc_cpu_handle_head = cur_stack_cpu_handle_start_;
-			alloc_cpu_handle_head.ptr += (increment_size * cur_stack_use_count_);
+			alloc_cpu_handle_head.ptr += (increment_offset);
 			alloc_gpu_handle_head = cur_stack_gpu_handle_start_;
-			alloc_gpu_handle_head.ptr += (increment_size * cur_stack_use_count_);
+			alloc_gpu_handle_head.ptr += (increment_offset);
 
 			// スタック消費量更新.
 			cur_stack_use_count_ += count;

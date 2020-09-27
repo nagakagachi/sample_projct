@@ -44,6 +44,11 @@ namespace ngl
 
 			// SwapChainに対してBarrier
 			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
+
+		public:
+			// 検証中は直接利用するかもしれないので取得関数追加
+			FrameDescriptorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
+
 		private:
 			DeviceDep* parent_device_	= nullptr;
 			Desc		desc_ = {};

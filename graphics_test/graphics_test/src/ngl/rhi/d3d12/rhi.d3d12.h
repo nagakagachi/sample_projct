@@ -52,6 +52,7 @@ namespace ngl
 
 		class PersistentDescriptorAllocator;
 		class FrameDescriptorManager;
+		class DescriptorSetDep;
 
 
 		using ResourceViewName = ngl::text::FixedString<32>;
@@ -538,6 +539,9 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
+			// 名前でDescriptorSetへハンドル設定
+			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
+
 			ID3D12RootSignature* GetD3D12RootSignature();
 
 		private:
@@ -586,6 +590,9 @@ namespace ngl
 
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
+
+			// 名前でDescriptorSetへハンドル設定
+			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
 		private:
 			CComPtr<ID3D12PipelineState>			pso_;
