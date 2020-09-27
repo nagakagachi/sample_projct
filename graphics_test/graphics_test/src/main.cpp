@@ -15,6 +15,7 @@
 
 // rhi
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
+#include "ngl/rhi/d3d12/rhi_command_list.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_descriptor.d3d12.h"
 
 
@@ -63,10 +64,6 @@ private:
 
 	ngl::rhi::ShaderDep							sample_vs_;
 	ngl::rhi::ShaderDep							sample_ps_;
-
-
-	// cbv srv uav用PersistentDescriptorAllocator
-	ngl::rhi::PersistentDescriptorAllocator persistent_cbv_srv_uav_allocator_;
 };
 
 
@@ -110,7 +107,11 @@ bool AppGame::Initialize()
 		return false;
 	}
 
-	if (!device_.Initialize(&window_, true))
+	ngl::rhi::DeviceDep::Desc device_desc = {};
+	device_desc.enable_debug_layer = true;
+	device_desc.frame_descriptor_size = 100000;
+	device_desc.persistent_descriptor_size = 100000;
+	if (!device_.Initialize(&window_, device_desc))
 	{
 		std::cout << "ERROR: Device Initialize" << std::endl;
 		return false;
@@ -123,7 +124,6 @@ bool AppGame::Initialize()
 	}
 	{
 		ngl::rhi::SwapChainDep::Desc swap_chain_desc;
-		swap_chain_desc.buffer_count = 2;
 		swap_chain_desc.format = DXGI_FORMAT_R10G10B10A2_UNORM;
 		if (!swapchain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
 		{
@@ -141,7 +141,8 @@ bool AppGame::Initialize()
 
 	}
 
-	if (!gfx_command_list_.Initialize(&device_))
+	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};
+	if (!gfx_command_list_.Initialize(&device_, gcl_desc))
 	{
 		std::cout << "ERROR: CommandList Initialize" << std::endl;
 		return false;
@@ -151,18 +152,6 @@ bool AppGame::Initialize()
 	{
 		std::cout << "ERROR: Fence Initialize" << std::endl;
 		return false;
-	}
-
-	// cbv srv uav用PersistentDescriptorAllocator初期化
-	{
-		ngl::rhi::PersistentDescriptorAllocator::Desc pda_desc;
-		pda_desc.size = 65535;
-		pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		if (!persistent_cbv_srv_uav_allocator_.Initialize(&device_, pda_desc))
-		{
-			std::cout << "ERROR: PersistentDescriptorAllocator Initialize" << std::endl;
-			return false;
-		}
 	}
 
 	clear_color_[0] = 0.0f;
@@ -233,7 +222,6 @@ bool AppGame::Initialize()
 		{
 			std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
 		}
-
 	}
 
 
@@ -275,8 +263,10 @@ bool AppGame::Execute()
 
 	// Render Loop
 	{
-		const auto swapchain_index = swapchain_.GetCurrentBufferIndex();
+		// Deviceのフレーム準備
+		device_.ReadyToNewFrame();
 
+		const auto swapchain_index = swapchain_.GetCurrentBufferIndex();
 		{
 			gfx_command_list_.Begin();
 
@@ -373,9 +363,9 @@ void AppGame::TestCode()
 			buffer0.Unmap();
 		}
 
-
+		auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
 		// CBV生成テスト. persistent上に作成.
-		auto pd_cbv = persistent_cbv_srv_uav_allocator_.Allocate();
+		auto pd_cbv = persistent_desc_allocator->Allocate();
 		if (pd_cbv.allocator)
 		{
 			D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
@@ -384,11 +374,11 @@ void AppGame::TestCode()
 			device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
 
 			// 解放
-			persistent_cbv_srv_uav_allocator_.Deallocate(pd_cbv);
+			persistent_desc_allocator->Deallocate(pd_cbv);
 		}
 
 		// SRV生成テスト. persistent上に作成.
-		auto pd_srv = persistent_cbv_srv_uav_allocator_.Allocate();
+		auto pd_srv = persistent_desc_allocator->Allocate();
 		if (pd_srv.allocator)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
@@ -403,12 +393,12 @@ void AppGame::TestCode()
 			device_.GetD3D12Device()->CreateShaderResourceView(buffer0.GetD3D12Resource() , &srv_desc, pd_srv.cpu_handle);
 
 			// 解放
-			persistent_cbv_srv_uav_allocator_.Deallocate(pd_srv);
+			persistent_desc_allocator->Deallocate(pd_srv);
 		}
 		// UAV生成テスト. persistent上に作成.
 		if (is_uav_test)
 		{
-			auto pd_uav = persistent_cbv_srv_uav_allocator_.Allocate();
+			auto pd_uav = persistent_desc_allocator->Allocate();
 			if (pd_uav.allocator)
 			{
 				D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
@@ -423,14 +413,14 @@ void AppGame::TestCode()
 				device_.GetD3D12Device()->CreateUnorderedAccessView(buffer0.GetD3D12Resource(), nullptr, &uav_desc, pd_uav.cpu_handle);
 
 				// 解放
-				persistent_cbv_srv_uav_allocator_.Deallocate(pd_uav);
+				persistent_desc_allocator->Deallocate(pd_uav);
 			}
 		}
 	}
 
 	// シェーダテスト
 	{
-// バイナリ読み込み.
+		// バイナリ読み込み.
 		{
 		ngl::file::FileObject file_obj;
 		ngl::rhi::ShaderDep	shader00;
@@ -530,23 +520,16 @@ void AppGame::TestCode()
 	}
 
 
-	// PersistentDescriptorAllocatorテスト. 適当なサイズで初期化して確保と解放を繰り返すテスト.
+	// PersistentDescriptorAllocatorテスト. 確保と解放を繰り返すテスト.
 	{
 		ngl::time::Timer::Instance().StartTimer("PersistentDescriptorAllocatorTest");
 
-		ngl::rhi::PersistentDescriptorAllocator persistent_desc_allocator0;
+		ngl::rhi::PersistentDescriptorAllocator* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
 
-		ngl::rhi::PersistentDescriptorAllocator::Desc pda_desc;
-		pda_desc.size = 65535;
-		pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		if (!persistent_desc_allocator0.Initialize(&device_, pda_desc))
-		{
-			std::cout << "ERROR: Create rhi::PersistentDescriptorAllocator" << std::endl;
-		}
 		std::vector<ngl::rhi::PersistentDescriptorInfo> debug_alloc_pd;
-		for (ngl::u32 i = 0u; i  < (pda_desc.size); ++i)
+		for (ngl::u32 i = 0u; i  < (10000); ++i)
 		{
-			auto pd0 = persistent_desc_allocator0.Allocate();
+			auto pd0 = persistent_desc_allocator->Allocate();
 
 			if (0 != pd0.allocator)
 			{
@@ -558,7 +541,7 @@ void AppGame::TestCode()
 			if (debug_alloc_pd[dealloc_index].allocator)
 			{
 				// ランダムに選んだものがまだDeallocされていなければDealloc
-				persistent_desc_allocator0.Deallocate(debug_alloc_pd[dealloc_index]);
+				persistent_desc_allocator->Deallocate(debug_alloc_pd[dealloc_index]);
 				debug_alloc_pd[dealloc_index] = {};
 			}
 #endif
@@ -570,11 +553,7 @@ void AppGame::TestCode()
 
 	{
 		// フレームでのDescriptorマネージャ初期化
-		ngl::rhi::FrameDescriptorManager	frame_desc_man;
-		ngl::rhi::FrameDescriptorManager::Desc frame_desc_man_desc = {};
-		frame_desc_man_desc.allocate_descriptor_count_ = 100000;
-		frame_desc_man_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		frame_desc_man.Initialize(&device_, frame_desc_man_desc);
+		ngl::rhi::FrameDescriptorManager*	frame_desc_man = device_.GetFrameDescriptorManager();
 
 		// バッファリング数分のフレームDescriptorインターフェース初期化
 		const ngl::u32 buffer_count = 3;
@@ -584,7 +563,7 @@ void AppGame::TestCode()
 		{
 			ngl::rhi::FrameDescriptorInterface::Desc frame_desc_interface_desc = {};
 			frame_desc_interface_desc.stack_size = 2000;
-			e.Initialize( &frame_desc_man, frame_desc_interface_desc);
+			e.Initialize( frame_desc_man, frame_desc_interface_desc);
 		}
 
 		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.

@@ -2,6 +2,8 @@
 
 #include "rhi.d3d12.h"
 #include "rhi_util.d3d12.h"
+#include "rhi_command_list.d3d12.h"
+#include "rhi_descriptor.d3d12.h"
 
 #include <array>
 #include <algorithm>
@@ -74,16 +76,18 @@ namespace ngl
 			Finalize();
 		}
 
-		bool DeviceDep::Initialize(ngl::platform::CoreWindow* window, bool enable_debug_layer)
+		bool DeviceDep::Initialize(ngl::platform::CoreWindow* window, const Desc& desc)
 		{
 			if (!window)
 				return false;
+
+			desc_ = desc;
 
 			p_window_ = window;
 
 #if 1
 			// DebugLayer有効化
-			if (enable_debug_layer)
+			if (desc_.enable_debug_layer)
 			{
 				CComPtr<ID3D12Debug> debugController;
 				if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
@@ -95,7 +99,7 @@ namespace ngl
 
 			{
 #if 1
-				if (enable_debug_layer)
+				if (desc_.enable_debug_layer)
 				{
 					// デバッグ情報有効Factory
 					if (FAILED(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&p_factory_))))
@@ -144,12 +148,46 @@ namespace ngl
 					return false;
 				}
 			}
+
+			// FrameDescriptorManager初期化
+			{
+				p_frame_descriptor_manager_.Reset(new FrameDescriptorManager());
+				FrameDescriptorManager::Desc fdm_desc = {};
+				fdm_desc.allocate_descriptor_count_ = desc_.frame_descriptor_size;
+				fdm_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+				if (!p_frame_descriptor_manager_->Initialize(this, fdm_desc))
+				{
+					std::cout << "ERROR: Create FrameDescriptorManager" << std::endl;
+					return false;
+				}
+			}
+			// PersistentDescriptorManager初期化
+			{
+				p_persistent_descriptor_allocator_.Reset(new PersistentDescriptorAllocator());
+				PersistentDescriptorAllocator::Desc pda_desc = {};
+				pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+				pda_desc.allocate_descriptor_count_ = desc_.persistent_descriptor_size;
+
+				if (!p_persistent_descriptor_allocator_->Initialize(this, pda_desc))
+				{
+					std::cout << "ERROR: Create PersistentDescriptorAllocator" << std::endl;
+					return false;
+				}
+			}
+
 			return true;
 		}
 		void DeviceDep::Finalize()
 		{
 			p_device_ = nullptr;
 			p_factory_ = nullptr;
+		}
+		void DeviceDep::ReadyToNewFrame()
+		{
+			buffer_index_ = (buffer_index_ + 1) % desc_.swapchain_buffer_count;
+
+			p_frame_descriptor_manager_->ResetFrameDescriptor(buffer_index_);
 		}
 
 		ngl::platform::CoreWindow* DeviceDep::GetWindow()
@@ -165,6 +203,7 @@ namespace ngl
 		{
 			return p_factory_;
 		}
+
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -189,6 +228,7 @@ namespace ngl
 			unsigned int screen_h = 0;
 			p_device->GetWindow()->Impl()->GetScreenSize(screen_w, screen_h);
 
+			const auto device_desc = p_device->GetDesc();
 
 			DXGI_SWAP_CHAIN_DESC1 obj_desc = {};
 			obj_desc.Width = screen_w;
@@ -198,7 +238,7 @@ namespace ngl
 			obj_desc.SampleDesc.Count = 1;
 			obj_desc.SampleDesc.Quality = 0;
 			obj_desc.BufferUsage = DXGI_USAGE_BACK_BUFFER;
-			obj_desc.BufferCount = desc.buffer_count;
+			obj_desc.BufferCount = device_desc.swapchain_buffer_count;
 
 			obj_desc.Scaling = DXGI_SCALING_STRETCH;
 			obj_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -214,7 +254,7 @@ namespace ngl
 			}
 
 			// Resource取得
-			num_resource_ = desc.buffer_count;
+			num_resource_ = device_desc.swapchain_buffer_count;
 			p_resources_ = new CComPtr<ID3D12Resource> [num_resource_];
 			for (auto i = 0u; i < num_resource_; ++i)
 			{
@@ -322,96 +362,6 @@ namespace ngl
 		ID3D12CommandQueue* GraphicsCommandQueueDep::GetD3D12CommandQueue()
 		{
 			return p_command_queue_;
-		}
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		GraphicsCommandListDep::GraphicsCommandListDep()
-		{
-		}
-		GraphicsCommandListDep::~GraphicsCommandListDep()
-		{
-			Finalize();
-		}
-		bool GraphicsCommandListDep::Initialize(DeviceDep* p_device)
-		{
-			if (!p_device)
-				return false;
-
-			// Command Allocator
-			if (FAILED(p_device->GetD3D12Device()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&p_command_allocator_))))
-			{
-				std::cout << "ERROR: Create Command Allocator" << std::endl;
-				return false;
-			}
-
-			// Command List
-			if (FAILED(p_device->GetD3D12Device()->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, p_command_allocator_, nullptr, IID_PPV_ARGS(&p_command_list_))))
-			{
-				std::cout << "ERROR: Create Command List" << std::endl;
-				return false;
-			}
-
-			// 初回クローズ. これがないと初回フレームの開始時ResetでComError発生.
-			p_command_list_->Close();
-
-			return true;
-		}
-		void GraphicsCommandListDep::Finalize()
-		{
-			p_command_list_ = nullptr;
-			p_command_allocator_ = nullptr;
-		}
-
-		void GraphicsCommandListDep::Begin()
-		{
-			// アロケータリセット
-			p_command_allocator_->Reset();
-			// コマンドリストリセット
-			p_command_list_->Reset(p_command_allocator_, nullptr);
-		}
-		void GraphicsCommandListDep::End()
-		{
-			p_command_list_->Close();
-		}
-
-		void GraphicsCommandListDep::SetRenderTargetSingle(RenderTargetViewDep* p_rtv)
-		{
-			auto rtv = p_rtv->GetD3D12DescriptorHandle();
-			p_command_list_->OMSetRenderTargets(1, &rtv, true, nullptr);
-		}
-		void GraphicsCommandListDep::ClearRenderTarget(RenderTargetViewDep* p_rtv, float(color)[4])
-		{
-			auto rtv = p_rtv->GetD3D12DescriptorHandle();
-			p_command_list_->ClearRenderTargetView(rtv, color, 0u, nullptr);
-		}
-
-		// バリア
-		void GraphicsCommandListDep::ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next)
-		{
-			if (!p_swapchain)
-				return;
-			if (prev == next)
-				return;
-			auto* resource = p_swapchain->GetD3D12Resource(buffer_index);
-
-			D3D12_RESOURCE_STATES state_before = ConvertResourceState(prev);
-			D3D12_RESOURCE_STATES state_after = ConvertResourceState(next);
-
-			D3D12_RESOURCE_BARRIER desc = {};
-			desc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			desc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-			desc.Transition.pResource = resource;
-			desc.Transition.StateBefore = state_before;
-			desc.Transition.StateAfter = state_after;
-			// 現状は全サブリソースを対象.
-			desc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-			p_command_list_->ResourceBarrier(1, &desc);
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 

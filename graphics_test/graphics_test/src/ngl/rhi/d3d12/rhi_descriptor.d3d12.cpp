@@ -24,7 +24,7 @@ namespace ngl
 		bool PersistentDescriptorAllocator::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
 			assert(p_device);
-			assert(0 < desc.size);
+			assert(0 < desc.allocate_descriptor_count_);
 
 			desc_ = desc;
 			last_allocate_index_ = 0;
@@ -34,8 +34,8 @@ namespace ngl
 			// Heap作成
 			{
 				heap_desc_ = {};
-				heap_desc_.Type = desc.type;
-				heap_desc_.NumDescriptors = desc.size;
+				heap_desc_.Type = desc_.type;
+				heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
 				heap_desc_.NodeMask = 0;
 				// このHeap上のDescriptorは直接描画に利用しないためNone指定.
 				heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
@@ -54,7 +54,7 @@ namespace ngl
 			{
 				// 管理用情報構築
 				//constexpr auto num_flag_elem_bit = sizeof(decltype(*use_flag_bit_array_.data())) * 8;
-				num_use_flag_elem_ = (desc.size + (k_num_flag_elem_bit_ - 1)) / k_num_flag_elem_bit_;
+				num_use_flag_elem_ = (desc_.allocate_descriptor_count_ + (k_num_flag_elem_bit_ - 1)) / k_num_flag_elem_bit_;
 				use_flag_bit_array_.resize(num_use_flag_elem_);
 				
 				// リセット
@@ -65,9 +65,9 @@ namespace ngl
 				// 一旦すべて0クリアした後に端数部を1で埋める.
 				std::fill_n(use_flag_bit_array_.data(), num_use_flag_elem_, 0u);
 				// 端数
-				if (0 < desc.size)
+				if (0 < desc_.allocate_descriptor_count_)
 				{
-					const u32 fraction = desc.size - k_num_flag_elem_bit_ * (num_use_flag_elem_ - 1);
+					const u32 fraction = desc_.allocate_descriptor_count_ - k_num_flag_elem_bit_ * (num_use_flag_elem_ - 1);
 					if (0 < fraction && fraction < k_num_flag_elem_bit_)
 					{
 						const u32 lower_mask = (1u << fraction) - 1;
@@ -145,7 +145,7 @@ namespace ngl
 			const u32 allocation_index = (find * k_num_flag_elem_bit_) + empty_bit_pos;
 			// アロケーション位置が確保しているHeap要素数を超えている場合は失敗 ( 32bit使用ビットフラグは32単位だがHeap自体は1単位なので末端でありうる )
 			// 使用ビットフラグの末端の無効部分を1で埋めておけばここのチェックは不要だが誤ってゼロで埋めたりするとバグになるので素直に実装する.
-			if (desc_.size <= allocation_index)
+			if (desc_.allocate_descriptor_count_ <= allocation_index)
 			{
 				std::cout << "PersistentDescriptorAllocator::Allocate: Failed to Allocate" << std::endl;
 				return ret;
@@ -156,7 +156,7 @@ namespace ngl
 			// 使用ビットを建てる
 			use_flag_bit_array_[find] |= (1 << empty_bit_pos);
 
-			assert(desc_.size >= num_allocated_);
+			assert(desc_.allocate_descriptor_count_ >= num_allocated_);
 			// アロケーション数加算
 			++num_allocated_;
 			// ---------------------------------------------------------------------------------------------------------------------------------
@@ -182,8 +182,8 @@ namespace ngl
 		void PersistentDescriptorAllocator::Deallocate(const PersistentDescriptorInfo& v)
 		{
 			// 割当元が自身でない要素の破棄をリクエストされたらアサート
-			assert(v.allocator == this && v.allocation_index < desc_.size);
-			if ((this != v.allocator) || (desc_.size <= v.allocation_index))
+			assert(v.allocator == this && v.allocation_index < desc_.allocate_descriptor_count_);
+			if ((this != v.allocator) || (desc_.allocate_descriptor_count_ <= v.allocation_index))
 				return;
 
 			// アロケーションインデックスからビット位置計算.
@@ -235,8 +235,8 @@ namespace ngl
 			// Heap作成
 			{
 				heap_desc_ = {};
-				heap_desc_.Type = desc.type;
-				heap_desc_.NumDescriptors = desc.allocate_descriptor_count_;
+				heap_desc_.Type = desc_.type;
+				heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
 				heap_desc_.NodeMask = 0;
 				// このHeap上のDescriptorは描画に利用するためVISIBLE設定.
 				heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -493,7 +493,9 @@ namespace ngl
 			cur_stack_use_count_ = desc_.stack_size;
 
 			// 前回処理した際のフレームインデックスを解放.
-			p_manager_->ResetFrameDescriptor(frame_index_);
+			// Node. これはDeviceのReadyToNewFrame()でフレームの最初に一回呼ぶように変更した.
+			////p_manager_->ResetFrameDescriptor(frame_index_);
+
 			// フレームインデックス更新
 			frame_index_ = frame_index;
 
@@ -540,6 +542,7 @@ namespace ngl
 
 			// スタック消費量更新.
 			cur_stack_use_count_ += count;
+			return true;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 	}

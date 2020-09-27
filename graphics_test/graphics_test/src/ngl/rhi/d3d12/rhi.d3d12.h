@@ -10,6 +10,7 @@
 
 
 #include "ngl/util/types.h"
+#include "ngl/util/unique_ptr.h"
 #include "ngl/platform/win/window.win.h"
 
 #include <d3d12.h>
@@ -41,13 +42,17 @@ namespace ngl
 		class SwapChainDep;
 		class RenderTargetViewDep;
 
-
-		class GraphicsCommandListDep;
 		class GraphicsCommandQueueDep;
 
 		class FenceDep;
 
 		class DeviceDep;
+
+		class GraphicsCommandListDep;
+
+		class PersistentDescriptorAllocator;
+		class FrameDescriptorManager;
+
 
 		using ResourceViewName = ngl::text::FixedString<32>;
 
@@ -88,23 +93,58 @@ namespace ngl
 		public:
 			using DXGI_FACTORY_TYPE = IDXGIFactory6;
 
+			struct Desc
+			{
+				// swapchainバッファ数. 根幹のリソースバッファリング数に関わるのでDeviceのDescに設定する.
+				u32		swapchain_buffer_count = 3;
+
+				// リソースとペアで生成されるViewを保持するバッファのサイズ
+				u32		persistent_descriptor_size	= 100000;
+				// フレームで連続Descriptorを確保するためのバッファのサイズ
+				u32		frame_descriptor_size		= 100000;
+				bool	enable_debug_layer			= false;
+			};
+
 			DeviceDep();
 			~DeviceDep();
 
-			bool Initialize(ngl::platform::CoreWindow* window, bool enable_debug_layer);
+			bool Initialize(ngl::platform::CoreWindow* window, const Desc& desc);
 			void Finalize();
+
+			void ReadyToNewFrame();
+
+
+			const Desc& GetDesc() const { return desc_; }
+			const u32 GetFrameBufferIndex() const { return buffer_index_; }
+
 
 			ngl::platform::CoreWindow* GetWindow();
 
 			ID3D12Device* GetD3D12Device();
 			DXGI_FACTORY_TYPE* GetDxgiFactory();
 
+			FrameDescriptorManager* GetFrameDescriptorManager()
+			{
+				return p_frame_descriptor_manager_.Get();
+			}
+			PersistentDescriptorAllocator* GetPersistentDescriptorAllocator()
+			{
+				return p_persistent_descriptor_allocator_.Get();
+			}
 		private:
+			Desc	desc_ = {};
+
 			ngl::platform::CoreWindow* p_window_ = nullptr;
 
 			D3D_FEATURE_LEVEL device_feature_level_ = {};
 			CComPtr<ID3D12Device> p_device_;
 			CComPtr<DXGI_FACTORY_TYPE> p_factory_;
+
+			u32	buffer_index_ = 0;
+			// フレームでのDescriptor確保用( CBV, SRV, UAV 用)
+			ngl::UniquePtr<FrameDescriptorManager>			p_frame_descriptor_manager_;
+			// リソース用Descriptor確保用( CBV, SRV, UAV 用)
+			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_descriptor_allocator_;
 		};
 
 
@@ -127,34 +167,6 @@ namespace ngl
 		private:
 			CComPtr<ID3D12CommandQueue> p_command_queue_;
 			std::vector<ID3D12CommandList*> p_command_list_array_;
-		};
-
-
-		// CommandList
-		class GraphicsCommandListDep
-		{
-		public:
-			GraphicsCommandListDep();
-			~GraphicsCommandListDep();
-
-			bool Initialize(DeviceDep* p_device);
-			void Finalize();
-
-			ID3D12GraphicsCommandList* GetD3D12GraphicsCommandList()
-			{
-				return p_command_list_;
-			}
-
-			void Begin();
-			void End();
-
-			void SetRenderTargetSingle(RenderTargetViewDep* p_rtv);
-			void ClearRenderTarget(RenderTargetViewDep* p_rtv, float(color)[4]);
-
-			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
-		private:
-			CComPtr<ID3D12CommandAllocator>		p_command_allocator_;
-			CComPtr<ID3D12GraphicsCommandList>	p_command_list_;
 		};
 
 		// フェンス
@@ -197,7 +209,6 @@ namespace ngl
 			struct Desc
 			{
 				DXGI_FORMAT		format = {};
-				unsigned int	buffer_count = 2;
 			};
 
 			SwapChainDep();
@@ -580,212 +591,5 @@ namespace ngl
 			CComPtr<ID3D12PipelineState>			pso_;
 			PipelineResourceViewLayoutDep			view_layout_;
 		};
-
-
-		// Pipelineへ設定するDescriptor群をまとめるオブジェクト.
-		//	一旦このオブジェクトに描画に必要なDescriptorを設定し, CommapndListにこのオブジェクトを設定する際に動的DescriptorHeapから取得した連続DescriptorにコピーしてそれをPipelineにセットする.
-		//	連続Descriptor対応のために各リソースタイプ毎に1Pipelineで使用できるテーブルサイズの上限(レジスタ番号の上限)がある. -> k_cbv_table_size他.
-		//	リソース名でレジスタ番号を指定してDescriptorを設定したい場合は対応するPipelineの PipelineResourceViewLayoutDep がmapで保持しているのでそちらを利用する仕組みを作る.
-		class DescriptorSetDep
-		{
-		private:
-			template<u32 SIZE>
-			struct Handles
-			{
-				D3D12_CPU_DESCRIPTOR_HANDLE	cpu_handles[SIZE] = {};
-				u32							max_slot_count = 0;
-
-				void Reset()
-				{
-					memset(cpu_handles, 0, sizeof(cpu_handles));
-					max_slot_count = 0;
-				}
-
-				void SetHandle(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-				{
-					assert(index < SIZE);
-					cpu_handles[index] = handle;
-					max_slot_count = std::max<u32>(max_slot_count, index + 1);
-				}
-			};
-
-		public:
-			DescriptorSetDep()
-			{}
-			~DescriptorSetDep()
-			{}
-
-			void Reset();
-
-			inline void SetVsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetVsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetVsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetPsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetPsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetPsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetPsUav(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetGsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetGsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetGsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetHsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetHsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetHsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetDsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetDsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetDsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetCsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetCsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetCsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-			inline void SetCsUav(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
-
-			const Handles<k_cbv_table_size>& GetVsCbv() const { return vs_cbv_; }
-			const Handles<k_srv_table_size>& GetVsSrv() const { return vs_srv_; }
-			const Handles<k_sampler_table_size>& GetVsSampler() const { return vs_sampler_; }
-			const Handles<k_cbv_table_size>& GetPsCbv() const { return ps_cbv_; }
-			const Handles<k_srv_table_size>& GetPsSrv() const { return ps_srv_; }
-			const Handles<k_sampler_table_size>& GetPsSampler() const { return ps_sampler_; }
-			const Handles<k_uav_table_size>& GetPsUav() const { return ps_uav_; }
-			const Handles<k_cbv_table_size>& GetGsCbv() const { return gs_cbv_; }
-			const Handles<k_srv_table_size>& GetGsSrv() const { return gs_srv_; }
-			const Handles<k_sampler_table_size>& GetGsSampler() const { return gs_sampler_; }
-			const Handles<k_cbv_table_size>& GetHsCbv() const { return hs_cbv_; }
-			const Handles<k_srv_table_size>& GetHsSrv() const { return hs_srv_; }
-			const Handles<k_sampler_table_size>& GetHsSampler() const { return hs_sampler_; }
-			const Handles<k_cbv_table_size>& GetDsCbv() const { return ds_cbv_; }
-			const Handles<k_srv_table_size>& GetDsSrv() const { return ds_srv_; }
-			const Handles<k_sampler_table_size>& GetDsSampler() const { return ds_sampler_; }
-			const Handles<k_cbv_table_size>& GetCsCbv() const { return cs_cbv_; }
-			const Handles<k_srv_table_size>& GetCsSrv() const { return cs_srv_; }
-			const Handles<k_sampler_table_size>& GetCsSampler() const { return cs_sampler_; }
-			const Handles<k_uav_table_size>& GetCsUav() const { return cs_uav_; }
-
-		private:
-			Handles<k_cbv_table_size>		vs_cbv_;
-			Handles<k_srv_table_size>		vs_srv_;
-			Handles<k_sampler_table_size>	vs_sampler_;
-			Handles<k_cbv_table_size>		ps_cbv_;
-			Handles<k_srv_table_size>		ps_srv_;
-			Handles<k_sampler_table_size>	ps_sampler_;
-			Handles<k_uav_table_size>		ps_uav_;
-			Handles<k_cbv_table_size>		gs_cbv_;
-			Handles<k_srv_table_size>		gs_srv_;
-			Handles<k_sampler_table_size>	gs_sampler_;
-			Handles<k_cbv_table_size>		hs_cbv_;
-			Handles<k_srv_table_size>		hs_srv_;
-			Handles<k_sampler_table_size>	hs_sampler_;
-			Handles<k_cbv_table_size>		ds_cbv_;
-			Handles<k_srv_table_size>		ds_srv_;
-			Handles<k_sampler_table_size>	ds_sampler_;
-			Handles<k_cbv_table_size>		cs_cbv_;
-			Handles<k_srv_table_size>		cs_srv_;
-			Handles<k_sampler_table_size>	cs_sampler_;
-			Handles<k_uav_table_size>		cs_uav_;
-		};
-
-		inline void DescriptorSetDep::Reset()
-		{
-			vs_cbv_.Reset();
-			vs_srv_.Reset();
-			vs_sampler_.Reset();
-			ps_cbv_.Reset();
-			ps_srv_.Reset();
-			ps_sampler_.Reset();
-			ps_uav_.Reset();
-			gs_cbv_.Reset();
-			gs_srv_.Reset();
-			gs_sampler_.Reset();
-			hs_cbv_.Reset();
-			hs_srv_.Reset();
-			hs_sampler_.Reset();
-			ds_cbv_.Reset();
-			ds_srv_.Reset();
-			ds_sampler_.Reset();
-			cs_cbv_.Reset();
-			cs_srv_.Reset();
-			cs_sampler_.Reset();
-			cs_uav_.Reset();
-		}
-
-		inline void DescriptorSetDep::SetVsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			vs_cbv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetVsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			vs_srv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetVsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			vs_sampler_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetPsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ps_cbv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetPsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ps_srv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetPsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ps_sampler_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetPsUav(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ps_uav_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetGsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			gs_cbv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetGsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			gs_srv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetGsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			gs_sampler_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetHsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			hs_cbv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetHsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			hs_srv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetHsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			hs_sampler_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetDsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ds_cbv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetDsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ds_srv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetDsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			ds_sampler_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetCsCbv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			cs_cbv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetCsSrv(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			cs_srv_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetCsSampler(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			cs_sampler_.SetHandle(index, handle);
-		}
-		inline void DescriptorSetDep::SetCsUav(u32 index, const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
-		{
-			cs_uav_.SetHandle(index, handle);
-		}
-
 	}
 }
