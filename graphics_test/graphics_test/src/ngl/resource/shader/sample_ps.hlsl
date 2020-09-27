@@ -1,12 +1,11 @@
 
-
-cbuffer CbTest
+struct VS_OUTPUT
 {
-	float cb_param0 = 1.111;
-	uint cb_param1;
+	float4 pos	:	SV_POSITION;
 };
 
-float4 main_ps() : SV_TARGET
+
+float4 main_ps(VS_OUTPUT input) : SV_TARGET
 {
-	return float4(cb_param0, 1.0f, 1.0f, 1.0f);
+	return float4(1.0f, 1.0f, 1.0f, 1.0f);
 }

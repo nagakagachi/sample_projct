@@ -1245,8 +1245,6 @@ namespace ngl
 				}
 			}
 
-
-
 			D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 			/*
 				RootSignatureのDescriptorTableはもんしょさんのコピー戦略を参考.
@@ -1622,6 +1620,10 @@ namespace ngl
 		{
 			return root_signature_;
 		}
+		const ID3D12RootSignature* PipelineResourceViewLayoutDep::GetD3D12RootSignature() const
+		{
+			return root_signature_;
+		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -1690,7 +1692,7 @@ namespace ngl
 					dst.SrcBlendAlpha = ConvertBlendFactor(src.src_alpha_blend);
 					dst.DestBlendAlpha = ConvertBlendFactor(src.dst_alpha_blend);
 
-					dst.RenderTargetWriteMask = src.write_mask;
+					dst.RenderTargetWriteMask = (D3D12_COLOR_WRITE_ENABLE_ALL < src.write_mask)? D3D12_COLOR_WRITE_ENABLE_ALL : src.write_mask;
 
 					// LogicOpは現状サポート外.
 					dst.LogicOp = {};
@@ -1701,7 +1703,7 @@ namespace ngl
 			pso_desc.SampleMask = desc.sample_mask;
 			// RasterizerState
 			{
-				const auto& src = desc.rasterizer_staet;
+				const auto& src = desc.rasterizer_state;
 				auto& dst = pso_desc.RasterizerState;
 
 				dst.AntialiasedLineEnable = src.antialiased_line_enable;
@@ -1822,6 +1824,24 @@ namespace ngl
 		void GraphicsPipelineStateDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
 		{
 			view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
+		}
+
+
+		ID3D12PipelineState* GraphicsPipelineStateDep::GetD3D12PipelineState()
+		{
+			return pso_;
+		}
+		ID3D12RootSignature* GraphicsPipelineStateDep::GetD3D12RootSignature()
+		{
+			return view_layout_.GetD3D12RootSignature();
+		}
+		const ID3D12PipelineState* GraphicsPipelineStateDep::GetD3D12PipelineState() const
+		{
+			return pso_;
+		}
+		const ID3D12RootSignature* GraphicsPipelineStateDep::GetD3D12RootSignature() const
+		{
+			return view_layout_.GetD3D12RootSignature();
 		}
 	}
 }

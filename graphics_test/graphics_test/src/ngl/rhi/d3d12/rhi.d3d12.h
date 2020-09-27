@@ -543,6 +543,7 @@ namespace ngl
 			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
 			ID3D12RootSignature* GetD3D12RootSignature();
+			const ID3D12RootSignature* GetD3D12RootSignature() const;
 
 		private:
 			CComPtr<ID3D12RootSignature>	root_signature_;
@@ -571,7 +572,7 @@ namespace ngl
 
 				BlendState			blend_state = {};
 				u32					sample_mask = ~(u32(0));
-				RasterizerState		rasterizer_staet = {};
+				RasterizerState		rasterizer_state = {};
 				DepthStencilState	depth_stencil_state = {};
 
 				InputLayout				input_layout = {};
@@ -594,6 +595,10 @@ namespace ngl
 			// 名前でDescriptorSetへハンドル設定
 			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
+			ID3D12PipelineState* GetD3D12PipelineState();
+			ID3D12RootSignature* GetD3D12RootSignature();
+			const ID3D12PipelineState* GetD3D12PipelineState() const;
+			const ID3D12RootSignature* GetD3D12RootSignature() const;
 		private:
 			CComPtr<ID3D12PipelineState>			pso_;
 			PipelineResourceViewLayoutDep			view_layout_;

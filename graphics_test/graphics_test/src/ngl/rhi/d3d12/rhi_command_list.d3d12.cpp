@@ -117,6 +117,36 @@ namespace ngl
 
 			p_command_list_->ResourceBarrier(1, &desc);
 		}
+		void GraphicsCommandListDep::SetViewports(u32 num, const  D3D12_VIEWPORT* viewports)
+		{
+			assert(viewports);
+			assert(num);
+			p_command_list_->RSSetViewports( num, viewports );
+		}
+		void GraphicsCommandListDep::SetScissor(u32 num, const  D3D12_RECT* rects)
+		{
+			assert(rects);
+			assert(num);
+			p_command_list_->RSSetScissorRects(num, rects);
+		}
+
+		void GraphicsCommandListDep::SetPipelineState(GraphicsPipelineStateDep* pso)
+		{
+			p_command_list_->SetPipelineState(pso->GetD3D12PipelineState());
+			p_command_list_->SetGraphicsRootSignature(pso->GetD3D12RootSignature());
+		}
+		void GraphicsCommandListDep::SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY topology)
+		{
+			p_command_list_->IASetPrimitiveTopology(topology);
+		}
+		void GraphicsCommandListDep::SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* views)
+		{
+			p_command_list_->IASetVertexBuffers( slot, num, views );
+		}
+		void GraphicsCommandListDep::DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance)
+		{
+			p_command_list_->DrawInstanced(num_vtx, num_instance, offset_vtx, offset_instance);
+		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 	}
