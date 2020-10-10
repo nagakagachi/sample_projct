@@ -246,7 +246,7 @@ bool AppGame::Initialize()
 
 		ngl::rhi::BufferDep::Desc vtx_desc = {};
 		vtx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		vtx_desc.element_count = std::size(sample_vtx_list);
+		vtx_desc.element_count = static_cast<ngl::u32>(std::size(sample_vtx_list));
 		vtx_desc.element_byte_size = sizeof(sample_vtx_list[0]);
 
 		if (sample_vtx_buffer_.Initialize(&device_, vtx_desc))
@@ -285,7 +285,7 @@ bool AppGame::Execute()
 		frame_sec_ = ngl::time::Timer::Instance().GetElapsedSec("app_frame_sec");
 		app_sec_ += frame_sec_;
 
-		std::cout << "Frame Second: " << frame_sec_ << std::endl;
+		//std::cout << "Frame Second: " << frame_sec_ << std::endl;
 
 		// 再スタート
 		ngl::time::Timer::Instance().StartTimer("app_frame_sec");
@@ -505,7 +505,6 @@ void AppGame::TestCode()
 			std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 		}
 		reflect00.Initialize(&device_, &shader00);
-		std::cout << "_" << std::endl;
 		}
 		// バイナリ読み込み.
 		{
@@ -518,7 +517,6 @@ void AppGame::TestCode()
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
 			}
 			reflect00.Initialize(&device_, &shader01);
-			std::cout << "_" << std::endl;
 		}
 
 		// HLSLからコンパイルして初期化.
@@ -590,7 +588,6 @@ void AppGame::TestCode()
 			std::cout << "cb default value " << default_value << std::endl;
 		}
 
-		std::cout << "_" << std::endl;
 	}
 
 	// PSO
@@ -703,7 +700,6 @@ void AppGame::TestCode()
 		}
 
 		std::cout << "PersistentDescriptorAllocatorTest time -> " << ngl::time::Timer::Instance().GetElapsedSec("PersistentDescriptorAllocatorTest") << std::endl;
-		std::cout << "_" << std::endl;
 	}
 
 	{
@@ -735,11 +731,9 @@ void AppGame::TestCode()
 
 				// TODO. 取得したハンドルから16個分の連続したDescriptorにViewをコピーして描画に使う.
 
-				std::cout << "_" << std::endl;
 			}
 			frame_index = (frame_index + 1) % buffer_count;
 		}
 
-		std::cout << "_" << std::endl;
 	}
 }

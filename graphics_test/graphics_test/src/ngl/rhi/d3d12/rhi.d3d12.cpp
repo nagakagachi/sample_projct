@@ -105,7 +105,7 @@ namespace ngl
 					if (FAILED(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&p_factory_))))
 					{
 						// DXGIファクトリ生成失敗.
-						std::cout << "ERROR: Create DXGIFactory" << std::endl;
+						std::cout << "[ERROR] Create DXGIFactory" << std::endl;
 						return false;
 					}
 				}
@@ -116,7 +116,7 @@ namespace ngl
 					if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&p_factory_))))
 					{
 						// DXGIファクトリ生成失敗.
-						std::cout << "ERROR: Create DXGIFactory" << std::endl;
+						std::cout << "[ERROR] Create DXGIFactory" << std::endl;
 						return false;
 					}
 				}
@@ -144,7 +144,7 @@ namespace ngl
 				if (!p_device_)
 				{
 					// デバイス生成失敗.
-					std::cout << "ERROR: Create Device" << std::endl;
+					std::cout << "[ERROR] Create Device" << std::endl;
 					return false;
 				}
 			}
@@ -158,7 +158,7 @@ namespace ngl
 
 				if (!p_frame_descriptor_manager_->Initialize(this, fdm_desc))
 				{
-					std::cout << "ERROR: Create FrameDescriptorManager" << std::endl;
+					std::cout << "[ERROR] Create FrameDescriptorManager" << std::endl;
 					return false;
 				}
 			}
@@ -171,7 +171,7 @@ namespace ngl
 
 				if (!p_persistent_descriptor_allocator_->Initialize(this, pda_desc))
 				{
-					std::cout << "ERROR: Create PersistentDescriptorAllocator" << std::endl;
+					std::cout << "[ERROR] Create PersistentDescriptorAllocator" << std::endl;
 					return false;
 				}
 			}
@@ -249,7 +249,7 @@ namespace ngl
 
 			if (FAILED(p_device->GetDxgiFactory()->CreateSwapChainForHwnd(p_graphics_command_queu->GetD3D12CommandQueue(), hwnd, &obj_desc, nullptr, nullptr, (IDXGISwapChain1**)(&p_swapchain_))))
 			{
-				std::cout << "ERROR: Create Command Queue" << std::endl;
+				std::cout << "[ERROR] Create Command Queue" << std::endl;
 				return false;
 			}
 
@@ -260,7 +260,7 @@ namespace ngl
 			{
 				if (FAILED(p_swapchain_->GetBuffer(i, IID_PPV_ARGS(&p_resources_[i]))))
 				{
-					std::cout << "ERROR: Get SwapChain Buffer " << i << std::endl;
+					std::cout << "[ERROR] Get SwapChain Buffer " << i << std::endl;
 				}
 			}
 
@@ -327,7 +327,7 @@ namespace ngl
 
 			if (FAILED(p_device->GetD3D12Device()->CreateCommandQueue(&desc, IID_PPV_ARGS(&p_command_queue_))))
 			{
-				std::cout << "ERROR: Create Command Queue" << std::endl;
+				std::cout << "[ERROR] Create Command Queue" << std::endl;
 				return false;
 			}
 
@@ -390,7 +390,7 @@ namespace ngl
 
 				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
 				{
-					std::cout << "ERROR: Create DescriptorHeap" << std::endl;
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
 					return false;
 				}
 			}
@@ -398,7 +398,7 @@ namespace ngl
 				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
 				if (!buffer)
 				{
-					std::cout << "ERROR: Invalid Buffer Index" << std::endl;
+					std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
 					return false;
 				}
 
@@ -438,7 +438,7 @@ namespace ngl
 
 			if (FAILED(p_device->GetD3D12Device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&p_fence_))))
 			{
-				std::cout << "ERROR: Create Fence" << std::endl;
+				std::cout << "[ERROR] Create Fence" << std::endl;
 				return false;
 			}
 
@@ -570,7 +570,7 @@ namespace ngl
 			if ((D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS & resource_desc.Flags) && (D3D12_HEAP_TYPE_DEFAULT != heap_prop.Type))
 			{
 				// UAVリソースはDefaultHeap以外許可されない.
-				std::cout << "ERROR: Heap of UAV Resource must be ResourceHeapType::DEFAULT" << std::endl;
+				std::cout << "[ERROR] Heap of UAV Resource must be ResourceHeapType::DEFAULT" << std::endl;
 				return false;
 			}
 
@@ -584,7 +584,7 @@ namespace ngl
 			{
 				if (D3D12_RESOURCE_STATE_GENERIC_READ != initial_state)
 				{
-					std::cout << "ERROR: State of Upload Buffer must be ResourceState::General" << std::endl;
+					std::cout << "[ERROR] State of Upload Buffer must be ResourceState::General" << std::endl;
 					return false;
 				}
 			}
@@ -592,14 +592,14 @@ namespace ngl
 			{
 				if (D3D12_RESOURCE_STATE_COPY_DEST != initial_state)
 				{
-					std::cout << "ERROR: State of Readback Buffer must be ResourceState::CopyDst" << std::endl;
+					std::cout << "[ERROR] State of Readback Buffer must be ResourceState::CopyDst" << std::endl;
 					return false;
 				}
 			}
 
 			if (FAILED(p_device->GetD3D12Device()->CreateCommittedResource(&heap_prop, heap_flag, &resource_desc, initial_state, nullptr, IID_PPV_ARGS(&resource_))))
 			{
-				std::cout << "ERROR: CreateCommittedResource" << std::endl;
+				std::cout << "[ERROR] CreateCommittedResource" << std::endl;
 				return false;
 			}
 
@@ -776,7 +776,7 @@ namespace ngl
 							hr = dxc_result->GetErrorBuffer(&errorsBlob);
 							if (SUCCEEDED(hr) && errorsBlob)
 							{
-								wprintf(L"ERROR : Compilation failed with errors:\n%hs\n",
+								wprintf(L"[ERROR] Compilation failed with errors:\n%hs\n",
 									(const char*)errorsBlob->GetBufferPointer());
 							}
 						}
@@ -818,7 +818,7 @@ namespace ngl
 					if (HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) == hr)
 					{
 						// ファイルパス不正
-						std::cout << "ERROR : Shader File not found" << std::endl;
+						std::cout << "[ERROR] Shader File not found" << std::endl;
 					}
 					if (error_blob)
 					{
@@ -826,7 +826,7 @@ namespace ngl
 						error_message.resize(error_blob->GetBufferSize());
 						std::copy_n(static_cast<char*>(error_blob->GetBufferPointer()), error_blob->GetBufferSize(), error_message.begin());
 
-						std::cout << "ERROR : " << error_message << std::endl;
+						std::cout << "[ERROR] " << error_message << std::endl;
 					}
 
 					compile_success = false;
@@ -1085,7 +1085,7 @@ namespace ngl
 							case D3D_SHADER_INPUT_TYPE::D3D_SIT_UAV_CONSUME_STRUCTURED:
 								paramType = RootParameterType::UnorderedAccess; break;
 							default:
-								std::cout << "ERROR : ShaderReflection. Failed to Get BoundResources " << i << " ." << std::endl;
+								std::cout << "[ERROR] ShaderReflection. Failed to Get BoundResources " << i << " ." << std::endl;
 								break;;
 							}
 
@@ -1414,7 +1414,7 @@ namespace ngl
 			auto hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &root_signature_blob, &root_signature_error_blob);
 			if (FAILED(hr) && root_signature_error_blob)
 			{
-				wprintf(L"ERROR : D3D12SerializeRootSignature:\n%hs\n",
+				wprintf(L"[ERROR] D3D12SerializeRootSignature:\n%hs\n",
 					(const char*)root_signature_error_blob->GetBufferPointer());
 				assert(false);
 				return false;
@@ -1425,7 +1425,7 @@ namespace ngl
 				if (FAILED(hr))
 				{
 					root_signature_ = nullptr;
-					std::cout << "ERROR : CreateRootSignature" << std::endl;
+					std::cout << "[ERROR] CreateRootSignature" << std::endl;
 					assert(false);
 					return false;
 				}
@@ -1642,6 +1642,22 @@ namespace ngl
 			if (!p_device)
 				return false;
 
+			// よくやるミスのチェック
+#if defined(_DEBUG)
+			{
+				bool any_writemask_nonzero = false;
+				for (auto&& bs_target : desc.blend_state.target_blend_states)
+				{
+					any_writemask_nonzero |= (bs_target.write_mask != 0);
+				}
+				if (!any_writemask_nonzero)
+				{
+					// write_maskの設定忘れで一切描画されないことがよくあるため警告
+					std::cout << "[WARNING] Graphics PipelineStateObject : All WriteMask is Zero." << std::endl;
+				}
+			}
+#endif
+
 			// 入力エレメント定義配列を一時的に確保して設定し,そのメモリを指定する.
 			std::vector<D3D12_INPUT_ELEMENT_DESC> input_elem_descs;
 			input_elem_descs.resize(desc.input_layout.num_elements);
@@ -1808,7 +1824,7 @@ namespace ngl
 
 			if (FAILED(p_device->GetD3D12Device()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))
 			{
-				std::cout << "ERROR: CreateGraphicsPipelineState" << std::endl;
+				std::cout << "[ERROR] CreateGraphicsPipelineState" << std::endl;
 				return false;
 			}
 
