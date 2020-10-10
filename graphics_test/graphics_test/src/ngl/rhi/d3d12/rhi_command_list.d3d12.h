@@ -54,9 +54,11 @@ namespace ngl
 
 			void SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY topology);
 			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views);
+			void SetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW* p_view);
 
 
 			void DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance);
+			void DrawIndexedInstanced(u32 index_count_per_instance, u32 instance_count, u32 start_index_location, s32  base_vertex_location, u32 start_instance_location);
 
 		public:
 			// 検証中は直接利用するかもしれないので取得関数追加

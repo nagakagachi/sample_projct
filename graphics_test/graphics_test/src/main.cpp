@@ -72,9 +72,13 @@ private:
 	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
 
 	ngl::rhi::BufferDep							cb_sample_ps_;
-	ngl::rhi::ConstantBufferViewDep						cbv_sample_ps_;
+	ngl::rhi::ConstantBufferViewDep				cbv_sample_ps_;
 
-	ngl::rhi::BufferDep							sample_vtx_buffer_;
+	ngl::rhi::BufferDep							vb_sample_;
+	ngl::rhi::VertexBufferViewDep				vbv_sample_;
+
+	ngl::rhi::BufferDep							ib_sample_;
+	ngl::rhi::IndexBufferViewDep				ibv_sample_;
 };
 
 
@@ -239,6 +243,7 @@ bool AppGame::Initialize()
 		// PSのConstantBuffer作成
 		ngl::rhi::BufferDep::Desc cb_desc = {};
 		cb_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+		cb_desc.usage_flag = (int)ngl::rhi::BufferUsage::ConstantBuffer;
 		cb_desc.element_byte_size = sizeof(CbSamplePs);
 		cb_desc.element_count = 1;
 
@@ -280,17 +285,51 @@ bool AppGame::Initialize()
 
 		ngl::rhi::BufferDep::Desc vtx_desc = {};
 		vtx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+		vtx_desc.usage_flag = (int)ngl::rhi::BufferUsage::VertexBuffer;
 		vtx_desc.element_count = static_cast<ngl::u32>(std::size(sample_vtx_list));
 		vtx_desc.element_byte_size = sizeof(sample_vtx_list[0]);
 
-		if (sample_vtx_buffer_.Initialize(&device_, vtx_desc))
+		if (vb_sample_.Initialize(&device_, vtx_desc))
 		{
-			if (auto* map_data = sample_vtx_buffer_.Map<Vector4>())
+			if (auto* map_data = vb_sample_.Map<Vector4>())
 			{
 				memcpy(map_data, sample_vtx_list, sizeof(sample_vtx_list));
 
-				sample_vtx_buffer_.Unmap();
+				vb_sample_.Unmap();
 			}
+		}
+
+		ngl::rhi::VertexBufferViewDep::Desc vbv_desc{};
+		if (!vbv_sample_.Initialize(&vb_sample_, vbv_desc))
+		{
+			assert(false);
+		}
+	}
+	{
+		int sample_index_data[] =
+		{
+			0, 1, 2
+		};
+
+
+		ngl::rhi::BufferDep::Desc idx_desc = {};
+		idx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+		idx_desc.usage_flag = (int)ngl::rhi::BufferUsage::IndexBuffer;
+		idx_desc.element_count = static_cast<ngl::u32>(std::size(sample_index_data));
+		idx_desc.element_byte_size = sizeof(sample_index_data[0]);
+
+		if (!ib_sample_.Initialize(&device_, idx_desc))
+		{
+			assert(false);
+		}
+		if (auto* map_data = ib_sample_.Map<int>())
+		{
+			memcpy(map_data, sample_index_data, sizeof(sample_index_data));
+		}
+
+		ngl::rhi::IndexBufferViewDep::Desc ibv_desc = {};
+		if (!ibv_sample_.Initialize(&ib_sample_, ibv_desc))
+		{
 		}
 	}
 
@@ -386,13 +425,14 @@ bool AppGame::Execute()
 				
 				gfx_command_list_.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-				D3D12_VERTEX_BUFFER_VIEW vtx_view;
-				vtx_view.SizeInBytes = sample_vtx_buffer_.GetDesc().element_count* sample_vtx_buffer_.GetDesc().element_byte_size;
-				vtx_view.StrideInBytes = sample_vtx_buffer_.GetDesc().element_byte_size;
-				vtx_view.BufferLocation = sample_vtx_buffer_.GetD3D12Resource()->GetGPUVirtualAddress();
-				gfx_command_list_.SetVertexBuffers(0, 1, &vtx_view);
+				gfx_command_list_.SetVertexBuffers(0, 1, &vbv_sample_.GetView());
 
+#if 0
 				gfx_command_list_.DrawInstanced(3, 1, 0, 0);
+#else
+				gfx_command_list_.SetIndexBuffer(&ibv_sample_.GetView());
+				gfx_command_list_.DrawIndexedInstanced(3, 1, 0, 0, 0);
+#endif
 			}
 #endif
 
@@ -447,7 +487,7 @@ void AppGame::TestCode()
 	auto find3 = fixstr_map.find("01234567");
 	auto find4 = fixstr_map.find("012345678");
 
-
+	if(true)
 	{
 		bool is_uav_test = false;
 
@@ -456,6 +496,7 @@ void AppGame::TestCode()
 		ngl::rhi::BufferDep buffer0;
 		ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 		buffer_desc0.element_byte_size = sizeof(ngl::u64);
+		buffer_desc0.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
 		buffer_desc0.element_count = 1;
 		buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
 		if(is_uav_test)
@@ -483,18 +524,6 @@ void AppGame::TestCode()
 		}
 
 		auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
-		// CBV生成テスト. persistent上に作成.
-		auto pd_cbv = persistent_desc_allocator->Allocate();
-		if (pd_cbv.allocator)
-		{
-			D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
-			cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
-			cbv_desc.SizeInBytes = buffer0.GetAlignedBufferSize();
-			device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
-
-			// 解放
-			persistent_desc_allocator->Deallocate(pd_cbv);
-		}
 
 		// SRV生成テスト. persistent上に作成.
 		auto pd_srv = persistent_desc_allocator->Allocate();
@@ -533,6 +562,90 @@ void AppGame::TestCode()
 
 				// 解放
 				persistent_desc_allocator->Deallocate(pd_uav);
+			}
+		}
+	}
+	if (true)
+	{
+		// PSO
+		{
+			ngl::rhi::GraphicsPipelineStateDep pso;
+
+			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+			desc.vs = &sample_vs_;
+			desc.ps = &sample_ps_;
+
+			desc.num_render_targets = 1;
+			desc.render_target_formats[0] = ngl::rhi::ResourceFormat::NGL_FORMAT_R10G10B10A2_UNORM;
+
+			desc.depth_stencil_state.depth_enable = false;
+			desc.depth_stencil_state.stencil_enable = false;
+
+			desc.blend_state.target_blend_states[0].blend_enable = false;;
+
+			// 入力レイアウト
+			std::array<ngl::rhi::InputElement, 1> input_elem_data;
+			desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
+			desc.input_layout.p_input_elements = input_elem_data.data();
+			input_elem_data[0].semantic_name = "POSITION";
+			input_elem_data[0].semantic_index = 0;
+			input_elem_data[0].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32B32A32_FLOAT;
+			input_elem_data[0].stream_slot = 0;
+			input_elem_data[0].element_offset = 0;
+
+			if (!pso.Initialize(&device_, desc))
+			{
+				std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
+			}
+
+			// DescriptorSet設定テスト
+			{
+				// Buffer生成テスト
+				struct CbTest
+				{
+					float cb_param0 = 1.111f;
+					ngl::u32 cb_param1 = 0;
+				};
+				ngl::rhi::BufferDep buffer0;
+				ngl::rhi::BufferDep::Desc buffer_desc0 = {};
+				buffer_desc0.element_byte_size = sizeof(CbTest);
+				buffer_desc0.element_count = 1;
+				buffer_desc0.usage_flag = (int)ngl::rhi::BufferUsage::ConstantBuffer;
+				buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
+				// CPU->GPU Uploadリソース
+				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+
+				if (!buffer0.Initialize(&device_, buffer_desc0))
+				{
+					std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+				}
+
+				if (auto* buffer0_map = buffer0.Map<CbTest>())
+				{
+					buffer0_map->cb_param0 = 2.0f;
+					buffer0_map->cb_param1 = 1;
+					buffer0.Unmap();
+				}
+
+				auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
+				// CBV生成テスト. persistent上に作成.
+				auto pd_cbv = persistent_desc_allocator->Allocate();
+				if (pd_cbv.allocator)
+				{
+					D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
+					cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
+					cbv_desc.SizeInBytes = buffer0.GetAlignedBufferSize();
+					device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
+
+				}
+				// psoで名前解決をしてDescSetにハンドルを設定するテスト.
+				ngl::rhi::DescriptorSetDep desc_set;
+				pso.SetDescriptorHandle(&desc_set, "CbTest", pd_cbv.cpu_handle);
+
+				// TODO. psoで名前解決してdesc_setの適切なスロットにDescriptorをセットし、完成したdesc_setをCommandListで描画用Descriptorにセットする.
+
+				// 一応解放しておく
+				persistent_desc_allocator->Deallocate(pd_cbv);
 			}
 		}
 	}
@@ -634,88 +747,6 @@ void AppGame::TestCode()
 		}
 
 	}
-
-	// PSO
-	{
-		ngl::rhi::GraphicsPipelineStateDep pso;
-
-		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-		desc.vs = &sample_vs_;
-		desc.ps = &sample_ps_;
-
-		desc.num_render_targets = 1;
-		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::NGL_FORMAT_R10G10B10A2_UNORM;
-
-		desc.depth_stencil_state.depth_enable = false;
-		desc.depth_stencil_state.stencil_enable = false;
-
-		desc.blend_state.target_blend_states[0].blend_enable = false;;
-
-		// 入力レイアウト
-		std::array<ngl::rhi::InputElement, 1> input_elem_data;
-		desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-		desc.input_layout.p_input_elements = input_elem_data.data();
-		input_elem_data[0].semantic_name = "POSITION";
-		input_elem_data[0].semantic_index = 0;
-		input_elem_data[0].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32B32A32_FLOAT;
-		input_elem_data[0].stream_slot = 0;
-		input_elem_data[0].element_offset = 0;
-
-		if (!pso.Initialize(&device_, desc))
-		{
-			std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
-		}
-
-		// DescriptorSet設定テスト
-		{
-			// Buffer生成テスト
-			struct CbTest
-			{
-				float cb_param0 = 1.111f;
-				ngl::u32 cb_param1 = 0;
-			};
-			ngl::rhi::BufferDep buffer0;
-			ngl::rhi::BufferDep::Desc buffer_desc0 = {};
-			buffer_desc0.element_byte_size = sizeof(CbTest);
-			buffer_desc0.element_count = 1;
-			buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
-			// CPU->GPU Uploadリソース
-			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-
-			if (!buffer0.Initialize(&device_, buffer_desc0))
-			{
-				std::cout << "ERROR: Create rhi::Buffer" << std::endl;
-			}
-
-			if (auto* buffer0_map = buffer0.Map<CbTest>())
-			{
-				buffer0_map->cb_param0 = 2.0f;
-				buffer0_map->cb_param1 = 1;
-				buffer0.Unmap();
-			}
-
-			auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
-			// CBV生成テスト. persistent上に作成.
-			auto pd_cbv = persistent_desc_allocator->Allocate();
-			if (pd_cbv.allocator)
-			{
-				D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
-				cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
-				cbv_desc.SizeInBytes = buffer0.GetAlignedBufferSize();
-				device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
-
-			}
-			// psoで名前解決をしてDescSetにハンドルを設定するテスト.
-			ngl::rhi::DescriptorSetDep desc_set;
-			pso.SetDescriptorHandle(&desc_set, "CbTest", pd_cbv.cpu_handle);
-
-			// TODO. psoで名前解決してdesc_setの適切なスロットにDescriptorをセットし、完成したdesc_setをCommandListで描画用Descriptorにセットする.
-
-			// 一応解放しておく
-			persistent_desc_allocator->Deallocate(pd_cbv);
-		}
-	}
-
 
 	// PersistentDescriptorAllocatorテスト. 確保と解放を繰り返すテスト.
 	{

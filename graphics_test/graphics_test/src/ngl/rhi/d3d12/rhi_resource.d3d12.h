@@ -20,6 +20,15 @@ namespace ngl
 		class PersistentDescriptorAllocator;
 		struct PersistentDescriptorInfo;
 
+		enum class BufferUsage : int
+		{
+			ConstantBuffer	= (1 << 0),
+			VertexBuffer	= (1 << 1),
+			IndexBuffer		= (1 << 2),
+			ShaderResource	= (1 << 3),
+
+			Max
+		};
 
 		// Buffer
 		class BufferDep
@@ -29,6 +38,7 @@ namespace ngl
 			{
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
+				u32					usage_flag = 0;
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
 				bool				allow_uav = false;
@@ -106,7 +116,7 @@ namespace ngl
 			bool Initialize(BufferDep* buffer, const Desc& desc);
 			void Finalize();
 
-			PersistentDescriptorInfo GetView() const
+			const PersistentDescriptorInfo& GetView() const
 			{
 				return view_;
 			}
@@ -115,6 +125,58 @@ namespace ngl
 			BufferDep* parent_buffer_ = nullptr;
 
 			PersistentDescriptorInfo	view_;
+		};
+
+		// VertexBufferView
+		class VertexBufferViewDep
+		{
+		public:
+			struct Desc
+			{
+				ngl::u32			dummy;
+			};
+
+			VertexBufferViewDep();
+			~VertexBufferViewDep();
+
+			bool Initialize(BufferDep* buffer, const Desc& desc);
+			void Finalize();
+
+			const D3D12_VERTEX_BUFFER_VIEW& GetView() const
+			{
+				return view_;
+			}
+
+		private:
+			BufferDep* parent_buffer_ = nullptr;
+
+			D3D12_VERTEX_BUFFER_VIEW	view_;
+		};
+
+		// IndexBufferView
+		class IndexBufferViewDep
+		{
+		public:
+			struct Desc
+			{
+				ngl::u32			dummy;
+			};
+
+			IndexBufferViewDep();
+			~IndexBufferViewDep();
+
+			bool Initialize(BufferDep* buffer, const Desc& desc);
+			void Finalize();
+
+			const D3D12_INDEX_BUFFER_VIEW& GetView() const
+			{
+				return view_;
+			}
+
+		private:
+			BufferDep* parent_buffer_ = nullptr;
+
+			D3D12_INDEX_BUFFER_VIEW	view_;
 		};
 	}
 }

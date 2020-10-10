@@ -24,6 +24,11 @@ namespace ngl
 		{
 			if (!p_device)
 				return false;
+			if (0 == desc.usage_flag)
+			{
+				assert(false);
+				return false;
+			}
 
 			desc_ = desc;
 			p_parent_device_ = p_device;
@@ -63,11 +68,15 @@ namespace ngl
 			}
 
 			D3D12_RESOURCE_FLAGS need_flags = D3D12_RESOURCE_FLAG_NONE;
-			// 必要な最大のAlignment. ひとまずConstantBufferのサイズAlignを初期値(256).
-			u32 need_alignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+			// 用途によるアライメント.
+			u32 need_alignment = 16;
+			if ((int)BufferUsage::ConstantBuffer & desc_.usage_flag)
+			{
+				need_alignment = static_cast<u32>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+			}
 			if (desc.allow_uav)
 			{
-				need_alignment = std::max<>(need_alignment, static_cast<u32>(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT));
+				need_alignment = static_cast<u32>(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT);
 				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			}
 
@@ -168,7 +177,15 @@ namespace ngl
 		bool ConstantBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
 		{
 			if (!buffer || !buffer->GetParentDevice())
+			{
+				assert(false);
 				return false;
+			}
+			if ((int)BufferUsage::ConstantBuffer != buffer->GetDesc().usage_flag)
+			{
+				assert(false);
+				return false;
+			}
 
 			parent_buffer_ = buffer;
 
@@ -191,6 +208,93 @@ namespace ngl
 			auto&& descriptor_allocator = parent_buffer_->GetParentDevice()->GetPersistentDescriptorAllocator();
 			descriptor_allocator->Deallocate(view_);
 
+			view_ = {};
+			parent_buffer_ = nullptr;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		VertexBufferViewDep::VertexBufferViewDep()
+		{
+		}
+		VertexBufferViewDep::~VertexBufferViewDep()
+		{
+			Finalize();
+		}
+		bool VertexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		{
+			if (!buffer || !buffer->GetParentDevice())
+			{
+				assert(false);
+				return false;
+			}
+
+			const auto& buffer_desc = buffer->GetDesc();
+			if ((int)BufferUsage::VertexBuffer != buffer_desc.usage_flag)
+			{
+				assert(false);
+				return false;
+			}
+
+			parent_buffer_ = buffer;
+
+			auto&& p_device = parent_buffer_->GetParentDevice();
+
+			view_ = {};
+			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
+			view_.StrideInBytes = buffer_desc.element_byte_size;
+			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+
+			return true;
+		}
+		void VertexBufferViewDep::Finalize()
+		{
+			view_ = {};
+			parent_buffer_ = nullptr;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		IndexBufferViewDep::IndexBufferViewDep()
+		{
+		}
+		IndexBufferViewDep::~IndexBufferViewDep()
+		{
+			Finalize();
+		}
+		bool IndexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		{
+			if (!buffer || !buffer->GetParentDevice())
+			{
+				assert(false);
+				return false;
+			}
+
+			const auto& buffer_desc = buffer->GetDesc();
+			if ((int)BufferUsage::IndexBuffer != buffer_desc.usage_flag)
+			{
+				assert(false);
+				return false;
+			}
+
+			parent_buffer_ = buffer;
+
+			auto&& p_device = parent_buffer_->GetParentDevice();
+
+
+			view_ = {};
+			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
+			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_.Format = (buffer_desc.element_byte_size == 4) ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
+
+			return true;
+		}
+		void IndexBufferViewDep::Finalize()
+		{
 			view_ = {};
 			parent_buffer_ = nullptr;
 		}

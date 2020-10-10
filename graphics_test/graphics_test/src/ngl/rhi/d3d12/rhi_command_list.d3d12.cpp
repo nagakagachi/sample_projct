@@ -137,9 +137,17 @@ namespace ngl
 		{
 			p_command_list_->IASetVertexBuffers( slot, num, p_views );
 		}
+		void GraphicsCommandListDep::SetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW* p_view)
+		{
+			p_command_list_->IASetIndexBuffer(p_view);
+		}
 		void GraphicsCommandListDep::DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance)
 		{
 			p_command_list_->DrawInstanced(num_vtx, num_instance, offset_vtx, offset_instance);
+		}
+		void GraphicsCommandListDep::DrawIndexedInstanced(u32 index_count_per_instance, u32 instance_count, u32 start_index_location, s32  base_vertex_location, u32 start_instance_location)
+		{
+			p_command_list_->DrawIndexedInstanced(index_count_per_instance, instance_count, start_index_location, base_vertex_location, start_instance_location);
 		}
 		void GraphicsCommandListDep::SetPipelineState(GraphicsPipelineStateDep* pso)
 		{
