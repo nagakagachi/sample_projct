@@ -73,7 +73,7 @@ namespace ngl
 
 			void Unmap();
 
-			const u32 GetBufferSize() const { return allocated_byte_size_; }
+			const u32 GetAlignedBufferSize() const { return allocated_byte_size_; }
 			const Desc& GetDesc() const { return desc_; }
 			DeviceDep* GetParentDevice() { return p_parent_device_; }
 

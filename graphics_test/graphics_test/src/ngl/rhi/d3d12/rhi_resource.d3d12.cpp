@@ -180,7 +180,7 @@ namespace ngl
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
 			view_desc.BufferLocation = parent_buffer_->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_desc.SizeInBytes = parent_buffer_->GetBufferSize();// アライメント考慮サイズを指定している.
+			view_desc.SizeInBytes = parent_buffer_->GetAlignedBufferSize();// アライメント考慮サイズを指定している.
 			auto handle = view_.cpu_handle;
 			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
 

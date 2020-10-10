@@ -489,7 +489,7 @@ void AppGame::TestCode()
 		{
 			D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
 			cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
-			cbv_desc.SizeInBytes = buffer0.GetBufferSize();
+			cbv_desc.SizeInBytes = buffer0.GetAlignedBufferSize();
 			device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
 
 			// 解放
@@ -701,7 +701,7 @@ void AppGame::TestCode()
 			{
 				D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
 				cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
-				cbv_desc.SizeInBytes = buffer0.GetBufferSize();
+				cbv_desc.SizeInBytes = buffer0.GetAlignedBufferSize();
 				device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
 
 			}
