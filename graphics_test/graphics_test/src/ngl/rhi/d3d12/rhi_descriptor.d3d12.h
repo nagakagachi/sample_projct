@@ -9,6 +9,7 @@
 
 
 #include "ngl/rhi/rhi.h"
+#include "rhi_util.d3d12.h"
 
 #include "rhi.d3d12.h"
 
@@ -20,6 +21,7 @@ namespace ngl
 {
 	namespace rhi
 	{
+		class DeviceDep;
 		class PersistentDescriptorAllocator;
 		class FrameDescriptorManager;
 		class FrameDescriptorInterface;
@@ -59,6 +61,11 @@ namespace ngl
 			PersistentDescriptorInfo	Allocate();
 			void						Deallocate(const PersistentDescriptorInfo& v);
 
+			PersistentDescriptorInfo	GetDefaultPersistentDescriptor() const
+			{
+				return default_persistent_descriptor_;
+			}
+
 		private:
 			std::mutex					mutex_;
 
@@ -85,6 +92,10 @@ namespace ngl
 			// CPU/GPUハンドル先頭
 			D3D12_CPU_DESCRIPTOR_HANDLE		cpu_handle_start_ = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE		gpu_handle_start_ = {};
+
+
+			// 安全のために未使用スロットへコピーするための空のデフォルトDescriptor.
+			PersistentDescriptorInfo		default_persistent_descriptor_;
 
 		private:
 			static constexpr u32 k_num_flag_elem_bit_ = sizeof(decltype(*use_flag_bit_array_.data())) * 8;
@@ -128,6 +139,12 @@ namespace ngl
 			u32	GetHeapIncrementSize() const 
 			{
 				return heap_increment_size_;
+			}
+
+
+			ID3D12DescriptorHeap* GetD3D12DescriptorHeap()
+			{
+				return p_heap_;
 			}
 
 		private:
@@ -203,6 +220,11 @@ namespace ngl
 			void ReadyToNewFrame(u32 frame_index);
 
 			bool Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+
+			FrameDescriptorManager* GetFrameDescriptorManager()
+			{
+				return p_manager_;
+			}
 
 		private:
 			Desc								desc_ = {};

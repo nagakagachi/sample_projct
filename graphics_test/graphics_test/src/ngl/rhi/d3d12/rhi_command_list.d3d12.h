@@ -7,6 +7,7 @@
 
 
 #include "ngl/rhi/rhi.h"
+
 #include "rhi.d3d12.h"
 #include "rhi_util.d3d12.h"
 #include "rhi_descriptor.d3d12.h"
@@ -45,17 +46,17 @@ namespace ngl
 			// SwapChainに対してBarrier
 			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
 
-			void SetViewports(u32 num, const  D3D12_VIEWPORT* viewports);
-			void SetScissor(u32 num, const  D3D12_RECT* rects);
+			void SetViewports(u32 num, const  D3D12_VIEWPORT* p_viewports);
+			void SetScissor(u32 num, const  D3D12_RECT* p_rects);
 
-			void SetPipelineState(GraphicsPipelineStateDep* pso);
+			void SetPipelineState(GraphicsPipelineStateDep* p_pso);
+			void SetDescriptorSet(const GraphicsPipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set);
+
 			void SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY topology);
-			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* views);
+			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views);
 
 
 			void DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance);
-
-			// TODO. SetDescriptorSet
 
 		public:
 			// 検証中は直接利用するかもしれないので取得関数追加

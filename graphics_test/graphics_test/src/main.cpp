@@ -17,8 +17,13 @@
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_command_list.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_descriptor.d3d12.h"
+#include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
 
 
+struct CbSamplePs
+{
+	float cb_param0[4];
+};
 
 
 // アプリ本体.
@@ -65,6 +70,9 @@ private:
 	ngl::rhi::ShaderDep							sample_vs_;
 	ngl::rhi::ShaderDep							sample_ps_;
 	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
+
+	ngl::rhi::BufferDep							cb_sample_ps_;
+	ngl::rhi::ConstantBufferViewDep						cbv_sample_ps_;
 
 	ngl::rhi::BufferDep							sample_vtx_buffer_;
 };
@@ -228,6 +236,32 @@ bool AppGame::Initialize()
 	}
 
 	{
+		// PSのConstantBuffer作成
+		ngl::rhi::BufferDep::Desc cb_desc = {};
+		cb_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
+		cb_desc.element_byte_size = sizeof(CbSamplePs);
+		cb_desc.element_count = 1;
+
+		if (cb_sample_ps_.Initialize(&device_, cb_desc))
+		{
+			if (auto* map_data = cb_sample_ps_.Map<CbSamplePs>())
+			{
+				map_data->cb_param0[0] = 1.0f;
+				map_data->cb_param0[1] = 0.0f;
+				map_data->cb_param0[2] = 0.0f;
+				map_data->cb_param0[3] = 1.0f;
+
+				cb_sample_ps_.Unmap();
+			}
+		}
+
+		// PSのConstantBufferView作成
+		ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
+		cbv_sample_ps_.Initialize(&cb_sample_ps_, cbv_desc);
+	}
+
+	{
+		// VertexBuffer作成
 		struct Vector4
 		{
 			float x;
@@ -339,6 +373,17 @@ bool AppGame::Execute()
 				gfx_command_list_.SetScissor(1, &scissor_rect);
 
 				gfx_command_list_.SetPipelineState(&sample_pso_);
+				
+				{
+					ngl::rhi::DescriptorSetDep empty_desc_set;
+					
+					// DescriptorSetに名前で定数バッファViewをセット
+					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
+
+					// DescriptorSetでViewを設定.
+					gfx_command_list_.SetDescriptorSet(&sample_pso_, &empty_desc_set);
+				}
+				
 				gfx_command_list_.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 				D3D12_VERTEX_BUFFER_VIEW vtx_view;

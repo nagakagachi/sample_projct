@@ -117,35 +117,98 @@ namespace ngl
 
 			p_command_list_->ResourceBarrier(1, &desc);
 		}
-		void GraphicsCommandListDep::SetViewports(u32 num, const  D3D12_VIEWPORT* viewports)
+		void GraphicsCommandListDep::SetViewports(u32 num, const  D3D12_VIEWPORT* p_viewports)
 		{
-			assert(viewports);
+			assert(p_viewports);
 			assert(num);
-			p_command_list_->RSSetViewports( num, viewports );
+			p_command_list_->RSSetViewports( num, p_viewports );
 		}
-		void GraphicsCommandListDep::SetScissor(u32 num, const  D3D12_RECT* rects)
+		void GraphicsCommandListDep::SetScissor(u32 num, const  D3D12_RECT* p_rects)
 		{
-			assert(rects);
+			assert(p_rects);
 			assert(num);
-			p_command_list_->RSSetScissorRects(num, rects);
-		}
-
-		void GraphicsCommandListDep::SetPipelineState(GraphicsPipelineStateDep* pso)
-		{
-			p_command_list_->SetPipelineState(pso->GetD3D12PipelineState());
-			p_command_list_->SetGraphicsRootSignature(pso->GetD3D12RootSignature());
+			p_command_list_->RSSetScissorRects(num, p_rects);
 		}
 		void GraphicsCommandListDep::SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY topology)
 		{
 			p_command_list_->IASetPrimitiveTopology(topology);
 		}
-		void GraphicsCommandListDep::SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* views)
+		void GraphicsCommandListDep::SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views)
 		{
-			p_command_list_->IASetVertexBuffers( slot, num, views );
+			p_command_list_->IASetVertexBuffers( slot, num, p_views );
 		}
 		void GraphicsCommandListDep::DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance)
 		{
 			p_command_list_->DrawInstanced(num_vtx, num_instance, offset_vtx, offset_instance);
+		}
+		void GraphicsCommandListDep::SetPipelineState(GraphicsPipelineStateDep* pso)
+		{
+			p_command_list_->SetPipelineState(pso->GetD3D12PipelineState());
+			p_command_list_->SetGraphicsRootSignature(pso->GetD3D12RootSignature());
+		}
+		void GraphicsCommandListDep::SetDescriptorSet(const GraphicsPipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set)
+		{
+			assert(p_pso);
+			assert(p_desc_set);
+
+			// cbv, srv, uav用デフォルトDescriptor取得.
+			auto def_descriptor = parent_device_->GetPersistentDescriptorAllocator()->GetDefaultPersistentDescriptor();
+			
+			auto resource_layout = p_pso->GetPipelineResourceViewLayout();
+			auto&& resource_table =  resource_layout->GetResourceTable();
+
+
+
+			// Heapの設定. あとでSampler設定も追加するのでそのときには2つのHeapをここでセット
+			ID3D12DescriptorHeap* heaps[] =
+			{
+				frame_desc_interface_.GetFrameDescriptorManager()->GetD3D12DescriptorHeap(),
+			};
+			p_command_list_->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
+
+
+			// CBV, SRV, UAVの登録
+			D3D12_CPU_DESCRIPTOR_HANDLE tmp[k_srv_table_size];
+			auto SetViewDesc = [&](u32 count, const D3D12_CPU_DESCRIPTOR_HANDLE* handles, u8 table_index)
+			{
+				if (0 > table_index)
+					return;
+
+				if (0 < count)
+				{
+					for (u32 i = 0; i < count; i++)
+					{
+						tmp[i] = (handles[i].ptr > 0) ? handles[i] : def_descriptor.cpu_handle;
+					}
+
+					D3D12_CPU_DESCRIPTOR_HANDLE dst_cpu;
+					D3D12_GPU_DESCRIPTOR_HANDLE dst_gpu;
+					frame_desc_interface_.Allocate(count, dst_cpu, dst_gpu);
+
+					// FrameDescriptorHeapから連続したDescriptorを確保してコピー,CommandListへセットする.
+					parent_device_->GetD3D12Device()->CopyDescriptors(
+						1, &dst_cpu, &count,
+						count, tmp, nullptr,
+						D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+					p_command_list_->SetGraphicsRootDescriptorTable(table_index, dst_gpu);
+				}
+			};
+			// 各ステージの各リソースタイプ別に連続Descriptorを確保,コピーしてテーブルにをセットしていく
+			SetViewDesc(p_desc_set->GetVsCbv().max_slot_count, p_desc_set->GetVsCbv().cpu_handles, resource_table.vs_cbv_table);
+			SetViewDesc(p_desc_set->GetVsSrv().max_slot_count, p_desc_set->GetVsSrv().cpu_handles, resource_table.vs_srv_table);
+
+			SetViewDesc(p_desc_set->GetPsCbv().max_slot_count, p_desc_set->GetPsCbv().cpu_handles, resource_table.ps_cbv_table);
+			SetViewDesc(p_desc_set->GetPsSrv().max_slot_count, p_desc_set->GetPsSrv().cpu_handles, resource_table.ps_srv_table);
+			SetViewDesc(p_desc_set->GetPsUav().max_slot_count, p_desc_set->GetPsUav().cpu_handles, resource_table.ps_uav_table);
+
+			SetViewDesc(p_desc_set->GetGsCbv().max_slot_count, p_desc_set->GetGsCbv().cpu_handles, resource_table.gs_cbv_table);
+			SetViewDesc(p_desc_set->GetGsSrv().max_slot_count, p_desc_set->GetGsSrv().cpu_handles, resource_table.gs_srv_table);
+
+			SetViewDesc(p_desc_set->GetHsCbv().max_slot_count, p_desc_set->GetHsCbv().cpu_handles, resource_table.hs_cbv_table);
+			SetViewDesc(p_desc_set->GetHsSrv().max_slot_count, p_desc_set->GetHsSrv().cpu_handles, resource_table.hs_srv_table);
+
+			SetViewDesc(p_desc_set->GetDsCbv().max_slot_count, p_desc_set->GetDsCbv().cpu_handles, resource_table.ds_cbv_table);
+			SetViewDesc(p_desc_set->GetDsSrv().max_slot_count, p_desc_set->GetDsSrv().cpu_handles, resource_table.ds_srv_table);
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 

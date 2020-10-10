@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "ngl/rhi/rhi.h"
-#include "ngl/text/hash_text.h"
+#include "rhi_util.d3d12.h"
 
 
 #include <iostream>
@@ -9,19 +9,10 @@
 #include <unordered_map>
 
 
-#include "ngl/util/types.h"
 #include "ngl/util/unique_ptr.h"
 #include "ngl/platform/win/window.win.h"
 
-#include <d3d12.h>
-#if 1
-#include <dxgi1_6.h>
-#else
-#include <dxgi1_4.h>
-#endif
-
-
-#include <atlbase.h>
+#include "rhi_descriptor.d3d12.h"
 
 /*
 	実装メモ
@@ -51,41 +42,9 @@ namespace ngl
 		class GraphicsCommandListDep;
 
 		class PersistentDescriptorAllocator;
+		struct PersistentDescriptorInfo;
 		class FrameDescriptorManager;
 		class DescriptorSetDep;
-
-
-		using ResourceViewName = ngl::text::FixedString<32>;
-
-		enum class RootParameterType : u16
-		{
-			ConstantBuffer,
-			ShaderResource,
-			UnorderedAccess,
-			Sampler,
-
-			_Max
-		};
-		
-		static const u32 k_cbv_table_size		= 16;
-		static const u32 k_srv_table_size		= 48;
-		static const u32 k_uav_table_size		= 16;
-		static const u32 k_sampler_table_size	= 16;
-
-		static constexpr u32 RootParameterTableSize(RootParameterType type)
-		{
-			const u32 type_size[] =
-			{
-				k_cbv_table_size,
-				k_srv_table_size,
-				k_uav_table_size,
-				k_sampler_table_size,
-
-				0,
-			};
-			static_assert(std::size(type_size)-1 == static_cast<size_t>(RootParameterType::_Max), "");
-			return type_size[static_cast<u32>(type)];
-		}
 
 
 		// Device
@@ -247,74 +206,6 @@ namespace ngl
 		private:
 			CComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
-
-		// Buffer
-		class BufferDep
-		{
-		public:
-			struct Desc
-			{
-				ngl::u32			element_byte_size = 0;
-				ngl::u32			element_count = 0;
-				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
-				ResourceState		initial_state = ResourceState::GENERAL;
-				bool				allow_uav = false;
-			};
-
-			BufferDep();
-			~BufferDep();
-
-			bool Initialize(DeviceDep* p_device, const Desc& desc);
-			void Finalize();
-
-			template<typename T = void>
-			T* Map()
-			{
-				// DefaultヒープリソースはMap不可
-				if (ResourceHeapType::DEFAULT == desc_.heap_type)
-				{
-					std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
-					return nullptr;
-				}
-				if (map_ptr_)
-				{
-					// Map済みの場合はそのまま返す.
-					return reinterpret_cast<T*>(map_ptr_);
-				}
-
-				// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
-				D3D12_RANGE read_range = { 0, 0 };
-				if (ResourceHeapType::READBACK == desc_.heap_type)
-				{
-					read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
-				}
-
-				if (FAILED(resource_->Map(0, &read_range, &map_ptr_)))
-				{
-					std::cout << "ERROR: Resouce Map" << std::endl;
-					map_ptr_ = nullptr;
-					return nullptr;
-				}
-				return reinterpret_cast<T*>(map_ptr_);
-			}
-
-			void Unmap();
-
-			const u32 GetBufferSize() const { return allocated_byte_size_; }
-			const Desc& GetDesc() const { return desc_; }
-
-			ID3D12Resource* GetD3D12Resource();
-
-		private:
-			Desc	desc_ = {};
-			u32		allocated_byte_size_ = 0;
-
-			void*		map_ptr_ = nullptr;
-
-			CComPtr<ID3D12Resource> resource_;
-		};
-
-
 
 		// D3D12では単純にシェーダバイナリを保持するだけ
 		class ShaderDep
@@ -539,6 +430,11 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
+			const ResourceTable& GetResourceTable() const
+			{
+				return resource_table_;
+			}
+
 			// 名前でDescriptorSetへハンドル設定
 			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
@@ -591,6 +487,11 @@ namespace ngl
 
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
+
+			const PipelineResourceViewLayoutDep* GetPipelineResourceViewLayout() const
+			{
+				return &view_layout_;
+			}
 
 			// 名前でDescriptorSetへハンドル設定
 			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;

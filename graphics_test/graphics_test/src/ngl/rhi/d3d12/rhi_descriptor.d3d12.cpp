@@ -5,7 +5,6 @@
 #include <array>
 #include <algorithm>
 
-#include "rhi_util.d3d12.h"
 #include "ngl/util/bit_operation.h"
 
 
@@ -79,10 +78,15 @@ namespace ngl
 				}
 			}
 
+			// デフォルト利用のためのDescriptorを一つ作成しておく.
+			default_persistent_descriptor_ = Allocate();
+
 			return true;
 		}
 		void PersistentDescriptorAllocator::Finalize()
 		{
+			Deallocate(default_persistent_descriptor_);
+
 			// CComPtrで解放
 			p_heap_ = nullptr;
 		}
