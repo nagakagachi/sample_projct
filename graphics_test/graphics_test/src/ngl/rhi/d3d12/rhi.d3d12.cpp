@@ -245,11 +245,22 @@ namespace ngl
 			obj_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 
-			if (FAILED(p_device->GetDxgiFactory()->CreateSwapChainForHwnd(p_graphics_command_queu->GetD3D12CommandQueue(), hwnd, &obj_desc, nullptr, nullptr, (IDXGISwapChain1**)(&p_swapchain_))))
+			// 一時オブジェクトでSwapchain生成
+			IDXGISwapChain1* p_tmp_swap;
+			if (FAILED(p_device->GetDxgiFactory()->CreateSwapChainForHwnd(p_graphics_command_queu->GetD3D12CommandQueue(), hwnd, &obj_desc, nullptr, nullptr, &p_tmp_swap)))
 			{
 				std::cout << "[ERROR] Create Command Queue" << std::endl;
 				return false;
 			}
+
+			// QueryInterfaceでIDXGISwapChain4要求
+			if (FAILED(p_tmp_swap->QueryInterface(IID_PPV_ARGS(&p_swapchain_))))
+			{
+				return false;
+			}
+			// 一時オブジェクト破棄
+			p_tmp_swap->Release();
+
 
 			// Resource取得
 			num_resource_ = device_desc.swapchain_buffer_count;
