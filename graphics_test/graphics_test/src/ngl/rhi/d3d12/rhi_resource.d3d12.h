@@ -27,6 +27,9 @@ namespace ngl
 			IndexBuffer		= (1 << 2),
 			ShaderResource	= (1 << 3),
 
+			RenderTarget	= (1 << 4),
+			DepthStencil	= (1 << 5),
+
 			Max
 		};
 
@@ -38,7 +41,7 @@ namespace ngl
 			{
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
-				u32					usage_flag = 0;
+				u32					usage_flag = 0;	// BufferUsage bitmask.
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
 				bool				allow_uav = false;
@@ -177,6 +180,83 @@ namespace ngl
 			BufferDep* parent_buffer_ = nullptr;
 
 			D3D12_INDEX_BUFFER_VIEW	view_;
+		};
+
+
+		// Texture
+		class TextureDep
+		{
+		public:
+			enum class Dimension
+			{
+				Texture1D,
+				Texture2D,
+				Texture3D,
+			};
+
+			struct Desc
+			{
+				ResourceFormat		format = ResourceFormat::NGL_FORMAT_UNKNOWN;
+				ngl::u32			width = 1;
+				ngl::u32			height = 1;
+				ngl::u32			depth = 1;
+				ngl::u32			mip_level = 1;
+				ngl::u32			sample_count = 1;
+
+				Dimension			dimension = Dimension::Texture2D;
+
+				u32					usage_flag = 0;	// BufferUsage bitmask.
+				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
+				ResourceState		initial_state = ResourceState::GENERAL;
+				bool				allow_uav = false;
+			};
+
+			TextureDep();
+			~TextureDep();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			template<typename T = void>
+			T* Map()
+			{
+				// DefaultヒープリソースはMap不可
+				if (ResourceHeapType::DEFAULT == desc_.heap_type)
+				{
+					std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
+					return nullptr;
+				}
+				if (map_ptr_)
+				{
+					// Map済みの場合はそのまま返す.
+					return reinterpret_cast<T*>(map_ptr_);
+				}
+				if (FAILED(resource_->Map(0, nullptr, &map_ptr_)))
+				{
+					std::cout << "ERROR: Resouce Map" << std::endl;
+					map_ptr_ = nullptr;
+					return nullptr;
+				}
+				return reinterpret_cast<T*>(map_ptr_);
+			}
+
+			void Unmap();
+
+			const u32 GetAlignedBufferSize() const { return allocated_byte_size_; }
+			const Desc& GetDesc() const { return desc_; }
+			DeviceDep* GetParentDevice() { return p_parent_device_; }
+
+			ID3D12Resource* GetD3D12Resource();
+
+		private:
+			DeviceDep* p_parent_device_ = nullptr;
+
+			Desc	desc_ = {};
+			u32		allocated_byte_size_ = 0;
+
+			void* map_ptr_ = nullptr;
+
+			CComPtr<ID3D12Resource> resource_;
 		};
 	}
 }

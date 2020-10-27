@@ -565,6 +565,30 @@ void AppGame::TestCode()
 			}
 		}
 	}
+
+	if (true)
+	{
+		// Textureテスト
+		ngl::rhi::TextureDep::Desc tex_desc00 = {};
+		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::DEFAULT;
+		tex_desc00.dimension = ngl::rhi::TextureDep::Dimension::Texture3D;
+		tex_desc00.width = 64;
+		tex_desc00.height = 64;
+		tex_desc00.depth = 64;
+		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R16_FLOAT;
+		tex_desc00.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
+		
+		//tex_desc00.usage_flag |= (int)ngl::rhi::BufferUsage::RenderTarget;
+		tex_desc00.allow_uav = true;// UAV
+
+		ngl::rhi::TextureDep tex00;
+		if (!tex00.Initialize( &device_, tex_desc00))
+		{
+			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+		}
+
+	}
+
 	if (true)
 	{
 		// PSO

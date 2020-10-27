@@ -299,5 +299,183 @@ namespace ngl
 			parent_buffer_ = nullptr;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		TextureDep::TextureDep()
+		{
+		}
+		TextureDep::~TextureDep()
+		{
+			Finalize();
+		}
+
+		bool TextureDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+			if (0 == desc.usage_flag)
+			{
+				assert(false);
+				return false;
+			}
+
+			desc_ = desc;
+			p_parent_device_ = p_device;
+
+			if (0 >= desc_.width || 0 >= desc_.height)
+				return false;
+			if (ResourceFormat::NGL_FORMAT_UNKNOWN == desc_.format)
+				return false;
+
+
+			const bool is_depth_stencil = (int)BufferUsage::DepthStencil & desc_.usage_flag;
+			const bool is_render_target = (int)BufferUsage::RenderTarget & desc_.usage_flag;
+
+
+			// 深度バッファ用にフォーマット変換
+			if (is_depth_stencil)
+			{
+				switch (desc_.format)
+				{
+				case ResourceFormat::NGL_FORMAT_D32_FLOAT:
+					desc_.format = ResourceFormat::NGL_FORMAT_R32_TYPELESS; break;
+				case  ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+					desc_.format = ResourceFormat::NGL_FORMAT_R32G8X24_TYPELESS; break;
+				case  ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
+					desc_.format = ResourceFormat::NGL_FORMAT_R24G8_TYPELESS; break;
+				case  ResourceFormat::NGL_FORMAT_D16_UNORM:
+					desc_.format = ResourceFormat::NGL_FORMAT_R16_TYPELESS; break;
+				}
+			}
+
+			// Heapタイプ
+			D3D12_HEAP_FLAGS heap_flag = D3D12_HEAP_FLAG_NONE;
+			D3D12_RESOURCE_STATES initial_state = ConvertResourceState(desc_.initial_state);
+			D3D12_HEAP_PROPERTIES heap_prop = {};
+			{
+				switch (desc_.heap_type)
+				{
+				case ResourceHeapType::DEFAULT:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_DEFAULT;
+					break;
+				}
+				case ResourceHeapType::UPLOAD:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_UPLOAD;
+					break;
+				}
+				case ResourceHeapType::READBACK:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_READBACK;
+					break;
+				}
+				default:
+				{
+					heap_prop.Type = D3D12_HEAP_TYPE_DEFAULT;
+				}
+				}
+				heap_prop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+				heap_prop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+				heap_prop.VisibleNodeMask = 0;
+			}
+
+			// Usageフラグ
+			D3D12_RESOURCE_FLAGS need_flags = D3D12_RESOURCE_FLAG_NONE;
+			if (is_render_target)
+			{
+				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+			}
+			if (is_depth_stencil)
+			{
+				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+			}
+			if (desc_.allow_uav)
+			{
+				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+			}
+
+
+			D3D12_RESOURCE_DESC resource_desc = {};
+			{
+				const D3D12_RESOURCE_DIMENSION kNativeDimensionTable[] = 
+				{
+					D3D12_RESOURCE_DIMENSION_TEXTURE1D,
+					D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+					D3D12_RESOURCE_DIMENSION_TEXTURE3D,
+				};
+
+				resource_desc.Dimension = kNativeDimensionTable[static_cast<int>(desc_.dimension)];
+				resource_desc.Alignment = 0u;
+				resource_desc.Width = static_cast<UINT64>(desc_.width);
+				resource_desc.Height = static_cast<UINT64>(desc_.height);
+				resource_desc.DepthOrArraySize = static_cast<UINT16>(desc_.depth);
+				resource_desc.MipLevels = desc_.mip_level;
+				resource_desc.SampleDesc.Count = desc_.sample_count;
+				resource_desc.SampleDesc.Quality = 0;
+				resource_desc.Format = ConvertResourceFormat(desc_.format);
+				resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+				resource_desc.Flags = need_flags;
+			}
+
+
+			// パラメータチェック
+			if ((D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS & resource_desc.Flags) && (D3D12_HEAP_TYPE_DEFAULT != heap_prop.Type))
+			{
+				// UAVリソースはDefaultHeap以外許可されない.
+				std::cout << "[ERROR] Heap of UAV Resource must be ResourceHeapType::DEFAULT" << std::endl;
+				return false;
+			}
+
+			/*
+				ステート制限
+					Upload -> D3D12_RESOURCE_STATE_GENERIC_READ
+					Readback -> D3D12_RESOURCE_STATE_COPY_DEST
+					テクスチャ配置専用予約バッファ -> D3D12_RESOURCE_STATE_COMMON
+			*/
+			if (D3D12_HEAP_TYPE_UPLOAD == heap_prop.Type)
+			{
+				if (D3D12_RESOURCE_STATE_GENERIC_READ != initial_state)
+				{
+					std::cout << "[ERROR] State of Upload Buffer must be ResourceState::General" << std::endl;
+					return false;
+				}
+			}
+			else if (D3D12_HEAP_TYPE_READBACK == heap_prop.Type)
+			{
+				if (D3D12_RESOURCE_STATE_COPY_DEST != initial_state)
+				{
+					std::cout << "[ERROR] State of Readback Buffer must be ResourceState::CopyDst" << std::endl;
+					return false;
+				}
+			}
+
+			if (FAILED(p_device->GetD3D12Device()->CreateCommittedResource(&heap_prop, heap_flag, &resource_desc, initial_state, nullptr, IID_PPV_ARGS(&resource_))))
+			{
+				std::cout << "[ERROR] CreateCommittedResource" << std::endl;
+				return false;
+			}
+
+			return true;
+		}
+		void TextureDep::Finalize()
+		{
+			resource_ = nullptr;
+		}
+		void TextureDep::Unmap()
+		{
+			if (!map_ptr_)
+				return;
+
+			resource_->Unmap(0, nullptr);
+			map_ptr_ = nullptr;
+		}
+		ID3D12Resource* TextureDep::GetD3D12Resource()
+		{
+			return resource_;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
 	}
 }
