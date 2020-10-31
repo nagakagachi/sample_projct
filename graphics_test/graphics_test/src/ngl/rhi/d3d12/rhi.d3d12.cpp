@@ -356,8 +356,17 @@ namespace ngl
 			{
 				p_command_list_array_.push_back(p_command_lists[i]->GetD3D12GraphicsCommandList());
 			}
+			try
+			{
+				p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array_[0]));
+			}
+			catch (...)
+			{
+				// D3D12で稀に発生するcom_errorをキャッチ
+				std::cout << "[ngl][GraphicsCommandQueueDep] ExecuteCommandLists: catch exception." << std::endl;
+				OutputDebugString(_T("[ngl][GraphicsCommandQueueDep] ExecuteCommandLists: catch exception."));
+			}
 
-			p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array_[0]));
 			p_command_list_array_.clear();
 		}
 
