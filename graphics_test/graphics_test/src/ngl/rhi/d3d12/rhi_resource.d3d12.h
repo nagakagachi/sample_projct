@@ -127,7 +127,7 @@ namespace ngl
 		private:
 			BufferDep* parent_buffer_ = nullptr;
 
-			PersistentDescriptorInfo	view_;
+			PersistentDescriptorInfo	view_ = {};
 		};
 
 		// VertexBufferView
@@ -153,7 +153,7 @@ namespace ngl
 		private:
 			BufferDep* parent_buffer_ = nullptr;
 
-			D3D12_VERTEX_BUFFER_VIEW	view_;
+			D3D12_VERTEX_BUFFER_VIEW	view_ = {};
 		};
 
 		// IndexBufferView
@@ -179,7 +179,7 @@ namespace ngl
 		private:
 			BufferDep* parent_buffer_ = nullptr;
 
-			D3D12_INDEX_BUFFER_VIEW	view_;
+			D3D12_INDEX_BUFFER_VIEW	view_ = {};
 		};
 
 

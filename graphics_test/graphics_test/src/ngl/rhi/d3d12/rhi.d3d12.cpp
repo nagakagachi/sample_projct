@@ -1168,20 +1168,20 @@ namespace ngl
 					root_signature_desc.Flags |= (0 < vs_reflection_.NumInputParamInfo()) ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
 				}
 				// Descriptor
-				int root_table = 0;
+				int root_table_index = 0;
 				{
 					// VS
 					if (desc.vs)
 					{
-						resource_table_.vs_cbv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::VERTEX_SHADER, fixed_range_infos[0]);
-						++root_table;
-						resource_table_.vs_srv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::VERTEX_SHADER, fixed_range_infos[1]);
-						++root_table;
-						resource_table_.vs_sampler_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::VERTEX_SHADER, fixed_range_infos[2]);
-						++root_table;
+						resource_table_.vs_cbv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::VERTEX_SHADER, fixed_range_infos[0]);
+						++root_table_index;
+						resource_table_.vs_srv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::VERTEX_SHADER, fixed_range_infos[1]);
+						++root_table_index;
+						resource_table_.vs_sampler_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::VERTEX_SHADER, fixed_range_infos[2]);
+						++root_table_index;
 						// VSはUAV無し
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS;
@@ -1190,15 +1190,15 @@ namespace ngl
 					// HS
 					if (desc.hs)
 					{
-						resource_table_.hs_cbv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::HULL_SHADER, fixed_range_infos[0]);
-						++root_table;
-						resource_table_.hs_srv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::HULL_SHADER, fixed_range_infos[1]);
-						++root_table;
-						resource_table_.hs_sampler_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::HULL_SHADER, fixed_range_infos[2]);
-						++root_table;
+						resource_table_.hs_cbv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::HULL_SHADER, fixed_range_infos[0]);
+						++root_table_index;
+						resource_table_.hs_srv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::HULL_SHADER, fixed_range_infos[1]);
+						++root_table_index;
+						resource_table_.hs_sampler_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::HULL_SHADER, fixed_range_infos[2]);
+						++root_table_index;
 						// HSはUAV無し
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS;
@@ -1207,15 +1207,15 @@ namespace ngl
 					// DS
 					if (desc.ds)
 					{
-						resource_table_.ds_cbv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::DOMAIN_SHADER, fixed_range_infos[0]);
-						++root_table;
-						resource_table_.ds_srv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::DOMAIN_SHADER, fixed_range_infos[1]);
-						++root_table;
-						resource_table_.ds_sampler_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::DOMAIN_SHADER, fixed_range_infos[2]);
-						++root_table;
+						resource_table_.ds_cbv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::DOMAIN_SHADER, fixed_range_infos[0]);
+						++root_table_index;
+						resource_table_.ds_srv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::DOMAIN_SHADER, fixed_range_infos[1]);
+						++root_table_index;
+						resource_table_.ds_sampler_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::DOMAIN_SHADER, fixed_range_infos[2]);
+						++root_table_index;
 						// DSはUAV無し
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS;
@@ -1224,15 +1224,15 @@ namespace ngl
 					// GS
 					if (desc.gs)
 					{
-						resource_table_.gs_cbv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[0]);
-						++root_table;
-						resource_table_.gs_srv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[1]);
-						++root_table;
-						resource_table_.gs_sampler_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[2]);
-						++root_table;
+						resource_table_.gs_cbv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[0]);
+						++root_table_index;
+						resource_table_.gs_srv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[1]);
+						++root_table_index;
+						resource_table_.gs_sampler_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[2]);
+						++root_table_index;
 						// GSはUAV無し
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
@@ -1241,18 +1241,18 @@ namespace ngl
 					// PS
 					if (desc.ps)
 					{
-						resource_table_.ps_cbv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[0]);
-						++root_table;
-						resource_table_.ps_srv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[1]);
-						++root_table;
-						resource_table_.ps_sampler_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[2]);
-						++root_table;
-						resource_table_.ps_uav_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::PIXEL_SHADER, fixed_range_infos[3]);
-						++root_table;
+						resource_table_.ps_cbv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[0]);
+						++root_table_index;
+						resource_table_.ps_srv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[1]);
+						++root_table_index;
+						resource_table_.ps_sampler_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[2]);
+						++root_table_index;
+						resource_table_.ps_uav_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[3]);
+						++root_table_index;
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 					}
@@ -1260,23 +1260,23 @@ namespace ngl
 					// CS
 					if (desc.cs)
 					{
-						resource_table_.cs_cbv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[0]);
-						++root_table;
-						resource_table_.cs_srv_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[1]);
-						++root_table;
-						resource_table_.cs_sampler_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[2]);
-						++root_table;
-						resource_table_.cs_uav_table = root_table;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table, ShaderStage::COMPUTE_SHADER, fixed_range_infos[3]);
-						++root_table;
+						resource_table_.cs_cbv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[0]);
+						++root_table_index;
+						resource_table_.cs_srv_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[1]);
+						++root_table_index;
+						resource_table_.cs_sampler_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[2]);
+						++root_table_index;
+						resource_table_.cs_uav_table = root_table_index;
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[3]);
+						++root_table_index;
 
 						root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 					}
 				}
-				root_signature_desc.NumParameters = root_table;
+				root_signature_desc.NumParameters = root_table_index;
 				root_signature_desc.pParameters = rootParameters.data();
 			}
 

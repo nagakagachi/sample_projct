@@ -49,7 +49,7 @@ namespace ngl
 			struct Desc
 			{
 				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-				u32							allocate_descriptor_count_ = 100000;
+				u32							allocate_descriptor_count_ = 1000000;
 			};
 
 			PersistentDescriptorAllocator();
@@ -125,7 +125,7 @@ namespace ngl
 			{
 				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 				// 一括確保するDescriptor数
-				u32							allocate_descriptor_count_ = 100000;
+				u32							allocate_descriptor_count_ = 1000000;
 			};
 
 			FrameDescriptorManager();

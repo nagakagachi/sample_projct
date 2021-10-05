@@ -36,7 +36,9 @@ namespace ngl
 				heap_desc_.Type = desc_.type;
 				heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
 				heap_desc_.NodeMask = 0;
-				// このHeap上のDescriptorは直接描画に利用しないためNone指定.
+				// このHeap上のDescriptorは直接描画に利用しないためNone指定によってシェーダから不可視(InVisible)とする.
+				// CopyDescriptorsのコピー元として利用するため, シェーダから不可視とする必要がある. シェーダから可視なヒープはCPUからのアクセスが低速でパフォーマンスに影響があるため.
+				//https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-copydescriptors
 				heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
 				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
@@ -242,7 +244,7 @@ namespace ngl
 				heap_desc_.Type = desc_.type;
 				heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
 				heap_desc_.NodeMask = 0;
-				// このHeap上のDescriptorは描画に利用するためVISIBLE設定.
+				// このHeap上のDescriptorは描画に利用するためVISIBLE設定. シェーダから可視.
 				heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
 				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))

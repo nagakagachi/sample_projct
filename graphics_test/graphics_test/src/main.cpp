@@ -124,8 +124,8 @@ bool AppGame::Initialize()
 
 	ngl::rhi::DeviceDep::Desc device_desc = {};
 	device_desc.enable_debug_layer = true;	// デバッグレイヤ
-	device_desc.frame_descriptor_size = 100000;
-	device_desc.persistent_descriptor_size = 100000;
+	device_desc.frame_descriptor_size = 1000000;
+	device_desc.persistent_descriptor_size = 1000000;
 	if (!device_.Initialize(&window_, device_desc))
 	{
 		std::cout << "ERROR: Device Initialize" << std::endl;
@@ -779,7 +779,7 @@ void AppGame::TestCode()
 		ngl::rhi::PersistentDescriptorAllocator* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
 
 		std::vector<ngl::rhi::PersistentDescriptorInfo> debug_alloc_pd;
-		for (ngl::u32 i = 0u; i  < (10000); ++i)
+		for (ngl::u32 i = 0u; i  < (100000); ++i)
 		{
 			auto pd0 = persistent_desc_allocator->Allocate();
 
@@ -823,7 +823,7 @@ void AppGame::TestCode()
 		{
 			frame_desc_interface[frame_index].ReadyToNewFrame(frame_index);
 
-			for (auto alloc_i = 0u; alloc_i < 200; ++alloc_i)
+			for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
 			{
 				D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
 				D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
