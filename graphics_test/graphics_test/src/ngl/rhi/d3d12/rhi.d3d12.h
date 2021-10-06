@@ -59,9 +59,9 @@ namespace ngl
 				u32		swapchain_buffer_count = 3;
 
 				// リソースとペアで生成されるViewを保持するバッファのサイズ
-				u32		persistent_descriptor_size	= 1000000;
+				u32		persistent_descriptor_size	= 500000;
 				// フレームで連続Descriptorを確保するためのバッファのサイズ
-				u32		frame_descriptor_size		= 1000000;
+				u32		frame_descriptor_size		= 500000;
 				bool	enable_debug_layer			= false;
 			};
 

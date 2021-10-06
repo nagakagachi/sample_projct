@@ -179,7 +179,10 @@ namespace ngl
 				p_persistent_sampler_descriptor_allocator_.Reset(new PersistentDescriptorAllocator());
 				PersistentDescriptorAllocator::Desc pda_desc = {};
 				pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;// Sampler用Heap
-				pda_desc.allocate_descriptor_count_ = 2048;// SamplerのDescriptorHeapは2048個分までの制限がある. Samplerはパラメータの組み合わせがほぼ決まっているので使い切ることは無いはず.
+				// SamplerのDescriptorHeapは2048個分までの制限がある. Samplerはパラメータの組み合わせがほぼ決まっているので使い切ることは無いはず.
+				// また,RootSignature固定化のため無効なレジスタがある場合に設定するダミーDescriptorを一つ確保するため実際に利用できる最大数は -1.
+				// と思ったがHeapの確保自体は2048より多くできるようだ. 実際にDescriptorを作成した際に一つのHeap内に2048個までしか同時に存在できないということか?.
+				pda_desc.allocate_descriptor_count_ = 2048;
 				if (!p_persistent_sampler_descriptor_allocator_->Initialize(this, pda_desc))
 				{
 					std::cout << "[ERROR] Create PersistentDescriptorAllocator" << std::endl;

@@ -124,8 +124,8 @@ bool AppGame::Initialize()
 
 	ngl::rhi::DeviceDep::Desc device_desc = {};
 	device_desc.enable_debug_layer = true;	// デバッグレイヤ
-	device_desc.frame_descriptor_size = 1000000;
-	device_desc.persistent_descriptor_size = 1000000;
+	device_desc.frame_descriptor_size = 500000;
+	device_desc.persistent_descriptor_size = 500000;
 	if (!device_.Initialize(&window_, device_desc))
 	{
 		std::cout << "ERROR: Device Initialize" << std::endl;
@@ -515,6 +515,7 @@ void AppGame::TestCode()
 		if (!buffer0.Initialize(&device_, buffer_desc0))
 		{
 			std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+			assert(false);
 		}
 
 		if (auto* buffer0_map = buffer0.Map<ngl::u64>())
@@ -585,6 +586,7 @@ void AppGame::TestCode()
 		if (!tex00.Initialize( &device_, tex_desc00))
 		{
 			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+			assert(false);
 		}
 	}
 
@@ -606,15 +608,15 @@ void AppGame::TestCode()
 		samp_desc.desc.MinLOD = 0.0f;
 		samp_desc.desc.MipLODBias = 0.0f;
 
-		ngl::rhi::SamplerDep samp00;
-		if (!samp00.Initialize(&device_, samp_desc))
+		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
+		ngl::rhi::SamplerDep samp[2048 - 1];
+		for (auto&& e : samp)
 		{
-			std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
-		}
-		ngl::rhi::SamplerDep samp01;
-		if (!samp01.Initialize(&device_, samp_desc))
-		{
-			std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+			if (!e.Initialize(&device_, samp_desc))
+			{
+				std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+				assert(false);
+			}
 		}
 	}
 
@@ -649,6 +651,7 @@ void AppGame::TestCode()
 			if (!pso.Initialize(&device_, desc))
 			{
 				std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
+				assert(false);
 			}
 
 			// DescriptorSet設定テスト
@@ -671,6 +674,7 @@ void AppGame::TestCode()
 				if (!buffer0.Initialize(&device_, buffer_desc0))
 				{
 					std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+					assert(false);
 				}
 
 				if (auto* buffer0_map = buffer0.Map<CbTest>())
@@ -714,6 +718,7 @@ void AppGame::TestCode()
 		if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 		{
 			std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+			assert(false);
 		}
 		reflect00.Initialize(&device_, &shader00);
 		}
@@ -726,6 +731,7 @@ void AppGame::TestCode()
 			if (!shader01.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				assert(false);
 			}
 			reflect00.Initialize(&device_, &shader01);
 		}
@@ -743,6 +749,7 @@ void AppGame::TestCode()
 			if (!shader00.Initialize(&device_, shader_desc))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				assert(false);
 			}
 			reflect00.Initialize(&device_, &shader00);
 
@@ -770,6 +777,7 @@ void AppGame::TestCode()
 			if (!shader01.Initialize(&device_, shader_desc))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				assert(false);
 			}
 			reflect01.Initialize(&device_, &shader01);
 
@@ -791,6 +799,7 @@ void AppGame::TestCode()
 			if (!shader02.Initialize(&device_, shader_desc))
 			{
 				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				assert(false);
 			}
 			reflect02.Initialize(&device_, &shader02);
 
