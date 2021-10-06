@@ -202,21 +202,22 @@ namespace ngl
 				}
 			};
 			// 各ステージの各リソースタイプ別に連続Descriptorを確保,コピーしてテーブルにをセットしていく
-			SetViewDesc(p_desc_set->GetVsCbv().max_slot_count, p_desc_set->GetVsCbv().cpu_handles, resource_table.vs_cbv_table);
-			SetViewDesc(p_desc_set->GetVsSrv().max_slot_count, p_desc_set->GetVsSrv().cpu_handles, resource_table.vs_srv_table);
+			// 各ステージ毎各リソースタイプ毎に0番から設定された最大レジスタ番号までの範囲でFrameDescriptorから確保してコピー,CommandListへ設定する.
+			SetViewDesc(p_desc_set->GetVsCbv().max_use_register_index + 1, p_desc_set->GetVsCbv().cpu_handles, resource_table.vs_cbv_table);
+			SetViewDesc(p_desc_set->GetVsSrv().max_use_register_index + 1, p_desc_set->GetVsSrv().cpu_handles, resource_table.vs_srv_table);
 
-			SetViewDesc(p_desc_set->GetPsCbv().max_slot_count, p_desc_set->GetPsCbv().cpu_handles, resource_table.ps_cbv_table);
-			SetViewDesc(p_desc_set->GetPsSrv().max_slot_count, p_desc_set->GetPsSrv().cpu_handles, resource_table.ps_srv_table);
-			SetViewDesc(p_desc_set->GetPsUav().max_slot_count, p_desc_set->GetPsUav().cpu_handles, resource_table.ps_uav_table);
+			SetViewDesc(p_desc_set->GetPsCbv().max_use_register_index + 1, p_desc_set->GetPsCbv().cpu_handles, resource_table.ps_cbv_table);
+			SetViewDesc(p_desc_set->GetPsSrv().max_use_register_index + 1, p_desc_set->GetPsSrv().cpu_handles, resource_table.ps_srv_table);
+			SetViewDesc(p_desc_set->GetPsUav().max_use_register_index + 1, p_desc_set->GetPsUav().cpu_handles, resource_table.ps_uav_table);
 
-			SetViewDesc(p_desc_set->GetGsCbv().max_slot_count, p_desc_set->GetGsCbv().cpu_handles, resource_table.gs_cbv_table);
-			SetViewDesc(p_desc_set->GetGsSrv().max_slot_count, p_desc_set->GetGsSrv().cpu_handles, resource_table.gs_srv_table);
+			SetViewDesc(p_desc_set->GetGsCbv().max_use_register_index + 1, p_desc_set->GetGsCbv().cpu_handles, resource_table.gs_cbv_table);
+			SetViewDesc(p_desc_set->GetGsSrv().max_use_register_index + 1, p_desc_set->GetGsSrv().cpu_handles, resource_table.gs_srv_table);
 
-			SetViewDesc(p_desc_set->GetHsCbv().max_slot_count, p_desc_set->GetHsCbv().cpu_handles, resource_table.hs_cbv_table);
-			SetViewDesc(p_desc_set->GetHsSrv().max_slot_count, p_desc_set->GetHsSrv().cpu_handles, resource_table.hs_srv_table);
+			SetViewDesc(p_desc_set->GetHsCbv().max_use_register_index + 1, p_desc_set->GetHsCbv().cpu_handles, resource_table.hs_cbv_table);
+			SetViewDesc(p_desc_set->GetHsSrv().max_use_register_index + 1, p_desc_set->GetHsSrv().cpu_handles, resource_table.hs_srv_table);
 
-			SetViewDesc(p_desc_set->GetDsCbv().max_slot_count, p_desc_set->GetDsCbv().cpu_handles, resource_table.ds_cbv_table);
-			SetViewDesc(p_desc_set->GetDsSrv().max_slot_count, p_desc_set->GetDsSrv().cpu_handles, resource_table.ds_srv_table);
+			SetViewDesc(p_desc_set->GetDsCbv().max_use_register_index + 1, p_desc_set->GetDsCbv().cpu_handles, resource_table.ds_cbv_table);
+			SetViewDesc(p_desc_set->GetDsSrv().max_use_register_index + 1, p_desc_set->GetDsSrv().cpu_handles, resource_table.ds_srv_table);
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 

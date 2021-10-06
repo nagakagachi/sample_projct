@@ -37,6 +37,8 @@ namespace ngl
 			_Max
 		};
 
+		// このシステムではRootSignature固定のため各リソースタイプはシェーダステージ毎にレジスタ0から固定数でバインドする.
+		// 以下は各リソースタイプの固定数.
 		static const u32 k_cbv_table_size = 16;
 		static const u32 k_srv_table_size = 48;
 		static const u32 k_uav_table_size = 16;
