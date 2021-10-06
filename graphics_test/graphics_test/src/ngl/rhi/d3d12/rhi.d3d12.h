@@ -91,6 +91,10 @@ namespace ngl
 			{
 				return p_persistent_descriptor_allocator_.Get();
 			}
+			PersistentDescriptorAllocator* GetPersistentSamplerDescriptorAllocator()
+			{
+				return p_persistent_sampler_descriptor_allocator_.Get();
+			}
 		private:
 			Desc	desc_ = {};
 
@@ -105,6 +109,9 @@ namespace ngl
 			ngl::UniquePtr<FrameDescriptorManager>			p_frame_descriptor_manager_;
 			// リソース用Descriptor確保用( CBV, SRV, UAV 用)
 			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_descriptor_allocator_;
+
+			// 生成したSampler用Descriptor確保用( Sampler 用)
+			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_sampler_descriptor_allocator_;
 		};
 
 

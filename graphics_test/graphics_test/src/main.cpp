@@ -586,7 +586,36 @@ void AppGame::TestCode()
 		{
 			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
 		}
+	}
 
+	if (true)
+	{
+		// Samplerテスト
+		ngl::rhi::SamplerDep::Desc samp_desc = {};
+		samp_desc.desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samp_desc.desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samp_desc.desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samp_desc.desc.BorderColor[0] = 0.0f;
+		samp_desc.desc.BorderColor[1] = 0.0f;
+		samp_desc.desc.BorderColor[2] = 0.0f;
+		samp_desc.desc.BorderColor[3] = 0.0f;
+		samp_desc.desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		samp_desc.desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		samp_desc.desc.MaxAnisotropy = 0;
+		samp_desc.desc.MaxLOD = FLT_MAX;
+		samp_desc.desc.MinLOD = 0.0f;
+		samp_desc.desc.MipLODBias = 0.0f;
+
+		ngl::rhi::SamplerDep samp00;
+		if (!samp00.Initialize(&device_, samp_desc))
+		{
+			std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+		}
+		ngl::rhi::SamplerDep samp01;
+		if (!samp01.Initialize(&device_, samp_desc))
+		{
+			std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+		}
 	}
 
 	if (true)

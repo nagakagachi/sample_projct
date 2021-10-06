@@ -174,6 +174,19 @@ namespace ngl
 				}
 			}
 
+			// Sampler用PersistentDescriptorManager初期化
+			{
+				p_persistent_sampler_descriptor_allocator_.Reset(new PersistentDescriptorAllocator());
+				PersistentDescriptorAllocator::Desc pda_desc = {};
+				pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;// Sampler用Heap
+				pda_desc.allocate_descriptor_count_ = 2048;// SamplerのDescriptorHeapは2048個分までの制限がある. Samplerはパラメータの組み合わせがほぼ決まっているので使い切ることは無いはず.
+				if (!p_persistent_sampler_descriptor_allocator_->Initialize(this, pda_desc))
+				{
+					std::cout << "[ERROR] Create PersistentDescriptorAllocator" << std::endl;
+					return false;
+				}
+			}
+
 			return true;
 		}
 		void DeviceDep::Finalize()

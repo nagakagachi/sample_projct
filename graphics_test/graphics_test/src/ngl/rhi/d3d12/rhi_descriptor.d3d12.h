@@ -28,9 +28,20 @@ namespace ngl
 
 		struct PersistentDescriptorInfo
 		{
+			static constexpr u32 k_invalid_allocation_index = ~u32(0);
+
+			static bool IsValid(const PersistentDescriptorInfo& v)
+			{
+				return (k_invalid_allocation_index != v.allocation_index && nullptr != v.allocator);
+			}
+			bool IsValid() const
+			{
+				return IsValid(*this);
+			}
+
 			// アロケーション元
 			PersistentDescriptorAllocator*	allocator = nullptr;
-			u32								allocation_index = ~u32(0);
+			u32								allocation_index = k_invalid_allocation_index;
 
 			D3D12_CPU_DESCRIPTOR_HANDLE	cpu_handle = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE	gpu_handle = {};

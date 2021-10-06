@@ -477,5 +477,39 @@ namespace ngl
 			return resource_;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		SamplerDep::SamplerDep()
+		{
+		}
+		SamplerDep::~SamplerDep()
+		{
+			Finalize();
+		}
+		bool SamplerDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Samplerは専用のAllocatorを利用.
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+				return false;
+
+			// Persistent上に作成.
+			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
+			return true;
+		}
+		void SamplerDep::Finalize()
+		{
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
+			view_ = {};
+		}
 	}
 }

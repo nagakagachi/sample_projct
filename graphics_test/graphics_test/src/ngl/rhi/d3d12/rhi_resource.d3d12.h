@@ -184,6 +184,7 @@ namespace ngl
 
 
 		// Texture
+		// TODO. Array対応, Cubemap対応.
 		class TextureDep
 		{
 		public:
@@ -257,6 +258,23 @@ namespace ngl
 			void* map_ptr_ = nullptr;
 
 			CComPtr<ID3D12Resource> resource_;
+		};
+
+		class SamplerDep
+		{
+		public:
+			struct Desc
+			{
+				// TODO. あとで自前定義に置き換える.
+				D3D12_SAMPLER_DESC	desc;
+			};
+			SamplerDep();
+			~SamplerDep();
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+		private:
+			PersistentDescriptorInfo	view_{};
 		};
 	}
 }
