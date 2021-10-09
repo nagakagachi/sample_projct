@@ -204,7 +204,7 @@ namespace ngl
 			for (const auto& e : sampler_set_info)
 				total_samp_count += e.max_register_ + 1;
 
-
+			// Sampler用のFrameDescriptor確保. ここでPageが足りなければ新規Pageが確保されてHeapが切り替わるので, SetDescriptorHeaps() の前に実行する必要がある.
 			const auto sampler_desc_heap_type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
 			D3D12_CPU_DESCRIPTOR_HANDLE cpu_sampler_handle_start;
 			D3D12_GPU_DESCRIPTOR_HANDLE gpu_sampler_handle_start;

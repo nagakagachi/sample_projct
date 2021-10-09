@@ -245,7 +245,7 @@ bool AppGame::Initialize()
 	}
 
 	{
-		// PSのConstantBuffer作成
+		// ConstantBuffer作成
 		ngl::rhi::BufferDep::Desc cb_desc = {};
 		cb_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
 		cb_desc.usage_flag = (int)ngl::rhi::BufferUsage::ConstantBuffer;
@@ -257,7 +257,7 @@ bool AppGame::Initialize()
 			if (auto* map_data = cb_sample_ps_.Map<CbSamplePs>())
 			{
 				map_data->cb_param0[0] = 1.0f;
-				map_data->cb_param0[1] = 0.0f;
+				map_data->cb_param0[1] = 0.5f;
 				map_data->cb_param0[2] = 0.0f;
 				map_data->cb_param0[3] = 1.0f;
 
@@ -265,7 +265,7 @@ bool AppGame::Initialize()
 			}
 		}
 
-		// PSのConstantBufferView作成
+		// ConstantBufferView作成
 		ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
 		cbv_sample_ps_.Initialize(&cb_sample_ps_, cbv_desc);
 	}
