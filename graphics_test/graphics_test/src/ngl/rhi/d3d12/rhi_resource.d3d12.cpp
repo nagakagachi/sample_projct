@@ -30,11 +30,11 @@ namespace ngl
 				return false;
 			}
 
+			if (0 >= desc.element_byte_size || 0 >= desc.element_count)
+				return false;
+
 			desc_ = desc;
 			p_parent_device_ = p_device;
-
-			if (0 >= desc_.element_byte_size || 0 >= desc_.element_count)
-				return false;
 
 			D3D12_HEAP_FLAGS heap_flag = D3D12_HEAP_FLAG_NONE;
 			D3D12_RESOURCE_STATES initial_state = ConvertResourceState(desc_.initial_state);
@@ -187,17 +187,20 @@ namespace ngl
 				return false;
 			}
 
-			parent_buffer_ = buffer;
-
-			auto&& p_device = parent_buffer_->GetParentDevice();
-
+			auto&& p_device = buffer->GetParentDevice();
 			
 			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
 			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+			{
+				std::cout << "[ERROR] ConstantBufferViewDep::Initialize" << std::endl;
+				assert(false);
+				return false;
+			}
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
-			view_desc.BufferLocation = parent_buffer_->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_desc.SizeInBytes = parent_buffer_->GetAlignedBufferSize();// アライメント考慮サイズを指定している.
+			view_desc.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_desc.SizeInBytes = buffer->GetAlignedBufferSize();// アライメント考慮サイズを指定している.
 			auto handle = view_.cpu_handle;
 			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
 
@@ -205,11 +208,13 @@ namespace ngl
 		}
 		void ConstantBufferViewDep::Finalize()
 		{
-			auto&& descriptor_allocator = parent_buffer_->GetParentDevice()->GetPersistentDescriptorAllocator();
-			descriptor_allocator->Deallocate(view_);
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
 
 			view_ = {};
-			parent_buffer_ = nullptr;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -238,9 +243,7 @@ namespace ngl
 				return false;
 			}
 
-			parent_buffer_ = buffer;
-
-			auto&& p_device = parent_buffer_->GetParentDevice();
+			auto&& p_device = buffer->GetParentDevice();
 
 			view_ = {};
 			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
@@ -252,7 +255,6 @@ namespace ngl
 		void VertexBufferViewDep::Finalize()
 		{
 			view_ = {};
-			parent_buffer_ = nullptr;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -281,10 +283,7 @@ namespace ngl
 				return false;
 			}
 
-			parent_buffer_ = buffer;
-
-			auto&& p_device = parent_buffer_->GetParentDevice();
-
+			auto&& p_device = buffer->GetParentDevice();
 
 			view_ = {};
 			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
@@ -296,10 +295,42 @@ namespace ngl
 		void IndexBufferViewDep::Finalize()
 		{
 			view_ = {};
-			parent_buffer_ = nullptr;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		SamplerDep::SamplerDep()
+		{
+		}
+		SamplerDep::~SamplerDep()
+		{
+			Finalize();
+		}
+		bool SamplerDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Samplerは専用のAllocatorを利用.
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+				return false;
+
+			// Persistent上に作成.
+			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
+			return true;
+		}
+		void SamplerDep::Finalize()
+		{
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
+			view_ = {};
+		}
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -321,14 +352,22 @@ namespace ngl
 				return false;
 			}
 
+			if (0 >= desc.width || 0 >= desc.height)
+				return false;
+			if (ResourceFormat::NGL_FORMAT_UNKNOWN == desc.format)
+				return false;
+
 			desc_ = desc;
 			p_parent_device_ = p_device;
 
-			if (0 >= desc_.width || 0 >= desc_.height)
+			if (ResourceHeapType::UPLOAD == desc_.heap_type || ResourceHeapType::READBACK == desc_.heap_type)
+			{
+				// TODO. DefaultHeap以外のTextureは生成できないので, 内部的にはUpload/READBACKなBufferを生成してそちらにCPUアクセスし,DefaultHeapなTextureにコピーする.
+				// 未実装.
+				std::cout << "[ERROR] Upload or Readback Texture is Unimplemented." << std::endl;
+				assert(false);
 				return false;
-			if (ResourceFormat::NGL_FORMAT_UNKNOWN == desc_.format)
-				return false;
-
+			}
 
 			const bool is_depth_stencil = (int)BufferUsage::DepthStencil & desc_.usage_flag;
 			const bool is_render_target = (int)BufferUsage::RenderTarget & desc_.usage_flag;
@@ -478,31 +517,193 @@ namespace ngl
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
-
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		SamplerDep::SamplerDep()
+		RenderTargetViewDep::RenderTargetViewDep()
 		{
 		}
-		SamplerDep::~SamplerDep()
+		RenderTargetViewDep::~RenderTargetViewDep()
 		{
 			Finalize();
 		}
-		bool SamplerDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		// SwapChainからRTV作成.
+		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
 		{
-			if (!p_device)
+			if (!p_device || !p_swapchain)
 				return false;
 
-			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Samplerは専用のAllocatorを利用.
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
-				return false;
+			{
+				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+				desc.NumDescriptors = 1;
+				desc.NodeMask = 0;
+				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
-			// Persistent上に作成.
-			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
+				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
+				{
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+					return false;
+				}
+			}
+			{
+				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
+				if (!buffer)
+				{
+					std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
+					return false;
+				}
+
+				auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
+				p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
+			}
+
 			return true;
 		}
-		void SamplerDep::Finalize()
+
+		void RenderTargetViewDep::Finalize()
+		{
+			p_heap_ = nullptr;
+		}
+
+		D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetViewDep::GetD3D12DescriptorHandle() const
+		{
+			return p_heap_->GetCPUDescriptorHandleForHeapStart();
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+		ShaderResourceViewDep::ShaderResourceViewDep()
+		{
+		}
+		ShaderResourceViewDep::~ShaderResourceViewDep()
+		{
+			Finalize();
+		}
+
+		// SwapChainからRTV作成.
+		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 firstMip, u32 mipCount, u32 firstArray, u32 arraySize)
+		{
+			assert(p_device && p_texture);
+			if (!p_device || !p_texture)
+				return false;
+
+			const D3D12_RESOURCE_DESC resDesc = p_texture->GetD3D12Resource()->GetDesc();
+
+			if (firstMip >= resDesc.MipLevels)
+			{
+				firstMip = resDesc.MipLevels - 1;
+				mipCount = 1;
+			}
+			else if ((mipCount == 0) || (mipCount > resDesc.MipLevels - firstMip))
+			{
+				mipCount = resDesc.MipLevels - firstMip;
+			}
+			if (firstArray >= resDesc.DepthOrArraySize)
+			{
+				firstArray = resDesc.DepthOrArraySize - 1;
+				arraySize = 1;
+			}
+			else if ((arraySize == 0) || (arraySize > resDesc.DepthOrArraySize - firstArray))
+			{
+				arraySize = resDesc.DepthOrArraySize - firstArray;
+			}
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
+			viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			viewDesc.Format = resDesc.Format;// pTex->GetTextureDesc().format;
+			switch (viewDesc.Format)
+			{
+			case DXGI_FORMAT_D32_FLOAT:
+				viewDesc.Format = DXGI_FORMAT_R32_FLOAT; break;
+			case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+				viewDesc.Format = DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS; break;
+			case DXGI_FORMAT_D24_UNORM_S8_UINT:
+				viewDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS; break;
+			case DXGI_FORMAT_D16_UNORM:
+				viewDesc.Format = DXGI_FORMAT_R16_UNORM; break;
+			}
+			if (resDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D)
+			{
+				if (resDesc.DepthOrArraySize == 1)
+				{
+					viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
+					viewDesc.Texture1D.MipLevels = mipCount;
+					viewDesc.Texture1D.MostDetailedMip = firstMip;
+					viewDesc.Texture1D.ResourceMinLODClamp = 0.0f;
+				}
+				else
+				{
+					viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
+					viewDesc.Texture1DArray.MipLevels = mipCount;
+					viewDesc.Texture1DArray.MostDetailedMip = firstMip;
+					viewDesc.Texture1DArray.ResourceMinLODClamp = 0.0f;
+					viewDesc.Texture1DArray.FirstArraySlice = firstArray;
+					viewDesc.Texture1DArray.ArraySize = arraySize;
+				}
+			}
+			else if (resDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+			{
+				if (resDesc.SampleDesc.Count == 1)
+				{
+					if (resDesc.DepthOrArraySize == 1)
+					{
+						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+						viewDesc.Texture2D.MipLevels = mipCount;
+						viewDesc.Texture2D.MostDetailedMip = firstMip;
+						viewDesc.Texture2D.PlaneSlice = 0;
+						viewDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+					}
+					else
+					{
+						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+						viewDesc.Texture2DArray.MipLevels = mipCount;
+						viewDesc.Texture2DArray.MostDetailedMip = firstMip;
+						viewDesc.Texture2DArray.PlaneSlice = 0;
+						viewDesc.Texture2DArray.ResourceMinLODClamp = 0.0f;
+						viewDesc.Texture2DArray.FirstArraySlice = firstArray;
+						viewDesc.Texture2DArray.ArraySize = arraySize;
+					}
+				}
+				else
+				{
+					if (resDesc.DepthOrArraySize == 1)
+					{
+						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+					}
+					else
+					{
+						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+						viewDesc.Texture2DMSArray.FirstArraySlice = firstArray;
+						viewDesc.Texture2DMSArray.ArraySize = arraySize;
+					}
+				}
+			}
+			else
+			{
+				viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+				viewDesc.Texture3D.MipLevels = mipCount;
+				viewDesc.Texture3D.MostDetailedMip = firstMip;
+				viewDesc.Texture3D.ResourceMinLODClamp = 0.0f;
+			}
+
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+			{
+				std::cout << "[ERROR] ConstantBufferViewDep::Initialize" << std::endl;
+				assert(false);
+				return false;
+			}
+
+			p_device->GetD3D12Device()->CreateShaderResourceView(p_texture->GetD3D12Resource(), &viewDesc, view_.cpu_handle);
+
+			return true;
+		}
+
+		void ShaderResourceViewDep::Finalize()
 		{
 			auto&& descriptor_allocator = view_.allocator;
 			if (descriptor_allocator)
@@ -511,5 +712,6 @@ namespace ngl
 			}
 			view_ = {};
 		}
+
 	}
 }

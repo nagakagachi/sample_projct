@@ -125,8 +125,6 @@ namespace ngl
 			}
 
 		private:
-			BufferDep* parent_buffer_ = nullptr;
-
 			PersistentDescriptorInfo	view_ = {};
 		};
 
@@ -151,8 +149,6 @@ namespace ngl
 			}
 
 		private:
-			BufferDep* parent_buffer_ = nullptr;
-
 			D3D12_VERTEX_BUFFER_VIEW	view_ = {};
 		};
 
@@ -177,11 +173,30 @@ namespace ngl
 			}
 
 		private:
-			BufferDep* parent_buffer_ = nullptr;
-
 			D3D12_INDEX_BUFFER_VIEW	view_ = {};
 		};
 
+
+		class SamplerDep
+		{
+		public:
+			struct Desc
+			{
+				// TODO. あとで自前定義に置き換える.
+				D3D12_SAMPLER_DESC	desc;
+			};
+			SamplerDep();
+			~SamplerDep();
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			const PersistentDescriptorInfo& GetView() const
+			{
+				return view_;
+			}
+		private:
+			PersistentDescriptorInfo	view_{};
+		};
 
 		// Texture
 		// TODO. Array対応, Cubemap対応.
@@ -200,13 +215,15 @@ namespace ngl
 				ResourceFormat		format = ResourceFormat::NGL_FORMAT_UNKNOWN;
 				ngl::u32			width = 1;
 				ngl::u32			height = 1;
+				// Depth of Texture3D or ArraySize of TextureArray
 				ngl::u32			depth = 1;
 				ngl::u32			mip_level = 1;
 				ngl::u32			sample_count = 1;
 
 				Dimension			dimension = Dimension::Texture2D;
 
-				u32					usage_flag = 0;	// BufferUsage bitmask.
+				// bitmask of ngl::rhi::BufferUsage.
+				u32					usage_flag = 0;
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
 				bool				allow_uav = false;
@@ -260,21 +277,45 @@ namespace ngl
 			CComPtr<ID3D12Resource> resource_;
 		};
 
-		class SamplerDep
+
+		// RenderTargetView
+		// TODO. 現状はView一つに付きHeap一つを確保している. 最終的にはHeapプールから確保するようにしたい.
+		class RenderTargetViewDep
 		{
 		public:
-			struct Desc
-			{
-				// TODO. あとで自前定義に置き換える.
-				D3D12_SAMPLER_DESC	desc;
-			};
-			SamplerDep();
-			~SamplerDep();
-			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			RenderTargetViewDep();
+			~RenderTargetViewDep();
+
+			// SwapChainからRTV作成.
+			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index);
+
+			// TODO. Initialize from Texture.
+
 			void Finalize();
 
+			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const;
 		private:
-			PersistentDescriptorInfo	view_{};
+			// 現状のRTVやDSVはHeapをそれぞれ専有する. 問題があればグローバルな専用Heapから確保する.
+			CComPtr<ID3D12DescriptorHeap> p_heap_;
+		};
+
+		class ShaderResourceViewDep
+		{
+		public:
+			ShaderResourceViewDep();
+			~ShaderResourceViewDep();
+
+			// SwapChainからRTV作成.
+			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 firstMip, u32 mipCount, u32 firstArray, u32 arraySize);
+
+			void Finalize();
+
+			const PersistentDescriptorInfo& GetView() const
+			{
+				return view_;
+			}
+		private:
+			PersistentDescriptorInfo	view_ = {};
 		};
 	}
 }

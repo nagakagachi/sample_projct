@@ -68,7 +68,10 @@ namespace ngl
 			DeviceDep* parent_device_	= nullptr;
 			Desc		desc_ = {};
 
-			FrameDescriptorInterface frame_desc_interface_ = {};
+			// Cvb Srv Uav用.
+			FrameDescriptorInterface			frame_desc_interface_ = {};
+			// Sampler用.
+			FrameDescriptorHeapPageInterface	frame_desc_page_interface_for_sampler_ = {};
 
 			CComPtr<ID3D12CommandAllocator>		p_command_allocator_;
 			CComPtr<ID3D12GraphicsCommandList>	p_command_list_;

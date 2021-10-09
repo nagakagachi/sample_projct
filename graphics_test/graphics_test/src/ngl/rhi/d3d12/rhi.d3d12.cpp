@@ -147,19 +147,6 @@ namespace ngl
 				}
 			}
 
-			// FrameDescriptorManager初期化
-			{
-				p_frame_descriptor_manager_.Reset(new FrameDescriptorManager());
-				FrameDescriptorManager::Desc fdm_desc = {};
-				fdm_desc.allocate_descriptor_count_ = desc_.frame_descriptor_size;
-				fdm_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-
-				if (!p_frame_descriptor_manager_->Initialize(this, fdm_desc))
-				{
-					std::cout << "[ERROR] Create FrameDescriptorManager" << std::endl;
-					return false;
-				}
-			}
 			// PersistentDescriptorManager初期化
 			{
 				p_persistent_descriptor_allocator_.Reset(new PersistentDescriptorAllocator());
@@ -190,6 +177,30 @@ namespace ngl
 				}
 			}
 
+			// FrameDescriptorManager初期化
+			{
+				p_frame_descriptor_manager_.Reset(new FrameDescriptorManager());
+				FrameDescriptorManager::Desc fdm_desc = {};
+				fdm_desc.allocate_descriptor_count_ = desc_.frame_descriptor_size;
+				fdm_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+				if (!p_frame_descriptor_manager_->Initialize(this, fdm_desc))
+				{
+					std::cout << "[ERROR] Create FrameDescriptorManager" << std::endl;
+					return false;
+				}
+			}
+
+			// FrameDescriptorHeapPagePool初期化
+			{
+				p_frame_descriptor_page_pool_.Reset(new FrameDescriptorHeapPagePool());
+				if (!p_frame_descriptor_page_pool_->Initialize(this))
+				{
+					std::cout << "[ERROR] Create FrameDescriptorHeapPagePool" << std::endl;
+					return false;
+				}
+			}
+
 			return true;
 		}
 		void DeviceDep::Finalize()
@@ -199,6 +210,8 @@ namespace ngl
 		}
 		void DeviceDep::ReadyToNewFrame()
 		{
+			++frame_index_;
+
 			buffer_index_ = (buffer_index_ + 1) % desc_.swapchain_buffer_count;
 
 			p_frame_descriptor_manager_->ResetFrameDescriptor(buffer_index_);
@@ -398,62 +411,6 @@ namespace ngl
 			return p_command_queue_;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		RenderTargetViewDep::RenderTargetViewDep()
-		{
-		}
-		RenderTargetViewDep::~RenderTargetViewDep()
-		{
-			Finalize();
-		}
-		// SwapChainからRTV作成.
-		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
-		{
-			if (!p_device || !p_swapchain)
-				return false;
-
-			{
-				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-				desc.NumDescriptors = 1;
-				desc.NodeMask = 0;
-				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
-				{
-					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
-					return false;
-				}
-			}
-			{
-				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
-				if (!buffer)
-				{
-					std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
-					return false;
-				}
-
-				auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
-				p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
-			}
-
-			return true;
-		}
-
-		void RenderTargetViewDep::Finalize()
-		{
-			p_heap_ = nullptr;
-		}
-
-		D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetViewDep::GetD3D12DescriptorHandle() const
-		{
-			return p_heap_->GetCPUDescriptorHandleForHeapStart();
-		}
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -664,6 +621,7 @@ namespace ngl
 							hr = dxc_result->GetErrorBuffer(&errorsBlob);
 							if (SUCCEEDED(hr) && errorsBlob)
 							{
+								// FXCで失敗した場合は後段でDXCによるコンパイルを試みる.
 								wprintf(L"[ERROR] Compilation failed with errors:\n%hs\n",
 									(const char*)errorsBlob->GetBufferPointer());
 							}

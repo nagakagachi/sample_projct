@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <queue>
 #include <array>
 #include <unordered_map>
 #include <mutex>
@@ -256,7 +257,7 @@ namespace ngl
 		};
 
 		/*
-			リソースのDescriptorを配置する目的のHeapを管理する
+			リソースのDescriptorを配置する目的のグローバルなHeapを管理する
 			ここで管理されているDescriptorは直接描画には利用されず,別実装のFrameDescriptorHeap上に描画直前にCopyDescriptorsでコピーされて利用される.
 
 			mutexによって Allocate と Deallocate はスレッドセーフ.
@@ -307,7 +308,7 @@ namespace ngl
 			// Headの定義情報
 			D3D12_DESCRIPTOR_HEAP_DESC		heap_desc_{};
 			// Heap上の要素アドレスサイズ
-			u32								heap_increment_size_ = 0;
+			u32								handle_increment_size_ = 0;
 			// CPU/GPUハンドル先頭
 			D3D12_CPU_DESCRIPTOR_HANDLE		cpu_handle_start_ = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE		gpu_handle_start_ = {};
@@ -334,6 +335,7 @@ namespace ngl
 			FrameDescriptorManagerから借り受ける際にフレーム番号を指定し、描画が完了して使い終わった後にそのフレームでFrameDescriptorManagerから取得された連続領域を纏めて開放するために使う
 
 
+			SamplerはHeapのサイズがAPIで制限されているため別途クラスを用意する.
 		*/
 		class FrameDescriptorManager
 		{
@@ -355,9 +357,9 @@ namespace ngl
 
 			void ResetFrameDescriptor(u32 frame_index);
 
-			u32	GetHeapIncrementSize() const 
+			u32	GetHandleIncrementSize() const 
 			{
-				return heap_increment_size_;
+				return handle_increment_size_;
 			}
 
 
@@ -379,7 +381,7 @@ namespace ngl
 			CComPtr<ID3D12DescriptorHeap>		p_heap_ = nullptr;
 			D3D12_DESCRIPTOR_HEAP_DESC			heap_desc_{};
 			// Heap上の要素アドレスサイズ
-			u32									heap_increment_size_ = 0;
+			u32									handle_increment_size_ = 0;
 			// CPU/GPUハンドル先頭
 			D3D12_CPU_DESCRIPTOR_HANDLE			cpu_handle_start_ = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE			gpu_handle_start_ = {};
@@ -461,23 +463,95 @@ namespace ngl
 		};
 
 
-		/*
-			各スレッドのCommandListが保持するSampler用設定キャッシュ管理.
-				SamplerのDescriptorはHeapにつき2048までという制限がある(らしい)ため,CommandListに設定するHeapもその制限に抑えられる.
-				SRVのように巨大なHeapからブロック単位で取得して利用ということができない. (そもそもその巨大なHeapがNG).
-				そのためSamplerはDraw/Dispatch時にセットされるDescriptorSetに含まれるSamplerの組み合わせをキャッシュして,必要な組み合わせセットのみ制限サイズ内のHeapにコピーして使い回す.
-		*/
-		// TODO.
-		class SamplerDescriptorSetCache
+
+
+
+
+		// 巨大な単一HeapではなくPage単位で確保するHeapManager. 一つのHeapのサイズに制限があるSampler向けだが, CBV_SRV_UAVでも利用可能.
+		// 返却されたPageの利用可能リストへの移動などの処理はDeviceのフレームインデックスと協調して自動的に実行される. (Allocate時についでに処理している).
+		class FrameDescriptorHeapPagePool
 		{
 		public:
-			//void GetFrameSamplerDescriptors(const DescriptorSetDep& descriptor_set);
+			static constexpr u32 k_max_sampler_heap_handle_count = 2048;// D3D12の制限2048.
+
+			static constexpr u32 GetHeapTypeIndex(D3D12_DESCRIPTOR_HEAP_TYPE t)
+			{
+				assert(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == t || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == t);
+
+				return (D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == t)? 0 : 1;
+			}
+
+			FrameDescriptorHeapPagePool();
+			~FrameDescriptorHeapPagePool();
+
+			bool Initialize(DeviceDep* p_device);
+			void Finalize();
+
+			// Pageを割り当て.
+			ID3D12DescriptorHeap* AllocatePage(D3D12_DESCRIPTOR_HEAP_TYPE t);
+			// Pageを返却.
+			void DeallocatePage(D3D12_DESCRIPTOR_HEAP_TYPE t, ID3D12DescriptorHeap* p_heap);
+ 
+			u32 GetPageSize(D3D12_DESCRIPTOR_HEAP_TYPE t) const;
+			u32	GetHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE t) const;
 
 		private:
-			
+			DeviceDep* p_device_ = {};
+
+			// index 0 -> CBV_SRV_UAV
+			// index 1 -> SAMPLER
+			std::mutex		mutex_[2] = {};
+
+			u32 page_size_[2] = {};
+
+			u32 handle_increment_size_[2] = {};
+
+			// 生成したHeapは解放のためにすべてスマートポインタで保持.
+			std::vector<CComPtr<ID3D12DescriptorHeap>>	created_pool_[2];
+			std::queue<ID3D12DescriptorHeap*>			available_pool_[2];
+			// 返却時のフレームインデックスをペアで格納.
+			std::queue<std::pair<u64, ID3D12DescriptorHeap*>> retired_pool_[2];
+
 		};
 
+		/*
+			CommandListがそれぞれ保持するフレーム毎のDescriptorHeap管理.
+			内部ではPoolへの参照をもち, Poolから一定サイズのHeap単位をPageとして取得して利用する.
+			
+			FrameDescriptorInterface との違いは巨大な単一のHeapではなくPage単位のHeapを利用する点.
+			これによりHeap辺り2048のハンドルまでという制限のあるSamplerのDescriptorにも対応している.
+		*/
+		class FrameDescriptorHeapPageInterface
+		{
+		public:
+			struct Desc
+			{
+				// D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV or D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER.
+				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+			};
 
+
+			FrameDescriptorHeapPageInterface();
+			~FrameDescriptorHeapPageInterface();
+
+			bool Initialize(FrameDescriptorHeapPagePool* p_pool, const Desc& desc);
+			void Finalize();
+
+			const FrameDescriptorHeapPagePool* GetPool() const { return p_pool_; }
+			FrameDescriptorHeapPagePool* GetPool() { return p_pool_; }
+
+			bool Allocate(u32 handle_count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+			ID3D12DescriptorHeap* GetD3D12DescriptorHeap() { return p_cur_heap_; }
+
+		private:
+			Desc							desc_ = {};
+			FrameDescriptorHeapPagePool*	 p_pool_ = {};
+
+			u32								use_handle_count_ = 0;
+			ID3D12DescriptorHeap*			p_cur_heap_ = {};
+			D3D12_CPU_DESCRIPTOR_HANDLE		cur_cpu_handle_start_ = {};
+			D3D12_GPU_DESCRIPTOR_HANDLE		cur_gpu_handle_start_ = {};
+		};
 
 
 	}

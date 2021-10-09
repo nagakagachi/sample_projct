@@ -44,6 +44,7 @@ namespace ngl
 		class PersistentDescriptorAllocator;
 		struct PersistentDescriptorInfo;
 		class FrameDescriptorManager;
+		class FrameDescriptorHeapPagePool;
 		class DescriptorSetDep;
 
 
@@ -72,6 +73,8 @@ namespace ngl
 			void Finalize();
 
 			void ReadyToNewFrame();
+			// Deviceが管理するグローバルなフレームインデックスを取得.
+			u64	 GetDeviceFrameIndex() const { return frame_index_; }
 
 
 			const Desc& GetDesc() const { return desc_; }
@@ -83,10 +86,6 @@ namespace ngl
 			ID3D12Device* GetD3D12Device();
 			DXGI_FACTORY_TYPE* GetDxgiFactory();
 
-			FrameDescriptorManager* GetFrameDescriptorManager()
-			{
-				return p_frame_descriptor_manager_.Get();
-			}
 			PersistentDescriptorAllocator* GetPersistentDescriptorAllocator()
 			{
 				return p_persistent_descriptor_allocator_.Get();
@@ -94,6 +93,14 @@ namespace ngl
 			PersistentDescriptorAllocator* GetPersistentSamplerDescriptorAllocator()
 			{
 				return p_persistent_sampler_descriptor_allocator_.Get();
+			}
+			FrameDescriptorManager* GetFrameDescriptorManager()
+			{
+				return p_frame_descriptor_manager_.Get();
+			}
+			FrameDescriptorHeapPagePool* GetFrameDescriptorHeapPagePool()
+			{
+				return p_frame_descriptor_page_pool_.Get();
 			}
 		private:
 			Desc	desc_ = {};
@@ -104,14 +111,24 @@ namespace ngl
 			CComPtr<ID3D12Device> p_device_;
 			CComPtr<DXGI_FACTORY_TYPE> p_factory_;
 
+			// テスト中. フレームインデックス処理用.
+			u64 frame_index_ = 0;
+
 			u32	buffer_index_ = 0;
-			// フレームでのDescriptor確保用( CBV, SRV, UAV 用)
-			ngl::UniquePtr<FrameDescriptorManager>			p_frame_descriptor_manager_;
+
 			// リソース用Descriptor確保用( CBV, SRV, UAV 用)
 			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_descriptor_allocator_;
 
 			// 生成したSampler用Descriptor確保用( Sampler 用)
 			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_sampler_descriptor_allocator_;
+
+
+			// フレームでのDescriptor確保用( CBV, SRV, UAV 用). 巨大な単一Heap管理. Samplerのハンドル数制限には対応していないが通常のリソースにはこちらのほうが効率的と思われる.
+			ngl::UniquePtr<FrameDescriptorManager>			p_frame_descriptor_manager_;
+
+			// フレームでのDescriptor確保用. こちらはPage単位で拡張していく. CBV,SRV,UAVおよびSamplerすべてで利用可能.
+			ngl::UniquePtr<FrameDescriptorHeapPagePool>		p_frame_descriptor_page_pool_;
+
 		};
 
 
@@ -194,24 +211,6 @@ namespace ngl
 
 			CComPtr<ID3D12Resource>* p_resources_ = nullptr;
 			unsigned int num_resource_ = 0;
-		};
-
-
-		// RenderTargetView
-		// TODO. 現状はView一つに付きHeap一つを確保している. 最終的にはHeapプールから確保するようにしたい.
-		class RenderTargetViewDep
-		{
-		public:
-			RenderTargetViewDep();
-			~RenderTargetViewDep();
-
-			// SwapChainからRTV作成.
-			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index);
-			void Finalize();
-
-			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const;
-		private:
-			CComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
 		// D3D12では単純にシェーダバイナリを保持するだけ

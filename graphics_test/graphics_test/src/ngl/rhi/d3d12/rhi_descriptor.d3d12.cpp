@@ -4,6 +4,7 @@
 
 #include <array>
 #include <algorithm>
+#include <limits>
 
 #include "ngl/util/bit_operation.h"
 
@@ -47,7 +48,7 @@ namespace ngl
 					return false;
 				}
 
-				heap_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
+				handle_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
 				cpu_handle_start_ = p_heap_->GetCPUDescriptorHandleForHeapStart();
 				gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
 			}
@@ -175,7 +176,7 @@ namespace ngl
 			ret.cpu_handle = cpu_handle_start_;
 			ret.gpu_handle = gpu_handle_start_;
 			// アドレスオフセット
-			const auto handle_offset = heap_increment_size_ * ret.allocation_index;
+			const auto handle_offset = handle_increment_size_ * ret.allocation_index;
 			ret.cpu_handle.ptr += static_cast<size_t>(handle_offset);
 			ret.gpu_handle.ptr += static_cast<size_t>(handle_offset);
 
@@ -253,7 +254,7 @@ namespace ngl
 					return false;
 				}
 
-				heap_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
+				handle_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
 				cpu_handle_start_ = p_heap_->GetCPUDescriptorHandleForHeapStart();
 				gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
 			}
@@ -436,9 +437,9 @@ namespace ngl
 
 			// アロケーション位置の先頭を取得して返す.
 			alloc_cpu_handle_head = cpu_handle_start_;
-			alloc_cpu_handle_head.ptr += (static_cast<UINT64>(heap_increment_size_) * static_cast<UINT64>(alloc_start_index));
+			alloc_cpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(alloc_start_index));
 			alloc_gpu_handle_head = gpu_handle_start_;
-			alloc_gpu_handle_head.ptr += (static_cast<UINT64>(heap_increment_size_) * static_cast<UINT64>(alloc_start_index));
+			alloc_gpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(alloc_start_index));
 
 			return true;
 		}
@@ -540,7 +541,7 @@ namespace ngl
 			if (desc_.stack_size < cur_stack_use_count_ + count)
 				return false;
 			
-			const auto increment_size = p_manager_->GetHeapIncrementSize();
+			const auto increment_size = p_manager_->GetHandleIncrementSize();
 			const auto increment_offset = increment_size * cur_stack_use_count_;
 
 			alloc_cpu_handle_head = cur_stack_cpu_handle_start_;
@@ -553,5 +554,211 @@ namespace ngl
 			return true;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		FrameDescriptorHeapPagePool::FrameDescriptorHeapPagePool()
+		{
+		}
+		FrameDescriptorHeapPagePool::~FrameDescriptorHeapPagePool()
+		{
+			Finalize();
+		}
+
+		bool FrameDescriptorHeapPagePool::Initialize(DeviceDep* p_device)
+		{
+			assert(p_device);
+			if (!p_device)
+				return false;
+
+			p_device_ = p_device;
+
+			constexpr auto i_srv = GetHeapTypeIndex(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			constexpr auto i_sampler = GetHeapTypeIndex(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+
+			// CBV_SRV_UAV.
+			page_size_[i_srv] = 4096;
+			// SAMPLER.
+			page_size_[i_sampler] = k_max_sampler_heap_handle_count;
+
+			handle_increment_size_[i_srv] = p_device_->GetD3D12Device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			handle_increment_size_[i_sampler] = p_device_->GetD3D12Device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+
+			return true;
+		}
+		void FrameDescriptorHeapPagePool::Finalize()
+		{
+		}
+
+		// ページを割り当て.
+		ID3D12DescriptorHeap* FrameDescriptorHeapPagePool::AllocatePage(D3D12_DESCRIPTOR_HEAP_TYPE t)
+		{
+			assert(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == t || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == t);
+
+			const auto type_index = GetHeapTypeIndex(t);
+
+			// HeapType毎にLock.
+			std::lock_guard<std::mutex> lock(mutex_[type_index]);
+
+			// タイミングで返却リストのものを処理する.
+			{
+				const auto func_check_fence_complete = [](DeviceDep* p_device, u64 retired_frame)
+				{
+					const auto frame_index = p_device->GetDeviceFrameIndex();
+					if (frame_index == retired_frame)
+						return false;
+
+					const auto max_index = ~u64(0);// std::numeric_limits<decltype(frame_index)>::max();
+					const auto frame_diff = (frame_index > retired_frame) ? (frame_index - retired_frame) : (max_index - retired_frame + (frame_index + 1));
+					return (2 <= frame_diff);
+				};
+
+				// 返却Queueの先頭から経過フレームチェックで再利用可能なものをAvailableに移動.
+				while (!retired_pool_[type_index].empty() && func_check_fence_complete(p_device_, retired_pool_[type_index].front().first))
+				{
+					available_pool_[type_index].push(retired_pool_[type_index].front().second);
+					retired_pool_[type_index].pop();
+				}
+			}
+
+			// 割り当てられるものがあるならそれを返す.
+			if (!available_pool_[type_index].empty())
+			{
+				auto lend_object = available_pool_[type_index].front();
+				available_pool_[type_index].pop();
+				return lend_object;
+			}
+			else
+			{
+				// なければ新規に作成
+				D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
+				heap_desc.Type = t;
+				heap_desc.NumDescriptors = page_size_[type_index];
+				heap_desc.NodeMask = 0;
+				// このHeap上のDescriptorは描画に利用するためVISIBLE設定. シェーダから可視.
+				heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+				CComPtr<ID3D12DescriptorHeap> p_heap;
+				if (FAILED(p_device_->GetD3D12Device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&p_heap))))
+				{
+					std::cout << "ERROR: Create DescriptorHeap" << std::endl;
+					return nullptr;
+				}
+				// 生成したHeapをすべてスマートポインタで保持しておく.
+				created_pool_[type_index].push_back(p_heap);
+
+				// 確保したものを返す.
+				return p_heap.p;
+			}
+		}
+
+		void FrameDescriptorHeapPagePool::DeallocatePage(D3D12_DESCRIPTOR_HEAP_TYPE t, ID3D12DescriptorHeap* p_heap)
+		{
+			assert(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == t || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == t);
+
+			const auto type_index = GetHeapTypeIndex(t);
+			const auto frame_index = p_device_->GetDeviceFrameIndex();
+
+			// HeapType毎にLock.
+			std::lock_guard<std::mutex> lock(mutex_[type_index]);
+
+			retired_pool_[type_index].push(std::make_pair(frame_index, p_heap));
+		}
+
+
+		u32 FrameDescriptorHeapPagePool::GetPageSize(D3D12_DESCRIPTOR_HEAP_TYPE t) const
+		{
+			assert(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == t || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == t);
+
+			return page_size_[GetHeapTypeIndex(t)];
+		}
+		u32	FrameDescriptorHeapPagePool::GetHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE t) const
+		{
+			assert(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == t || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == t);
+
+			return handle_increment_size_[GetHeapTypeIndex(t)];
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		FrameDescriptorHeapPageInterface::FrameDescriptorHeapPageInterface()
+		{
+		}
+		FrameDescriptorHeapPageInterface::~FrameDescriptorHeapPageInterface()
+		{
+			Finalize();
+		}
+
+		bool FrameDescriptorHeapPageInterface::Initialize(FrameDescriptorHeapPagePool* p_pool, const Desc& desc)
+		{
+			assert(p_pool);
+			if (!p_pool)
+				return false;
+
+			assert(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == desc.type || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == desc.type);
+			// CBV_SRV_UAVとSAMPLERのみ対応.
+			if (!(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV == desc.type || D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER == desc.type))
+				return false;
+
+			p_pool_ = p_pool;
+			desc_ = desc;
+			use_handle_count_ = 0;
+
+			return true;
+		}
+		void FrameDescriptorHeapPageInterface::Finalize()
+		{
+			if (p_cur_heap_)
+			{
+				// 現在のPageを返却.
+				p_pool_->DeallocatePage(desc_.type, p_cur_heap_);
+				p_cur_heap_ = nullptr;
+			}
+		}
+
+		bool FrameDescriptorHeapPageInterface::Allocate(u32 handle_count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+		{
+			assert(p_pool_);
+
+			// Pageが確保されていないか, 必要個数が確保できない場合はPageを新規取得.
+			if (!p_cur_heap_ || (use_handle_count_ + handle_count > p_pool_->GetPageSize(desc_.type)))
+			{
+				if (p_cur_heap_)
+				{
+					// 現在のPageを返却.
+					p_pool_->DeallocatePage(desc_.type, p_cur_heap_);
+					p_cur_heap_ = nullptr;
+				}
+
+				// 新規Page.
+				p_cur_heap_ = p_pool_->AllocatePage(desc_.type);
+				assert(p_cur_heap_);
+				if (!p_cur_heap_)
+				{
+					return false;
+				}
+				// 各種リセット.
+				use_handle_count_ = 0;
+				cur_cpu_handle_start_ = p_cur_heap_->GetCPUDescriptorHandleForHeapStart();
+				cur_gpu_handle_start_ = p_cur_heap_->GetGPUDescriptorHandleForHeapStart();
+			}
+
+			// Handleを確保.
+			const auto increment_size = p_pool_->GetHandleIncrementSize(desc_.type);
+			// 使用範囲の末端までオフセットして割り当てる.
+			const auto increment_offset = increment_size * use_handle_count_;
+
+			// ページ先頭から位置までオフセットして返す.
+			alloc_cpu_handle_head = cur_cpu_handle_start_;
+			alloc_cpu_handle_head.ptr += (increment_offset);
+			alloc_gpu_handle_head = cur_gpu_handle_start_;
+			alloc_gpu_handle_head.ptr += (increment_offset);
+
+			// 確保分だけ使用数加算.
+			use_handle_count_ += handle_count;
+
+			return true;
+		}
 	}
 }

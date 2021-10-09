@@ -79,6 +79,11 @@ private:
 
 	ngl::rhi::BufferDep							ib_sample_;
 	ngl::rhi::IndexBufferViewDep				ibv_sample_;
+
+	ngl::rhi::SamplerDep						samp_;
+	
+	ngl::rhi::TextureDep						tex_;
+	ngl::rhi::ShaderResourceViewDep				tex_view_;
 };
 
 
@@ -334,6 +339,78 @@ bool AppGame::Initialize()
 	}
 
 
+	{
+		// Samplerテスト
+		ngl::rhi::SamplerDep::Desc samp_desc = {};
+		samp_desc.desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samp_desc.desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samp_desc.desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samp_desc.desc.BorderColor[0] = 0.0f;
+		samp_desc.desc.BorderColor[1] = 0.0f;
+		samp_desc.desc.BorderColor[2] = 0.0f;
+		samp_desc.desc.BorderColor[3] = 0.0f;
+		samp_desc.desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		samp_desc.desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+		samp_desc.desc.MaxAnisotropy = 0;
+		samp_desc.desc.MaxLOD = FLT_MAX;
+		samp_desc.desc.MinLOD = 0.0f;
+		samp_desc.desc.MipLODBias = 0.0f;
+
+		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
+		if (!samp_.Initialize(&device_, samp_desc))
+		{
+			std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+			assert(false);
+		}
+	}
+
+	{
+#if 1
+		// Textureテスト
+		ngl::rhi::TextureDep::Desc tex_desc00 = {};
+		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::DEFAULT;
+		tex_desc00.dimension = ngl::rhi::TextureDep::Dimension::Texture2D;
+		tex_desc00.width = 64;
+		tex_desc00.height = 64;
+		tex_desc00.depth = 1;
+		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_SNORM;
+		tex_desc00.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
+
+		tex_desc00.allow_uav = true;// UAV
+
+		if (!tex_.Initialize(&device_, tex_desc00))
+		{
+			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+			assert(false);
+		}
+#else
+		// Textureテスト
+		ngl::rhi::TextureDep::Desc tex_desc00 = {};
+		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
+		tex_desc00.dimension = ngl::rhi::TextureDep::Dimension::Texture2D;
+		tex_desc00.width = 64;
+		tex_desc00.height = 64;
+		tex_desc00.depth = 1;
+		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_SNORM;
+		tex_desc00.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
+
+		tex_desc00.allow_uav = false;// UAV
+
+		if (!tex_.Initialize(&device_, tex_desc00))
+		{
+			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+			assert(false);
+		}
+#endif
+
+		// TextureView
+		if (!tex_view_.Initialize(&device_, &tex_, 0, 1, 0, 1))
+		{
+			std::cout << "ERROR: Create rhi::ShaderResourceViewDep" << std::endl;
+			assert(false);
+		}
+	}
+
 
 	// テストコード
 	TestCode();
@@ -418,6 +495,9 @@ bool AppGame::Execute()
 					
 					// DescriptorSetに名前で定数バッファViewをセット
 					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
+
+					sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_view_.GetView().cpu_handle);
+					sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);
 
 					// DescriptorSetでViewを設定.
 					gfx_command_list_.SetDescriptorSet(&sample_pso_, &empty_desc_set);
@@ -609,7 +689,7 @@ void AppGame::TestCode()
 		samp_desc.desc.MipLODBias = 0.0f;
 
 		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
-		ngl::rhi::SamplerDep samp[2048 - 1];
+		ngl::rhi::SamplerDep samp[1];
 		for (auto&& e : samp)
 		{
 			if (!e.Initialize(&device_, samp_desc))
@@ -711,16 +791,16 @@ void AppGame::TestCode()
 	{
 		// バイナリ読み込み.
 		{
-		ngl::file::FileObject file_obj;
-		ngl::rhi::ShaderDep	shader00;
-		ngl::rhi::ShaderReflectionDep reflect00;
-		file_obj.ReadFile("./data/sample_vs.cso");
-		if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
-		{
-			std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
-			assert(false);
-		}
-		reflect00.Initialize(&device_, &shader00);
+			ngl::file::FileObject file_obj;
+			ngl::rhi::ShaderDep	shader00;
+			ngl::rhi::ShaderReflectionDep reflect00;
+			file_obj.ReadFile("./data/sample_vs.cso");
+			if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
+			{
+				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				assert(false);
+			}
+			reflect00.Initialize(&device_, &shader00);
 		}
 		// バイナリ読み込み.
 		{
@@ -872,6 +952,46 @@ void AppGame::TestCode()
 			}
 			frame_index = (frame_index + 1) % buffer_count;
 		}
+	}
 
+	if(false)
+	{
+		ngl::rhi::FrameDescriptorHeapPagePool* frame_desc_page_pool = device_.GetFrameDescriptorHeapPagePool();
+
+		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
+		//ngl::u32 frame_index = 0;
+		//for (auto f_i = 0u; f_i < 5; ++f_i)
+		{
+			ngl::rhi::FrameDescriptorHeapPageInterface fmra_page_interface_sampler;
+			{
+				ngl::rhi::FrameDescriptorHeapPageInterface::Desc desc = {};
+				desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+				fmra_page_interface_sampler.Initialize(frame_desc_page_pool, desc);
+			}
+
+			ngl::rhi::FrameDescriptorHeapPageInterface fmra_page_interface_srv;
+			{
+				ngl::rhi::FrameDescriptorHeapPageInterface::Desc desc = {};
+				desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+				fmra_page_interface_srv.Initialize(frame_desc_page_pool, desc);
+			}
+
+			for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
+			{
+				{
+					D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
+					D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
+					fmra_page_interface_sampler.Allocate(16, cpu_handle, gpu_handle);
+				}
+				{
+					D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
+					D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
+					fmra_page_interface_srv.Allocate(16, cpu_handle, gpu_handle);
+				}
+
+				// TODO. 取得したハンドルから16個分の連続したDescriptorにViewをコピーして描画に使う.
+
+			}
+		}
 	}
 }
