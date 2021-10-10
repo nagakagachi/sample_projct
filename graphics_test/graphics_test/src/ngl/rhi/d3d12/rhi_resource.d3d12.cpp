@@ -70,7 +70,7 @@ namespace ngl
 			D3D12_RESOURCE_FLAGS need_flags = D3D12_RESOURCE_FLAG_NONE;
 			// 用途によるアライメント.
 			u32 need_alignment = 16;
-			if ((int)BufferUsage::ConstantBuffer & desc_.usage_flag)
+			if ((int)ResourceBindFlag::ConstantBuffer & desc_.usage_flag)
 			{
 				need_alignment = static_cast<u32>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 			}
@@ -167,173 +167,6 @@ namespace ngl
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		ConstantBufferViewDep::ConstantBufferViewDep()
-		{
-		}
-		ConstantBufferViewDep::~ConstantBufferViewDep()
-		{
-			Finalize();
-		}
-		bool ConstantBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
-		{
-			if (!buffer || !buffer->GetParentDevice())
-			{
-				assert(false);
-				return false;
-			}
-			if ((int)BufferUsage::ConstantBuffer != buffer->GetDesc().usage_flag)
-			{
-				assert(false);
-				return false;
-			}
-
-			auto&& p_device = buffer->GetParentDevice();
-			
-			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
-			{
-				std::cout << "[ERROR] ConstantBufferViewDep::Initialize" << std::endl;
-				assert(false);
-				return false;
-			}
-
-			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
-			view_desc.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_desc.SizeInBytes = buffer->GetAlignedBufferSize();// アライメント考慮サイズを指定している.
-			auto handle = view_.cpu_handle;
-			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
-
-			return true;
-		}
-		void ConstantBufferViewDep::Finalize()
-		{
-			auto&& descriptor_allocator = view_.allocator;
-			if (descriptor_allocator)
-			{
-				descriptor_allocator->Deallocate(view_);
-			}
-
-			view_ = {};
-		}
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		VertexBufferViewDep::VertexBufferViewDep()
-		{
-		}
-		VertexBufferViewDep::~VertexBufferViewDep()
-		{
-			Finalize();
-		}
-		bool VertexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
-		{
-			if (!buffer || !buffer->GetParentDevice())
-			{
-				assert(false);
-				return false;
-			}
-
-			const auto& buffer_desc = buffer->GetDesc();
-			if ((int)BufferUsage::VertexBuffer != buffer_desc.usage_flag)
-			{
-				assert(false);
-				return false;
-			}
-
-			auto&& p_device = buffer->GetParentDevice();
-
-			view_ = {};
-			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
-			view_.StrideInBytes = buffer_desc.element_byte_size;
-			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-
-			return true;
-		}
-		void VertexBufferViewDep::Finalize()
-		{
-			view_ = {};
-		}
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		IndexBufferViewDep::IndexBufferViewDep()
-		{
-		}
-		IndexBufferViewDep::~IndexBufferViewDep()
-		{
-			Finalize();
-		}
-		bool IndexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
-		{
-			if (!buffer || !buffer->GetParentDevice())
-			{
-				assert(false);
-				return false;
-			}
-
-			const auto& buffer_desc = buffer->GetDesc();
-			if ((int)BufferUsage::IndexBuffer != buffer_desc.usage_flag)
-			{
-				assert(false);
-				return false;
-			}
-
-			auto&& p_device = buffer->GetParentDevice();
-
-			view_ = {};
-			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
-			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_.Format = (buffer_desc.element_byte_size == 4) ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
-
-			return true;
-		}
-		void IndexBufferViewDep::Finalize()
-		{
-			view_ = {};
-		}
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		SamplerDep::SamplerDep()
-		{
-		}
-		SamplerDep::~SamplerDep()
-		{
-			Finalize();
-		}
-		bool SamplerDep::Initialize(DeviceDep* p_device, const Desc& desc)
-		{
-			if (!p_device)
-				return false;
-
-			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Samplerは専用のAllocatorを利用.
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
-				return false;
-
-			// Persistent上に作成.
-			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
-			return true;
-		}
-		void SamplerDep::Finalize()
-		{
-			auto&& descriptor_allocator = view_.allocator;
-			if (descriptor_allocator)
-			{
-				descriptor_allocator->Deallocate(view_);
-			}
-			view_ = {};
-		}
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		TextureDep::TextureDep()
 		{
 		}
@@ -369,8 +202,8 @@ namespace ngl
 				return false;
 			}
 
-			const bool is_depth_stencil = (int)BufferUsage::DepthStencil & desc_.usage_flag;
-			const bool is_render_target = (int)BufferUsage::RenderTarget & desc_.usage_flag;
+			const bool is_depth_stencil = (int)ResourceBindFlag::DepthStencil & desc_.usage_flag;
+			const bool is_render_target = (int)ResourceBindFlag::RenderTarget & desc_.usage_flag;
 
 
 			// 深度バッファ用にフォーマット変換
@@ -439,7 +272,7 @@ namespace ngl
 
 			D3D12_RESOURCE_DESC resource_desc = {};
 			{
-				const D3D12_RESOURCE_DIMENSION kNativeDimensionTable[] = 
+				const D3D12_RESOURCE_DIMENSION kNativeDimensionTable[] =
 				{
 					D3D12_RESOURCE_DIMENSION_TEXTURE1D,
 					D3D12_RESOURCE_DIMENSION_TEXTURE2D,
@@ -516,6 +349,173 @@ namespace ngl
 			return resource_;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		ConstantBufferViewDep::ConstantBufferViewDep()
+		{
+		}
+		ConstantBufferViewDep::~ConstantBufferViewDep()
+		{
+			Finalize();
+		}
+		bool ConstantBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		{
+			if (!buffer || !buffer->GetParentDevice())
+			{
+				assert(false);
+				return false;
+			}
+			if ((int)ResourceBindFlag::ConstantBuffer != buffer->GetDesc().usage_flag)
+			{
+				assert(false);
+				return false;
+			}
+
+			auto&& p_device = buffer->GetParentDevice();
+			
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+			{
+				std::cout << "[ERROR] ConstantBufferViewDep::Initialize" << std::endl;
+				assert(false);
+				return false;
+			}
+
+			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
+			view_desc.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_desc.SizeInBytes = buffer->GetAlignedBufferSize();// アライメント考慮サイズを指定している.
+			auto handle = view_.cpu_handle;
+			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
+
+			return true;
+		}
+		void ConstantBufferViewDep::Finalize()
+		{
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
+
+			view_ = {};
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		VertexBufferViewDep::VertexBufferViewDep()
+		{
+		}
+		VertexBufferViewDep::~VertexBufferViewDep()
+		{
+			Finalize();
+		}
+		bool VertexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		{
+			if (!buffer || !buffer->GetParentDevice())
+			{
+				assert(false);
+				return false;
+			}
+
+			const auto& buffer_desc = buffer->GetDesc();
+			if ((int)ResourceBindFlag::VertexBuffer != buffer_desc.usage_flag)
+			{
+				assert(false);
+				return false;
+			}
+
+			auto&& p_device = buffer->GetParentDevice();
+
+			view_ = {};
+			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
+			view_.StrideInBytes = buffer_desc.element_byte_size;
+			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+
+			return true;
+		}
+		void VertexBufferViewDep::Finalize()
+		{
+			view_ = {};
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		IndexBufferViewDep::IndexBufferViewDep()
+		{
+		}
+		IndexBufferViewDep::~IndexBufferViewDep()
+		{
+			Finalize();
+		}
+		bool IndexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		{
+			if (!buffer || !buffer->GetParentDevice())
+			{
+				assert(false);
+				return false;
+			}
+
+			const auto& buffer_desc = buffer->GetDesc();
+			if ((int)ResourceBindFlag::IndexBuffer != buffer_desc.usage_flag)
+			{
+				assert(false);
+				return false;
+			}
+
+			auto&& p_device = buffer->GetParentDevice();
+
+			view_ = {};
+			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
+			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_.Format = (buffer_desc.element_byte_size == 4) ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
+
+			return true;
+		}
+		void IndexBufferViewDep::Finalize()
+		{
+			view_ = {};
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		SamplerDep::SamplerDep()
+		{
+		}
+		SamplerDep::~SamplerDep()
+		{
+			Finalize();
+		}
+		bool SamplerDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Samplerは専用のAllocatorを利用.
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+				return false;
+
+			// Persistent上に作成.
+			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
+			return true;
+		}
+		void SamplerDep::Finalize()
+		{
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
+			view_ = {};
+		}
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------

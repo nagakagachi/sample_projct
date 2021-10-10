@@ -20,18 +20,51 @@ namespace ngl
 		class PersistentDescriptorAllocator;
 		struct PersistentDescriptorInfo;
 
-		enum class BufferUsage : int
+
+		enum class ResourceType
+		{
+			Buffer,                 ///< Buffer. Can be bound to all shader-stages
+			Texture1D,              ///< 1D texture. Can be bound as render-target, shader-resource and UAV
+			Texture2D,              ///< 2D texture. Can be bound as render-target, shader-resource and UAV
+			Texture3D,              ///< 3D texture. Can be bound as render-target, shader-resource and UAV
+			TextureCube,            ///< Texture-cube. Can be bound as render-target, shader-resource and UAV
+			Texture2DMultisample,   ///< 2D multi-sampled texture. Can be bound as render-target, shader-resource and UAV
+		};
+
+
+		enum class ResourceBindFlag : int
 		{
 			ConstantBuffer	= (1 << 0),
 			VertexBuffer	= (1 << 1),
 			IndexBuffer		= (1 << 2),
 			ShaderResource	= (1 << 3),
+			UnorderedAccess = (1 << 4),
+			RenderTarget	= (1 << 5),
+			DepthStencil	= (1 << 6),
+			IndirectArg		= (1 << 7),
 
-			RenderTarget	= (1 << 4),
-			DepthStencil	= (1 << 5),
-
-			Max
+			//AccelerationStructure = 0x80000000,  ///< The resource will be bound as an acceleration structure
 		};
+
+		/*
+		// BufferやTextureの基底.
+		// 具体的な生成処理などは派生クラス(Texture)などで実装
+		class ResourceInterface
+		{
+		public:
+			ResourceInterface(ResourceType type, ResourceBindFlag bindflag)
+				:	type_(type)
+				,	bindflag_(bindflag)
+			{
+			}
+
+		private:
+			ResourceType		type_		= ResourceType::Buffer;
+			ResourceBindFlag	bindflag_	= ResourceBindFlag::ConstantBuffer;
+		};
+		*/
+
+
 
 		// Buffer
 		class BufferDep
@@ -102,6 +135,91 @@ namespace ngl
 
 			CComPtr<ID3D12Resource> resource_;
 		};
+
+
+		// Texture
+		// TODO. Array対応, Cubemap対応.
+		class TextureDep
+		{
+		public:
+			enum class Dimension
+			{
+				Texture1D,
+				Texture2D,
+				Texture3D,
+			};
+
+			struct Desc
+			{
+				ResourceFormat		format = ResourceFormat::NGL_FORMAT_UNKNOWN;
+				ngl::u32			width = 1;
+				ngl::u32			height = 1;
+				// Depth of Texture3D or ArraySize of TextureArray
+				ngl::u32			depth = 1;
+				ngl::u32			mip_level = 1;
+				ngl::u32			sample_count = 1;
+
+				Dimension			dimension = Dimension::Texture2D;
+
+				// bitmask of ngl::rhi::BufferUsage.
+				u32					usage_flag = 0;
+				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
+				ResourceState		initial_state = ResourceState::GENERAL;
+				bool				allow_uav = false;
+			};
+
+			TextureDep();
+			~TextureDep();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			template<typename T = void>
+			T* Map()
+			{
+				// DefaultヒープリソースはMap不可
+				if (ResourceHeapType::DEFAULT == desc_.heap_type)
+				{
+					std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
+					return nullptr;
+				}
+				if (map_ptr_)
+				{
+					// Map済みの場合はそのまま返す.
+					return reinterpret_cast<T*>(map_ptr_);
+				}
+				if (FAILED(resource_->Map(0, nullptr, &map_ptr_)))
+				{
+					std::cout << "ERROR: Resouce Map" << std::endl;
+					map_ptr_ = nullptr;
+					return nullptr;
+				}
+				return reinterpret_cast<T*>(map_ptr_);
+			}
+
+			void Unmap();
+
+			const u32 GetAlignedBufferSize() const { return allocated_byte_size_; }
+			const Desc& GetDesc() const { return desc_; }
+			DeviceDep* GetParentDevice() { return p_parent_device_; }
+
+			ID3D12Resource* GetD3D12Resource();
+
+		private:
+			DeviceDep* p_parent_device_ = nullptr;
+
+			Desc	desc_ = {};
+			u32		allocated_byte_size_ = 0;
+
+			void* map_ptr_ = nullptr;
+
+			CComPtr<ID3D12Resource> resource_;
+		};
+
+
+
+
+
 
 
 		// ConstantBufferView
@@ -198,84 +316,6 @@ namespace ngl
 			PersistentDescriptorInfo	view_{};
 		};
 
-		// Texture
-		// TODO. Array対応, Cubemap対応.
-		class TextureDep
-		{
-		public:
-			enum class Dimension
-			{
-				Texture1D,
-				Texture2D,
-				Texture3D,
-			};
-
-			struct Desc
-			{
-				ResourceFormat		format = ResourceFormat::NGL_FORMAT_UNKNOWN;
-				ngl::u32			width = 1;
-				ngl::u32			height = 1;
-				// Depth of Texture3D or ArraySize of TextureArray
-				ngl::u32			depth = 1;
-				ngl::u32			mip_level = 1;
-				ngl::u32			sample_count = 1;
-
-				Dimension			dimension = Dimension::Texture2D;
-
-				// bitmask of ngl::rhi::BufferUsage.
-				u32					usage_flag = 0;
-				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
-				ResourceState		initial_state = ResourceState::GENERAL;
-				bool				allow_uav = false;
-			};
-
-			TextureDep();
-			~TextureDep();
-
-			bool Initialize(DeviceDep* p_device, const Desc& desc);
-			void Finalize();
-
-			template<typename T = void>
-			T* Map()
-			{
-				// DefaultヒープリソースはMap不可
-				if (ResourceHeapType::DEFAULT == desc_.heap_type)
-				{
-					std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
-					return nullptr;
-				}
-				if (map_ptr_)
-				{
-					// Map済みの場合はそのまま返す.
-					return reinterpret_cast<T*>(map_ptr_);
-				}
-				if (FAILED(resource_->Map(0, nullptr, &map_ptr_)))
-				{
-					std::cout << "ERROR: Resouce Map" << std::endl;
-					map_ptr_ = nullptr;
-					return nullptr;
-				}
-				return reinterpret_cast<T*>(map_ptr_);
-			}
-
-			void Unmap();
-
-			const u32 GetAlignedBufferSize() const { return allocated_byte_size_; }
-			const Desc& GetDesc() const { return desc_; }
-			DeviceDep* GetParentDevice() { return p_parent_device_; }
-
-			ID3D12Resource* GetD3D12Resource();
-
-		private:
-			DeviceDep* p_parent_device_ = nullptr;
-
-			Desc	desc_ = {};
-			u32		allocated_byte_size_ = 0;
-
-			void* map_ptr_ = nullptr;
-
-			CComPtr<ID3D12Resource> resource_;
-		};
 
 
 		// RenderTargetView

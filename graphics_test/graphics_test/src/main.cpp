@@ -248,7 +248,7 @@ bool AppGame::Initialize()
 		// ConstantBuffer作成
 		ngl::rhi::BufferDep::Desc cb_desc = {};
 		cb_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		cb_desc.usage_flag = (int)ngl::rhi::BufferUsage::ConstantBuffer;
+		cb_desc.usage_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 		cb_desc.element_byte_size = sizeof(CbSamplePs);
 		cb_desc.element_count = 1;
 
@@ -290,7 +290,7 @@ bool AppGame::Initialize()
 
 		ngl::rhi::BufferDep::Desc vtx_desc = {};
 		vtx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		vtx_desc.usage_flag = (int)ngl::rhi::BufferUsage::VertexBuffer;
+		vtx_desc.usage_flag = (int)ngl::rhi::ResourceBindFlag::VertexBuffer;
 		vtx_desc.element_count = static_cast<ngl::u32>(std::size(sample_vtx_list));
 		vtx_desc.element_byte_size = sizeof(sample_vtx_list[0]);
 
@@ -319,7 +319,7 @@ bool AppGame::Initialize()
 
 		ngl::rhi::BufferDep::Desc idx_desc = {};
 		idx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		idx_desc.usage_flag = (int)ngl::rhi::BufferUsage::IndexBuffer;
+		idx_desc.usage_flag = (int)ngl::rhi::ResourceBindFlag::IndexBuffer;
 		idx_desc.element_count = static_cast<ngl::u32>(std::size(sample_index_data));
 		idx_desc.element_byte_size = sizeof(sample_index_data[0]);
 
@@ -374,7 +374,7 @@ bool AppGame::Initialize()
 		tex_desc00.height = 64;
 		tex_desc00.depth = 1;
 		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_SNORM;
-		tex_desc00.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
+		tex_desc00.usage_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 
 		tex_desc00.allow_uav = true;// UAV
 
@@ -576,7 +576,7 @@ void AppGame::TestCode()
 		ngl::rhi::BufferDep buffer0;
 		ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 		buffer_desc0.element_byte_size = sizeof(ngl::u64);
-		buffer_desc0.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
+		buffer_desc0.usage_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 		buffer_desc0.element_count = 1;
 		buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
 		if(is_uav_test)
@@ -657,7 +657,7 @@ void AppGame::TestCode()
 		tex_desc00.height = 64;
 		tex_desc00.depth = 64;
 		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R16_FLOAT;
-		tex_desc00.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
+		tex_desc00.usage_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 		
 		//tex_desc00.usage_flag |= (int)ngl::rhi::BufferUsage::RenderTarget;
 		tex_desc00.allow_uav = true;// UAV
@@ -746,7 +746,7 @@ void AppGame::TestCode()
 				ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 				buffer_desc0.element_byte_size = sizeof(CbTest);
 				buffer_desc0.element_count = 1;
-				buffer_desc0.usage_flag = (int)ngl::rhi::BufferUsage::ConstantBuffer;
+				buffer_desc0.usage_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 				buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
 				// CPU->GPU Uploadリソース
 				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
