@@ -10,6 +10,12 @@ namespace ngl
 {
 	namespace rhi
 	{
+		template<typename T0, typename T1>
+		static constexpr bool and_nonzero(T0 v0, T1 v1)
+		{
+			return 0 != (v0 & v1);
+		}
+
 		enum class ResourceFormat
 		{
 			NGL_FORMAT_UNKNOWN,

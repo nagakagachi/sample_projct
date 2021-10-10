@@ -369,7 +369,7 @@ bool AppGame::Initialize()
 		// Textureテスト
 		ngl::rhi::TextureDep::Desc tex_desc00 = {};
 		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::DEFAULT;
-		tex_desc00.dimension = ngl::rhi::TextureDep::Dimension::Texture2D;
+		tex_desc00.type = ngl::rhi::TextureType::Texture2D;
 		tex_desc00.width = 64;
 		tex_desc00.height = 64;
 		tex_desc00.depth = 1;
@@ -650,7 +650,7 @@ void AppGame::TestCode()
 		// Textureテスト
 		ngl::rhi::TextureDep::Desc tex_desc00 = {};
 		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::DEFAULT;
-		tex_desc00.dimension = ngl::rhi::TextureDep::Dimension::Texture3D;
+		tex_desc00.type = ngl::rhi::TextureType::Texture3D;
 		tex_desc00.width = 64;
 		tex_desc00.height = 64;
 		tex_desc00.depth = 64;
