@@ -70,6 +70,16 @@ private:
 	ngl::rhi::DepthStencilViewDep				tex_depth_dsv_;
 	ngl::rhi::ResourceState						tex_depth_state_;
 
+
+	ngl::rhi::TextureDep						tex_rt_;
+	ngl::rhi::RenderTargetViewDep				tex_rt_rtv_;
+	ngl::rhi::ResourceState						tex_rt_state_;
+
+	ngl::rhi::TextureDep						tex_ua_;
+	ngl::rhi::UnorderedAccessView				tex_ua_uav_;
+	ngl::rhi::ResourceState						tex_ua_state_;
+
+
 	ngl::rhi::ShaderDep							sample_vs_;
 	ngl::rhi::ShaderDep							sample_ps_;
 	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
@@ -162,7 +172,7 @@ bool AppGame::Initialize()
 		for (auto i = 0u; i < swapchain_.NumResource(); ++i)
 		{
 			swapchain_rtvs_[i].Initialize( &device_, &swapchain_, i );
-			swapchain_resource_state_[i] = ngl::rhi::ResourceState::COMMON;
+			swapchain_resource_state_[i] = ngl::rhi::ResourceState::COMMON;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 
 	}
@@ -188,7 +198,55 @@ bool AppGame::Initialize()
 			assert(false);
 		}
 
-		tex_depth_state_ = ngl::rhi::ResourceState::GENERAL;
+		tex_depth_state_ = desc.initial_state;
+	}
+
+	// RenderTarget Texture.
+	{
+		ngl::rhi::TextureDep::Desc desc = {};
+		desc.bind_flag = ngl::rhi::ResourceBindFlag::RenderTarget | ngl::rhi::ResourceBindFlag::ShaderResource;
+		desc.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_UNORM;
+		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.width = 256;
+		desc.height = 256;
+
+		if (!tex_rt_.Initialize(&device_, desc))
+		{
+			std::cout << "ERROR: Create RenderTarget Texture Initialize" << std::endl;
+			assert(false);
+		}
+
+		if (!tex_rt_rtv_.Initialize(&device_, &tex_rt_, 0, 0, 1))
+		{
+			std::cout << "ERROR: Create Rtv Initialize" << std::endl;
+			assert(false);
+		}
+
+		tex_rt_state_ = desc.initial_state;
+	}
+
+	// UnorderedAccess Texture.
+	{
+		ngl::rhi::TextureDep::Desc desc = {};
+		desc.bind_flag = ngl::rhi::ResourceBindFlag::UnorderedAccess | ngl::rhi::ResourceBindFlag::ShaderResource;
+		desc.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_UNORM;
+		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.width = 256;
+		desc.height = 256;
+
+		if (!tex_ua_.Initialize(&device_, desc))
+		{
+			std::cout << "ERROR: Create RenderTarget Texture Initialize" << std::endl;
+			assert(false);
+		}
+
+		if (!tex_ua_uav_.Initialize(&device_, &tex_ua_, 0, 0, 1))
+		{
+			std::cout << "ERROR: Create Rtv Initialize" << std::endl;
+			assert(false);
+		}
+
+		tex_ua_state_ = desc.initial_state;
 	}
 
 	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};

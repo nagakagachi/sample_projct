@@ -305,6 +305,12 @@ namespace ngl
 			if (!p_device || !p_texture)
 				return false;
 
+			if (!and_nonzero(ResourceBindFlag::ShaderResource, p_texture->GetBindFlag()))
+			{
+				assert(false);
+				return false;
+			}
+
 			//const auto& res_desc = p_texture->GetDesc();
 
 			// MipやArrayの値の範囲クランプ他.
@@ -399,7 +405,7 @@ namespace ngl
 			view_ = descriptor_allocator->Allocate();
 			if (!view_.IsValid())
 			{
-				std::cout << "[ERROR] ConstantBufferViewDep::Initialize" << std::endl;
+				std::cout << "[ERROR] ShaderResourceViewDep::Initialize" << std::endl;
 				assert(false);
 				return false;
 			}
@@ -508,7 +514,57 @@ namespace ngl
 			return createDsvRtvUavDescCommon<D3D12_RENDER_TARGET_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
 		}
 
+		D3D12_UNORDERED_ACCESS_VIEW_DESC createUavDesc(const TextureDep* p_texture, uint32_t mipLevel, uint32_t firstArraySlice, uint32_t arraySize)
+		{
+			return createDsvRtvUavDescCommon<D3D12_UNORDERED_ACCESS_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
+		}
 
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		UnorderedAccessView::UnorderedAccessView()
+		{
+		}
+		UnorderedAccessView::~UnorderedAccessView()
+		{
+			Finalize();
+		}
+		bool UnorderedAccessView::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size)
+		{
+			assert(p_device);
+			assert(p_texture);
+
+			if (!and_nonzero(ResourceBindFlag::UnorderedAccess, p_texture->GetBindFlag()))
+			{
+				assert(false);
+				return false;
+			}
+
+			// Descriptor確保.
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+			{
+				std::cout << "[ERROR] UnorderedAccessView::Initialize" << std::endl;
+				assert(false);
+				return false;
+			}
+
+			// 専有HeapにDescriptor作成.
+			{
+				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createUavDesc(p_texture, first_mip, first_array, array_size);
+				constexpr ID3D12Resource* p_counter_resource = nullptr;
+				p_device->GetD3D12Device()->CreateUnorderedAccessView(p_texture->GetD3D12Resource(), p_counter_resource, &desc, view_.cpu_handle);
+			}
+
+			return true;
+		}
+		void UnorderedAccessView::Finalize()
+		{
+		}
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		DepthStencilViewDep::DepthStencilViewDep()
 		{
 		}
@@ -521,7 +577,11 @@ namespace ngl
 			assert(p_device);
 			assert(p_texture);
 
-			D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, first_mip, first_array, array_size);
+			if (!and_nonzero(ResourceBindFlag::DepthStencil, p_texture->GetBindFlag()))
+			{
+				assert(false);
+				return false;
+			}
 
 			// 専有Heap確保.
 			{
@@ -539,6 +599,7 @@ namespace ngl
 			}
 			// 専有HeapにDescriptor作成.
 			{
+				D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, first_mip, first_array, array_size);
 				p_device->GetD3D12Device()->CreateDepthStencilView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
 			}
 
@@ -546,6 +607,7 @@ namespace ngl
 		}
 		void DepthStencilViewDep::Finalize()
 		{
+			p_heap_.Release();
 		}
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -556,6 +618,39 @@ namespace ngl
 		RenderTargetViewDep::~RenderTargetViewDep()
 		{
 			Finalize();
+		}
+		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size)
+		{
+			assert(p_device);
+			assert(p_texture);
+
+			if (!and_nonzero(ResourceBindFlag::RenderTarget, p_texture->GetBindFlag()))
+			{
+				assert(false);
+				return false;
+			}
+
+			// 専有Heap確保.
+			{
+				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+				desc.NumDescriptors = 1;
+				desc.NodeMask = 0;
+				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
+				{
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+					return false;
+				}
+			}
+			// 専有HeapにDescriptor作成.
+			{
+				D3D12_RENDER_TARGET_VIEW_DESC desc = createRtvDesc(p_texture, first_mip, first_array, array_size);
+				p_device->GetD3D12Device()->CreateRenderTargetView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
+			}
+
+			return true;
 		}
 		// SwapChainからRTV作成.
 		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
@@ -592,7 +687,7 @@ namespace ngl
 		}
 		void RenderTargetViewDep::Finalize()
 		{
-			p_heap_ = nullptr;
+			p_heap_.Release();
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 

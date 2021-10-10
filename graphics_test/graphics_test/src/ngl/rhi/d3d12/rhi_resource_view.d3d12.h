@@ -127,10 +127,11 @@ namespace ngl
 			RenderTargetViewDep();
 			~RenderTargetViewDep();
 
-			// SwapChainからRTV作成.
+			// SwapChainから作成.
 			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index);
 
-			// TODO. Initialize from Texture.
+			// Textureから生成.
+			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size);
 
 			void Finalize();
 
@@ -150,6 +151,7 @@ namespace ngl
 			DepthStencilViewDep();
 			~DepthStencilViewDep();
 
+			// Textureから生成.
 			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size);
 
 			void Finalize();
@@ -163,6 +165,7 @@ namespace ngl
 			CComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
+
 		// ShaderResourceView
 		class ShaderResourceViewDep
 		{
@@ -170,9 +173,31 @@ namespace ngl
 			ShaderResourceViewDep();
 			~ShaderResourceViewDep();
 
-			// SwapChainからRTV作成.
+			// Textureから生成.
 			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 mip_count, u32 first_array, u32 array_size);
 			
+			// TODO. Initialize from Buffer.
+
+			void Finalize();
+
+			const PersistentDescriptorInfo& GetView() const
+			{
+				return view_;
+			}
+		private:
+			PersistentDescriptorInfo	view_ = {};
+		};
+
+		// UnorderedAccessView
+		class UnorderedAccessView
+		{
+		public:
+			UnorderedAccessView();
+			~UnorderedAccessView();
+
+			// Textureから生成.
+			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size);
+
 			// TODO. Initialize from Buffer.
 
 			void Finalize();
