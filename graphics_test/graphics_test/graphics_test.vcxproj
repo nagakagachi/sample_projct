@@ -182,6 +182,7 @@ copy /Y "C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\D3D\\x64\\dxil.dll" 
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_util.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\rhi.h" />
+    <ClInclude Include="src\ngl\rhi\rhi_resource.h" />
     <ClInclude Include="src\ngl\text\hash_text.h" />
     <ClInclude Include="src\ngl\util\bit_operation.h" />
     <ClInclude Include="src\ngl\util\instance_handle.h" />

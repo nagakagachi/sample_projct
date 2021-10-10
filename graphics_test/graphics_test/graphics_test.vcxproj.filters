@@ -134,6 +134,9 @@
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource.d3d12.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="src\ngl\rhi\rhi_resource.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\ngl\text\hash_text.inl">
