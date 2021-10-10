@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <vector>
+#include <assert.h>
 
 #include "ngl/util/types.h"
 
@@ -136,6 +137,43 @@ namespace ngl
 			NGL_FORMAT_B4G4R4A4_UNORM,
 			_MAX,
 		};
+
+		// DepthFormatをSrv用に変換. それ以外はそのまま返却.
+		inline ResourceFormat depthToColorFormat(ResourceFormat format)
+		{
+			switch (format)
+			{
+			case ResourceFormat::NGL_FORMAT_D16_UNORM:
+				return ResourceFormat::NGL_FORMAT_R16_UNORM;
+			case ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
+				return ResourceFormat::NGL_FORMAT_R24_UNORM_X8_TYPELESS;
+			case ResourceFormat::NGL_FORMAT_D32_FLOAT:
+				return ResourceFormat::NGL_FORMAT_R32_FLOAT;
+			case ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+				assert(false);
+				return ResourceFormat::NGL_FORMAT_UNKNOWN;
+			default:
+				return format;
+			}
+		}
+		// DepthFormatなら真
+		inline bool isDepthFormat(ResourceFormat format)
+		{
+			switch (format)
+			{
+			case ResourceFormat::NGL_FORMAT_D16_UNORM:
+				return true;
+			case ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
+				return true;
+			case ResourceFormat::NGL_FORMAT_D32_FLOAT:
+				return true;
+			case ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+				assert(false);
+				return false;
+			default:
+				return false;
+			}
+		}
 
 		enum class ResourceState
 		{

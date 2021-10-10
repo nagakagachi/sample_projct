@@ -73,6 +73,24 @@ namespace ngl
 			}
 		}
 
+		// Srv Uav利用するDepthBufferのフォーマットはTypelessとする必要があるため変換.
+		inline DXGI_FORMAT getTypelessFormatFromDepthFormat(ResourceFormat format)
+		{
+			switch (format)
+			{
+			case ResourceFormat::NGL_FORMAT_D16_UNORM:
+				return DXGI_FORMAT_R16_TYPELESS;
+			case ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+				return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+			case ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
+				return DXGI_FORMAT_R24G8_TYPELESS;
+			case ResourceFormat::NGL_FORMAT_D32_FLOAT:
+				return DXGI_FORMAT_R32_TYPELESS;
+			default:
+				assert(isDepthFormat(format) == false);
+				return ConvertResourceFormat(format);
+			}
+		}
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -257,7 +275,6 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-
 			if (0 >= desc.width || 0 >= desc.height)
 				return false;
 			if (ResourceFormat::NGL_FORMAT_UNKNOWN == desc.format)
@@ -275,22 +292,6 @@ namespace ngl
 				return false;
 			}
 
-			// 深度バッファ用にフォーマット変換.
-			if (and_nonzero(ResourceBindFlag::DepthStencil, desc_.bind_flag))
-			{
-				switch (desc_.format)
-				{
-				case ResourceFormat::NGL_FORMAT_D32_FLOAT:
-					desc_.format = ResourceFormat::NGL_FORMAT_R32_TYPELESS; break;
-				case  ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
-					desc_.format = ResourceFormat::NGL_FORMAT_R32G8X24_TYPELESS; break;
-				case  ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
-					desc_.format = ResourceFormat::NGL_FORMAT_R24G8_TYPELESS; break;
-				case  ResourceFormat::NGL_FORMAT_D16_UNORM:
-					desc_.format = ResourceFormat::NGL_FORMAT_R16_TYPELESS; break;
-				}
-			}
-
 			// Heapタイプ
 			D3D12_HEAP_FLAGS heap_flag = D3D12_HEAP_FLAG_NONE;
 			D3D12_RESOURCE_STATES initial_state = ConvertResourceState(desc_.initial_state);
@@ -301,20 +302,51 @@ namespace ngl
 				heap_prop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 				heap_prop.VisibleNodeMask = 0;
 			}
-
+			// リソースDesc
 			D3D12_RESOURCE_DESC resource_desc = {};
 			{
 				resource_desc.Dimension = getD3D12ResourceDimension(desc_.type);
 				resource_desc.Alignment = 0u;
 				resource_desc.Width = static_cast<UINT64>(desc_.width);
 				resource_desc.Height = static_cast<UINT64>(desc_.height);
-				resource_desc.DepthOrArraySize = static_cast<UINT16>(desc_.depth);
 				resource_desc.MipLevels = desc_.mip_level;
-				resource_desc.SampleDesc.Count = desc_.sample_count;
+				resource_desc.SampleDesc.Count = (desc_.type == TextureType::Texture2DMultisample)? desc_.sample_count : 1;// Texture2DMultisample以外では1固定.
 				resource_desc.SampleDesc.Quality = 0;
 				resource_desc.Format = ConvertResourceFormat(desc_.format);
 				resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 				resource_desc.Flags = getD3D12ResourceFlags(desc_.bind_flag);
+				if (desc_.type == TextureType::TextureCube)
+				{
+					resource_desc.DepthOrArraySize = desc_.array_size * 6;
+				}
+				else if (desc_.type == TextureType::Texture3D)
+				{
+					resource_desc.DepthOrArraySize = desc_.depth;
+				}
+				else
+				{
+					resource_desc.DepthOrArraySize = desc_.array_size;
+				}
+			}
+			assert(resource_desc.Width > 0 && resource_desc.Height > 0);
+			assert(resource_desc.MipLevels > 0 && resource_desc.DepthOrArraySize > 0 && resource_desc.SampleDesc.Count > 0);
+			
+			// クリア値
+			D3D12_CLEAR_VALUE clearValue = {};
+			D3D12_CLEAR_VALUE* pClearVal = nullptr;
+			if (and_nonzero(ResourceBindFlag::RenderTarget | ResourceBindFlag::DepthStencil, desc_.bind_flag))
+			{
+				clearValue.Format = resource_desc.Format;
+				if (and_nonzero(ResourceBindFlag::DepthStencil, desc_.bind_flag))
+				{
+					clearValue.DepthStencil.Depth = 1.0f;
+				}
+				pClearVal = &clearValue;
+			}
+			if (isDepthFormat(desc_.format) && (and_nonzero(ResourceBindFlag::ShaderResource | ResourceBindFlag::UnorderedAccess, desc_.bind_flag)) )
+			{
+				// Depthフォーマット且つ用途がSrvまたはUavの場合はフォーマット変換.
+				resource_desc.Format = getTypelessFormatFromDepthFormat(desc_.format);
 			}
 
 			// パラメータチェック
@@ -350,7 +382,7 @@ namespace ngl
 			}
 
 			// 生成.
-			if (FAILED(p_device->GetD3D12Device()->CreateCommittedResource(&heap_prop, heap_flag, &resource_desc, initial_state, nullptr, IID_PPV_ARGS(&resource_))))
+			if (FAILED(p_device->GetD3D12Device()->CreateCommittedResource(&heap_prop, heap_flag, &resource_desc, initial_state, pClearVal, IID_PPV_ARGS(&resource_))))
 			{
 				std::cout << "[ERROR] CreateCommittedResource" << std::endl;
 				return false;
@@ -396,6 +428,9 @@ namespace ngl
 			return resource_;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -622,6 +657,115 @@ namespace ngl
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
+		namespace
+		{
+			/** texture dimension -> view dimension.
+			*/
+			ResourceDimension getTextureDimension(TextureType type, bool isTextureArray)
+			{
+				switch (type)
+				{
+				//case TextureType::Buffer:
+				//	assert(isTextureArray == false);
+				//	return ResourceDimension::Buffer;
+				case TextureType::Texture1D:
+					return (isTextureArray) ? ResourceDimension::Texture1DArray : ResourceDimension::Texture1D;
+				case TextureType::Texture2D:
+					return (isTextureArray) ? ResourceDimension::Texture2DArray : ResourceDimension::Texture2D;
+				case TextureType::Texture2DMultisample:
+					return (isTextureArray) ? ResourceDimension::Texture2DMSArray : ResourceDimension::Texture2DMS;
+				case TextureType::Texture3D:
+					assert(isTextureArray == false);
+					return ResourceDimension::Texture3D;
+				case TextureType::TextureCube:
+					return (isTextureArray) ? ResourceDimension::TextureCubeArray : ResourceDimension::TextureCube;
+				default:
+					assert(false);
+					return ResourceDimension::Unknown;
+				}
+			}
+
+			/** view dimension to D3D12 view dimension.
+			*/
+			template<typename ViewType>
+			ViewType getTextureViewDimension(ResourceDimension dimension);
+
+			// for srv.
+			template<>
+			D3D12_SRV_DIMENSION getTextureViewDimension<D3D12_SRV_DIMENSION>(ResourceDimension dimension)
+			{
+				switch (dimension)
+				{
+				case ResourceDimension::Texture1D: return D3D12_SRV_DIMENSION_TEXTURE1D;
+				case ResourceDimension::Texture1DArray: return D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
+				case ResourceDimension::Texture2D: return D3D12_SRV_DIMENSION_TEXTURE2D;
+				case ResourceDimension::Texture2DArray: return D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+				case ResourceDimension::Texture2DMS: return D3D12_SRV_DIMENSION_TEXTURE2DMS;
+				case ResourceDimension::Texture2DMSArray: return D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+				case ResourceDimension::Texture3D: return D3D12_SRV_DIMENSION_TEXTURE3D;
+				case ResourceDimension::TextureCube: return D3D12_SRV_DIMENSION_TEXTURECUBE;
+				case ResourceDimension::TextureCubeArray: return D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+				case ResourceDimension::AccelerationStructure: return D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+				default:
+					assert(false);
+					return D3D12_SRV_DIMENSION_UNKNOWN;
+				}
+			}
+			// for uav.
+			template<>
+			D3D12_UAV_DIMENSION getTextureViewDimension<D3D12_UAV_DIMENSION>(ResourceDimension dimension)
+			{
+				switch (dimension)
+				{
+				case ResourceDimension::Texture1D: return D3D12_UAV_DIMENSION_TEXTURE1D;
+				case ResourceDimension::Texture1DArray: return D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
+				case ResourceDimension::Texture2D: return D3D12_UAV_DIMENSION_TEXTURE2D;
+				case ResourceDimension::Texture2DArray: return D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+				case ResourceDimension::Texture3D: return D3D12_UAV_DIMENSION_TEXTURE3D;
+				default:
+					assert(false);
+					return D3D12_UAV_DIMENSION_UNKNOWN;
+				}
+			}
+			// for dsv.
+			template<>
+			D3D12_DSV_DIMENSION getTextureViewDimension<D3D12_DSV_DIMENSION>(ResourceDimension dimension)
+			{
+				switch (dimension)
+				{
+				case ResourceDimension::Texture1D: return D3D12_DSV_DIMENSION_TEXTURE1D;
+				case ResourceDimension::Texture1DArray: return D3D12_DSV_DIMENSION_TEXTURE1DARRAY;
+				case ResourceDimension::Texture2D: return D3D12_DSV_DIMENSION_TEXTURE2D;
+				case ResourceDimension::Texture2DArray: return D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+				case ResourceDimension::Texture2DMS: return D3D12_DSV_DIMENSION_TEXTURE2DMS;
+				case ResourceDimension::Texture2DMSArray: return D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+					// TODO: Falcor previously mapped cube to 2D array. Not sure if needed anymore.
+					//case ReflectionResourceType::Dimensions::TextureCube: return D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+				default:
+					assert(false);
+					return D3D12_DSV_DIMENSION_UNKNOWN;
+				}
+			}
+			// for rtv.
+			template<>
+			D3D12_RTV_DIMENSION getTextureViewDimension<D3D12_RTV_DIMENSION>(ResourceDimension dimension)
+			{
+				switch (dimension)
+				{
+				case ResourceDimension::Texture1D: return D3D12_RTV_DIMENSION_TEXTURE1D;
+				case ResourceDimension::Texture1DArray: return D3D12_RTV_DIMENSION_TEXTURE1DARRAY;
+				case ResourceDimension::Texture2D: return D3D12_RTV_DIMENSION_TEXTURE2D;
+				case ResourceDimension::Texture2DArray: return D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+				case ResourceDimension::Texture2DMS: return D3D12_RTV_DIMENSION_TEXTURE2DMS;
+				case ResourceDimension::Texture2DMSArray: return D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+				case ResourceDimension::Texture3D: return D3D12_RTV_DIMENSION_TEXTURE3D;
+				default:
+					assert(false);
+					return D3D12_RTV_DIMENSION_UNKNOWN;
+				}
+			}
+		}
+
 		ShaderResourceViewDep::ShaderResourceViewDep()
 		{
 		}
@@ -630,112 +774,102 @@ namespace ngl
 			Finalize();
 		}
 
-		// SwapChainからRTV作成.
 		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 firstMip, u32 mipCount, u32 firstArray, u32 arraySize)
 		{
 			assert(p_device && p_texture);
 			if (!p_device || !p_texture)
 				return false;
 
-			const D3D12_RESOURCE_DESC resDesc = p_texture->GetD3D12Resource()->GetDesc();
+			const auto& res_desc = p_texture->GetDesc();
 
-			if (firstMip >= resDesc.MipLevels)
+			// MipやArrayの値の範囲クランプ他.
+			if (firstMip >= res_desc.mip_level)
 			{
-				firstMip = resDesc.MipLevels - 1;
+				firstMip = res_desc.mip_level - 1;
 				mipCount = 1;
 			}
-			else if ((mipCount == 0) || (mipCount > resDesc.MipLevels - firstMip))
+			else if ((mipCount == 0) || (mipCount > res_desc.mip_level - firstMip))
 			{
-				mipCount = resDesc.MipLevels - firstMip;
+				mipCount = res_desc.mip_level - firstMip;
 			}
-			if (firstArray >= resDesc.DepthOrArraySize)
+			if (firstArray >= res_desc.array_size)
 			{
-				firstArray = resDesc.DepthOrArraySize - 1;
+				firstArray = res_desc.array_size - 1;
 				arraySize = 1;
 			}
-			else if ((arraySize == 0) || (arraySize > resDesc.DepthOrArraySize - firstArray))
+			else if ((arraySize == 0) || (arraySize > res_desc.array_size - firstArray))
 			{
-				arraySize = resDesc.DepthOrArraySize - firstArray;
+				arraySize = res_desc.array_size - firstArray;
 			}
+
+			bool isTextureArray = res_desc.array_size > 1;
 
 			D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
 			viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			viewDesc.Format = resDesc.Format;// pTex->GetTextureDesc().format;
-			switch (viewDesc.Format)
+			viewDesc.Format = ConvertResourceFormat(depthToColorFormat(p_texture->GetDesc().format));
+			viewDesc.ViewDimension = getTextureViewDimension<D3D12_SRV_DIMENSION>(getTextureDimension(res_desc.type, isTextureArray));
+
+			switch (res_desc.type)
 			{
-			case DXGI_FORMAT_D32_FLOAT:
-				viewDesc.Format = DXGI_FORMAT_R32_FLOAT; break;
-			case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
-				viewDesc.Format = DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS; break;
-			case DXGI_FORMAT_D24_UNORM_S8_UINT:
-				viewDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS; break;
-			case DXGI_FORMAT_D16_UNORM:
-				viewDesc.Format = DXGI_FORMAT_R16_UNORM; break;
-			}
-			if (resDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D)
-			{
-				if (resDesc.DepthOrArraySize == 1)
+			case TextureType::Texture1D:
+				if (isTextureArray)
 				{
-					viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
-					viewDesc.Texture1D.MipLevels = mipCount;
-					viewDesc.Texture1D.MostDetailedMip = firstMip;
-					viewDesc.Texture1D.ResourceMinLODClamp = 0.0f;
-				}
-				else
-				{
-					viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
 					viewDesc.Texture1DArray.MipLevels = mipCount;
 					viewDesc.Texture1DArray.MostDetailedMip = firstMip;
-					viewDesc.Texture1DArray.ResourceMinLODClamp = 0.0f;
-					viewDesc.Texture1DArray.FirstArraySlice = firstArray;
 					viewDesc.Texture1DArray.ArraySize = arraySize;
-				}
-			}
-			else if (resDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D)
-			{
-				if (resDesc.SampleDesc.Count == 1)
-				{
-					if (resDesc.DepthOrArraySize == 1)
-					{
-						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-						viewDesc.Texture2D.MipLevels = mipCount;
-						viewDesc.Texture2D.MostDetailedMip = firstMip;
-						viewDesc.Texture2D.PlaneSlice = 0;
-						viewDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-					}
-					else
-					{
-						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-						viewDesc.Texture2DArray.MipLevels = mipCount;
-						viewDesc.Texture2DArray.MostDetailedMip = firstMip;
-						viewDesc.Texture2DArray.PlaneSlice = 0;
-						viewDesc.Texture2DArray.ResourceMinLODClamp = 0.0f;
-						viewDesc.Texture2DArray.FirstArraySlice = firstArray;
-						viewDesc.Texture2DArray.ArraySize = arraySize;
-					}
+					viewDesc.Texture1DArray.FirstArraySlice = firstArray;
 				}
 				else
 				{
-					if (resDesc.DepthOrArraySize == 1)
-					{
-						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-					}
-					else
-					{
-						viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
-						viewDesc.Texture2DMSArray.FirstArraySlice = firstArray;
-						viewDesc.Texture2DMSArray.ArraySize = arraySize;
-					}
+					viewDesc.Texture1D.MipLevels = mipCount;
+					viewDesc.Texture1D.MostDetailedMip = firstMip;
 				}
-			}
-			else
-			{
-				viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+				break;
+			case TextureType::Texture2D:
+				if (isTextureArray)
+				{
+					viewDesc.Texture2DArray.MipLevels = mipCount;
+					viewDesc.Texture2DArray.MostDetailedMip = firstMip;
+					viewDesc.Texture2DArray.ArraySize = arraySize;
+					viewDesc.Texture2DArray.FirstArraySlice = firstArray;
+				}
+				else
+				{
+					viewDesc.Texture2D.MipLevels = mipCount;
+					viewDesc.Texture2D.MostDetailedMip = firstMip;
+				}
+				break;
+			case TextureType::Texture2DMultisample:
+				if (arraySize > 1)
+				{
+					viewDesc.Texture2DMSArray.ArraySize = arraySize;
+					viewDesc.Texture2DMSArray.FirstArraySlice = firstArray;
+				}
+				break;
+			case TextureType::Texture3D:
+				assert(arraySize == 1);
 				viewDesc.Texture3D.MipLevels = mipCount;
 				viewDesc.Texture3D.MostDetailedMip = firstMip;
-				viewDesc.Texture3D.ResourceMinLODClamp = 0.0f;
+				break;
+			case TextureType::TextureCube:
+				if (arraySize > 1)
+				{
+					viewDesc.TextureCubeArray.First2DArrayFace = 0;
+					viewDesc.TextureCubeArray.NumCubes = arraySize;
+					viewDesc.TextureCubeArray.MipLevels = mipCount;
+					viewDesc.TextureCubeArray.MostDetailedMip = firstMip;
+				}
+				else
+				{
+					viewDesc.TextureCube.MipLevels = mipCount;
+					viewDesc.TextureCube.MostDetailedMip = firstMip;
+				}
+				break;
+			default:
+				assert(false);
 			}
 
+			// Descriptor確保.
 			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
 			view_ = descriptor_allocator->Allocate();
 			if (!view_.IsValid())
@@ -744,7 +878,7 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-
+			// View生成.
 			p_device->GetD3D12Device()->CreateShaderResourceView(p_texture->GetD3D12Resource(), &viewDesc, view_.cpu_handle);
 
 			return true;

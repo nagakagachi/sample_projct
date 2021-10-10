@@ -12,7 +12,25 @@ namespace ngl
 			Texture2D,              ///< 2D texture. Can be bound as render-target, shader-resource and UAV
 			Texture3D,              ///< 3D texture. Can be bound as render-target, shader-resource and UAV
 			TextureCube,            ///< Texture-cube. Can be bound as render-target, shader-resource and UAV
-			//Texture2DMultisample,   ///< 2D multi-sampled texture. Can be bound as render-target, shader-resource and UAV
+			Texture2DMultisample,   ///< 2D multi-sampled texture. Can be bound as render-target, shader-resource and UAV
+		};
+
+		enum class ResourceDimension : u32
+		{
+			Unknown,
+			Texture1D,
+			Texture2D,
+			Texture3D,
+			TextureCube,
+			Texture1DArray,
+			Texture2DArray,
+			Texture2DMS,
+			Texture2DMSArray,
+			TextureCubeArray,
+			AccelerationStructure,
+			Buffer,
+
+			Count
 		};
 
 		struct ResourceBindFlag

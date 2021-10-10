@@ -73,10 +73,10 @@ namespace ngl
 				ResourceFormat		format = ResourceFormat::NGL_FORMAT_UNKNOWN;
 				ngl::u32			width = 1;
 				ngl::u32			height = 1;
-				// Depth of Texture3D or ArraySize of TextureArray
 				ngl::u32			depth = 1;
 				ngl::u32			mip_level = 1;
 				ngl::u32			sample_count = 1;
+				ngl::u32			array_size = 1;
 
 				TextureType			type = TextureType::Texture2D;
 
