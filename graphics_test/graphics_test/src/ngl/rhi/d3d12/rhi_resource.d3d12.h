@@ -74,7 +74,7 @@ namespace ngl
 				ngl::u32			width = 1;
 				ngl::u32			height = 1;
 				ngl::u32			depth = 1;
-				ngl::u32			mip_level = 1;
+				ngl::u32			mip_count = 1;
 				ngl::u32			sample_count = 1;
 				ngl::u32			array_size = 1;
 
@@ -242,7 +242,7 @@ namespace ngl
 			~ShaderResourceViewDep();
 
 			// SwapChainからRTV作成.
-			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 firstMip, u32 mipCount, u32 firstArray, u32 arraySize);
+			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 mip_count, u32 first_array, u32 array_size);
 
 			void Finalize();
 

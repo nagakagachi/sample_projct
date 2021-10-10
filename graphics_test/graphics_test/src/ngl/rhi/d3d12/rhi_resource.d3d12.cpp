@@ -309,7 +309,7 @@ namespace ngl
 				resource_desc.Alignment = 0u;
 				resource_desc.Width = static_cast<UINT64>(desc_.width);
 				resource_desc.Height = static_cast<UINT64>(desc_.height);
-				resource_desc.MipLevels = desc_.mip_level;
+				resource_desc.MipLevels = desc_.mip_count;
 				resource_desc.SampleDesc.Count = (desc_.type == TextureType::Texture2DMultisample)? desc_.sample_count : 1;// Texture2DMultisample以外では1固定.
 				resource_desc.SampleDesc.Quality = 0;
 				resource_desc.Format = ConvertResourceFormat(desc_.format);
@@ -774,7 +774,7 @@ namespace ngl
 			Finalize();
 		}
 
-		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 firstMip, u32 mipCount, u32 firstArray, u32 arraySize)
+		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 mip_count, u32 first_array, u32 array_size)
 		{
 			assert(p_device && p_texture);
 			if (!p_device || !p_texture)
@@ -783,23 +783,23 @@ namespace ngl
 			const auto& res_desc = p_texture->GetDesc();
 
 			// MipやArrayの値の範囲クランプ他.
-			if (firstMip >= res_desc.mip_level)
+			if (first_mip >= res_desc.mip_count)
 			{
-				firstMip = res_desc.mip_level - 1;
-				mipCount = 1;
+				first_mip = res_desc.mip_count - 1;
+				mip_count = 1;
 			}
-			else if ((mipCount == 0) || (mipCount > res_desc.mip_level - firstMip))
+			else if ((mip_count == 0) || (mip_count > res_desc.mip_count - first_mip))
 			{
-				mipCount = res_desc.mip_level - firstMip;
+				mip_count = res_desc.mip_count - first_mip;
 			}
-			if (firstArray >= res_desc.array_size)
+			if (first_array >= res_desc.array_size)
 			{
-				firstArray = res_desc.array_size - 1;
-				arraySize = 1;
+				first_array = res_desc.array_size - 1;
+				array_size = 1;
 			}
-			else if ((arraySize == 0) || (arraySize > res_desc.array_size - firstArray))
+			else if ((array_size == 0) || (array_size > res_desc.array_size - first_array))
 			{
-				arraySize = res_desc.array_size - firstArray;
+				array_size = res_desc.array_size - first_array;
 			}
 
 			bool isTextureArray = res_desc.array_size > 1;
@@ -814,55 +814,55 @@ namespace ngl
 			case TextureType::Texture1D:
 				if (isTextureArray)
 				{
-					viewDesc.Texture1DArray.MipLevels = mipCount;
-					viewDesc.Texture1DArray.MostDetailedMip = firstMip;
-					viewDesc.Texture1DArray.ArraySize = arraySize;
-					viewDesc.Texture1DArray.FirstArraySlice = firstArray;
+					viewDesc.Texture1DArray.MipLevels = mip_count;
+					viewDesc.Texture1DArray.MostDetailedMip = first_mip;
+					viewDesc.Texture1DArray.ArraySize = array_size;
+					viewDesc.Texture1DArray.FirstArraySlice = first_array;
 				}
 				else
 				{
-					viewDesc.Texture1D.MipLevels = mipCount;
-					viewDesc.Texture1D.MostDetailedMip = firstMip;
+					viewDesc.Texture1D.MipLevels = mip_count;
+					viewDesc.Texture1D.MostDetailedMip = first_mip;
 				}
 				break;
 			case TextureType::Texture2D:
 				if (isTextureArray)
 				{
-					viewDesc.Texture2DArray.MipLevels = mipCount;
-					viewDesc.Texture2DArray.MostDetailedMip = firstMip;
-					viewDesc.Texture2DArray.ArraySize = arraySize;
-					viewDesc.Texture2DArray.FirstArraySlice = firstArray;
+					viewDesc.Texture2DArray.MipLevels = mip_count;
+					viewDesc.Texture2DArray.MostDetailedMip = first_mip;
+					viewDesc.Texture2DArray.ArraySize = array_size;
+					viewDesc.Texture2DArray.FirstArraySlice = first_array;
 				}
 				else
 				{
-					viewDesc.Texture2D.MipLevels = mipCount;
-					viewDesc.Texture2D.MostDetailedMip = firstMip;
+					viewDesc.Texture2D.MipLevels = mip_count;
+					viewDesc.Texture2D.MostDetailedMip = first_mip;
 				}
 				break;
 			case TextureType::Texture2DMultisample:
-				if (arraySize > 1)
+				if (array_size > 1)
 				{
-					viewDesc.Texture2DMSArray.ArraySize = arraySize;
-					viewDesc.Texture2DMSArray.FirstArraySlice = firstArray;
+					viewDesc.Texture2DMSArray.ArraySize = array_size;
+					viewDesc.Texture2DMSArray.FirstArraySlice = first_array;
 				}
 				break;
 			case TextureType::Texture3D:
-				assert(arraySize == 1);
-				viewDesc.Texture3D.MipLevels = mipCount;
-				viewDesc.Texture3D.MostDetailedMip = firstMip;
+				assert(array_size == 1);
+				viewDesc.Texture3D.MipLevels = mip_count;
+				viewDesc.Texture3D.MostDetailedMip = first_mip;
 				break;
 			case TextureType::TextureCube:
-				if (arraySize > 1)
+				if (array_size > 1)
 				{
 					viewDesc.TextureCubeArray.First2DArrayFace = 0;
-					viewDesc.TextureCubeArray.NumCubes = arraySize;
-					viewDesc.TextureCubeArray.MipLevels = mipCount;
-					viewDesc.TextureCubeArray.MostDetailedMip = firstMip;
+					viewDesc.TextureCubeArray.NumCubes = array_size;
+					viewDesc.TextureCubeArray.MipLevels = mip_count;
+					viewDesc.TextureCubeArray.MostDetailedMip = first_mip;
 				}
 				else
 				{
-					viewDesc.TextureCube.MipLevels = mipCount;
-					viewDesc.TextureCube.MostDetailedMip = firstMip;
+					viewDesc.TextureCube.MipLevels = mip_count;
+					viewDesc.TextureCube.MostDetailedMip = first_mip;
 				}
 				break;
 			default:
