@@ -2,6 +2,7 @@
 
 #include "rhi_command_list.d3d12.h"
 #include "rhi_resource.d3d12.h"
+#include "rhi_resource_view.d3d12.h"
 
 namespace ngl
 {

@@ -57,6 +57,9 @@
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_resource.d3d12.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="src\ngl\rhi\d3d12\rhi_resource_view.d3d12.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\util\bit_operation.h">
@@ -135,6 +138,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\rhi\rhi_resource.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource_view.d3d12.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
