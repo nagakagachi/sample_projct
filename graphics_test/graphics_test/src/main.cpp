@@ -248,13 +248,13 @@ bool AppGame::Initialize()
 		// ConstantBuffer作成
 		ngl::rhi::BufferDep::Desc cb_desc = {};
 		cb_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		cb_desc.usage_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
+		cb_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 		cb_desc.element_byte_size = sizeof(CbSamplePs);
 		cb_desc.element_count = 1;
 
 		if (cb_sample_ps_.Initialize(&device_, cb_desc))
 		{
-			if (auto* map_data = cb_sample_ps_.Map<CbSamplePs>())
+			if (auto* map_data = reinterpret_cast<CbSamplePs*>(cb_sample_ps_.Map()))
 			{
 				map_data->cb_param0[0] = 1.0f;
 				map_data->cb_param0[1] = 0.5f;
@@ -290,13 +290,13 @@ bool AppGame::Initialize()
 
 		ngl::rhi::BufferDep::Desc vtx_desc = {};
 		vtx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		vtx_desc.usage_flag = (int)ngl::rhi::ResourceBindFlag::VertexBuffer;
+		vtx_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::VertexBuffer;
 		vtx_desc.element_count = static_cast<ngl::u32>(std::size(sample_vtx_list));
 		vtx_desc.element_byte_size = sizeof(sample_vtx_list[0]);
 
 		if (vb_sample_.Initialize(&device_, vtx_desc))
 		{
-			if (auto* map_data = vb_sample_.Map<Vector4>())
+			if (auto* map_data = reinterpret_cast<Vector4*>(vb_sample_.Map()))
 			{
 				memcpy(map_data, sample_vtx_list, sizeof(sample_vtx_list));
 
@@ -319,7 +319,7 @@ bool AppGame::Initialize()
 
 		ngl::rhi::BufferDep::Desc idx_desc = {};
 		idx_desc.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
-		idx_desc.usage_flag = (int)ngl::rhi::ResourceBindFlag::IndexBuffer;
+		idx_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::IndexBuffer;
 		idx_desc.element_count = static_cast<ngl::u32>(std::size(sample_index_data));
 		idx_desc.element_byte_size = sizeof(sample_index_data[0]);
 
@@ -327,7 +327,7 @@ bool AppGame::Initialize()
 		{
 			assert(false);
 		}
-		if (auto* map_data = ib_sample_.Map<int>())
+		if (auto* map_data = reinterpret_cast<int*>(ib_sample_.Map()))
 		{
 			memcpy(map_data, sample_index_data, sizeof(sample_index_data));
 		}
@@ -374,9 +374,9 @@ bool AppGame::Initialize()
 		tex_desc00.height = 64;
 		tex_desc00.depth = 1;
 		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_SNORM;
-		tex_desc00.usage_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
+		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 
-		tex_desc00.allow_uav = true;// UAV
+		tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;// UAV
 
 		if (!tex_.Initialize(&device_, tex_desc00))
 		{
@@ -392,9 +392,7 @@ bool AppGame::Initialize()
 		tex_desc00.height = 64;
 		tex_desc00.depth = 1;
 		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_SNORM;
-		tex_desc00.usage_flag = (int)ngl::rhi::BufferUsage::ShaderResource;
-
-		tex_desc00.allow_uav = false;// UAV
+		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 
 		if (!tex_.Initialize(&device_, tex_desc00))
 		{
@@ -569,20 +567,20 @@ void AppGame::TestCode()
 
 	if(true)
 	{
-		bool is_uav_test = false;
+		bool is_uav_test = true;
 
 
 		// Buffer生成テスト
 		ngl::rhi::BufferDep buffer0;
 		ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 		buffer_desc0.element_byte_size = sizeof(ngl::u64);
-		buffer_desc0.usage_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
+		buffer_desc0.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 		buffer_desc0.element_count = 1;
 		buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
 		if(is_uav_test)
 		{
 			// UAV用設定.
-			buffer_desc0.allow_uav = true;
+			buffer_desc0.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;
 			// UAVはDefaultHeap必須
 			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::DEFAULT;
 		}
@@ -598,7 +596,7 @@ void AppGame::TestCode()
 			assert(false);
 		}
 
-		if (auto* buffer0_map = buffer0.Map<ngl::u64>())
+		if (auto* buffer0_map = reinterpret_cast<ngl::u64*>(buffer0.Map()))
 		{
 			*buffer0_map = 111u;
 			buffer0.Unmap();
@@ -657,10 +655,10 @@ void AppGame::TestCode()
 		tex_desc00.height = 64;
 		tex_desc00.depth = 64;
 		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R16_FLOAT;
-		tex_desc00.usage_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
+		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 		
-		//tex_desc00.usage_flag |= (int)ngl::rhi::BufferUsage::RenderTarget;
-		tex_desc00.allow_uav = true;// UAV
+		//tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::RenderTarget;
+		tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;// UAV
 
 		ngl::rhi::TextureDep tex00;
 		if (!tex00.Initialize( &device_, tex_desc00))
@@ -746,7 +744,7 @@ void AppGame::TestCode()
 				ngl::rhi::BufferDep::Desc buffer_desc0 = {};
 				buffer_desc0.element_byte_size = sizeof(CbTest);
 				buffer_desc0.element_count = 1;
-				buffer_desc0.usage_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
+				buffer_desc0.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 				buffer_desc0.initial_state = ngl::rhi::ResourceState::GENERAL;
 				// CPU->GPU Uploadリソース
 				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;
@@ -757,7 +755,7 @@ void AppGame::TestCode()
 					assert(false);
 				}
 
-				if (auto* buffer0_map = buffer0.Map<CbTest>())
+				if (auto* buffer0_map = reinterpret_cast<CbTest*>(buffer0.Map()))
 				{
 					buffer0_map->cb_param0 = 2.0f;
 					buffer0_map->cb_param1 = 1;

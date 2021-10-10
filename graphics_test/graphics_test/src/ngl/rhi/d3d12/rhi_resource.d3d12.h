@@ -21,7 +21,7 @@ namespace ngl
 		struct PersistentDescriptorInfo;
 
 
-		enum class ResourceType
+		enum class ResourceType : u32
 		{
 			Buffer,                 ///< Buffer. Can be bound to all shader-stages
 			Texture1D,              ///< 1D texture. Can be bound as render-target, shader-resource and UAV
@@ -31,40 +31,20 @@ namespace ngl
 			Texture2DMultisample,   ///< 2D multi-sampled texture. Can be bound as render-target, shader-resource and UAV
 		};
 
-
-		enum class ResourceBindFlag : int
+		struct ResourceBindFlag
 		{
-			ConstantBuffer	= (1 << 0),
-			VertexBuffer	= (1 << 1),
-			IndexBuffer		= (1 << 2),
-			ShaderResource	= (1 << 3),
-			UnorderedAccess = (1 << 4),
-			RenderTarget	= (1 << 5),
-			DepthStencil	= (1 << 6),
-			IndirectArg		= (1 << 7),
+			static constexpr u32 None				= (1 << 0);
+			static constexpr u32 ConstantBuffer		= (1 << 1);
+			static constexpr u32 VertexBuffer		= (1 << 2);
+			static constexpr u32 IndexBuffer		= (1 << 3);
+			static constexpr u32 ShaderResource		= (1 << 4);
+			static constexpr u32 UnorderedAccess	= (1 << 5);
+			static constexpr u32 RenderTarget		= (1 << 6);
+			static constexpr u32 DepthStencil		= (1 << 7);
+			static constexpr u32 IndirectArg		= (1 << 8);
 
 			//AccelerationStructure = 0x80000000,  ///< The resource will be bound as an acceleration structure
 		};
-
-		/*
-		// BufferやTextureの基底.
-		// 具体的な生成処理などは派生クラス(Texture)などで実装
-		class ResourceInterface
-		{
-		public:
-			ResourceInterface(ResourceType type, ResourceBindFlag bindflag)
-				:	type_(type)
-				,	bindflag_(bindflag)
-			{
-			}
-
-		private:
-			ResourceType		type_		= ResourceType::Buffer;
-			ResourceBindFlag	bindflag_	= ResourceBindFlag::ConstantBuffer;
-		};
-		*/
-
-
 
 		// Buffer
 		class BufferDep
@@ -74,10 +54,10 @@ namespace ngl
 			{
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
-				u32					usage_flag = 0;	// BufferUsage bitmask.
+				// bitmask of ngl::rhi::ResourceBindFlag.
+				u32					bind_flag = 0;
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
-				bool				allow_uav = false;
 			};
 
 			BufferDep();
@@ -86,37 +66,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
-			template<typename T = void>
-			T* Map()
-			{
-				// DefaultヒープリソースはMap不可
-				if (ResourceHeapType::DEFAULT == desc_.heap_type)
-				{
-					std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
-					return nullptr;
-				}
-				if (map_ptr_)
-				{
-					// Map済みの場合はそのまま返す.
-					return reinterpret_cast<T*>(map_ptr_);
-				}
-
-				// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
-				D3D12_RANGE read_range = { 0, 0 };
-				if (ResourceHeapType::READBACK == desc_.heap_type)
-				{
-					read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
-				}
-
-				if (FAILED(resource_->Map(0, &read_range, &map_ptr_)))
-				{
-					std::cout << "ERROR: Resouce Map" << std::endl;
-					map_ptr_ = nullptr;
-					return nullptr;
-				}
-				return reinterpret_cast<T*>(map_ptr_);
-			}
-
+			void* Map();
 			void Unmap();
 
 			const u32 GetAlignedBufferSize() const { return allocated_byte_size_; }
@@ -161,11 +111,10 @@ namespace ngl
 
 				Dimension			dimension = Dimension::Texture2D;
 
-				// bitmask of ngl::rhi::BufferUsage.
-				u32					usage_flag = 0;
+				// bitmask of ngl::rhi::ResourceBindFlag.
+				u32					bind_flag = 0;
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
-				bool				allow_uav = false;
 			};
 
 			TextureDep();
@@ -174,29 +123,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
-			template<typename T = void>
-			T* Map()
-			{
-				// DefaultヒープリソースはMap不可
-				if (ResourceHeapType::DEFAULT == desc_.heap_type)
-				{
-					std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
-					return nullptr;
-				}
-				if (map_ptr_)
-				{
-					// Map済みの場合はそのまま返す.
-					return reinterpret_cast<T*>(map_ptr_);
-				}
-				if (FAILED(resource_->Map(0, nullptr, &map_ptr_)))
-				{
-					std::cout << "ERROR: Resouce Map" << std::endl;
-					map_ptr_ = nullptr;
-					return nullptr;
-				}
-				return reinterpret_cast<T*>(map_ptr_);
-			}
-
+			void* Map();
 			void Unmap();
 
 			const u32 GetAlignedBufferSize() const { return allocated_byte_size_; }

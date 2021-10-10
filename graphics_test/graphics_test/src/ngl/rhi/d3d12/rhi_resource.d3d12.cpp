@@ -24,7 +24,7 @@ namespace ngl
 		{
 			if (!p_device)
 				return false;
-			if (0 == desc.usage_flag)
+			if (0 == desc.bind_flag)
 			{
 				assert(false);
 				return false;
@@ -70,11 +70,11 @@ namespace ngl
 			D3D12_RESOURCE_FLAGS need_flags = D3D12_RESOURCE_FLAG_NONE;
 			// 用途によるアライメント.
 			u32 need_alignment = 16;
-			if ((int)ResourceBindFlag::ConstantBuffer & desc_.usage_flag)
+			if (ResourceBindFlag::ConstantBuffer & desc_.bind_flag)
 			{
 				need_alignment = static_cast<u32>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 			}
-			if (desc.allow_uav)
+			if (ResourceBindFlag::UnorderedAccess & desc.bind_flag)
 			{
 				need_alignment = static_cast<u32>(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT);
 				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
@@ -143,6 +143,35 @@ namespace ngl
 		{
 			resource_ = nullptr;
 		}
+		void* BufferDep::Map()
+		{
+			// DefaultヒープリソースはMap不可
+			if (ResourceHeapType::DEFAULT == desc_.heap_type)
+			{
+				std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
+				return nullptr;
+			}
+			if (map_ptr_)
+			{
+				// Map済みの場合はそのまま返す.
+				return map_ptr_;
+			}
+
+			// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
+			D3D12_RANGE read_range = { 0, 0 };
+			if (ResourceHeapType::READBACK == desc_.heap_type)
+			{
+				read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
+			}
+
+			if (FAILED(resource_->Map(0, &read_range, &map_ptr_)))
+			{
+				std::cout << "ERROR: Resouce Map" << std::endl;
+				map_ptr_ = nullptr;
+				return nullptr;
+			}
+			return map_ptr_;
+		}
 		void BufferDep::Unmap()
 		{
 			if (!map_ptr_)
@@ -179,7 +208,7 @@ namespace ngl
 		{
 			if (!p_device)
 				return false;
-			if (0 == desc.usage_flag)
+			if (0 == desc.bind_flag)
 			{
 				assert(false);
 				return false;
@@ -202,8 +231,9 @@ namespace ngl
 				return false;
 			}
 
-			const bool is_depth_stencil = (int)ResourceBindFlag::DepthStencil & desc_.usage_flag;
-			const bool is_render_target = (int)ResourceBindFlag::RenderTarget & desc_.usage_flag;
+			const bool is_depth_stencil = ResourceBindFlag::DepthStencil & desc_.bind_flag;
+			const bool is_render_target = ResourceBindFlag::RenderTarget & desc_.bind_flag;
+			const bool is_uav = ResourceBindFlag::UnorderedAccess & desc_.bind_flag;
 
 
 			// 深度バッファ用にフォーマット変換
@@ -264,7 +294,7 @@ namespace ngl
 			{
 				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 			}
-			if (desc_.allow_uav)
+			if (is_uav)
 			{
 				need_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			}
@@ -336,6 +366,27 @@ namespace ngl
 		{
 			resource_ = nullptr;
 		}
+		void* TextureDep::Map()
+		{
+			// DefaultヒープリソースはMap不可
+			if (ResourceHeapType::DEFAULT == desc_.heap_type)
+			{
+				std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
+				return nullptr;
+			}
+			if (map_ptr_)
+			{
+				// Map済みの場合はそのまま返す.
+				return map_ptr_;
+			}
+			if (FAILED(resource_->Map(0, nullptr, &map_ptr_)))
+			{
+				std::cout << "ERROR: Resouce Map" << std::endl;
+				map_ptr_ = nullptr;
+				return nullptr;
+			}
+			return map_ptr_;
+		}
 		void TextureDep::Unmap()
 		{
 			if (!map_ptr_)
@@ -366,7 +417,7 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-			if ((int)ResourceBindFlag::ConstantBuffer != buffer->GetDesc().usage_flag)
+			if (!(ResourceBindFlag::ConstantBuffer & buffer->GetDesc().bind_flag))
 			{
 				assert(false);
 				return false;
@@ -422,7 +473,7 @@ namespace ngl
 			}
 
 			const auto& buffer_desc = buffer->GetDesc();
-			if ((int)ResourceBindFlag::VertexBuffer != buffer_desc.usage_flag)
+			if (!(ResourceBindFlag::VertexBuffer & buffer_desc.bind_flag))
 			{
 				assert(false);
 				return false;
@@ -462,7 +513,7 @@ namespace ngl
 			}
 
 			const auto& buffer_desc = buffer->GetDesc();
-			if ((int)ResourceBindFlag::IndexBuffer != buffer_desc.usage_flag)
+			if (!(ResourceBindFlag::IndexBuffer & buffer_desc.bind_flag))
 			{
 				assert(false);
 				return false;

@@ -10,7 +10,6 @@ namespace ngl
 {
 	namespace rhi
 	{
-
 		enum class ResourceFormat
 		{
 			NGL_FORMAT_UNKNOWN,
