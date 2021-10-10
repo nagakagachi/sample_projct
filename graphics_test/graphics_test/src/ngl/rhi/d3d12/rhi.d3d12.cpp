@@ -260,7 +260,7 @@ namespace ngl
 			DXGI_SWAP_CHAIN_DESC1 obj_desc = {};
 			obj_desc.Width = screen_w;
 			obj_desc.Height = screen_h;
-			obj_desc.Format = desc.format;
+			obj_desc.Format = ConvertResourceFormat(desc.format);
 			obj_desc.Stereo = false;
 			obj_desc.SampleDesc.Count = 1;
 			obj_desc.SampleDesc.Quality = 0;

@@ -1,4 +1,4 @@
-
+ï»¿
 #include "rhi_resource_view.d3d12.h"
 
 #include "rhi.d3d12.h"
@@ -47,7 +47,7 @@ namespace ngl
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
 			view_desc.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_desc.SizeInBytes = buffer->GetAlignedBufferSize();// ƒAƒ‰ƒCƒƒ“ƒgl—¶ƒTƒCƒY‚ðŽw’è‚µ‚Ä‚¢‚é.
+			view_desc.SizeInBytes = buffer->GetAlignedBufferSize();// ã‚¢ãƒ©ã‚¤ãƒ¡ãƒ³ãƒˆè€ƒæ…®ã‚µã‚¤ã‚ºã‚’æŒ‡å®šã—ã¦ã„ã‚‹.
 			auto handle = view_.cpu_handle;
 			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
 
@@ -160,12 +160,12 @@ namespace ngl
 			if (!p_device)
 				return false;
 
-			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Sampler‚Íê—p‚ÌAllocator‚ð—˜—p.
+			auto&& descriptor_allocator = p_device->GetPersistentSamplerDescriptorAllocator();// Samplerã¯å°‚ç”¨ã®Allocatorã‚’åˆ©ç”¨.
 			view_ = descriptor_allocator->Allocate();
 			if (!view_.IsValid())
 				return false;
 
-			// Persistentã‚Éì¬.
+			// Persistentä¸Šã«ä½œæˆ.
 			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
 			return true;
 		}
@@ -178,61 +178,6 @@ namespace ngl
 			}
 			view_ = {};
 		}
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		RenderTargetViewDep::RenderTargetViewDep()
-		{
-		}
-		RenderTargetViewDep::~RenderTargetViewDep()
-		{
-			Finalize();
-		}
-		// SwapChain‚©‚çRTVì¬.
-		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
-		{
-			if (!p_device || !p_swapchain)
-				return false;
-
-			{
-				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-				desc.NumDescriptors = 1;
-				desc.NodeMask = 0;
-				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
-				{
-					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
-					return false;
-				}
-			}
-			{
-				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
-				if (!buffer)
-				{
-					std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
-					return false;
-				}
-
-				auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
-				p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
-			}
-
-			return true;
-		}
-
-		void RenderTargetViewDep::Finalize()
-		{
-			p_heap_ = nullptr;
-		}
-
-		D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetViewDep::GetD3D12DescriptorHandle() const
-		{
-			return p_heap_->GetCPUDescriptorHandleForHeapStart();
-		}
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -360,36 +305,36 @@ namespace ngl
 			if (!p_device || !p_texture)
 				return false;
 
-			const auto& res_desc = p_texture->GetDesc();
+			//const auto& res_desc = p_texture->GetDesc();
 
-			// Mip‚âArray‚Ì’l‚Ì”ÍˆÍƒNƒ‰ƒ“ƒv‘¼.
-			if (first_mip >= res_desc.mip_count)
+			// Mipã‚„Arrayã®å€¤ã®ç¯„å›²ã‚¯ãƒ©ãƒ³ãƒ—ä»–.
+			if (first_mip >= p_texture->GetMipCount())
 			{
-				first_mip = res_desc.mip_count - 1;
+				first_mip = p_texture->GetMipCount() - 1;
 				mip_count = 1;
 			}
-			else if ((mip_count == 0) || (mip_count > res_desc.mip_count - first_mip))
+			else if ((mip_count == 0) || (mip_count > p_texture->GetMipCount() - first_mip))
 			{
-				mip_count = res_desc.mip_count - first_mip;
+				mip_count = p_texture->GetMipCount() - first_mip;
 			}
-			if (first_array >= res_desc.array_size)
+			if (first_array >= p_texture->GetArraySize())
 			{
-				first_array = res_desc.array_size - 1;
+				first_array = p_texture->GetArraySize() - 1;
 				array_size = 1;
 			}
-			else if ((array_size == 0) || (array_size > res_desc.array_size - first_array))
+			else if ((array_size == 0) || (array_size > p_texture->GetArraySize() - first_array))
 			{
-				array_size = res_desc.array_size - first_array;
+				array_size = p_texture->GetArraySize() - first_array;
 			}
 
-			bool isTextureArray = res_desc.array_size > 1;
+			bool isTextureArray = p_texture->GetArraySize() > 1;
 
 			D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
 			viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			viewDesc.Format = ConvertResourceFormat(depthToColorFormat(p_texture->GetDesc().format));
-			viewDesc.ViewDimension = getTextureViewDimension<D3D12_SRV_DIMENSION>(getTextureDimension(res_desc.type, isTextureArray));
+			viewDesc.ViewDimension = getTextureViewDimension<D3D12_SRV_DIMENSION>(getTextureDimension(p_texture->GetType(), isTextureArray));
 
-			switch (res_desc.type)
+			switch (p_texture->GetType())
 			{
 			case TextureType::Texture1D:
 				if (isTextureArray)
@@ -449,7 +394,7 @@ namespace ngl
 				assert(false);
 			}
 
-			// DescriptorŠm•Û.
+			// Descriptorç¢ºä¿.
 			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
 			view_ = descriptor_allocator->Allocate();
 			if (!view_.IsValid())
@@ -458,7 +403,7 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-			// View¶¬.
+			// Viewç”Ÿæˆ.
 			p_device->GetD3D12Device()->CreateShaderResourceView(p_texture->GetD3D12Resource(), &viewDesc, view_.cpu_handle);
 
 			return true;
@@ -473,6 +418,183 @@ namespace ngl
 			}
 			view_ = {};
 		}
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		template<typename DescType>
+		DescType createDsvRtvUavDescCommon(const TextureDep* p_texture, uint32_t mip_level, uint32_t first_array_slice, uint32_t array_size)
+		{
+			assert(p_texture);   // Buffers should not get here
+
+			uint32_t arrayMultiplier = (p_texture->GetType() == TextureType::TextureCube) ? 6 : 1;
+
+			if (array_size + first_array_slice > p_texture->GetArraySize())
+			{
+				array_size = p_texture->GetArraySize() - first_array_slice;
+			}
+
+			DescType desc = {};
+			desc.Format = ConvertResourceFormat(p_texture->GetFormat());
+			desc.ViewDimension = getTextureViewDimension<decltype(desc.ViewDimension)>(getTextureDimension(p_texture->GetType(), p_texture->GetArraySize() > 1));
+
+			switch (p_texture->GetType())
+			{
+			case TextureType::Texture1D:
+				if (p_texture->GetArraySize() > 1)
+				{
+					desc.Texture1DArray.ArraySize = array_size;
+					desc.Texture1DArray.FirstArraySlice = first_array_slice;
+					desc.Texture1DArray.MipSlice = mip_level;
+				}
+				else
+				{
+					desc.Texture1D.MipSlice = mip_level;
+				}
+				break;
+			case TextureType::Texture2D:
+			case TextureType::TextureCube:
+				if (p_texture->GetArraySize() * arrayMultiplier > 1)
+				{
+					desc.Texture2DArray.ArraySize = array_size * arrayMultiplier;
+					desc.Texture2DArray.FirstArraySlice = first_array_slice * arrayMultiplier;
+					desc.Texture2DArray.MipSlice = mip_level;
+				}
+				else
+				{
+					desc.Texture2D.MipSlice = mip_level;
+				}
+				break;
+			case TextureType::Texture2DMultisample:
+				if constexpr (std::is_same_v<DescType, D3D12_DEPTH_STENCIL_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
+				{
+					if (p_texture->GetArraySize() > 1)
+					{
+						desc.Texture2DMSArray.ArraySize = array_size;
+						desc.Texture2DMSArray.FirstArraySlice = first_array_slice;
+					}
+				}
+				else
+				{
+					throw std::exception("Texture2DMultisample does not support UAV views");
+				}
+				break;
+			case TextureType::Texture3D:
+				if constexpr (std::is_same_v<DescType, D3D12_UNORDERED_ACCESS_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
+				{
+					assert(p_texture->GetArraySize() == 1);
+					desc.Texture3D.MipSlice = mip_level;
+					desc.Texture3D.FirstWSlice = 0;
+					desc.Texture3D.WSize = p_texture->GetDepth(mip_level);
+				}
+				else
+				{
+					throw std::exception("Texture3D does not support DSV views");
+				}
+				break;
+			default:
+				assert(false);
+			}
+
+			return desc;
+		}
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC createDsvDesc(const TextureDep* p_texture, uint32_t mipLevel, uint32_t firstArraySlice, uint32_t arraySize)
+		{
+			return createDsvRtvUavDescCommon<D3D12_DEPTH_STENCIL_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
+		}
+
+		D3D12_RENDER_TARGET_VIEW_DESC createRtvDesc(const TextureDep* p_texture, uint32_t mipLevel, uint32_t firstArraySlice, uint32_t arraySize)
+		{
+			return createDsvRtvUavDescCommon<D3D12_RENDER_TARGET_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
+		}
+
+
+		DepthStencilViewDep::DepthStencilViewDep()
+		{
+		}
+		DepthStencilViewDep::~DepthStencilViewDep()
+		{
+			Finalize();
+		}
+		bool DepthStencilViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size)
+		{
+			assert(p_device);
+			assert(p_texture);
+
+			D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, first_mip, first_array, array_size);
+
+			// å°‚æœ‰Heapç¢ºä¿.
+			{
+				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+				desc.NumDescriptors = 1;
+				desc.NodeMask = 0;
+				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
+				{
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+					return false;
+				}
+			}
+			// å°‚æœ‰Heapã«Descriptorä½œæˆ.
+			{
+				p_device->GetD3D12Device()->CreateDepthStencilView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
+			}
+
+			return true;
+		}
+		void DepthStencilViewDep::Finalize()
+		{
+		}
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		RenderTargetViewDep::RenderTargetViewDep()
+		{
+		}
+		RenderTargetViewDep::~RenderTargetViewDep()
+		{
+			Finalize();
+		}
+		// SwapChainã‹ã‚‰RTVä½œæˆ.
+		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
+		{
+			if (!p_device || !p_swapchain)
+				return false;
+
+			{
+				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+				desc.NumDescriptors = 1;
+				desc.NodeMask = 0;
+				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
+				{
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+					return false;
+				}
+			}
+			{
+				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
+				if (!buffer)
+				{
+					std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
+					return false;
+				}
+
+				auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
+				p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
+			}
+
+			return true;
+		}
+		void RenderTargetViewDep::Finalize()
+		{
+			p_heap_ = nullptr;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 	}
 }

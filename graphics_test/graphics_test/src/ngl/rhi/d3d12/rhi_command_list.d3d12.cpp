@@ -94,17 +94,38 @@ namespace ngl
 		{
 			p_command_list_->Close();
 		}
-
+#if 0
 		void GraphicsCommandListDep::SetRenderTargetSingle(RenderTargetViewDep* p_rtv)
 		{
 			auto rtv = p_rtv->GetD3D12DescriptorHandle();
 			p_command_list_->OMSetRenderTargets(1, &rtv, true, nullptr);
 		}
-		void GraphicsCommandListDep::ClearRenderTarget(RenderTargetViewDep* p_rtv, float(color)[4])
+#endif
+		void GraphicsCommandListDep::SetRenderTargets(const RenderTargetViewDep** pp_rtv, int num_rtv, const DepthStencilViewDep* p_dsv)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[16];
+			assert(std::size(rtvs) >= num_rtv);
+			for (auto i = 0; i < num_rtv; ++i)
+			{
+				rtvs[i] = pp_rtv[i]->GetD3D12DescriptorHandle();
+			}
+
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = p_dsv->GetD3D12DescriptorHandle();
+			GetD3D12GraphicsCommandList()->OMSetRenderTargets(num_rtv, rtvs, false, &dsv);
+		};
+		void GraphicsCommandListDep::ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4])
 		{
 			auto rtv = p_rtv->GetD3D12DescriptorHandle();
 			p_command_list_->ClearRenderTargetView(rtv, color, 0u, nullptr);
 		}
+		void GraphicsCommandListDep::ClearDepthTarget(const DepthStencilViewDep* p_dsv, float depth, uint8_t stencil, bool clearDepth, bool clearStencil)
+		{
+			uint32_t flags = clearDepth ? D3D12_CLEAR_FLAG_DEPTH : 0;
+			flags |= clearStencil ? D3D12_CLEAR_FLAG_STENCIL : 0;
+
+			GetD3D12GraphicsCommandList()->ClearDepthStencilView(p_dsv->GetD3D12DescriptorHandle(), D3D12_CLEAR_FLAGS(flags), depth, stencil, 0, nullptr);
+		};
+
 
 		// バリア
 		void GraphicsCommandListDep::ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next)
@@ -114,6 +135,29 @@ namespace ngl
 			if (prev == next)
 				return;
 			auto* resource = p_swapchain->GetD3D12Resource(buffer_index);
+
+			D3D12_RESOURCE_STATES state_before = ConvertResourceState(prev);
+			D3D12_RESOURCE_STATES state_after = ConvertResourceState(next);
+
+			D3D12_RESOURCE_BARRIER desc = {};
+			desc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			desc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+			desc.Transition.pResource = resource;
+			desc.Transition.StateBefore = state_before;
+			desc.Transition.StateAfter = state_after;
+			// 現状は全サブリソースを対象.
+			desc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+			p_command_list_->ResourceBarrier(1, &desc);
+		}
+		void GraphicsCommandListDep::ResourceBarrier(TextureDep* p_texture, ResourceState prev, ResourceState next)
+		{
+			if (!p_texture)
+				return;
+			if (prev == next)
+				return;
+			auto* resource = p_texture->GetD3D12Resource();
 
 			D3D12_RESOURCE_STATES state_before = ConvertResourceState(prev);
 			D3D12_RESOURCE_STATES state_after = ConvertResourceState(next);

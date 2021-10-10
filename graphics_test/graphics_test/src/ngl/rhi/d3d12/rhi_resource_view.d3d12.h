@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <iostream>
 
@@ -102,7 +102,7 @@ namespace ngl
 		public:
 			struct Desc
 			{
-				// TODO. ‚ ‚Æ‚Å©‘O’è‹`‚É’u‚«Š·‚¦‚é.
+				// TODO. ã‚ã¨ã§è‡ªå‰å®šç¾©ã«ç½®ãæ›ãˆã‚‹.
 				D3D12_SAMPLER_DESC	desc;
 			};
 			SamplerDep();
@@ -127,19 +127,41 @@ namespace ngl
 			RenderTargetViewDep();
 			~RenderTargetViewDep();
 
-			// SwapChain‚©‚çRTVì¬.
+			// SwapChainã‹ã‚‰RTVä½œæˆ.
 			bool Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index);
 
 			// TODO. Initialize from Texture.
 
 			void Finalize();
 
-			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const;
+			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const
+			{
+				return p_heap_->GetCPUDescriptorHandleForHeapStart();
+			}
 		private:
-			// Œ»ó‚ÌRTV‚âDSV‚ÍHeap‚ğ‚»‚ê‚¼‚êê—L‚·‚é. –â‘è‚ª‚ ‚ê‚ÎƒOƒ[ƒoƒ‹‚Èê—pHeap‚©‚çŠm•Û‚·‚é.
+			// ç¾çŠ¶ã®RTVã‚„DSVã¯Heapã‚’ãã‚Œãã‚Œå°‚æœ‰ã™ã‚‹. å•é¡ŒãŒã‚ã‚Œã°ã‚°ãƒ­ãƒ¼ãƒãƒ«ãªå°‚ç”¨Heapã‹ã‚‰ç¢ºä¿ã™ã‚‹.
 			CComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
+		// DepthStencilView
+		class DepthStencilViewDep
+		{
+		public:
+			DepthStencilViewDep();
+			~DepthStencilViewDep();
+
+			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size);
+
+			void Finalize();
+
+			D3D12_CPU_DESCRIPTOR_HANDLE GetD3D12DescriptorHandle() const
+			{
+				return p_heap_->GetCPUDescriptorHandleForHeapStart();
+			}
+		private:
+			// ç¾çŠ¶ã®RTVã‚„DSVã¯Heapã‚’ãã‚Œãã‚Œå°‚æœ‰ã™ã‚‹. å•é¡ŒãŒã‚ã‚Œã°ã‚°ãƒ­ãƒ¼ãƒãƒ«ãªå°‚ç”¨Heapã‹ã‚‰ç¢ºä¿ã™ã‚‹.
+			CComPtr<ID3D12DescriptorHeap> p_heap_;
+		};
 
 		// ShaderResourceView
 		class ShaderResourceViewDep
@@ -148,8 +170,10 @@ namespace ngl
 			ShaderResourceViewDep();
 			~ShaderResourceViewDep();
 
-			// SwapChain‚©‚çRTVì¬.
+			// SwapChainã‹ã‚‰RTVä½œæˆ.
 			bool Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 mip_count, u32 first_array, u32 array_size);
+			
+			// TODO. Initialize from Buffer.
 
 			void Finalize();
 

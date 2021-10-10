@@ -17,6 +17,10 @@ namespace ngl
 {
 	namespace rhi
 	{
+		class TextureDep;
+		class RenderTargetViewDep;
+		class DepthStencilViewDep;
+
 		// CommandList
 		class GraphicsCommandListDep
 		{
@@ -40,11 +44,7 @@ namespace ngl
 			void Begin();
 			void End();
 
-			void SetRenderTargetSingle(RenderTargetViewDep* p_rtv);
-			void ClearRenderTarget(RenderTargetViewDep* p_rtv, float(color)[4]);
-
-			// SwapChainに対してBarrier
-			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
+			void SetRenderTargets(const RenderTargetViewDep** pp_rtv, int num_rtv, const DepthStencilViewDep* p_dsv);
 
 			void SetViewports(u32 num, const  D3D12_VIEWPORT* p_viewports);
 			void SetScissor(u32 num, const  D3D12_RECT* p_rects);
@@ -56,9 +56,17 @@ namespace ngl
 			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views);
 			void SetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW* p_view);
 
-
 			void DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance);
 			void DrawIndexedInstanced(u32 index_count_per_instance, u32 instance_count, u32 start_index_location, s32  base_vertex_location, u32 start_instance_location);
+
+
+
+			void ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4]);
+			void ClearDepthTarget(const DepthStencilViewDep* p_dsv, float depth, uint8_t stencil, bool clearDepth, bool clearStencil);
+
+			// Barrier
+			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
+			void ResourceBarrier(TextureDep* p_texture, ResourceState prev, ResourceState next);
 
 		public:
 			// 検証中は直接利用するかもしれないので取得関数追加

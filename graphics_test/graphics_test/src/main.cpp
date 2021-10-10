@@ -51,10 +51,6 @@ private:
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
 	
-	// SwapChain
-	ngl::rhi::SwapChainDep						swapchain_;
-	std::vector<ngl::rhi::RenderTargetViewDep>	swapchain_rtvs_;
-	std::vector <ngl::rhi::ResourceState>		swapchain_resource_state_;
 
 	// CommandQueue実行完了待機用Fence
 	ngl::rhi::FenceDep							wait_fence_;
@@ -63,10 +59,16 @@ private:
 	// CommandQueue実行完了待機用オブジェクト
 	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
 
-
-
 	ngl::rhi::GraphicsCommandListDep			gfx_command_list_;
 
+	// SwapChain
+	ngl::rhi::SwapChainDep						swapchain_;
+	std::vector<ngl::rhi::RenderTargetViewDep>	swapchain_rtvs_;
+	std::vector <ngl::rhi::ResourceState>		swapchain_resource_state_;
+
+	ngl::rhi::TextureDep						tex_depth_;
+	ngl::rhi::DepthStencilViewDep				tex_depth_dsv_;
+	ngl::rhi::ResourceState						tex_depth_state_;
 
 	ngl::rhi::ShaderDep							sample_vs_;
 	ngl::rhi::ShaderDep							sample_ps_;
@@ -122,8 +124,11 @@ AppGame::~AppGame()
 
 bool AppGame::Initialize()
 {
+	constexpr auto scree_w = 1280;
+	constexpr auto scree_h = 720;
+
 	// ウィンドウ作成
-	if(!window_.Initialize(_T("Test Window"), 1280, 720))
+	if(!window_.Initialize(_T("Test Window"), scree_w, scree_h))
 	{
 		return false;
 	}
@@ -145,7 +150,7 @@ bool AppGame::Initialize()
 	}
 	{
 		ngl::rhi::SwapChainDep::Desc swap_chain_desc;
-		swap_chain_desc.format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		swap_chain_desc.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R10G10B10A2_UNORM;// DXGI_FORMAT_R10G10B10A2_UNORM;
 		if (!swapchain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
 		{
 			std::cout << "ERROR: SwapChain Initialize" << std::endl;
@@ -160,6 +165,30 @@ bool AppGame::Initialize()
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::COMMON;
 		}
 
+	}
+
+	// DepthBuffer
+	{
+		ngl::rhi::TextureDep::Desc desc = {};
+		desc.bind_flag = ngl::rhi::ResourceBindFlag::DepthStencil | ngl::rhi::ResourceBindFlag::ShaderResource;
+		desc.format = ngl::rhi::ResourceFormat::NGL_FORMAT_D32_FLOAT;
+		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.width = scree_w;
+		desc.height = scree_h;
+
+		if (!tex_depth_.Initialize(&device_, desc))
+		{
+			std::cout << "ERROR: Create DepthTexture Initialize" << std::endl;
+			assert(false);
+		}
+
+		if (!tex_depth_dsv_.Initialize(&device_, &tex_depth_, 0, 0, 1))
+		{
+			std::cout << "ERROR: Create Dsv Initialize" << std::endl;
+			assert(false);
+		}
+
+		tex_depth_state_ = ngl::rhi::ResourceState::GENERAL;
 	}
 
 	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};
@@ -223,7 +252,16 @@ bool AppGame::Initialize()
 		desc.num_render_targets = 1;
 		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::NGL_FORMAT_R10G10B10A2_UNORM;
 		
+#if 1
+		// Dsv有効.
+		desc.depth_stencil_format = tex_depth_.GetFormat();
+		desc.depth_stencil_state.depth_enable = true;
+		desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::COMP_FUNC_LESS;
+
+		desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
+#else
 		desc.depth_stencil_state.depth_enable = false;
+#endif
 		desc.depth_stencil_state.stencil_enable = false;
 
 		desc.blend_state.target_blend_states[0].blend_enable = false;
@@ -459,13 +497,27 @@ bool AppGame::Execute()
 		{
 			gfx_command_list_.Begin();
 
-			// Swapchain State to RenderTarget
-			gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RENDER_TARGET);
-			swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RENDER_TARGET;
+			{
+				// Swapchain State to RenderTarget
+				gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RENDER_TARGET);
+				swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RENDER_TARGET;
+			}
+			{
+				// Dsv State
+				gfx_command_list_.ResourceBarrier(&tex_depth_, tex_depth_state_, ngl::rhi::ResourceState::DEPTH_WRITE);
+				tex_depth_state_ = ngl::rhi::ResourceState::DEPTH_WRITE;
+			}
 
-			gfx_command_list_.SetRenderTargetSingle(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()]);
-
+			// Rtvクリア.
 			gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_);
+			// Dsvクリア.
+			gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 1.0f, 0, true, false);
+
+			// Rtv, Dsv セット.
+			{
+				const auto* p_rtv = &swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()];
+				gfx_command_list_.SetRenderTargets(&p_rtv, 1, &tex_depth_dsv_);
+			}
 
 #if 1
 			// Draw Polygon

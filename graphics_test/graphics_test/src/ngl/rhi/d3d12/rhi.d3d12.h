@@ -192,7 +192,7 @@ namespace ngl
 
 			struct Desc
 			{
-				DXGI_FORMAT		format = {};
+				ResourceFormat		format = ResourceFormat::NGL_FORMAT_R10G10B10A2_UNORM;
 			};
 
 			SwapChainDep();
