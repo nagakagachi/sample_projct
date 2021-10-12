@@ -28,7 +28,7 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-			if (!and_nonzero(ResourceBindFlag::ConstantBuffer, buffer->GetDesc().bind_flag))
+			if (!check_bits(ResourceBindFlag::ConstantBuffer, buffer->GetDesc().bind_flag))
 			{
 				assert(false);
 				return false;
@@ -84,7 +84,7 @@ namespace ngl
 			}
 
 			const auto& buffer_desc = buffer->GetDesc();
-			if (!and_nonzero(ResourceBindFlag::VertexBuffer, buffer_desc.bind_flag))
+			if (!check_bits(ResourceBindFlag::VertexBuffer, buffer_desc.bind_flag))
 			{
 				assert(false);
 				return false;
@@ -124,7 +124,7 @@ namespace ngl
 			}
 
 			const auto& buffer_desc = buffer->GetDesc();
-			if (!and_nonzero(ResourceBindFlag::IndexBuffer, buffer_desc.bind_flag))
+			if (!check_bits(ResourceBindFlag::IndexBuffer, buffer_desc.bind_flag))
 			{
 				assert(false);
 				return false;
@@ -289,277 +289,281 @@ namespace ngl
 					return D3D12_RTV_DIMENSION_UNKNOWN;
 				}
 			}
-		}
 
-		ShaderResourceViewDep::ShaderResourceViewDep()
-		{
-		}
-		ShaderResourceViewDep::~ShaderResourceViewDep()
-		{
-			Finalize();
-		}
 
-		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 mip_count, u32 first_array, u32 array_size)
-		{
-			assert(p_device && p_texture);
-			if (!p_device || !p_texture)
-				return false;
 
-			if (!and_nonzero(ResourceBindFlag::ShaderResource, p_texture->GetBindFlag()))
+
+			// -------------------------------------------------------------------------------------------------------------------------------------------------
+			// Texture Dsv, Rtv, Uavの設定共通化.
+			template<typename DescType>
+			DescType createDsvRtvUavDescCommon(const TextureDep* p_texture, uint32_t mip_slice, uint32_t first_array_slice, uint32_t array_size)
 			{
-				assert(false);
-				return false;
-			}
+				assert(p_texture);   // Buffers should not get here
 
-			//const auto& res_desc = p_texture->GetDesc();
+				uint32_t arrayMultiplier = (p_texture->GetType() == TextureType::TextureCube) ? 6 : 1;
 
-			// MipやArrayの値の範囲クランプ他.
-			if (first_mip >= p_texture->GetMipCount())
-			{
-				first_mip = p_texture->GetMipCount() - 1;
-				mip_count = 1;
-			}
-			else if ((mip_count == 0) || (mip_count > p_texture->GetMipCount() - first_mip))
-			{
-				mip_count = p_texture->GetMipCount() - first_mip;
-			}
-			if (first_array >= p_texture->GetArraySize())
-			{
-				first_array = p_texture->GetArraySize() - 1;
-				array_size = 1;
-			}
-			else if ((array_size == 0) || (array_size > p_texture->GetArraySize() - first_array))
-			{
-				array_size = p_texture->GetArraySize() - first_array;
-			}
-
-			bool isTextureArray = p_texture->GetArraySize() > 1;
-
-			D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
-			viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			viewDesc.Format = ConvertResourceFormat(depthToColorFormat(p_texture->GetDesc().format));
-			viewDesc.ViewDimension = getTextureViewDimension<D3D12_SRV_DIMENSION>(getTextureDimension(p_texture->GetType(), isTextureArray));
-
-			switch (p_texture->GetType())
-			{
-			case TextureType::Texture1D:
-				if (isTextureArray)
+				if (array_size + first_array_slice > p_texture->GetArraySize())
 				{
-					viewDesc.Texture1DArray.MipLevels = mip_count;
-					viewDesc.Texture1DArray.MostDetailedMip = first_mip;
-					viewDesc.Texture1DArray.ArraySize = array_size;
-					viewDesc.Texture1DArray.FirstArraySlice = first_array;
+					array_size = p_texture->GetArraySize() - first_array_slice;
 				}
-				else
-				{
-					viewDesc.Texture1D.MipLevels = mip_count;
-					viewDesc.Texture1D.MostDetailedMip = first_mip;
-				}
-				break;
-			case TextureType::Texture2D:
-				if (isTextureArray)
-				{
-					viewDesc.Texture2DArray.MipLevels = mip_count;
-					viewDesc.Texture2DArray.MostDetailedMip = first_mip;
-					viewDesc.Texture2DArray.ArraySize = array_size;
-					viewDesc.Texture2DArray.FirstArraySlice = first_array;
-				}
-				else
-				{
-					viewDesc.Texture2D.MipLevels = mip_count;
-					viewDesc.Texture2D.MostDetailedMip = first_mip;
-				}
-				break;
-			case TextureType::Texture2DMultisample:
-				if (array_size > 1)
-				{
-					viewDesc.Texture2DMSArray.ArraySize = array_size;
-					viewDesc.Texture2DMSArray.FirstArraySlice = first_array;
-				}
-				break;
-			case TextureType::Texture3D:
-				assert(array_size == 1);
-				viewDesc.Texture3D.MipLevels = mip_count;
-				viewDesc.Texture3D.MostDetailedMip = first_mip;
-				break;
-			case TextureType::TextureCube:
-				if (array_size > 1)
-				{
-					viewDesc.TextureCubeArray.First2DArrayFace = 0;
-					viewDesc.TextureCubeArray.NumCubes = array_size;
-					viewDesc.TextureCubeArray.MipLevels = mip_count;
-					viewDesc.TextureCubeArray.MostDetailedMip = first_mip;
-				}
-				else
-				{
-					viewDesc.TextureCube.MipLevels = mip_count;
-					viewDesc.TextureCube.MostDetailedMip = first_mip;
-				}
-				break;
-			default:
-				assert(false);
-			}
 
-			// Descriptor確保.
-			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
-			{
-				std::cout << "[ERROR] ShaderResourceViewDep::Initialize" << std::endl;
-				assert(false);
-				return false;
-			}
-			// View生成.
-			p_device->GetD3D12Device()->CreateShaderResourceView(p_texture->GetD3D12Resource(), &viewDesc, view_.cpu_handle);
+				DescType desc = {};
+				desc.Format = ConvertResourceFormat(p_texture->GetFormat());
+				desc.ViewDimension = getTextureViewDimension<decltype(desc.ViewDimension)>(getTextureDimension(p_texture->GetType(), p_texture->GetArraySize() > 1));
 
-			return true;
-		}
-
-		void ShaderResourceViewDep::Finalize()
-		{
-			auto&& descriptor_allocator = view_.allocator;
-			if (descriptor_allocator)
-			{
-				descriptor_allocator->Deallocate(view_);
-			}
-			view_ = {};
-		}
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		template<typename DescType>
-		DescType createDsvRtvUavDescCommon(const TextureDep* p_texture, uint32_t mip_level, uint32_t first_array_slice, uint32_t array_size)
-		{
-			assert(p_texture);   // Buffers should not get here
-
-			uint32_t arrayMultiplier = (p_texture->GetType() == TextureType::TextureCube) ? 6 : 1;
-
-			if (array_size + first_array_slice > p_texture->GetArraySize())
-			{
-				array_size = p_texture->GetArraySize() - first_array_slice;
-			}
-
-			DescType desc = {};
-			desc.Format = ConvertResourceFormat(p_texture->GetFormat());
-			desc.ViewDimension = getTextureViewDimension<decltype(desc.ViewDimension)>(getTextureDimension(p_texture->GetType(), p_texture->GetArraySize() > 1));
-
-			switch (p_texture->GetType())
-			{
-			case TextureType::Texture1D:
-				if (p_texture->GetArraySize() > 1)
+				switch (p_texture->GetType())
 				{
-					desc.Texture1DArray.ArraySize = array_size;
-					desc.Texture1DArray.FirstArraySlice = first_array_slice;
-					desc.Texture1DArray.MipSlice = mip_level;
-				}
-				else
-				{
-					desc.Texture1D.MipSlice = mip_level;
-				}
-				break;
-			case TextureType::Texture2D:
-			case TextureType::TextureCube:
-				if (p_texture->GetArraySize() * arrayMultiplier > 1)
-				{
-					desc.Texture2DArray.ArraySize = array_size * arrayMultiplier;
-					desc.Texture2DArray.FirstArraySlice = first_array_slice * arrayMultiplier;
-					desc.Texture2DArray.MipSlice = mip_level;
-				}
-				else
-				{
-					desc.Texture2D.MipSlice = mip_level;
-				}
-				break;
-			case TextureType::Texture2DMultisample:
-				if constexpr (std::is_same_v<DescType, D3D12_DEPTH_STENCIL_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
-				{
+				case TextureType::Texture1D:
 					if (p_texture->GetArraySize() > 1)
+					{
+						desc.Texture1DArray.ArraySize = array_size;
+						desc.Texture1DArray.FirstArraySlice = first_array_slice;
+						desc.Texture1DArray.MipSlice = mip_slice;
+					}
+					else
+					{
+						desc.Texture1D.MipSlice = mip_slice;
+					}
+					break;
+				case TextureType::Texture2D:
+				case TextureType::TextureCube:
+					if (p_texture->GetArraySize() * arrayMultiplier > 1)
+					{
+						desc.Texture2DArray.ArraySize = array_size * arrayMultiplier;
+						desc.Texture2DArray.FirstArraySlice = first_array_slice * arrayMultiplier;
+						desc.Texture2DArray.MipSlice = mip_slice;
+					}
+					else
+					{
+						desc.Texture2D.MipSlice = mip_slice;
+					}
+					break;
+				case TextureType::Texture2DMultisample:
+					if constexpr (std::is_same_v<DescType, D3D12_DEPTH_STENCIL_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
+					{
+						if (p_texture->GetArraySize() > 1)
+						{
+							desc.Texture2DMSArray.ArraySize = array_size;
+							desc.Texture2DMSArray.FirstArraySlice = first_array_slice;
+						}
+					}
+					else
+					{
+						throw std::exception("Texture2DMultisample does not support UAV views");
+					}
+					break;
+				case TextureType::Texture3D:
+					if constexpr (std::is_same_v<DescType, D3D12_UNORDERED_ACCESS_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
+					{
+						assert(p_texture->GetArraySize() == 1);
+						desc.Texture3D.MipSlice = mip_slice;
+						desc.Texture3D.FirstWSlice = 0;
+						desc.Texture3D.WSize = p_texture->GetDepth(mip_slice);
+					}
+					else
+					{
+						throw std::exception("Texture3D does not support DSV views");
+					}
+					break;
+				default:
+					assert(false);
+				}
+
+				return desc;
+			}
+			// Texture Dsv用.
+			D3D12_DEPTH_STENCIL_VIEW_DESC createDsvDesc(const TextureDep* p_texture, uint32_t mip_slice, uint32_t first_array_slice, uint32_t array_size)
+			{
+				return createDsvRtvUavDescCommon<D3D12_DEPTH_STENCIL_VIEW_DESC>(p_texture, mip_slice, first_array_slice, array_size);
+			}
+			// Texture Rtv用.
+			D3D12_RENDER_TARGET_VIEW_DESC createRtvDesc(const TextureDep* p_texture, uint32_t mip_slice, uint32_t first_array_slice, uint32_t array_size)
+			{
+				return createDsvRtvUavDescCommon<D3D12_RENDER_TARGET_VIEW_DESC>(p_texture, mip_slice, first_array_slice, array_size);
+			}
+			// Texture Uav用.
+			D3D12_UNORDERED_ACCESS_VIEW_DESC createUavDesc(const TextureDep* p_texture, uint32_t mip_slice, uint32_t first_array_slice, uint32_t array_size)
+			{
+				return createDsvRtvUavDescCommon<D3D12_UNORDERED_ACCESS_VIEW_DESC>(p_texture, mip_slice, first_array_slice, array_size);
+			}
+
+			// Texture Srv用.
+			D3D12_SHADER_RESOURCE_VIEW_DESC createTextureSrvDesc(const TextureDep* p_texture, uint32_t mip_slice, uint32_t mip_count, uint32_t first_array_slice, uint32_t array_size)
+			{
+				assert(p_texture);
+				D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+
+				//If not depth, returns input format
+				desc.Format = ConvertResourceFormat(depthToColorFormat(p_texture->GetFormat()));
+
+				bool isTextureArray = p_texture->GetArraySize() > 1;
+				desc.ViewDimension = getTextureViewDimension<D3D12_SRV_DIMENSION>(getTextureDimension(p_texture->GetType(), isTextureArray));
+
+				switch (p_texture->GetType())
+				{
+				case TextureType::Texture1D:
+					if (isTextureArray)
+					{
+						desc.Texture1DArray.MipLevels = mip_count;
+						desc.Texture1DArray.MostDetailedMip = mip_slice;
+						desc.Texture1DArray.ArraySize = array_size;
+						desc.Texture1DArray.FirstArraySlice = first_array_slice;
+					}
+					else
+					{
+						desc.Texture1D.MipLevels = mip_count;
+						desc.Texture1D.MostDetailedMip = mip_slice;
+					}
+					break;
+				case TextureType::Texture2D:
+					if (isTextureArray)
+					{
+						desc.Texture2DArray.MipLevels = mip_count;
+						desc.Texture2DArray.MostDetailedMip = mip_slice;
+						desc.Texture2DArray.ArraySize = array_size;
+						desc.Texture2DArray.FirstArraySlice = first_array_slice;
+					}
+					else
+					{
+						desc.Texture2D.MipLevels = mip_count;
+						desc.Texture2D.MostDetailedMip = mip_slice;
+					}
+					break;
+				case TextureType::Texture2DMultisample:
+					if (array_size > 1)
 					{
 						desc.Texture2DMSArray.ArraySize = array_size;
 						desc.Texture2DMSArray.FirstArraySlice = first_array_slice;
 					}
+					break;
+				case TextureType::Texture3D:
+					assert(array_size == 1);
+					desc.Texture3D.MipLevels = mip_count;
+					desc.Texture3D.MostDetailedMip = mip_slice;
+					break;
+				case TextureType::TextureCube:
+					if (array_size > 1)
+					{
+						desc.TextureCubeArray.First2DArrayFace = 0;
+						desc.TextureCubeArray.NumCubes = array_size;
+						desc.TextureCubeArray.MipLevels = mip_count;
+						desc.TextureCubeArray.MostDetailedMip = mip_slice;
+					}
+					else
+					{
+						desc.TextureCube.MipLevels = mip_count;
+						desc.TextureCube.MostDetailedMip = mip_slice;
+					}
+					break;
+				default:
+					assert(false);
+				}
+
+				desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+				return desc;
+			}
+
+			/*
+			// TODO.
+			// Buffer Srv.
+			D3D12_SHADER_RESOURCE_VIEW_DESC createBufferSrvDesc(const BufferDep* pBuffer, uint32_t firstElement, uint32_t elementCount)
+			{
+				assert(pBuffer);
+				D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+
+				uint32_t bufferElementSize = 0;
+				uint32_t bufferElementCount = 0;
+				if (pBuffer->isTyped())
+				{
+					assert(getFormatPixelsPerBlock(pBuffer->getFormat()) == 1);
+					bufferElementSize = getFormatBytesPerBlock(pBuffer->getFormat());
+					bufferElementCount = pBuffer->getElementCount();
+					desc.Format = getDxgiFormat(pBuffer->getFormat());
+				}
+				else if (pBuffer->isStructured())
+				{
+					bufferElementSize = pBuffer->getStructSize();
+					bufferElementCount = pBuffer->getElementCount();
+					desc.Format = DXGI_FORMAT_UNKNOWN;
+					desc.Buffer.StructureByteStride = pBuffer->getStructSize();
 				}
 				else
 				{
-					throw std::exception("Texture2DMultisample does not support UAV views");
+					// ByteAddress.
+					bufferElementSize = sizeof(uint32_t);
+					bufferElementCount = (uint32_t)(pBuffer->getSize() / sizeof(uint32_t));
+					desc.Format = DXGI_FORMAT_R32_TYPELESS;
+					desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 				}
-				break;
-			case TextureType::Texture3D:
-				if constexpr (std::is_same_v<DescType, D3D12_UNORDERED_ACCESS_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
+
+				bool useDefaultCount = (elementCount == ShaderResourceView::kMaxPossible);
+				assert(useDefaultCount || (firstElement + elementCount) <= bufferElementCount); // Check range
+				desc.Buffer.FirstElement = firstElement;
+				desc.Buffer.NumElements = useDefaultCount ? (bufferElementCount - firstElement) : elementCount;
+
+				desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+				desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+
+				// D3D12 doesn't currently handle views that extend to close to 4GB or beyond the base address.
+				// TODO: Revisit this check in the future.
+				assert(bufferElementSize > 0);
+				if (desc.Buffer.FirstElement + desc.Buffer.NumElements > ((1ull << 32) / bufferElementSize - 8))
 				{
-					assert(p_texture->GetArraySize() == 1);
-					desc.Texture3D.MipSlice = mip_level;
-					desc.Texture3D.FirstWSlice = 0;
-					desc.Texture3D.WSize = p_texture->GetDepth(mip_level);
+					throw std::exception("Buffer SRV exceeds the maximum supported size");
+				}
+
+				return desc;
+			}
+
+			// TODO.
+			// Buffer Uav.
+			D3D12_UNORDERED_ACCESS_VIEW_DESC createBufferUavDesc(const Buffer* pBuffer, uint32_t firstElement, uint32_t elementCount)
+			{
+				assert(pBuffer);
+				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
+
+				uint32_t bufferElementSize = 0;
+				uint32_t bufferElementCount = 0;
+				if (pBuffer->isTyped())
+				{
+					assert(getFormatPixelsPerBlock(pBuffer->getFormat()) == 1);
+					bufferElementSize = getFormatBytesPerBlock(pBuffer->getFormat());
+					bufferElementCount = pBuffer->getElementCount();
+					desc.Format = getDxgiFormat(pBuffer->getFormat());
+				}
+				else if (pBuffer->isStructured())
+				{
+					bufferElementSize = pBuffer->getStructSize();
+					bufferElementCount = pBuffer->getElementCount();
+					desc.Format = DXGI_FORMAT_UNKNOWN;
+					desc.Buffer.StructureByteStride = pBuffer->getStructSize();
 				}
 				else
 				{
-					throw std::exception("Texture3D does not support DSV views");
+					bufferElementSize = sizeof(uint32_t);
+					bufferElementCount = (uint32_t)(pBuffer->getSize() / sizeof(uint32_t));
+					desc.Format = DXGI_FORMAT_R32_TYPELESS;
+					desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 				}
-				break;
-			default:
-				assert(false);
+
+				bool useDefaultCount = (elementCount == UnorderedAccessView::kMaxPossible);
+				assert(useDefaultCount || (firstElement + elementCount) <= bufferElementCount); // Check range
+				desc.Buffer.FirstElement = firstElement;
+				desc.Buffer.NumElements = useDefaultCount ? bufferElementCount - firstElement : elementCount;
+
+				desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+
+				// D3D12 doesn't currently handle views that extend to close to 4GB or beyond the base address.
+				// TODO: Revisit this check in the future.
+				assert(bufferElementSize > 0);
+				if (desc.Buffer.FirstElement + desc.Buffer.NumElements > ((1ull << 32) / bufferElementSize - 8))
+				{
+					throw std::exception("Buffer UAV exceeds the maximum supported size");
+				}
+
+				return desc;
 			}
-
-			return desc;
-		}
-
-		D3D12_DEPTH_STENCIL_VIEW_DESC createDsvDesc(const TextureDep* p_texture, uint32_t mipLevel, uint32_t firstArraySlice, uint32_t arraySize)
-		{
-			return createDsvRtvUavDescCommon<D3D12_DEPTH_STENCIL_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
-		}
-
-		D3D12_RENDER_TARGET_VIEW_DESC createRtvDesc(const TextureDep* p_texture, uint32_t mipLevel, uint32_t firstArraySlice, uint32_t arraySize)
-		{
-			return createDsvRtvUavDescCommon<D3D12_RENDER_TARGET_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
-		}
-
-		D3D12_UNORDERED_ACCESS_VIEW_DESC createUavDesc(const TextureDep* p_texture, uint32_t mipLevel, uint32_t firstArraySlice, uint32_t arraySize)
-		{
-			return createDsvRtvUavDescCommon<D3D12_UNORDERED_ACCESS_VIEW_DESC>(p_texture, mipLevel, firstArraySlice, arraySize);
-		}
-
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		UnorderedAccessView::UnorderedAccessView()
-		{
-		}
-		UnorderedAccessView::~UnorderedAccessView()
-		{
-			Finalize();
-		}
-		bool UnorderedAccessView::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size)
-		{
-			assert(p_device);
-			assert(p_texture);
-
-			if (!and_nonzero(ResourceBindFlag::UnorderedAccess, p_texture->GetBindFlag()))
-			{
-				assert(false);
-				return false;
-			}
-
-			// Descriptor確保.
-			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
-			{
-				std::cout << "[ERROR] UnorderedAccessView::Initialize" << std::endl;
-				assert(false);
-				return false;
-			}
-
-			// 専有HeapにDescriptor作成.
-			{
-				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createUavDesc(p_texture, first_mip, first_array, array_size);
-				constexpr ID3D12Resource* p_counter_resource = nullptr;
-				p_device->GetD3D12Device()->CreateUnorderedAccessView(p_texture->GetD3D12Resource(), p_counter_resource, &desc, view_.cpu_handle);
-			}
-
-			return true;
-		}
-		void UnorderedAccessView::Finalize()
-		{
+			*/
 		}
 
 
@@ -572,12 +576,12 @@ namespace ngl
 		{
 			Finalize();
 		}
-		bool DepthStencilViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size)
+		bool DepthStencilViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
 			assert(p_device);
 			assert(p_texture);
 
-			if (!and_nonzero(ResourceBindFlag::DepthStencil, p_texture->GetBindFlag()))
+			if (!check_bits(ResourceBindFlag::DepthStencil, p_texture->GetBindFlag()))
 			{
 				assert(false);
 				return false;
@@ -599,7 +603,7 @@ namespace ngl
 			}
 			// 専有HeapにDescriptor作成.
 			{
-				D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, first_mip, first_array, array_size);
+				D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, mip_slice, first_array_slice, array_size);
 				p_device->GetD3D12Device()->CreateDepthStencilView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
 			}
 
@@ -619,12 +623,12 @@ namespace ngl
 		{
 			Finalize();
 		}
-		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, TextureDep* p_texture, u32 first_mip, u32 first_array, u32 array_size)
+		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
 			assert(p_device);
 			assert(p_texture);
 
-			if (!and_nonzero(ResourceBindFlag::RenderTarget, p_texture->GetBindFlag()))
+			if (!check_bits(ResourceBindFlag::RenderTarget, p_texture->GetBindFlag()))
 			{
 				assert(false);
 				return false;
@@ -646,7 +650,7 @@ namespace ngl
 			}
 			// 専有HeapにDescriptor作成.
 			{
-				D3D12_RENDER_TARGET_VIEW_DESC desc = createRtvDesc(p_texture, first_mip, first_array, array_size);
+				D3D12_RENDER_TARGET_VIEW_DESC desc = createRtvDesc(p_texture, mip_slice, first_array_slice, array_size);
 				p_device->GetD3D12Device()->CreateRenderTargetView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
 			}
 
@@ -689,6 +693,123 @@ namespace ngl
 		{
 			p_heap_.Release();
 		}
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		UnorderedAccessView::UnorderedAccessView()
+		{
+		}
+		UnorderedAccessView::~UnorderedAccessView()
+		{
+			Finalize();
+		}
+		bool UnorderedAccessView::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
+		{
+			assert(p_device);
+			assert(p_texture);
+
+			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_texture->GetBindFlag()))
+			{
+				assert(false);
+				return false;
+			}
+
+			// Descriptor確保.
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+			{
+				std::cout << "[ERROR] UnorderedAccessView::Initialize" << std::endl;
+				assert(false);
+				return false;
+			}
+
+			{
+				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createUavDesc(p_texture, mip_slice, first_array_slice, array_size);
+				constexpr ID3D12Resource* p_counter_resource = nullptr;
+				p_device->GetD3D12Device()->CreateUnorderedAccessView(p_texture->GetD3D12Resource(), p_counter_resource, &desc, view_.cpu_handle);
+			}
+
+			return true;
+		}
+		void UnorderedAccessView::Finalize()
+		{
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
+			view_ = {};
+		}
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		ShaderResourceViewDep::ShaderResourceViewDep()
+		{
+		}
+		ShaderResourceViewDep::~ShaderResourceViewDep()
+		{
+			Finalize();
+		}
+		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 mip_count, u32 first_array_slice, u32 array_size)
+		{
+			assert(p_device && p_texture);
+			if (!p_device || !p_texture)
+				return false;
+
+			if (!check_bits(ResourceBindFlag::ShaderResource, p_texture->GetBindFlag()))
+			{
+				assert(false);
+				return false;
+			}
+
+			// clamp mip, array range.
+			if (mip_slice >= p_texture->GetMipCount())
+			{
+				mip_slice = p_texture->GetMipCount() - 1;
+				mip_count = 1;
+			}
+			else if ((mip_count == 0) || (mip_count > p_texture->GetMipCount() - mip_slice))
+			{
+				mip_count = p_texture->GetMipCount() - mip_slice;
+			}
+			if (first_array_slice >= p_texture->GetArraySize())
+			{
+				first_array_slice = p_texture->GetArraySize() - 1;
+				array_size = 1;
+			}
+			else if ((array_size == 0) || (array_size > p_texture->GetArraySize() - first_array_slice))
+			{
+				array_size = p_texture->GetArraySize() - first_array_slice;
+			}
+
+			// Desc生成.
+			auto desc = createTextureSrvDesc(p_texture, mip_slice, mip_count, first_array_slice, array_size);
+
+			// Descriptor確保.
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			view_ = descriptor_allocator->Allocate();
+			if (!view_.IsValid())
+			{
+				std::cout << "[ERROR] ShaderResourceViewDep::Initialize" << std::endl;
+				assert(false);
+				return false;
+			}
+			// View生成.
+			p_device->GetD3D12Device()->CreateShaderResourceView(p_texture->GetD3D12Resource(), &desc, view_.cpu_handle);
+
+			return true;
+		}
+		void ShaderResourceViewDep::Finalize()
+		{
+			auto&& descriptor_allocator = view_.allocator;
+			if (descriptor_allocator)
+			{
+				descriptor_allocator->Deallocate(view_);
+			}
+			view_ = {};
+		}
+
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 	}

@@ -473,7 +473,7 @@ bool AppGame::Initialize()
 		tex_desc00.format = ngl::rhi::ResourceFormat::NGL_FORMAT_R8G8B8A8_SNORM;
 		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 
-		tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;// UAV
+		//tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;// UAV
 
 		if (!tex_.Initialize(&device_, tex_desc00))
 		{

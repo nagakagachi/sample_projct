@@ -37,24 +37,24 @@ namespace ngl
 			D3D12_RESOURCE_FLAGS d3d = D3D12_RESOURCE_FLAG_NONE;
 
 			bool uavRequired = 0;
-			uavRequired |= and_nonzero(ResourceBindFlag::UnorderedAccess, flags);
-			//uavRequired |= and_nonzero(ResourceBindFlag::AccelerationStructure, flags);
+			uavRequired |= check_bits(ResourceBindFlag::UnorderedAccess, flags);
+			//uavRequired |= check_bits(ResourceBindFlag::AccelerationStructure, flags);
 			
 			if (uavRequired)
 			{
 				d3d |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			}
 
-			if (and_nonzero(ResourceBindFlag::DepthStencil, flags))
+			if (check_bits(ResourceBindFlag::DepthStencil, flags))
 			{
-				if (and_nonzero(ResourceBindFlag::ShaderResource, flags) == false)
+				if (check_bits(ResourceBindFlag::ShaderResource, flags) == false)
 				{
 					d3d |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
 				}
 				d3d |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 			}
 
-			if (and_nonzero(ResourceBindFlag::RenderTarget, flags))
+			if (check_bits(ResourceBindFlag::RenderTarget, flags))
 			{
 				d3d |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 			}
@@ -121,11 +121,11 @@ namespace ngl
 
 			// 用途によるアライメント.
 			u32 need_alignment = 16;
-			if (and_nonzero(ResourceBindFlag::ConstantBuffer, desc_.bind_flag))
+			if (check_bits(ResourceBindFlag::ConstantBuffer, desc_.bind_flag))
 			{
 				need_alignment = static_cast<u32>(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 			}
-			if (and_nonzero(ResourceBindFlag::UnorderedAccess, desc.bind_flag))
+			if (check_bits(ResourceBindFlag::UnorderedAccess, desc.bind_flag))
 			{
 				need_alignment = static_cast<u32>(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT);
 			}
@@ -249,7 +249,7 @@ namespace ngl
 			resource_->Unmap(0, &write_range);
 			map_ptr_ = nullptr;
 		}
-		ID3D12Resource* BufferDep::GetD3D12Resource()
+		ID3D12Resource* BufferDep::GetD3D12Resource() const
 		{
 			return resource_;
 		}
@@ -334,16 +334,16 @@ namespace ngl
 			// クリア値
 			D3D12_CLEAR_VALUE clearValue = {};
 			D3D12_CLEAR_VALUE* pClearVal = nullptr;
-			if (and_nonzero(ResourceBindFlag::RenderTarget | ResourceBindFlag::DepthStencil, desc_.bind_flag))
+			if (check_bits(ResourceBindFlag::RenderTarget | ResourceBindFlag::DepthStencil, desc_.bind_flag))
 			{
 				clearValue.Format = resource_desc.Format;
-				if (and_nonzero(ResourceBindFlag::DepthStencil, desc_.bind_flag))
+				if (check_bits(ResourceBindFlag::DepthStencil, desc_.bind_flag))
 				{
 					clearValue.DepthStencil.Depth = 1.0f;
 				}
 				pClearVal = &clearValue;
 			}
-			if (isDepthFormat(desc_.format) && (and_nonzero(ResourceBindFlag::ShaderResource | ResourceBindFlag::UnorderedAccess, desc_.bind_flag)) )
+			if (isDepthFormat(desc_.format) && (check_bits(ResourceBindFlag::ShaderResource | ResourceBindFlag::UnorderedAccess, desc_.bind_flag)) )
 			{
 				// Depthフォーマット且つ用途がSrvまたはUavの場合はフォーマット変換.
 				resource_desc.Format = getTypelessFormatFromDepthFormat(desc_.format);
@@ -423,7 +423,7 @@ namespace ngl
 			resource_->Unmap(0, nullptr);
 			map_ptr_ = nullptr;
 		}
-		ID3D12Resource* TextureDep::GetD3D12Resource()
+		ID3D12Resource* TextureDep::GetD3D12Resource() const
 		{
 			return resource_;
 		}

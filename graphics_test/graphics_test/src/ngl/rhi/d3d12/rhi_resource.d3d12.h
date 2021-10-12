@@ -27,8 +27,7 @@ namespace ngl
 			{
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
-				// bitmask of ngl::rhi::ResourceBindFlag.
-				u32					bind_flag = 0;
+				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
 			};
@@ -46,7 +45,7 @@ namespace ngl
 			const Desc& GetDesc() const { return desc_; }
 			DeviceDep* GetParentDevice() { return p_parent_device_; }
 
-			ID3D12Resource* GetD3D12Resource();
+			ID3D12Resource* GetD3D12Resource() const;
 
 		private:
 			DeviceDep* p_parent_device_ = nullptr;
@@ -77,8 +76,7 @@ namespace ngl
 
 				TextureType			type = TextureType::Texture2D;
 
-				// bitmask of ngl::rhi::ResourceBindFlag.
-				u32					bind_flag = 0;
+				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
 				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
 				ResourceState		initial_state = ResourceState::GENERAL;
 			};
@@ -96,7 +94,7 @@ namespace ngl
 			const Desc& GetDesc() const { return desc_; }
 			DeviceDep* GetParentDevice() { return p_parent_device_; }
 
-			ID3D12Resource* GetD3D12Resource();
+			ID3D12Resource* GetD3D12Resource() const;
 
 		public:
 			/** Get a mip-level width

@@ -12,7 +12,7 @@ namespace ngl
 	namespace rhi
 	{
 		template<typename T0, typename T1>
-		static constexpr bool and_nonzero(T0 v0, T1 v1)
+		static constexpr bool check_bits(T0 v0, T1 v1)
 		{
 			return 0 != (v0 & v1);
 		}
