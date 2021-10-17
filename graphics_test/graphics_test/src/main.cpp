@@ -499,7 +499,7 @@ bool AppGame::Initialize()
 #endif
 
 		// TextureView
-		if (!tex_view_.Initialize(&device_, &tex_, 0, 1, 0, 1))
+		if (!tex_view_.InitializeAsTexture(&device_, &tex_, 0, 1, 0, 1))
 		{
 			std::cout << "ERROR: Create rhi::ShaderResourceViewDep" << std::endl;
 			assert(false);

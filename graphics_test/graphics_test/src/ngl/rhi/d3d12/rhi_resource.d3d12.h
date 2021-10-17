@@ -47,6 +47,11 @@ namespace ngl
 
 			ID3D12Resource* GetD3D12Resource() const;
 
+		public:
+			u32 GetBufferSize() const { return allocated_byte_size_; }
+			u32 GetElementSize() const { return desc_.element_byte_size; }
+			u32 getElementCount() const { return desc_.element_count; }
+
 		private:
 			DeviceDep* p_parent_device_ = nullptr;
 
@@ -133,7 +138,6 @@ namespace ngl
 			/** Get the resource Type
 			*/
 			TextureType GetType() const { return desc_.type; }
-
 
 		private:
 			DeviceDep* p_parent_device_ = nullptr;

@@ -463,107 +463,99 @@ namespace ngl
 				return desc;
 			}
 
-			/*
-			// TODO.
-			// Buffer Srv.
-			D3D12_SHADER_RESOURCE_VIEW_DESC createBufferSrvDesc(const BufferDep* pBuffer, uint32_t firstElement, uint32_t elementCount)
+			struct BufferViewMode
+			{
+				enum Type : u32
+				{
+					// TypedBuffer.
+					Typed,
+					// Structured な raw buffer view.
+					Structured,
+					// 4 Byte per element な raw buffer view.
+					ByteAddress
+				};
+			};
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC createBufferSrvDesc(const BufferDep* pBuffer
+				// 初期化モード.
+				, BufferViewMode::Type mode
+				// 初期化モードTyped の場合の要素フォーマットタイプ.
+				, ResourceFormat typed_format
+				// 初期化モードStructured の場合の要素サイズ.
+				, u32 structured_element_size
+				, u32 firstElement, u32 elementCount)
 			{
 				assert(pBuffer);
 				D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-
-				uint32_t bufferElementSize = 0;
-				uint32_t bufferElementCount = 0;
-				if (pBuffer->isTyped())
+				u32 bufferElementCount = 0;
+				if (BufferViewMode::Typed == mode)
 				{
-					assert(getFormatPixelsPerBlock(pBuffer->getFormat()) == 1);
-					bufferElementSize = getFormatBytesPerBlock(pBuffer->getFormat());
+					// Typed.
 					bufferElementCount = pBuffer->getElementCount();
-					desc.Format = getDxgiFormat(pBuffer->getFormat());
+					desc.Format = ConvertResourceFormat(typed_format);
 				}
-				else if (pBuffer->isStructured())
+				else if (BufferViewMode::Structured == mode)
 				{
-					bufferElementSize = pBuffer->getStructSize();
+					// Structured.
 					bufferElementCount = pBuffer->getElementCount();
 					desc.Format = DXGI_FORMAT_UNKNOWN;
-					desc.Buffer.StructureByteStride = pBuffer->getStructSize();
+					desc.Buffer.StructureByteStride = structured_element_size;
 				}
 				else
 				{
 					// ByteAddress.
-					bufferElementSize = sizeof(uint32_t);
-					bufferElementCount = (uint32_t)(pBuffer->getSize() / sizeof(uint32_t));
+					bufferElementCount = pBuffer->getElementCount();
 					desc.Format = DXGI_FORMAT_R32_TYPELESS;
 					desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 				}
 
-				bool useDefaultCount = (elementCount == ShaderResourceView::kMaxPossible);
-				assert(useDefaultCount || (firstElement + elementCount) <= bufferElementCount); // Check range
+				assert((firstElement + elementCount) <= bufferElementCount); // Check range
 				desc.Buffer.FirstElement = firstElement;
-				desc.Buffer.NumElements = useDefaultCount ? (bufferElementCount - firstElement) : elementCount;
-
+				desc.Buffer.NumElements = elementCount;
 				desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 				desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-
-				// D3D12 doesn't currently handle views that extend to close to 4GB or beyond the base address.
-				// TODO: Revisit this check in the future.
-				assert(bufferElementSize > 0);
-				if (desc.Buffer.FirstElement + desc.Buffer.NumElements > ((1ull << 32) / bufferElementSize - 8))
-				{
-					throw std::exception("Buffer SRV exceeds the maximum supported size");
-				}
-
 				return desc;
 			}
 
-			// TODO.
-			// Buffer Uav.
-			D3D12_UNORDERED_ACCESS_VIEW_DESC createBufferUavDesc(const Buffer* pBuffer, uint32_t firstElement, uint32_t elementCount)
+			D3D12_UNORDERED_ACCESS_VIEW_DESC createBufferUavDesc(const BufferDep* pBuffer
+				// 初期化モード.
+				, BufferViewMode::Type mode
+				// 初期化モードTyped の場合の要素フォーマットタイプ.
+				, ResourceFormat typed_format
+				// 初期化モードStructured の場合の要素サイズ.
+				, u32 structured_element_size
+				, u32 firstElement, u32 elementCount)
 			{
 				assert(pBuffer);
 				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
-
-				uint32_t bufferElementSize = 0;
-				uint32_t bufferElementCount = 0;
-				if (pBuffer->isTyped())
+				u32 bufferElementCount = 0;
+				if (BufferViewMode::Typed == mode)
 				{
-					assert(getFormatPixelsPerBlock(pBuffer->getFormat()) == 1);
-					bufferElementSize = getFormatBytesPerBlock(pBuffer->getFormat());
+					// Typed.
 					bufferElementCount = pBuffer->getElementCount();
-					desc.Format = getDxgiFormat(pBuffer->getFormat());
+					desc.Format = ConvertResourceFormat(typed_format);
 				}
-				else if (pBuffer->isStructured())
+				else if (BufferViewMode::Structured == mode)
 				{
-					bufferElementSize = pBuffer->getStructSize();
+					// Structured.
 					bufferElementCount = pBuffer->getElementCount();
 					desc.Format = DXGI_FORMAT_UNKNOWN;
-					desc.Buffer.StructureByteStride = pBuffer->getStructSize();
+					desc.Buffer.StructureByteStride = structured_element_size;
 				}
 				else
 				{
-					bufferElementSize = sizeof(uint32_t);
-					bufferElementCount = (uint32_t)(pBuffer->getSize() / sizeof(uint32_t));
+					// ByteAddress.
+					bufferElementCount = pBuffer->getElementCount();
 					desc.Format = DXGI_FORMAT_R32_TYPELESS;
 					desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 				}
 
-				bool useDefaultCount = (elementCount == UnorderedAccessView::kMaxPossible);
-				assert(useDefaultCount || (firstElement + elementCount) <= bufferElementCount); // Check range
+				assert((firstElement + elementCount) <= bufferElementCount); // Check range
 				desc.Buffer.FirstElement = firstElement;
-				desc.Buffer.NumElements = useDefaultCount ? bufferElementCount - firstElement : elementCount;
-
+				desc.Buffer.NumElements = elementCount;
 				desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-
-				// D3D12 doesn't currently handle views that extend to close to 4GB or beyond the base address.
-				// TODO: Revisit this check in the future.
-				assert(bufferElementSize > 0);
-				if (desc.Buffer.FirstElement + desc.Buffer.NumElements > ((1ull << 32) / bufferElementSize - 8))
-				{
-					throw std::exception("Buffer UAV exceeds the maximum supported size");
-				}
-
 				return desc;
 			}
-			*/
 		}
 
 
@@ -703,35 +695,76 @@ namespace ngl
 		{
 			Finalize();
 		}
+		template<typename ResourceType>
+		bool _Initialize(DeviceDep* p_device, const ResourceType* p_buffer, const D3D12_UNORDERED_ACCESS_VIEW_DESC& desc, PersistentDescriptorInfo& out_desc_info)
+		{
+			// Descriptor確保.
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			out_desc_info = descriptor_allocator->Allocate();
+			if (!out_desc_info.IsValid())
+			{
+				std::cout << "[ERROR] ShaderResourceViewDep::InitializeAsStructured" << std::endl;
+				assert(false);
+				return false;
+			}
+			constexpr ID3D12Resource* p_counter_resource = nullptr;
+			p_device->GetD3D12Device()->CreateUnorderedAccessView(p_buffer->GetD3D12Resource(), p_counter_resource, &desc, out_desc_info.cpu_handle);
+
+			return true;
+		}
+		// TextureのView.
 		bool UnorderedAccessView::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
-			assert(p_device);
-			assert(p_texture);
-
+			assert(p_device && p_texture);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_texture->GetBindFlag()))
 			{
 				assert(false);
 				return false;
 			}
 
-			// Descriptor確保.
-			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
+			D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createUavDesc(p_texture, mip_slice, first_array_slice, array_size);
+			return _Initialize(p_device, p_texture, desc, view_);
+		}
+		// BufferのStructuredBufferView.
+		bool UnorderedAccessView::InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count)
+		{
+			assert(p_device && p_buffer);
+			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
 			{
-				std::cout << "[ERROR] UnorderedAccessView::Initialize" << std::endl;
 				assert(false);
 				return false;
 			}
 
+			D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createBufferUavDesc(p_buffer, BufferViewMode::Structured, {}, element_size, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
+		}
+		// BufferのTypedBufferView.
+		bool UnorderedAccessView::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
+		{
+			assert(p_device && p_buffer);
+			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
 			{
-				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createUavDesc(p_texture, mip_slice, first_array_slice, array_size);
-				constexpr ID3D12Resource* p_counter_resource = nullptr;
-				p_device->GetD3D12Device()->CreateUnorderedAccessView(p_texture->GetD3D12Resource(), p_counter_resource, &desc, view_.cpu_handle);
+				assert(false);
+				return false;
 			}
 
-			return true;
+			D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createBufferUavDesc(p_buffer, BufferViewMode::Typed, format, {}, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
 		}
+		// BufferのByteAddressBufferView.
+		bool UnorderedAccessView::InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count)
+		{
+			assert(p_device && p_buffer);
+			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
+			{
+				assert(false);
+				return false;
+			}
+
+			D3D12_UNORDERED_ACCESS_VIEW_DESC desc = createBufferUavDesc(p_buffer, BufferViewMode::ByteAddress, {}, {}, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
+		}
+
 		void UnorderedAccessView::Finalize()
 		{
 			auto&& descriptor_allocator = view_.allocator;
@@ -751,7 +784,24 @@ namespace ngl
 		{
 			Finalize();
 		}
-		bool ShaderResourceViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 mip_count, u32 first_array_slice, u32 array_size)
+		template<typename ResourceType>
+		bool _Initialize(DeviceDep* p_device, const ResourceType* p_buffer, const D3D12_SHADER_RESOURCE_VIEW_DESC& desc, PersistentDescriptorInfo& out_desc_info)
+		{
+			// Descriptor確保.
+			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
+			out_desc_info = descriptor_allocator->Allocate();
+			if (!out_desc_info.IsValid())
+			{
+				std::cout << "[ERROR] ShaderResourceViewDep::InitializeAsStructured" << std::endl;
+				assert(false);
+				return false;
+			}
+			p_device->GetD3D12Device()->CreateShaderResourceView(p_buffer->GetD3D12Resource(), &desc, out_desc_info.cpu_handle);
+
+			return true;
+		}
+		// TextureのView.
+		bool ShaderResourceViewDep::InitializeAsTexture(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 mip_count, u32 first_array_slice, u32 array_size)
 		{
 			assert(p_device && p_texture);
 			if (!p_device || !p_texture)
@@ -785,21 +835,55 @@ namespace ngl
 
 			// Desc生成.
 			auto desc = createTextureSrvDesc(p_texture, mip_slice, mip_count, first_array_slice, array_size);
+			return _Initialize(p_device, p_texture, desc, view_);
+		}
 
-			// Descriptor確保.
-			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
-			view_ = descriptor_allocator->Allocate();
-			if (!view_.IsValid())
+		// BufferのStructuredBufferView.
+		bool ShaderResourceViewDep::InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count)
+		{
+			assert(p_device && p_buffer);
+			if (!p_device || !p_buffer)
+				return false;
+			if (!check_bits(ResourceBindFlag::ShaderResource, p_buffer->GetDesc().bind_flag))
 			{
-				std::cout << "[ERROR] ShaderResourceViewDep::Initialize" << std::endl;
 				assert(false);
 				return false;
 			}
-			// View生成.
-			p_device->GetD3D12Device()->CreateShaderResourceView(p_texture->GetD3D12Resource(), &desc, view_.cpu_handle);
 
-			return true;
+			D3D12_SHADER_RESOURCE_VIEW_DESC desc = createBufferSrvDesc(p_buffer, BufferViewMode::Structured, {}, element_size, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
 		}
+		// BufferのTypedBufferView.
+		bool ShaderResourceViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
+		{
+			assert(p_device && p_buffer);
+			if (!p_device || !p_buffer)
+				return false;
+			if (!check_bits(ResourceBindFlag::ShaderResource, p_buffer->GetDesc().bind_flag))
+			{
+				assert(false);
+				return false;
+			}
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC desc = createBufferSrvDesc(p_buffer, BufferViewMode::Typed, format, {}, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
+		}
+		// BufferのByteAddressBufferView.
+		bool ShaderResourceViewDep::InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count)
+		{
+			assert(p_device && p_buffer);
+			if (!p_device || !p_buffer)
+				return false;
+			if (!check_bits(ResourceBindFlag::ShaderResource, p_buffer->GetDesc().bind_flag))
+			{
+				assert(false);
+				return false;
+			}
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC desc = createBufferSrvDesc(p_buffer, BufferViewMode::ByteAddress, {}, {}, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
+		}
+
 		void ShaderResourceViewDep::Finalize()
 		{
 			auto&& descriptor_allocator = view_.allocator;

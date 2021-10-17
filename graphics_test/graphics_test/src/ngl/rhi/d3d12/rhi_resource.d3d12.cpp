@@ -11,6 +11,7 @@ namespace ngl
 	namespace rhi
 	{
 
+#define align_to(_alignment, _val) ((((_val) + (_alignment) - 1) / (_alignment)) * (_alignment))
 
 		D3D12_RESOURCE_DIMENSION getD3D12ResourceDimension(TextureType type)
 		{
@@ -131,8 +132,7 @@ namespace ngl
 			}
 			// 現状はとりあえずConstantBufferのアラインメントに従ってみる
 			// 確保するサイズはDirectX12のConstantBufferサイズAlignmentにしたがう(256)
-			const auto minimum_size = (desc_.element_byte_size) * (desc_.element_count);
-			allocated_byte_size_ = need_alignment * ((minimum_size + need_alignment - 1) / need_alignment);
+			allocated_byte_size_ = align_to(need_alignment, (desc_.element_byte_size) * (desc_.element_count));
 
 			D3D12_HEAP_FLAGS heap_flag = D3D12_HEAP_FLAG_NONE;
 			D3D12_RESOURCE_STATES initial_state = ConvertResourceState(desc_.initial_state);

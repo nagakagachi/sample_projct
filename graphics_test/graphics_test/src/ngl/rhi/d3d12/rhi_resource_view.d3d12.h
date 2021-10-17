@@ -172,10 +172,14 @@ namespace ngl
 			UnorderedAccessView();
 			~UnorderedAccessView();
 
-			// Textureから生成.
+			// TextureのView.
 			bool Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size);
-
-			// TODO. Initialize from Buffer.
+			// BufferのStructuredBufferView.
+			bool InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count);
+			// BufferのTypedBufferView.
+			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count);
+			// BufferのByteAddressBufferView.
+			bool InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count);
 
 			void Finalize();
 
@@ -194,10 +198,14 @@ namespace ngl
 			ShaderResourceViewDep();
 			~ShaderResourceViewDep();
 
-			// Textureから生成.
-			bool Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 mip_count, u32 first_array_slice, u32 array_size);
-
-			// TODO. Initialize from Buffer.
+			// TextureのView.
+			bool InitializeAsTexture(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 mip_count, u32 first_array_slice, u32 array_size);
+			// BufferのStructuredBufferView.
+			bool InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count);
+			// BufferのTypedBufferView.
+			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count);
+			// BufferのByteAddressBufferView.
+			bool InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count);
 
 			void Finalize();
 
