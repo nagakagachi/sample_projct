@@ -21,20 +21,20 @@ namespace ngl
 		{
 			Finalize();
 		}
-		bool ConstantBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		bool ConstantBufferViewDep::Initialize(BufferDep* p_buffer, const Desc& desc)
 		{
-			if (!buffer || !buffer->GetParentDevice())
+			if (!p_buffer || !p_buffer->GetParentDevice())
 			{
 				assert(false);
 				return false;
 			}
-			if (!check_bits(ResourceBindFlag::ConstantBuffer, buffer->GetDesc().bind_flag))
+			if (!check_bits(ResourceBindFlag::ConstantBuffer, p_buffer->GetDesc().bind_flag))
 			{
 				assert(false);
 				return false;
 			}
 
-			auto&& p_device = buffer->GetParentDevice();
+			auto&& p_device = p_buffer->GetParentDevice();
 
 			auto&& descriptor_allocator = p_device->GetPersistentDescriptorAllocator();
 			view_ = descriptor_allocator->Allocate();
@@ -46,8 +46,8 @@ namespace ngl
 			}
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
-			view_desc.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_desc.SizeInBytes = buffer->GetBufferSize();// アライメント考慮サイズを指定している.
+			view_desc.BufferLocation = p_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_desc.SizeInBytes = p_buffer->GetBufferSize();// アライメント考慮サイズを指定している.
 			auto handle = view_.cpu_handle;
 			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
 
@@ -75,27 +75,27 @@ namespace ngl
 		{
 			Finalize();
 		}
-		bool VertexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		bool VertexBufferViewDep::Initialize(BufferDep* p_buffer, const Desc& desc)
 		{
-			if (!buffer || !buffer->GetParentDevice())
+			if (!p_buffer || !p_buffer->GetParentDevice())
 			{
 				assert(false);
 				return false;
 			}
 
-			const auto& buffer_desc = buffer->GetDesc();
+			const auto& buffer_desc = p_buffer->GetDesc();
 			if (!check_bits(ResourceBindFlag::VertexBuffer, buffer_desc.bind_flag))
 			{
 				assert(false);
 				return false;
 			}
 
-			auto&& p_device = buffer->GetParentDevice();
+			auto&& p_device = p_buffer->GetParentDevice();
 
 			view_ = {};
 			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
 			view_.StrideInBytes = buffer_desc.element_byte_size;
-			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_.BufferLocation = p_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
 
 			return true;
 		}
@@ -115,26 +115,26 @@ namespace ngl
 		{
 			Finalize();
 		}
-		bool IndexBufferViewDep::Initialize(BufferDep* buffer, const Desc& desc)
+		bool IndexBufferViewDep::Initialize(BufferDep* p_buffer, const Desc& desc)
 		{
-			if (!buffer || !buffer->GetParentDevice())
+			if (!p_buffer || !p_buffer->GetParentDevice())
 			{
 				assert(false);
 				return false;
 			}
 
-			const auto& buffer_desc = buffer->GetDesc();
+			const auto& buffer_desc = p_buffer->GetDesc();
 			if (!check_bits(ResourceBindFlag::IndexBuffer, buffer_desc.bind_flag))
 			{
 				assert(false);
 				return false;
 			}
 
-			auto&& p_device = buffer->GetParentDevice();
+			auto&& p_device = p_buffer->GetParentDevice();
 
 			view_ = {};
 			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
-			view_.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+			view_.BufferLocation = p_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
 			view_.Format = (buffer_desc.element_byte_size == 4) ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
 
 			return true;
@@ -186,24 +186,24 @@ namespace ngl
 		{
 			/** texture dimension -> view dimension.
 			*/
-			ResourceDimension getTextureDimension(TextureType type, bool isTextureArray)
+			ResourceDimension getTextureDimension(TextureType type, bool is_texture_array)
 			{
 				switch (type)
 				{
 					//case TextureType::Buffer:
-					//	assert(isTextureArray == false);
+					//	assert(is_texture_array == false);
 					//	return ResourceDimension::Buffer;
 				case TextureType::Texture1D:
-					return (isTextureArray) ? ResourceDimension::Texture1DArray : ResourceDimension::Texture1D;
+					return (is_texture_array) ? ResourceDimension::Texture1DArray : ResourceDimension::Texture1D;
 				case TextureType::Texture2D:
-					return (isTextureArray) ? ResourceDimension::Texture2DArray : ResourceDimension::Texture2D;
+					return (is_texture_array) ? ResourceDimension::Texture2DArray : ResourceDimension::Texture2D;
 				case TextureType::Texture2DMultisample:
-					return (isTextureArray) ? ResourceDimension::Texture2DMSArray : ResourceDimension::Texture2DMS;
+					return (is_texture_array) ? ResourceDimension::Texture2DMSArray : ResourceDimension::Texture2DMS;
 				case TextureType::Texture3D:
-					assert(isTextureArray == false);
+					assert(is_texture_array == false);
 					return ResourceDimension::Texture3D;
 				case TextureType::TextureCube:
-					return (isTextureArray) ? ResourceDimension::TextureCubeArray : ResourceDimension::TextureCube;
+					return (is_texture_array) ? ResourceDimension::TextureCubeArray : ResourceDimension::TextureCube;
 				default:
 					assert(false);
 					return ResourceDimension::Unknown;
@@ -483,7 +483,7 @@ namespace ngl
 				, ResourceFormat typed_format
 				// 初期化モードStructured の場合の要素サイズ.
 				, u32 structured_element_size
-				, u32 firstElement, u32 elementCount)
+				, u32 element_offset, u32 element_count)
 			{
 				assert(pBuffer);
 				D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
@@ -509,50 +509,50 @@ namespace ngl
 					desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 				}
 
-				assert((firstElement + elementCount) <= bufferElementCount); // Check range
-				desc.Buffer.FirstElement = firstElement;
-				desc.Buffer.NumElements = elementCount;
+				assert((element_offset + element_count) <= bufferElementCount); // Check range
+				desc.Buffer.FirstElement = element_offset;
+				desc.Buffer.NumElements = element_count;
 				desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 				desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 				return desc;
 			}
 
-			D3D12_UNORDERED_ACCESS_VIEW_DESC createBufferUavDesc(const BufferDep* pBuffer
+			D3D12_UNORDERED_ACCESS_VIEW_DESC createBufferUavDesc(const BufferDep* p_buffer
 				// 初期化モード.
 				, BufferViewMode::Type mode
 				// 初期化モードTyped の場合の要素フォーマットタイプ.
 				, ResourceFormat typed_format
 				// 初期化モードStructured の場合の要素サイズ.
 				, u32 structured_element_size
-				, u32 firstElement, u32 elementCount)
+				, u32 element_offset, u32 element_count)
 			{
-				assert(pBuffer);
+				assert(p_buffer);
 				D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
 				u32 bufferElementCount = 0;
 				if (BufferViewMode::Typed == mode)
 				{
 					// Typed.
-					bufferElementCount = pBuffer->getElementCount();
+					bufferElementCount = p_buffer->getElementCount();
 					desc.Format = ConvertResourceFormat(typed_format);
 				}
 				else if (BufferViewMode::Structured == mode)
 				{
 					// Structured.
-					bufferElementCount = pBuffer->getElementCount();
+					bufferElementCount = p_buffer->getElementCount();
 					desc.Format = DXGI_FORMAT_UNKNOWN;
 					desc.Buffer.StructureByteStride = structured_element_size;
 				}
 				else
 				{
 					// ByteAddress.
-					bufferElementCount = pBuffer->getElementCount();
+					bufferElementCount = p_buffer->getElementCount();
 					desc.Format = DXGI_FORMAT_R32_TYPELESS;
 					desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 				}
 
-				assert((firstElement + elementCount) <= bufferElementCount); // Check range
-				desc.Buffer.FirstElement = firstElement;
-				desc.Buffer.NumElements = elementCount;
+				assert((element_offset + element_count) <= bufferElementCount); // Check range
+				desc.Buffer.FirstElement = element_offset;
+				desc.Buffer.NumElements = element_count;
 				desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 				return desc;
 			}

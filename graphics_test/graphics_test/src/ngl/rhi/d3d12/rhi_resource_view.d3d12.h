@@ -36,7 +36,7 @@ namespace ngl
 			VertexBufferViewDep();
 			~VertexBufferViewDep();
 
-			bool Initialize(BufferDep* buffer, const Desc& desc);
+			bool Initialize(BufferDep* p_buffer, const Desc& desc);
 			void Finalize();
 
 			const D3D12_VERTEX_BUFFER_VIEW& GetView() const
@@ -60,7 +60,7 @@ namespace ngl
 			IndexBufferViewDep();
 			~IndexBufferViewDep();
 
-			bool Initialize(BufferDep* buffer, const Desc& desc);
+			bool Initialize(BufferDep* p_buffer, const Desc& desc);
 			void Finalize();
 
 			const D3D12_INDEX_BUFFER_VIEW& GetView() const
@@ -84,7 +84,7 @@ namespace ngl
 			ConstantBufferViewDep();
 			~ConstantBufferViewDep();
 
-			bool Initialize(BufferDep* buffer, const Desc& desc);
+			bool Initialize(BufferDep* p_buffer, const Desc& desc);
 			void Finalize();
 
 			const PersistentDescriptorInfo& GetView() const
