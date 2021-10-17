@@ -47,7 +47,7 @@ namespace ngl
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC view_desc = {};
 			view_desc.BufferLocation = buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-			view_desc.SizeInBytes = buffer->GetAlignedBufferSize();// アライメント考慮サイズを指定している.
+			view_desc.SizeInBytes = buffer->GetBufferSize();// アライメント考慮サイズを指定している.
 			auto handle = view_.cpu_handle;
 			p_device->GetD3D12Device()->CreateConstantBufferView(&view_desc, handle);
 
@@ -467,9 +467,9 @@ namespace ngl
 			{
 				enum Type : u32
 				{
-					// TypedBuffer.
+					// Typed Buffer View.
 					Typed,
-					// Structured な raw buffer view.
+					// Structured な buffer view.
 					Structured,
 					// 4 Byte per element な raw buffer view.
 					ByteAddress
@@ -580,24 +580,20 @@ namespace ngl
 			}
 
 			// 専有Heap確保.
+			D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
+			heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+			heap_desc.NumDescriptors = 1;
+			heap_desc.NodeMask = 0;
+			heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+			if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&p_heap_))))
 			{
-				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-				desc.NumDescriptors = 1;
-				desc.NodeMask = 0;
-				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+				std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+				return false;
+			}
 
-				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
-				{
-					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
-					return false;
-				}
-			}
 			// 専有HeapにDescriptor作成.
-			{
-				D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, mip_slice, first_array_slice, array_size);
-				p_device->GetD3D12Device()->CreateDepthStencilView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
-			}
+			D3D12_DEPTH_STENCIL_VIEW_DESC desc = createDsvDesc(p_texture, mip_slice, first_array_slice, array_size);
+			p_device->GetD3D12Device()->CreateDepthStencilView(p_texture->GetD3D12Resource(), &desc, p_heap_->GetCPUDescriptorHandleForHeapStart());
 
 			return true;
 		}
@@ -627,19 +623,17 @@ namespace ngl
 			}
 
 			// 専有Heap確保.
+			D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
+			heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+			heap_desc.NumDescriptors = 1;
+			heap_desc.NodeMask = 0;
+			heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+			if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&p_heap_))))
 			{
-				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-				desc.NumDescriptors = 1;
-				desc.NodeMask = 0;
-				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
-				{
-					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
-					return false;
-				}
+				std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+				return false;
 			}
+
 			// 専有HeapにDescriptor作成.
 			{
 				D3D12_RENDER_TARGET_VIEW_DESC desc = createRtvDesc(p_texture, mip_slice, first_array_slice, array_size);
@@ -654,30 +648,29 @@ namespace ngl
 			if (!p_device || !p_swapchain)
 				return false;
 
+			// 専有Heap確保.
+			D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
+			heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+			heap_desc.NumDescriptors = 1;
+			heap_desc.NodeMask = 0;
+			heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+			if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&p_heap_))))
 			{
-				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-				desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-				desc.NumDescriptors = 1;
-				desc.NodeMask = 0;
-				desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&p_heap_))))
-				{
-					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
-					return false;
-				}
+				std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+				return false;
+				
 			}
+
+			auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
+			if (!buffer)
 			{
-				auto* buffer = p_swapchain->GetD3D12Resource(buffer_index);
-				if (!buffer)
-				{
-					std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
-					return false;
-				}
-
-				auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
-				p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
+				std::cout << "[ERROR] Invalid Buffer Index" << std::endl;
+				return false;
 			}
+
+			auto handle_head = p_heap_->GetCPUDescriptorHandleForHeapStart();
+			p_device->GetD3D12Device()->CreateRenderTargetView(buffer, nullptr, handle_head);
+
 
 			return true;
 		}

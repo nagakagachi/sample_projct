@@ -880,15 +880,13 @@ void AppGame::TestCode()
 				{
 					D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
 					cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
-					cbv_desc.SizeInBytes = buffer0.GetAlignedBufferSize();
+					cbv_desc.SizeInBytes = buffer0.GetBufferSize();
 					device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
 
 				}
 				// psoで名前解決をしてDescSetにハンドルを設定するテスト.
 				ngl::rhi::DescriptorSetDep desc_set;
 				pso.SetDescriptorHandle(&desc_set, "CbTest", pd_cbv.cpu_handle);
-
-				// TODO. psoで名前解決してdesc_setの適切なスロットにDescriptorをセットし、完成したdesc_setをCommandListで描画用Descriptorにセットする.
 
 				// 一応解放しておく
 				persistent_desc_allocator->Deallocate(pd_cbv);
@@ -1055,9 +1053,6 @@ void AppGame::TestCode()
 				D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
 				D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
 				frame_desc_interface[frame_index].Allocate(16, cpu_handle, gpu_handle);
-
-				// TODO. 取得したハンドルから16個分の連続したDescriptorにViewをコピーして描画に使う.
-
 			}
 			frame_index = (frame_index + 1) % buffer_count;
 		}
@@ -1097,9 +1092,6 @@ void AppGame::TestCode()
 					D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
 					fmra_page_interface_srv.Allocate(16, cpu_handle, gpu_handle);
 				}
-
-				// TODO. 取得したハンドルから16個分の連続したDescriptorにViewをコピーして描画に使う.
-
 			}
 		}
 	}
