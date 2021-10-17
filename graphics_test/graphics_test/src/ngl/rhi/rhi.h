@@ -410,7 +410,9 @@ namespace ngl
 
 		struct InputElement
 		{
+			// セマンティック名. インデックス無し.
 			const char*		semantic_name;
+			// セマンティックインデックス.
 			u32				semantic_index;
 			// 現状はD3Dのものを利用. 必要に応じて抽象化.
 			ResourceFormat	format;

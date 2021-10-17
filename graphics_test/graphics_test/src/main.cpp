@@ -326,7 +326,7 @@ bool AppGame::Initialize()
 		desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
 
 		// 入力レイアウト
-		std::array<ngl::rhi::InputElement, 1> input_elem_data;
+		std::array<ngl::rhi::InputElement, 2> input_elem_data;
 		desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
 		desc.input_layout.p_input_elements = input_elem_data.data();
 		input_elem_data[0].semantic_name = "POSITION";
@@ -334,6 +334,11 @@ bool AppGame::Initialize()
 		input_elem_data[0].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32B32A32_FLOAT;
 		input_elem_data[0].stream_slot = 0;
 		input_elem_data[0].element_offset = 0;
+		input_elem_data[1].semantic_name = "TEXCOORD";
+		input_elem_data[1].semantic_index = 0;
+		input_elem_data[1].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32_FLOAT;
+		input_elem_data[1].stream_slot = 0;
+		input_elem_data[1].element_offset = sizeof(float)*4;
 
 		if (!sample_pso_.Initialize(&device_, desc))
 		{
@@ -375,13 +380,20 @@ bool AppGame::Initialize()
 			float y;
 			float z;
 			float w;
+
+			float u;
+			float v;
 		};
 
 		Vector4 sample_vtx_list[] =
 		{
-			{-0.5f, -0.5f, 0.0f, 1.0f},
-			{-0.5f, 0.5f, 0.0f, 1.0f },
-			{0.5f, -0.5f, 0.0f, 1.0f },
+			{-0.5f, -0.5f, 0.0f, 1.0f,	0.0f, 0.0f},
+			{-0.5f, 0.5f, 0.0f, 1.0f,	0.0f, 1.0f },
+			{0.5f, -0.5f, 0.0f, 1.0f,	1.0f, 0.0f },
+
+			{-0.5f, -0.5f, 0.0f, 1.0f,	0.0f, 0.0f},
+			{0.5f, 0.5f, 1.0f, 1.0f,	0.0f, 1.0f },
+			{0.5f, -0.5f, 1.0f, 1.0f,	1.0f, 0.0f },
 		};
 
 
@@ -410,7 +422,8 @@ bool AppGame::Initialize()
 	{
 		int sample_index_data[] =
 		{
-			0, 1, 2
+			0, 1, 2,
+			3, 4, 5,
 		};
 
 
@@ -620,7 +633,7 @@ bool AppGame::Execute()
 				gfx_command_list_.DrawInstanced(3, 1, 0, 0);
 #else
 				gfx_command_list_.SetIndexBuffer(&ibv_sample_.GetView());
-				gfx_command_list_.DrawIndexedInstanced(3, 1, 0, 0, 0);
+				gfx_command_list_.DrawIndexedInstanced(6, 1, 0, 0, 0);
 #endif
 			}
 #endif
@@ -828,7 +841,7 @@ void AppGame::TestCode()
 			desc.blend_state.target_blend_states[0].blend_enable = false;;
 
 			// 入力レイアウト
-			std::array<ngl::rhi::InputElement, 1> input_elem_data;
+			std::array<ngl::rhi::InputElement, 2> input_elem_data;
 			desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
 			desc.input_layout.p_input_elements = input_elem_data.data();
 			input_elem_data[0].semantic_name = "POSITION";
@@ -836,6 +849,11 @@ void AppGame::TestCode()
 			input_elem_data[0].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32B32A32_FLOAT;
 			input_elem_data[0].stream_slot = 0;
 			input_elem_data[0].element_offset = 0;
+			input_elem_data[1].semantic_name = "TEXCOORD";
+			input_elem_data[1].semantic_index = 0;
+			input_elem_data[1].format = ngl::rhi::ResourceFormat::NGL_FORMAT_R32G32_FLOAT;
+			input_elem_data[1].stream_slot = 0;
+			input_elem_data[1].element_offset = sizeof(float) * 4;
 
 			if (!pso.Initialize(&device_, desc))
 			{
