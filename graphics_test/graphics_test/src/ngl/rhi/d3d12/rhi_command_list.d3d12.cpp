@@ -186,9 +186,9 @@ namespace ngl
 			assert(num);
 			p_command_list_->RSSetScissorRects(num, p_rects);
 		}
-		void GraphicsCommandListDep::SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY topology)
+		void GraphicsCommandListDep::SetPrimitiveTopology(PrimitiveTopology topology)
 		{
-			p_command_list_->IASetPrimitiveTopology(topology);
+			p_command_list_->IASetPrimitiveTopology(ConvertPrimitiveTopology(topology));
 		}
 		void GraphicsCommandListDep::SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views)
 		{

@@ -166,7 +166,22 @@ namespace ngl
 				return false;
 
 			// Persistent上に作成.
-			p_device->GetD3D12Device()->CreateSampler(&(desc.desc), view_.cpu_handle);
+			D3D12_SAMPLER_DESC d3ddesc = {};
+			d3ddesc.AddressU = ConvertTextureAddressMode(desc.AddressU);
+			d3ddesc.AddressV = ConvertTextureAddressMode(desc.AddressV);
+			d3ddesc.AddressW = ConvertTextureAddressMode(desc.AddressW);
+			d3ddesc.BorderColor[0] = desc.BorderColor[0];
+			d3ddesc.BorderColor[1] = desc.BorderColor[1];
+			d3ddesc.BorderColor[2] = desc.BorderColor[2];
+			d3ddesc.BorderColor[3] = desc.BorderColor[3];
+			d3ddesc.ComparisonFunc = ConvertComparisonFunc(desc.ComparisonFunc);
+			d3ddesc.Filter = ConvertTextureFilter(desc.Filter);
+			d3ddesc.MaxAnisotropy = desc.MaxAnisotropy;
+			d3ddesc.MaxLOD = desc.MaxLOD;
+			d3ddesc.MinLOD = desc.MinLOD;
+			d3ddesc.MipLODBias = desc.MipLODBias;
+
+			p_device->GetD3D12Device()->CreateSampler(&(d3ddesc), view_.cpu_handle);
 			return true;
 		}
 		void SamplerDep::Finalize()

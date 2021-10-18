@@ -52,7 +52,7 @@ namespace ngl
 			void SetPipelineState(GraphicsPipelineStateDep* p_pso);
 			void SetDescriptorSet(const GraphicsPipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set);
 
-			void SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY topology);
+			void SetPrimitiveTopology(PrimitiveTopology topology);
 			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views);
 			void SetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW* p_view);
 

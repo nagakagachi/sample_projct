@@ -19,122 +19,122 @@ namespace ngl
 
 		enum class ResourceFormat
 		{
-			NGL_FORMAT_UNKNOWN,
-			NGL_FORMAT_R32G32B32A32_TYPELESS,
-			NGL_FORMAT_R32G32B32A32_FLOAT,
-			NGL_FORMAT_R32G32B32A32_UINT,
-			NGL_FORMAT_R32G32B32A32_SINT,
-			NGL_FORMAT_R32G32B32_TYPELESS,
-			NGL_FORMAT_R32G32B32_FLOAT,
-			NGL_FORMAT_R32G32B32_UINT,
-			NGL_FORMAT_R32G32B32_SINT,
-			NGL_FORMAT_R16G16B16A16_TYPELESS,
-			NGL_FORMAT_R16G16B16A16_FLOAT,
-			NGL_FORMAT_R16G16B16A16_UNORM,
-			NGL_FORMAT_R16G16B16A16_UINT,
-			NGL_FORMAT_R16G16B16A16_SNORM,
-			NGL_FORMAT_R16G16B16A16_SINT,
-			NGL_FORMAT_R32G32_TYPELESS,
-			NGL_FORMAT_R32G32_FLOAT,
-			NGL_FORMAT_R32G32_UINT,
-			NGL_FORMAT_R32G32_SINT,
-			NGL_FORMAT_R32G8X24_TYPELESS,
-			NGL_FORMAT_D32_FLOAT_S8X24_UINT,
-			NGL_FORMAT_R32_FLOAT_X8X24_TYPELESS,
-			NGL_FORMAT_X32_TYPELESS_G8X24_UINT,
-			NGL_FORMAT_R10G10B10A2_TYPELESS,
-			NGL_FORMAT_R10G10B10A2_UNORM,
-			NGL_FORMAT_R10G10B10A2_UINT,
-			NGL_FORMAT_R11G11B10_FLOAT,
-			NGL_FORMAT_R8G8B8A8_TYPELESS,
-			NGL_FORMAT_R8G8B8A8_UNORM,
-			NGL_FORMAT_R8G8B8A8_UNORM_SRGB,
-			NGL_FORMAT_R8G8B8A8_UINT,
-			NGL_FORMAT_R8G8B8A8_SNORM,
-			NGL_FORMAT_R8G8B8A8_SINT,
-			NGL_FORMAT_R16G16_TYPELESS,
-			NGL_FORMAT_R16G16_FLOAT,
-			NGL_FORMAT_R16G16_UNORM,
-			NGL_FORMAT_R16G16_UINT,
-			NGL_FORMAT_R16G16_SNORM,
-			NGL_FORMAT_R16G16_SINT,
-			NGL_FORMAT_R32_TYPELESS,
-			NGL_FORMAT_D32_FLOAT,
-			NGL_FORMAT_R32_FLOAT,
-			NGL_FORMAT_R32_UINT,
-			NGL_FORMAT_R32_SINT,
-			NGL_FORMAT_R24G8_TYPELESS,
-			NGL_FORMAT_D24_UNORM_S8_UINT,
-			NGL_FORMAT_R24_UNORM_X8_TYPELESS,
-			NGL_FORMAT_X24_TYPELESS_G8_UINT,
-			NGL_FORMAT_R8G8_TYPELESS,
-			NGL_FORMAT_R8G8_UNORM,
-			NGL_FORMAT_R8G8_UINT,
-			NGL_FORMAT_R8G8_SNORM,
-			NGL_FORMAT_R8G8_SINT,
-			NGL_FORMAT_R16_TYPELESS,
-			NGL_FORMAT_R16_FLOAT,
-			NGL_FORMAT_D16_UNORM,
-			NGL_FORMAT_R16_UNORM,
-			NGL_FORMAT_R16_UINT,
-			NGL_FORMAT_R16_SNORM,
-			NGL_FORMAT_R16_SINT,
-			NGL_FORMAT_R8_TYPELESS,
-			NGL_FORMAT_R8_UNORM,
-			NGL_FORMAT_R8_UINT,
-			NGL_FORMAT_R8_SNORM,
-			NGL_FORMAT_R8_SINT,
-			NGL_FORMAT_A8_UNORM,
-			NGL_FORMAT_R1_UNORM,
-			NGL_FORMAT_R9G9B9E5_SHAREDEXP,
-			NGL_FORMAT_R8G8_B8G8_UNORM,
-			NGL_FORMAT_G8R8_G8B8_UNORM,
-			NGL_FORMAT_BC1_TYPELESS,
-			NGL_FORMAT_BC1_UNORM,
-			NGL_FORMAT_BC1_UNORM_SRGB,
-			NGL_FORMAT_BC2_TYPELESS,
-			NGL_FORMAT_BC2_UNORM,
-			NGL_FORMAT_BC2_UNORM_SRGB,
-			NGL_FORMAT_BC3_TYPELESS,
-			NGL_FORMAT_BC3_UNORM,
-			NGL_FORMAT_BC3_UNORM_SRGB,
-			NGL_FORMAT_BC4_TYPELESS,
-			NGL_FORMAT_BC4_UNORM,
-			NGL_FORMAT_BC4_SNORM,
-			NGL_FORMAT_BC5_TYPELESS,
-			NGL_FORMAT_BC5_UNORM,
-			NGL_FORMAT_BC5_SNORM,
-			NGL_FORMAT_B5G6R5_UNORM,
-			NGL_FORMAT_B5G5R5A1_UNORM,
-			NGL_FORMAT_B8G8R8A8_UNORM,
-			NGL_FORMAT_B8G8R8X8_UNORM,
-			NGL_FORMAT_R10G10B10_XR_BIAS_A2_UNORM,
-			NGL_FORMAT_B8G8R8A8_TYPELESS,
-			NGL_FORMAT_B8G8R8A8_UNORM_SRGB,
-			NGL_FORMAT_B8G8R8X8_TYPELESS,
-			NGL_FORMAT_B8G8R8X8_UNORM_SRGB,
-			NGL_FORMAT_BC6H_TYPELESS,
-			NGL_FORMAT_BC6H_UF16,
-			NGL_FORMAT_BC6H_SF16,
-			NGL_FORMAT_BC7_TYPELESS,
-			NGL_FORMAT_BC7_UNORM,
-			NGL_FORMAT_BC7_UNORM_SRGB,
-			NGL_FORMAT_AYUV,
-			NGL_FORMAT_Y410,
-			NGL_FORMAT_Y416,
-			NGL_FORMAT_NV12,
-			NGL_FORMAT_P010,
-			NGL_FORMAT_P016,
-			NGL_FORMAT_420_OPAQUE,
-			NGL_FORMAT_YUY2,
-			NGL_FORMAT_Y210,
-			NGL_FORMAT_Y216,
-			NGL_FORMAT_NV11,
-			NGL_FORMAT_AI44,
-			NGL_FORMAT_IA44,
-			NGL_FORMAT_P8,
-			NGL_FORMAT_A8P8,
-			NGL_FORMAT_B4G4R4A4_UNORM,
+			Format_UNKNOWN,
+			Format_R32G32B32A32_TYPELESS,
+			Format_R32G32B32A32_FLOAT,
+			Format_R32G32B32A32_UINT,
+			Format_R32G32B32A32_SINT,
+			Format_R32G32B32_TYPELESS,
+			Format_R32G32B32_FLOAT,
+			Format_R32G32B32_UINT,
+			Format_R32G32B32_SINT,
+			Format_R16G16B16A16_TYPELESS,
+			Format_R16G16B16A16_FLOAT,
+			Format_R16G16B16A16_UNORM,
+			Format_R16G16B16A16_UINT,
+			Format_R16G16B16A16_SNORM,
+			Format_R16G16B16A16_SINT,
+			Format_R32G32_TYPELESS,
+			Format_R32G32_FLOAT,
+			Format_R32G32_UINT,
+			Format_R32G32_SINT,
+			Format_R32G8X24_TYPELESS,
+			Format_D32_FLOAT_S8X24_UINT,
+			Format_R32_FLOAT_X8X24_TYPELESS,
+			Format_X32_TYPELESS_G8X24_UINT,
+			Format_R10G10B10A2_TYPELESS,
+			Format_R10G10B10A2_UNORM,
+			Format_R10G10B10A2_UINT,
+			Format_R11G11B10_FLOAT,
+			Format_R8G8B8A8_TYPELESS,
+			Format_R8G8B8A8_UNORM,
+			Format_R8G8B8A8_UNORM_SRGB,
+			Format_R8G8B8A8_UINT,
+			Format_R8G8B8A8_SNORM,
+			Format_R8G8B8A8_SINT,
+			Format_R16G16_TYPELESS,
+			Format_R16G16_FLOAT,
+			Format_R16G16_UNORM,
+			Format_R16G16_UINT,
+			Format_R16G16_SNORM,
+			Format_R16G16_SINT,
+			Format_R32_TYPELESS,
+			Format_D32_FLOAT,
+			Format_R32_FLOAT,
+			Format_R32_UINT,
+			Format_R32_SINT,
+			Format_R24G8_TYPELESS,
+			Format_D24_UNORM_S8_UINT,
+			Format_R24_UNORM_X8_TYPELESS,
+			Format_X24_TYPELESS_G8_UINT,
+			Format_R8G8_TYPELESS,
+			Format_R8G8_UNORM,
+			Format_R8G8_UINT,
+			Format_R8G8_SNORM,
+			Format_R8G8_SINT,
+			Format_R16_TYPELESS,
+			Format_R16_FLOAT,
+			Format_D16_UNORM,
+			Format_R16_UNORM,
+			Format_R16_UINT,
+			Format_R16_SNORM,
+			Format_R16_SINT,
+			Format_R8_TYPELESS,
+			Format_R8_UNORM,
+			Format_R8_UINT,
+			Format_R8_SNORM,
+			Format_R8_SINT,
+			Format_A8_UNORM,
+			Format_R1_UNORM,
+			Format_R9G9B9E5_SHAREDEXP,
+			Format_R8G8_B8G8_UNORM,
+			Format_G8R8_G8B8_UNORM,
+			Format_BC1_TYPELESS,
+			Format_BC1_UNORM,
+			Format_BC1_UNORM_SRGB,
+			Format_BC2_TYPELESS,
+			Format_BC2_UNORM,
+			Format_BC2_UNORM_SRGB,
+			Format_BC3_TYPELESS,
+			Format_BC3_UNORM,
+			Format_BC3_UNORM_SRGB,
+			Format_BC4_TYPELESS,
+			Format_BC4_UNORM,
+			Format_BC4_SNORM,
+			Format_BC5_TYPELESS,
+			Format_BC5_UNORM,
+			Format_BC5_SNORM,
+			Format_B5G6R5_UNORM,
+			Format_B5G5R5A1_UNORM,
+			Format_B8G8R8A8_UNORM,
+			Format_B8G8R8X8_UNORM,
+			Format_R10G10B10_XR_BIAS_A2_UNORM,
+			Format_B8G8R8A8_TYPELESS,
+			Format_B8G8R8A8_UNORM_SRGB,
+			Format_B8G8R8X8_TYPELESS,
+			Format_B8G8R8X8_UNORM_SRGB,
+			Format_BC6H_TYPELESS,
+			Format_BC6H_UF16,
+			Format_BC6H_SF16,
+			Format_BC7_TYPELESS,
+			Format_BC7_UNORM,
+			Format_BC7_UNORM_SRGB,
+			Format_AYUV,
+			Format_Y410,
+			Format_Y416,
+			Format_NV12,
+			Format_P010,
+			Format_P016,
+			Format_420_OPAQUE,
+			Format_YUY2,
+			Format_Y210,
+			Format_Y216,
+			Format_NV11,
+			Format_AI44,
+			Format_IA44,
+			Format_P8,
+			Format_A8P8,
+			Format_B4G4R4A4_UNORM,
 			_MAX,
 		};
 
@@ -143,15 +143,15 @@ namespace ngl
 		{
 			switch (format)
 			{
-			case ResourceFormat::NGL_FORMAT_D16_UNORM:
-				return ResourceFormat::NGL_FORMAT_R16_UNORM;
-			case ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
-				return ResourceFormat::NGL_FORMAT_R24_UNORM_X8_TYPELESS;
-			case ResourceFormat::NGL_FORMAT_D32_FLOAT:
-				return ResourceFormat::NGL_FORMAT_R32_FLOAT;
-			case ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+			case ResourceFormat::Format_D16_UNORM:
+				return ResourceFormat::Format_R16_UNORM;
+			case ResourceFormat::Format_D24_UNORM_S8_UINT:
+				return ResourceFormat::Format_R24_UNORM_X8_TYPELESS;
+			case ResourceFormat::Format_D32_FLOAT:
+				return ResourceFormat::Format_R32_FLOAT;
+			case ResourceFormat::Format_D32_FLOAT_S8X24_UINT:
 				assert(false);
-				return ResourceFormat::NGL_FORMAT_UNKNOWN;
+				return ResourceFormat::Format_UNKNOWN;
 			default:
 				return format;
 			}
@@ -161,13 +161,13 @@ namespace ngl
 		{
 			switch (format)
 			{
-			case ResourceFormat::NGL_FORMAT_D16_UNORM:
+			case ResourceFormat::Format_D16_UNORM:
 				return true;
-			case ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
+			case ResourceFormat::Format_D24_UNORM_S8_UINT:
 				return true;
-			case ResourceFormat::NGL_FORMAT_D32_FLOAT:
+			case ResourceFormat::Format_D32_FLOAT:
 				return true;
-			case ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+			case ResourceFormat::Format_D32_FLOAT_S8X24_UINT:
 				assert(false);
 				return false;
 			default:
@@ -177,167 +177,182 @@ namespace ngl
 
 		enum class ResourceState
 		{
-			COMMON,
-			GENERAL,
-			CONSTANT_BUFFER,
-			VERTEX_BUFFER,
-			INDEX_BUFFER,
-			RENDER_TARGET,
-			SHADER_READ,
-			UNORDERED_ACCESS,
-			DEPTH_WRITE,
-			DEPTH_READ,
-			INDIRECT_ARGUMENT,
-			COPY_DST,
-			COPY_SRC,
-			PRESENT,
+			Common,
+			General,
+			ConstatnBuffer,
+			VertexBuffer,
+			IndexBuffer,
+			RenderTarget,
+			ShaderRead,
+			UnorderedAccess,
+			DepthWrite,
+			DepthRead,
+			IndirectArgument,
+			CopyDst,
+			CopySrc,
+			Present,
 		};
 
 
 		enum class ResourceHeapType
 		{
-			DEFAULT,
-			UPLOAD,
-			READBACK,
+			Default,
+			Upload,
+			Readback,
 		};
 
 
 		enum class ShaderStage
 		{
-			VERTEX_SHADER,
-			HULL_SHADER,
-			DOMAIN_SHADER,
-			GEOMETRY_SHADER,
-			PIXEL_SHADER,
-			COMPUTE_SHADER,
+			Vertex,
+			Hull,
+			Domain,
+			Geometry,
+			Pixel,
+			Compute,
 
-			_MAX,
+			_Max,
 		};
 
 		// ブレンド要素
 		enum class BlendFactor
 		{
-			BLEND_FACTOR_ZERO,
-			BLEND_FACTOR_ONE,
-			BLEND_FACTOR_SRC_COLOR,
-			BLEND_FACTOR_INV_SRC_COLOR,
-			BLEND_FACTOR_SRC_ALPHA,
-			BLEND_FACTOR_INV_SRC_ALPHA,
-			BLEND_FACTOR_DEST_ALPHA,
-			BLEND_FACTOR_INV_DEST_ALPHA,
-			BLEND_FACTOR_DEST_COLOR,
-			BLEND_FACTOR_INV_DEST_COLOR,
-			BLEND_FACTOR_SRC_ALPHA_SAT,
-			BLEND_FACTOR_BLEND_FACTOR,
-			BLEND_FACTOR_INV_BLEND_FACTOR,
-			BLEND_FACTOR_SRC1_COLOR,
-			BLEND_FACTOR_INV_SRC1_COLOR,
-			BLEND_FACTOR_SRC1_ALPHA,
-			BLEND_FACTOR_INV_SRC1_ALPHA,
+			Zero,
+			One,
+			SrcColor,
+			InvSrcColor,
+			SrcAlpha,
+			InvSrcAlpha,
+			DestAlpha,
+			InvDestAlpha,
+			DestColor,
+			InvDestColor,
+			SrcAlphaSat,
+			BlendFactor,
+			InvBlendFactor,
+			Src1Color,
+			InvSrc1Color,
+			Src1Alpha,
+			InvSrc1Alpha,
 		};	// enum BlendFactor
 
 		// ブレンド関数
 		enum class BlendOp
 		{
-			BLEND_OP_ADD,
-			BLEND_OP_SUBTRACT,
-			BLEND_OP_REV_SUBTRACT,
-			BLEND_OP_MIN,
-			BLEND_OP_MAX,
+			Add,
+			Subtract,
+			RevSubtract,
+			Min,
+			Max,
 		};	// enum BlendOp
 
 		// 比較関数
 		enum class CompFunc
 		{
-			COMP_FUNC_NEVER,
-			COMP_FUNC_LESS,
-			COMP_FUNC_EQUAL,
-			COMP_FUNC_LESS_EQUAL,
-			COMP_FUNC_GREATER,
-			COMP_FUNC_NOT_EQUAL,
-			COMP_FUNC_GREATER_EQUAL,
-			COMP_FUNC_ALWAYS,
+			Never,
+			Less,
+			Equal,
+			LessEqual,
+			Greater,
+			NotEqual,
+			GreaterEqual,
+			Always,
 		};	// enum CompFunc
 
 		// ステンシル関数
 		enum class StencilOp
 		{
-			STENCIL_OP_KEEP,
-			STENCIL_OP_ZERO,
-			STENCIL_OP_REPLACE,
-			STENCIL_OP_INCR_SAT,
-			STENCIL_OP_DECR_SAT,
-			STENCIL_OP_INVERT,
-			STENCIL_OP_INCR,
-			STENCIL_OP_DECR,
+			Keep,
+			Zero,
+			Replace,
+			IncrSat,
+			DecrSat,
+			Invert,
+			Incr,
+			Decr,
 		};	// enum StencilOp
 
 		// ステンシル面方向
 		enum class StencilFace
 		{
-			STENCIL_FACE_FRONT,
-			STENCIL_FACE_BACK,
+			Front,
+			Back,
 
-			STENCIL_FACE_MAX
+			_Max
 		};	// enum StencilFace
 
 		// ポリゴン描画モード
 		enum class FillMode
 		{
-			FILL_WIREFRAME,
-			FILL_SOLID,
+			Wireframe,
+			Solid,
 		};	// enum FillMode
 
 		// カリング面
 		enum class CullingMode
 		{
-			CULL_NONE,
-			CULL_FRONT,
-			CULL_BACK,
+			None,
+			Front,
+			Back,
 		};	// enum CullingMode
 
 		// テクスチャフィルタ
-		enum class TexFilter
+		enum class TextureFilterMode
 		{
-			FILTER_MIN_MAG_MIP_POINT,
-			FILTER_MIN_MAG_POINT_MIP_LINEAR,
-			FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT,
-			FILTER_MIN_POINT_MAG_MIP_LINEAR,
-			FILTER_MIN_LINEAR_MAG_MIP_POINT,
-			FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR,
-			FILTER_MIN_MAG_LINEAR_MIP_POINT,
-			FILTER_MIN_MAG_MIP_LINEAR,
-			FILTER_ANISOTROPIC,
-			FILTER_COMP_MIN_MAG_MIP_POINT,
-			FILTER_COMP_MIN_MAG_POINT_MIP_LINEAR,
-			FILTER_COMP_MIN_POINT_MAG_LINEAR_MIP_POINT,
-			FILTER_COMP_MIN_POINT_MAG_MIP_LINEAR,
-			FILTER_COMP_MIN_LINEAR_MAG_MIP_POINT,
-			FILTER_COMP_MIN_LINEAR_MAG_POINT_MIP_LINEAR,
-			FILTER_COMP_MIN_MAG_LINEAR_MIP_POINT,
-			FILTER_COMP_MIN_MAG_MIP_LINEAR,
-			FILTER_COMP_ANISOTROPIC,
-		};	// enum TexFilter
+			Min_Point_Mag_Point_Mip_Point,
+			Min_Point_Mag_Point_Mip_Linear,
+			Min_Point_Mag_Linear_Mip_Point,
+			Min_Point_Mag_Linear_Mip_Linear,
+
+			Min_Linear_Mag_Point_Mip_Point,
+			Min_Linear_Mag_Point_Mip_Linear,
+			Min_Linear_Mag_Linear_Mip_Point,
+			Min_Linear_Mag_Linear_Mip_Linear,
+
+			Anisotropic,
+
+			Comp_Min_Point_Mag_Point_Mip_Point,
+			Comp_Min_Point_Mag_Point_Mip_Linear,
+			Comp_Min_Point_Mag_Linear_Mip_Point,
+			Comp_Min_Point_Mag_Linear_Mip_Linear,
+
+			Comp_Min_Linear_Mag_Point_Mip_Point,
+			Comp_Min_Linear_Mag_Point_Mip_Linear,
+			Comp_Min_Linear_Mag_Linear_Mip_Point,
+			Comp_Min_Linear_Mag_Linear_Mip_Linear,
+
+			Comp_Anisotropic,
+		};	// enum TextureFilterMode
 
 		// テクスチャラップモード
-		enum class TexWrap
+		enum class TextureAddressMode
 		{
-			TEXTURE_WRAP_REPEAT,
-			TEXTURE_WRAP_MIRROR,
-			TEXTURE_WRAP_CLAMP,
-			TEXTURE_WRAP_BORDER,
-			TEXTURE_WRAP_MIRROR_ONCE,
-		};	// enum TexWrap
+			Repeat,
+			Mirror,
+			Clamp,
+			Border,
+			MirrorOnce,
+		};	// enum TextureAddressMode
 
-		// 描画トポロジー
+		// 描画トポロジータイプ
 		enum class PrimitiveTopologyType
 		{
-			PRIMITIVE_TOPOLOGY_POINT,
-			PRIMITIVE_TOPOLOGY_LINE,
-			PRIMITIVE_TOPOLOGY_TRIANGLE,
-			PRIMITIVE_TOPOLOGY_PATCH,
+			Point,
+			Line,
+			Triangle,
+			Patch,
 		};	// enum PrimitiveTopologyType
 
+		// 描画トポロジー
+		enum class PrimitiveTopology
+		{
+			Undefined,
+			PointList,
+			LineList,
+			LineStrip,
+			TriangleList,
+			TriangleStrip
+		};
 
 		struct SampleDesc
 		{
@@ -369,8 +384,8 @@ namespace ngl
 		// ラスタライザステート
 		struct RasterizerState
 		{
-			FillMode		fill_mode = FillMode::FILL_SOLID;
-			CullingMode		cull_mode = CullingMode::CULL_BACK;
+			FillMode		fill_mode = FillMode::Solid;
+			CullingMode		cull_mode = CullingMode::Back;
 			bool			front_counter_clockwise = false;
 			int				depth_bias = 0;
 			float			depth_bias_clamp = 0.0f;

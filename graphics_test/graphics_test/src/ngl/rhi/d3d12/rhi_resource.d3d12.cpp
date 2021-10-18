@@ -67,9 +67,9 @@ namespace ngl
 		{
 			switch (type)
 			{
-			case ResourceHeapType::DEFAULT:		return D3D12_HEAP_TYPE_DEFAULT;
-			case ResourceHeapType::UPLOAD:		return D3D12_HEAP_TYPE_UPLOAD;
-			case ResourceHeapType::READBACK:	return D3D12_HEAP_TYPE_READBACK;
+			case ResourceHeapType::Default:		return D3D12_HEAP_TYPE_DEFAULT;
+			case ResourceHeapType::Upload:		return D3D12_HEAP_TYPE_UPLOAD;
+			case ResourceHeapType::Readback:	return D3D12_HEAP_TYPE_READBACK;
 			default:							return D3D12_HEAP_TYPE_DEFAULT;
 			}
 		}
@@ -79,13 +79,13 @@ namespace ngl
 		{
 			switch (format)
 			{
-			case ResourceFormat::NGL_FORMAT_D16_UNORM:
+			case ResourceFormat::Format_D16_UNORM:
 				return DXGI_FORMAT_R16_TYPELESS;
-			case ResourceFormat::NGL_FORMAT_D32_FLOAT_S8X24_UINT:
+			case ResourceFormat::Format_D32_FLOAT_S8X24_UINT:
 				return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
-			case ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT:
+			case ResourceFormat::Format_D24_UNORM_S8_UINT:
 				return DXGI_FORMAT_R24G8_TYPELESS;
-			case ResourceFormat::NGL_FORMAT_D32_FLOAT:
+			case ResourceFormat::Format_D32_FLOAT:
 				return DXGI_FORMAT_R32_TYPELESS;
 			default:
 				assert(isDepthFormat(format) == false);
@@ -208,7 +208,7 @@ namespace ngl
 		void* BufferDep::Map()
 		{
 			// DefaultヒープリソースはMap不可
-			if (ResourceHeapType::DEFAULT == desc_.heap_type)
+			if (ResourceHeapType::Default == desc_.heap_type)
 			{
 				std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
 				return nullptr;
@@ -221,7 +221,7 @@ namespace ngl
 
 			// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
 			D3D12_RANGE read_range = { 0, 0 };
-			if (ResourceHeapType::READBACK == desc_.heap_type)
+			if (ResourceHeapType::Readback == desc_.heap_type)
 			{
 				read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
 			}
@@ -241,7 +241,7 @@ namespace ngl
 
 			// Uploadバッファ以外の場合はUnmap時に書き戻さないのでZero-Range指定.
 			D3D12_RANGE write_range = {0, 0};
-			if (ResourceHeapType::UPLOAD == desc_.heap_type)
+			if (ResourceHeapType::Upload == desc_.heap_type)
 			{
 				write_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
 			}
@@ -277,13 +277,13 @@ namespace ngl
 			}
 			if (0 >= desc.width || 0 >= desc.height)
 				return false;
-			if (ResourceFormat::NGL_FORMAT_UNKNOWN == desc.format)
+			if (ResourceFormat::Format_UNKNOWN == desc.format)
 				return false;
 
 			desc_ = desc;
 			p_parent_device_ = p_device;
 
-			if (ResourceHeapType::UPLOAD == desc_.heap_type || ResourceHeapType::READBACK == desc_.heap_type)
+			if (ResourceHeapType::Upload == desc_.heap_type || ResourceHeapType::Readback == desc_.heap_type)
 			{
 				// TODO. DefaultHeap以外のTextureは生成できないので, 内部的にはUpload/READBACKなBufferを生成してそちらにCPUアクセスし,DefaultHeapなTextureにコピーする.
 				// 未実装.
@@ -397,7 +397,7 @@ namespace ngl
 		void* TextureDep::Map()
 		{
 			// DefaultヒープリソースはMap不可
-			if (ResourceHeapType::DEFAULT == desc_.heap_type)
+			if (ResourceHeapType::Default == desc_.heap_type)
 			{
 				std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
 				return nullptr;

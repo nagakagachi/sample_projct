@@ -103,7 +103,32 @@ namespace ngl
 			struct Desc
 			{
 				// TODO. あとで自前定義に置き換える.
-				D3D12_SAMPLER_DESC	desc;
+				TextureFilterMode	Filter;
+				TextureAddressMode	AddressU;
+				TextureAddressMode	AddressV;
+				TextureAddressMode	AddressW;
+				float				MipLODBias;
+				u32					MaxAnisotropy;
+				CompFunc			ComparisonFunc;
+				float				BorderColor[4];
+				float				MinLOD;
+				float				MaxLOD;
+
+				/*
+				Filter mMagFilter = Filter::Linear;
+				Filter mMinFilter = Filter::Linear;
+				Filter mMipFilter = Filter::Linear;
+				uint32_t mMaxAnisotropy = 1;
+				float mMaxLod = 1000;
+				float mMinLod = -1000;
+				float mLodBias = 0;
+				ComparisonMode mComparisonMode = ComparisonMode::Disabled;
+				ReductionMode mReductionMode = ReductionMode::Standard;
+				AddressMode mModeU = AddressMode::Wrap;
+				AddressMode mModeV = AddressMode::Wrap;
+				AddressMode mModeW = AddressMode::Wrap;
+				float4 mBorderColor = float4(0, 0, 0, 0);
+				*/
 			};
 			SamplerDep();
 			~SamplerDep();

@@ -77,5 +77,11 @@ namespace ngl
 		D3D12_COMPARISON_FUNC ConvertComparisonFunc(CompFunc v);
 
 		D3D12_PRIMITIVE_TOPOLOGY_TYPE ConvertPrimitiveTopologyType(PrimitiveTopologyType v);
+
+		D3D_PRIMITIVE_TOPOLOGY ConvertPrimitiveTopology(PrimitiveTopology v);
+
+		D3D12_FILTER ConvertTextureFilter(TextureFilterMode v);
+
+		D3D12_TEXTURE_ADDRESS_MODE ConvertTextureAddressMode(TextureAddressMode v);
 	}
 }

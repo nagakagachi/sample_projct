@@ -192,7 +192,7 @@ namespace ngl
 
 			struct Desc
 			{
-				ResourceFormat		format = ResourceFormat::NGL_FORMAT_R10G10B10A2_UNORM;
+				ResourceFormat		format = ResourceFormat::Format_R10G10B10A2_UNORM;
 			};
 
 			SwapChainDep();
@@ -232,7 +232,7 @@ namespace ngl
 				// "main_ps"
 				const char*		entry_point_name = nullptr;
 				// シェーダステージ.
-				ShaderStage		stage = ShaderStage::VERTEX_SHADER;
+				ShaderStage		stage = ShaderStage::Vertex;
 				// シェーダモデル文字列.
 				// "4_0", "5_0", "5_1" etc.
 				const char*		shader_model_version = nullptr;
@@ -478,11 +478,11 @@ namespace ngl
 				DepthStencilState	depth_stencil_state = {};
 
 				InputLayout				input_layout = {};
-				PrimitiveTopologyType	primitive_topology_type = PrimitiveTopologyType::PRIMITIVE_TOPOLOGY_TRIANGLE;
+				PrimitiveTopologyType	primitive_topology_type = PrimitiveTopologyType::Triangle;
 
 				u32					num_render_targets = 0;
 				ResourceFormat		render_target_formats[8] = {};
-				ResourceFormat		depth_stencil_format = ResourceFormat::NGL_FORMAT_D24_UNORM_S8_UINT;
+				ResourceFormat		depth_stencil_format = ResourceFormat::Format_D24_UNORM_S8_UINT;
 				SampleDesc			sample_desc = {};
 				u32					node_mask = 0;
 			};

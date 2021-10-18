@@ -41,22 +41,22 @@ namespace ngl
 		{
 			switch (v)
 			{
-			case ShaderStage::VERTEX_SHADER:
+			case ShaderStage::Vertex:
 				return D3D12_SHADER_VISIBILITY_VERTEX;
 
-			case ShaderStage::HULL_SHADER:
+			case ShaderStage::Hull:
 				return D3D12_SHADER_VISIBILITY_HULL;
 
-			case ShaderStage::DOMAIN_SHADER:
+			case ShaderStage::Domain:
 				return D3D12_SHADER_VISIBILITY_DOMAIN;
 
-			case ShaderStage::GEOMETRY_SHADER:
+			case ShaderStage::Geometry:
 				return D3D12_SHADER_VISIBILITY_GEOMETRY;
 
-			case ShaderStage::PIXEL_SHADER:
+			case ShaderStage::Pixel:
 				return D3D12_SHADER_VISIBILITY_PIXEL;
 
-			case ShaderStage::COMPUTE_SHADER:
+			case ShaderStage::Compute:
 				return D3D12_SHADER_VISIBILITY_ALL;
 
 			default:
@@ -529,7 +529,7 @@ namespace ngl
 					"ps",
 					"cs",
 				};
-				static_assert(static_cast<int>(ShaderStage::_MAX) == std::size(shader_stage_names),"Shader Stage Name Array Size is Invalid");
+				static_assert(static_cast<int>(ShaderStage::_Max) == std::size(shader_stage_names),"Shader Stage Name Array Size is Invalid");
 
 				size_t shader_model_name_len = 0;
 
@@ -1020,12 +1020,12 @@ namespace ngl
 				{
 					switch (shader_stage)
 					{
-					case ShaderStage::VERTEX_SHADER:   slot.vs_stage.slot = bind_point; slot.vs_stage.type = type; break;
-					case ShaderStage::PIXEL_SHADER:    slot.ps_stage.slot = bind_point; slot.ps_stage.type = type; break;
-					case ShaderStage::GEOMETRY_SHADER: slot.gs_stage.slot = bind_point; slot.gs_stage.type = type; break;
-					case ShaderStage::HULL_SHADER:     slot.hs_stage.slot = bind_point; slot.hs_stage.type = type; break;
-					case ShaderStage::DOMAIN_SHADER:   slot.ds_stage.slot = bind_point; slot.ds_stage.type = type; break;
-					case ShaderStage::COMPUTE_SHADER:  slot.cs_stage.slot = bind_point; slot.cs_stage.type = type; break;
+					case ShaderStage::Vertex:   slot.vs_stage.slot = bind_point; slot.vs_stage.type = type; break;
+					case ShaderStage::Pixel:    slot.ps_stage.slot = bind_point; slot.ps_stage.type = type; break;
+					case ShaderStage::Geometry: slot.gs_stage.slot = bind_point; slot.gs_stage.type = type; break;
+					case ShaderStage::Hull:     slot.hs_stage.slot = bind_point; slot.hs_stage.type = type; break;
+					case ShaderStage::Domain:   slot.ds_stage.slot = bind_point; slot.ds_stage.type = type; break;
+					case ShaderStage::Compute:  slot.cs_stage.slot = bind_point; slot.cs_stage.type = type; break;
 					}
 				};
 
@@ -1056,37 +1056,37 @@ namespace ngl
 				if (desc.vs)
 				{
 					// vsの入力レイアウト情報が必要なのでvsのreflectionはメンバ変数に保持
-					if( !vs_reflection_.Initialize(p_device, desc.vs) || !func_setup_slot(ShaderStage::VERTEX_SHADER, p_device, vs_reflection_, slot_map_))
+					if( !vs_reflection_.Initialize(p_device, desc.vs) || !func_setup_slot(ShaderStage::Vertex, p_device, vs_reflection_, slot_map_))
 						return false;
 				}
 				if (desc.hs)
 				{
 					ShaderReflectionDep		reflection;
-					if (!reflection.Initialize(p_device, desc.hs) || !func_setup_slot(ShaderStage::HULL_SHADER, p_device, reflection, slot_map_))
+					if (!reflection.Initialize(p_device, desc.hs) || !func_setup_slot(ShaderStage::Hull, p_device, reflection, slot_map_))
 						return false;
 				}
 				if (desc.ds)
 				{
 					ShaderReflectionDep		reflection;
-					if (!reflection.Initialize(p_device, desc.ds) || !func_setup_slot(ShaderStage::DOMAIN_SHADER, p_device, reflection, slot_map_))
+					if (!reflection.Initialize(p_device, desc.ds) || !func_setup_slot(ShaderStage::Domain, p_device, reflection, slot_map_))
 						return false;
 				}
 				if (desc.gs)
 				{
 					ShaderReflectionDep		reflection;
-					if (!reflection.Initialize(p_device, desc.gs) || !func_setup_slot(ShaderStage::GEOMETRY_SHADER, p_device, reflection, slot_map_))
+					if (!reflection.Initialize(p_device, desc.gs) || !func_setup_slot(ShaderStage::Geometry, p_device, reflection, slot_map_))
 						return false;
 				}
 				if (desc.ps)
 				{
 					ShaderReflectionDep		reflection;
-					if (!reflection.Initialize(p_device, desc.ps) || !func_setup_slot(ShaderStage::PIXEL_SHADER, p_device, reflection, slot_map_))
+					if (!reflection.Initialize(p_device, desc.ps) || !func_setup_slot(ShaderStage::Pixel, p_device, reflection, slot_map_))
 						return false;
 				}
 				if (desc.cs)
 				{
 					ShaderReflectionDep		reflection;
-					if (!reflection.Initialize(p_device, desc.cs) || !func_setup_slot(ShaderStage::COMPUTE_SHADER, p_device, reflection, slot_map_))
+					if (!reflection.Initialize(p_device, desc.cs) || !func_setup_slot(ShaderStage::Compute, p_device, reflection, slot_map_))
 						return false;
 				}
 			}
@@ -1102,7 +1102,7 @@ namespace ngl
 
 				というレイアウトとし、実行時には適切なサイズのHeapの適切な位置にCopyDescriptorsをする
 			*/
-			constexpr auto num_shader_stage = static_cast<int>(ShaderStage::_MAX);
+			constexpr auto num_shader_stage = static_cast<int>(ShaderStage::_Max);
 
 			const std::array<D3D12_DESCRIPTOR_RANGE, 4> fixed_range_infos =
 			{
@@ -1148,13 +1148,13 @@ namespace ngl
 					if (desc.vs)
 					{
 						resource_table_.vs_cbv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::VERTEX_SHADER, fixed_range_infos[0]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Vertex, fixed_range_infos[0]);
 						++root_table_index;
 						resource_table_.vs_srv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::VERTEX_SHADER, fixed_range_infos[1]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Vertex, fixed_range_infos[1]);
 						++root_table_index;
 						resource_table_.vs_sampler_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::VERTEX_SHADER, fixed_range_infos[2]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Vertex, fixed_range_infos[2]);
 						++root_table_index;
 						// VSはUAV無し
 
@@ -1165,13 +1165,13 @@ namespace ngl
 					if (desc.hs)
 					{
 						resource_table_.hs_cbv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::HULL_SHADER, fixed_range_infos[0]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Hull, fixed_range_infos[0]);
 						++root_table_index;
 						resource_table_.hs_srv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::HULL_SHADER, fixed_range_infos[1]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Hull, fixed_range_infos[1]);
 						++root_table_index;
 						resource_table_.hs_sampler_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::HULL_SHADER, fixed_range_infos[2]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Hull, fixed_range_infos[2]);
 						++root_table_index;
 						// HSはUAV無し
 
@@ -1182,13 +1182,13 @@ namespace ngl
 					if (desc.ds)
 					{
 						resource_table_.ds_cbv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::DOMAIN_SHADER, fixed_range_infos[0]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Domain, fixed_range_infos[0]);
 						++root_table_index;
 						resource_table_.ds_srv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::DOMAIN_SHADER, fixed_range_infos[1]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Domain, fixed_range_infos[1]);
 						++root_table_index;
 						resource_table_.ds_sampler_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::DOMAIN_SHADER, fixed_range_infos[2]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Domain, fixed_range_infos[2]);
 						++root_table_index;
 						// DSはUAV無し
 
@@ -1199,13 +1199,13 @@ namespace ngl
 					if (desc.gs)
 					{
 						resource_table_.gs_cbv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[0]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Geometry, fixed_range_infos[0]);
 						++root_table_index;
 						resource_table_.gs_srv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[1]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Geometry, fixed_range_infos[1]);
 						++root_table_index;
 						resource_table_.gs_sampler_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::GEOMETRY_SHADER, fixed_range_infos[2]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Geometry, fixed_range_infos[2]);
 						++root_table_index;
 						// GSはUAV無し
 
@@ -1216,16 +1216,16 @@ namespace ngl
 					if (desc.ps)
 					{
 						resource_table_.ps_cbv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[0]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Pixel, fixed_range_infos[0]);
 						++root_table_index;
 						resource_table_.ps_srv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[1]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Pixel, fixed_range_infos[1]);
 						++root_table_index;
 						resource_table_.ps_sampler_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[2]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Pixel, fixed_range_infos[2]);
 						++root_table_index;
 						resource_table_.ps_uav_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::PIXEL_SHADER, fixed_range_infos[3]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Pixel, fixed_range_infos[3]);
 						++root_table_index;
 
 						root_signature_desc.Flags &= ~D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
@@ -1235,16 +1235,16 @@ namespace ngl
 					if (desc.cs)
 					{
 						resource_table_.cs_cbv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[0]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Compute, fixed_range_infos[0]);
 						++root_table_index;
 						resource_table_.cs_srv_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[1]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Compute, fixed_range_infos[1]);
 						++root_table_index;
 						resource_table_.cs_sampler_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[2]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Compute, fixed_range_infos[2]);
 						++root_table_index;
 						resource_table_.cs_uav_table = root_table_index;
-						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::COMPUTE_SHADER, fixed_range_infos[3]);
+						func_set_table_to_param(ranges.data(), rootParameters.data(), root_table_index, ShaderStage::Compute, fixed_range_infos[3]);
 						++root_table_index;
 
 						root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;

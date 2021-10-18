@@ -28,8 +28,8 @@ namespace ngl
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
-				ResourceState		initial_state = ResourceState::GENERAL;
+				ResourceHeapType	heap_type = ResourceHeapType::Default;
+				ResourceState		initial_state = ResourceState::General;
 			};
 
 			BufferDep();
@@ -70,7 +70,7 @@ namespace ngl
 		public:
 			struct Desc
 			{
-				ResourceFormat		format = ResourceFormat::NGL_FORMAT_UNKNOWN;
+				ResourceFormat		format = ResourceFormat::Format_UNKNOWN;
 				ngl::u32			width = 1;
 				ngl::u32			height = 1;
 				ngl::u32			depth = 1;
@@ -81,8 +81,8 @@ namespace ngl
 				TextureType			type = TextureType::Texture2D;
 
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				ResourceHeapType	heap_type = ResourceHeapType::DEFAULT;
-				ResourceState		initial_state = ResourceState::GENERAL;
+				ResourceHeapType	heap_type = ResourceHeapType::Default;
+				ResourceState		initial_state = ResourceState::General;
 			};
 
 			TextureDep();

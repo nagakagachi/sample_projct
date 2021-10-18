@@ -138,72 +138,72 @@ namespace ngl
 			D3D12_RESOURCE_STATES ret = {};
 			switch (v)
 			{
-			case ResourceState::COMMON:
+			case ResourceState::Common:
 			{
 				ret = D3D12_RESOURCE_STATE_COMMON;
 				break;
 			}
-			case ResourceState::GENERAL:
+			case ResourceState::General:
 			{
 				ret = D3D12_RESOURCE_STATE_GENERIC_READ;
 				break;
 			}
-			case ResourceState::CONSTANT_BUFFER:
+			case ResourceState::ConstatnBuffer:
 			{
 				ret = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 				break;
 			}
-			case ResourceState::VERTEX_BUFFER:
+			case ResourceState::VertexBuffer:
 			{
 				ret = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 				break;
 			}
-			case ResourceState::INDEX_BUFFER:
+			case ResourceState::IndexBuffer:
 			{
 				ret = D3D12_RESOURCE_STATE_INDEX_BUFFER;
 				break;
 			}
-			case ResourceState::RENDER_TARGET:
+			case ResourceState::RenderTarget:
 			{
 				ret = D3D12_RESOURCE_STATE_RENDER_TARGET;
 				break;
 			}
-			case ResourceState::SHADER_READ:
+			case ResourceState::ShaderRead:
 			{
 				ret = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 				break;
 			}
-			case ResourceState::UNORDERED_ACCESS:
+			case ResourceState::UnorderedAccess:
 			{
 				ret = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 				break;
 			}
-			case ResourceState::DEPTH_WRITE:
+			case ResourceState::DepthWrite:
 			{
 				ret = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 				break;
 			}
-			case ResourceState::DEPTH_READ:
+			case ResourceState::DepthRead:
 			{
 				ret = D3D12_RESOURCE_STATE_DEPTH_READ;
 				break;
 			}
-			case ResourceState::INDIRECT_ARGUMENT:
+			case ResourceState::IndirectArgument:
 			{
 				ret = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
 				break;
 			}
-			case ResourceState::COPY_DST:
+			case ResourceState::CopyDst:
 			{
 				ret = D3D12_RESOURCE_STATE_COPY_DEST;
 				break;
 			}
-			case ResourceState::COPY_SRC:
+			case ResourceState::CopySrc:
 			{
 				ret = D3D12_RESOURCE_STATE_COPY_SOURCE;
 				break;
 			}
-			case ResourceState::PRESENT:
+			case ResourceState::Present:
 			{
 				ret = D3D12_RESOURCE_STATE_PRESENT;
 				break;
@@ -220,23 +220,23 @@ namespace ngl
 		{
 			switch (v)
 			{
-			case BlendOp::BLEND_OP_ADD:
+			case BlendOp::Add:
 			{
 				return D3D12_BLEND_OP_ADD;
 			}
-			case BlendOp::BLEND_OP_SUBTRACT:
+			case BlendOp::Subtract:
 			{
 				return D3D12_BLEND_OP_SUBTRACT;
 			}
-			case BlendOp::BLEND_OP_REV_SUBTRACT:
+			case BlendOp::RevSubtract:
 			{
 				return D3D12_BLEND_OP_REV_SUBTRACT;
 			}
-			case BlendOp::BLEND_OP_MIN:
+			case BlendOp::Min:
 			{
 				return D3D12_BLEND_OP_MIN;
 			}
-			case BlendOp::BLEND_OP_MAX:
+			case BlendOp::Max:
 			{
 				return D3D12_BLEND_OP_MAX;
 			}
@@ -251,71 +251,71 @@ namespace ngl
 		{
 			switch (v)
 			{
-				case BlendFactor::BLEND_FACTOR_ZERO:
+				case BlendFactor::Zero:
 				{
 					return D3D12_BLEND_ZERO;
 				}
-				case BlendFactor::BLEND_FACTOR_ONE:
+				case BlendFactor::One:
 				{
 					return D3D12_BLEND_ONE;
 				}
-				case BlendFactor::BLEND_FACTOR_SRC_COLOR:
+				case BlendFactor::SrcColor:
 				{
 					return D3D12_BLEND_SRC_COLOR;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_SRC_COLOR:
+				case BlendFactor::InvSrcColor:
 				{
 					return D3D12_BLEND_INV_SRC_COLOR;
 				}
-				case BlendFactor::BLEND_FACTOR_SRC_ALPHA:
+				case BlendFactor::SrcAlpha:
 				{
 					return D3D12_BLEND_SRC_ALPHA;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_SRC_ALPHA:
+				case BlendFactor::InvSrcAlpha:
 				{
 					return D3D12_BLEND_INV_SRC_ALPHA;
 				}
-				case BlendFactor::BLEND_FACTOR_DEST_ALPHA:
+				case BlendFactor::DestAlpha:
 				{
 					return D3D12_BLEND_DEST_ALPHA;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_DEST_ALPHA:
+				case BlendFactor::InvDestAlpha:
 				{
 					return D3D12_BLEND_INV_DEST_ALPHA;
 				}
-				case BlendFactor::BLEND_FACTOR_DEST_COLOR:
+				case BlendFactor::DestColor:
 				{
 					return D3D12_BLEND_DEST_COLOR;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_DEST_COLOR:
+				case BlendFactor::InvDestColor:
 				{
 					return D3D12_BLEND_INV_DEST_COLOR;
 				}
-				case BlendFactor::BLEND_FACTOR_SRC_ALPHA_SAT:
+				case BlendFactor::SrcAlphaSat:
 				{
 					return D3D12_BLEND_SRC_ALPHA_SAT;
 				}
-				case BlendFactor::BLEND_FACTOR_BLEND_FACTOR:
+				case BlendFactor::BlendFactor:
 				{
 					return D3D12_BLEND_BLEND_FACTOR;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_BLEND_FACTOR:
+				case BlendFactor::InvBlendFactor:
 				{
 					return D3D12_BLEND_INV_BLEND_FACTOR;
 				}
-				case BlendFactor::BLEND_FACTOR_SRC1_COLOR:
+				case BlendFactor::Src1Color:
 				{
 					return D3D12_BLEND_SRC1_COLOR;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_SRC1_COLOR:
+				case BlendFactor::InvSrc1Color:
 				{
 					return D3D12_BLEND_INV_SRC1_COLOR;
 				}
-				case BlendFactor::BLEND_FACTOR_SRC1_ALPHA:
+				case BlendFactor::Src1Alpha:
 				{
 					return D3D12_BLEND_SRC1_ALPHA;
 				}
-				case BlendFactor::BLEND_FACTOR_INV_SRC1_ALPHA:
+				case BlendFactor::InvSrc1Alpha:
 				{
 					return D3D12_BLEND_INV_SRC1_ALPHA;
 				}
@@ -331,10 +331,10 @@ namespace ngl
 		{
 			switch (v)
 			{
-			case CullingMode::CULL_FRONT:
+			case CullingMode::Front:
 				return D3D12_CULL_MODE_FRONT;
 
-			case CullingMode::CULL_BACK:
+			case CullingMode::Back:
 				return D3D12_CULL_MODE_BACK;
 
 			default:
@@ -346,10 +346,10 @@ namespace ngl
 		{
 			switch (v)
 			{
-			case FillMode::FILL_WIREFRAME:
+			case FillMode::Wireframe:
 				return D3D12_FILL_MODE_WIREFRAME;
 
-			case FillMode::FILL_SOLID:
+			case FillMode::Solid:
 				return D3D12_FILL_MODE_SOLID;
 
 			default:
@@ -361,28 +361,28 @@ namespace ngl
 		{
 			switch (v)
 			{
-			case StencilOp::STENCIL_OP_KEEP:
+			case StencilOp::Keep:
 				return D3D12_STENCIL_OP_KEEP;
 
-			case StencilOp::STENCIL_OP_ZERO:
+			case StencilOp::Zero:
 				return D3D12_STENCIL_OP_ZERO;
 
-			case StencilOp::STENCIL_OP_REPLACE:
+			case StencilOp::Replace:
 				return D3D12_STENCIL_OP_REPLACE;
 
-			case StencilOp::STENCIL_OP_INCR_SAT:
+			case StencilOp::IncrSat:
 				return D3D12_STENCIL_OP_INCR_SAT;
 
-			case StencilOp::STENCIL_OP_DECR_SAT:
+			case StencilOp::DecrSat:
 				return D3D12_STENCIL_OP_DECR_SAT;
 
-			case StencilOp::STENCIL_OP_INVERT:
+			case StencilOp::Invert:
 				return D3D12_STENCIL_OP_INVERT;
 
-			case StencilOp::STENCIL_OP_INCR:
+			case StencilOp::Incr:
 				return D3D12_STENCIL_OP_INCR;
 
-			case StencilOp::STENCIL_OP_DECR:
+			case StencilOp::Decr:
 				return D3D12_STENCIL_OP_DECR;
 
 			default:
@@ -394,28 +394,28 @@ namespace ngl
 		{
 			switch (v)
 			{
-				case CompFunc::COMP_FUNC_NEVER:
+				case CompFunc::Never:
 				return D3D12_COMPARISON_FUNC_NEVER;
 
-				case CompFunc::COMP_FUNC_LESS:
+				case CompFunc::Less:
 				return D3D12_COMPARISON_FUNC_LESS;
 
-				case CompFunc::COMP_FUNC_EQUAL:
+				case CompFunc::Equal:
 				return D3D12_COMPARISON_FUNC_EQUAL;
 
-				case CompFunc::COMP_FUNC_LESS_EQUAL:
+				case CompFunc::LessEqual:
 				return D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-				case CompFunc::COMP_FUNC_GREATER:
+				case CompFunc::Greater:
 				return D3D12_COMPARISON_FUNC_GREATER;
 
-				case CompFunc::COMP_FUNC_NOT_EQUAL:
+				case CompFunc::NotEqual:
 				return D3D12_COMPARISON_FUNC_NOT_EQUAL;
 
-				case CompFunc::COMP_FUNC_GREATER_EQUAL:
+				case CompFunc::GreaterEqual:
 				return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 
-				case CompFunc::COMP_FUNC_ALWAYS:
+				case CompFunc::Always:
 				return D3D12_COMPARISON_FUNC_ALWAYS;
 
 			default:
@@ -427,16 +427,16 @@ namespace ngl
 		{
 			switch (v)
 			{
-			case PrimitiveTopologyType::PRIMITIVE_TOPOLOGY_POINT:
+			case PrimitiveTopologyType::Point:
 				return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 
-			case PrimitiveTopologyType::PRIMITIVE_TOPOLOGY_LINE:
+			case PrimitiveTopologyType::Line:
 				return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 
-			case PrimitiveTopologyType::PRIMITIVE_TOPOLOGY_TRIANGLE:
+			case PrimitiveTopologyType::Triangle:
 				return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 
-			case PrimitiveTopologyType::PRIMITIVE_TOPOLOGY_PATCH:
+			case PrimitiveTopologyType::Patch:
 				return D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
 
 			default:
@@ -444,8 +444,67 @@ namespace ngl
 			}
 		}
 
+		D3D_PRIMITIVE_TOPOLOGY ConvertPrimitiveTopology(ngl::rhi::PrimitiveTopology v)
+		{
+			switch (v)
+			{
+			case PrimitiveTopology::PointList:
+				return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+			case PrimitiveTopology::LineList:
+				return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+			case PrimitiveTopology::LineStrip:
+				return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+			case PrimitiveTopology::TriangleList:
+				return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+			case PrimitiveTopology::TriangleStrip:
+				return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+			default:
+				assert(false);
+				return D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+			}
+		}
 
+		D3D12_FILTER ConvertTextureFilter(TextureFilterMode v)
+		{
+			static constexpr D3D12_FILTER table[] =
+			{
+				D3D12_FILTER_MIN_MAG_MIP_POINT,
+				D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR,
+				D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT,
+				D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR,
+				D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT,
+				D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR,
+				D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT,
+				D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+				D3D12_FILTER_ANISOTROPIC,
 
+				D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT,
+				D3D12_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR,
+				D3D12_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT,
+				D3D12_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR,
+				D3D12_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT,
+				D3D12_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR,
+				D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT,
+				D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR,
+				D3D12_FILTER_COMPARISON_ANISOTROPIC
+			};
+			assert(std::size(table) > static_cast<size_t>(v));
+			return table[static_cast<size_t>(v)];
+		}
+
+		D3D12_TEXTURE_ADDRESS_MODE ConvertTextureAddressMode(TextureAddressMode v)
+		{
+			static constexpr D3D12_TEXTURE_ADDRESS_MODE table[] =
+			{
+				D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+				D3D12_TEXTURE_ADDRESS_MODE_MIRROR,
+				D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+				D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+				D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE
+			};
+			assert(std::size(table) > static_cast<size_t>(v));
+			return table[static_cast<size_t>(v)];
+		}
 
 	}
 }
