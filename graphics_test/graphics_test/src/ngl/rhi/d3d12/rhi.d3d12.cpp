@@ -1095,10 +1095,10 @@ namespace ngl
 			/*
 				RootSignatureのDescriptorTableはもんしょさんのコピー戦略を参考.
 				一律で
-						Table2 : CBV 16個
-						Table0 : SRV 48個
-						Table3 : Sampler 16個
-						Table1 : UAV 16個
+						Table0 : CBV 16個
+						Table1 : SRV 48個
+						Table2 : Sampler 16個
+						Table3 : UAV 16個
 
 				というレイアウトとし、実行時には適切なサイズのHeapの適切な位置にCopyDescriptorsをする
 			*/

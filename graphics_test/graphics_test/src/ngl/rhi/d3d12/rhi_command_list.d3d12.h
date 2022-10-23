@@ -18,6 +18,7 @@ namespace ngl
 	namespace rhi
 	{
 		class TextureDep;
+		class BufferDep;
 		class RenderTargetViewDep;
 		class DepthStencilViewDep;
 
@@ -64,9 +65,10 @@ namespace ngl
 			void ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4]);
 			void ClearDepthTarget(const DepthStencilViewDep* p_dsv, float depth, uint8_t stencil, bool clearDepth, bool clearStencil);
 
-			// Barrier
+			// Barrier Swapchain, Texture, Buffer.
 			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
 			void ResourceBarrier(TextureDep* p_texture, ResourceState prev, ResourceState next);
+			void ResourceBarrier(BufferDep* p_buffer, ResourceState prev, ResourceState next);
 
 		public:
 			// 検証中は直接利用するかもしれないので取得関数追加
