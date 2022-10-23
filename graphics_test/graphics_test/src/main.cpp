@@ -276,7 +276,7 @@ bool AppGame::Initialize()
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
-			shader_desc.shader_model_version = "5_0";
+			shader_desc.shader_model_version = "6_0";
 
 			if (!sample_vs_.Initialize(&device_, shader_desc))
 			{
@@ -291,7 +291,7 @@ bool AppGame::Initialize()
 			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-			shader_desc.shader_model_version = "5_0";
+			shader_desc.shader_model_version = "6_0";
 
 			if (!sample_ps_.Initialize(&device_, shader_desc))
 			{
