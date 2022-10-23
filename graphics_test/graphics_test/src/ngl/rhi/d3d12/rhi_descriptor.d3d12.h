@@ -322,12 +322,7 @@ namespace ngl
 		};
 
 		/*
-			CommandListがPipelineにDescriptorを設定する際に連続したDescriptorのテーブルを提供するためのオブジェクト
-			非スレッドセーフであり、マルチスレッドでCommand生成をする場合にはCommandList毎にこのオブジェクトを割り当てる
-			SwapChainのバッファリング数と同じだけのバッファリングをし、最も古いものをリセットして使いまわしていく.
-
-
-			FrameDescriptorManagerは巨大なサイズを確保し,要求に応じて連続領域を切り出して貸し出す役割. スレッドセーフ
+			FrameDescriptorManagerは巨大なサイズを確保し, FrameDescriptorInterfaceからの要求に応じて連続領域を切り出して貸し出す役割. スレッドセーフ
 			切り出す時にフレーム番号を一緒に指定することで、特定のフレームで確保されたまとまった連続領域を纏めて解放できるようにしたい
 
 			FrameDescriptorInterface 固定サイズのスタックのリストを持ち、要求に応じてStackから連続したDescriptorを貸し出す　非スレッドセーフ
@@ -386,8 +381,6 @@ namespace ngl
 			D3D12_CPU_DESCRIPTOR_HANDLE			cpu_handle_start_ = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE			gpu_handle_start_ = {};
 			
-
-
 			struct FrameDescriptorRangeListNode
 			{
 				u32					frame_index	= k_invalid_frame_index;
@@ -464,15 +457,20 @@ namespace ngl
 
 
 
-
-
-
 		// 巨大な単一HeapではなくPage単位で確保するHeapManager. 一つのHeapのサイズに制限があるSampler向けだが, CBV_SRV_UAVでも利用可能.
 		// 返却されたPageの利用可能リストへの移動などの処理はDeviceのフレームインデックスと協調して自動的に実行される. (Allocate時についでに処理している).
 		class FrameDescriptorHeapPagePool
 		{
 		public:
 			static constexpr u32 k_max_sampler_heap_handle_count = 2048;// D3D12の制限2048.
+
+			// HeapTypeの種類数の定義のためだけの意味のない定義.
+			static constexpr D3D12_DESCRIPTOR_HEAP_TYPE k_heap_types[] =
+			{
+				D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+			};
+			static constexpr auto k_num_heap_types = std::size(k_heap_types);
+
 
 			static constexpr u32 GetHeapTypeIndex(D3D12_DESCRIPTOR_HEAP_TYPE t)
 			{
@@ -500,17 +498,17 @@ namespace ngl
 
 			// index 0 -> CBV_SRV_UAV
 			// index 1 -> SAMPLER
-			std::mutex		mutex_[2] = {};
+			std::mutex		mutex_[k_num_heap_types] = {};
 
-			u32 page_size_[2] = {};
+			u32 page_size_[k_num_heap_types] = {};
 
-			u32 handle_increment_size_[2] = {};
+			u32 handle_increment_size_[k_num_heap_types] = {};
 
 			// 生成したHeapは解放のためにすべてスマートポインタで保持.
-			std::vector<CComPtr<ID3D12DescriptorHeap>>	created_pool_[2];
-			std::queue<ID3D12DescriptorHeap*>			available_pool_[2];
+			std::vector<CComPtr<ID3D12DescriptorHeap>>	created_pool_[k_num_heap_types];
+			std::queue<ID3D12DescriptorHeap*>			available_pool_[k_num_heap_types];
 			// 返却時のフレームインデックスをペアで格納.
-			std::queue<std::pair<u64, ID3D12DescriptorHeap*>> retired_pool_[2];
+			std::queue<std::pair<u64, ID3D12DescriptorHeap*>> retired_pool_[k_num_heap_types];
 
 		};
 

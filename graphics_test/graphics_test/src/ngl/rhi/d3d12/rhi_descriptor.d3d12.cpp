@@ -499,10 +499,6 @@ namespace ngl
 			// 初期はFull
 			cur_stack_use_count_ = desc_.stack_size;
 
-			// 前回処理した際のフレームインデックスを解放.
-			// Node. これはDeviceのReadyToNewFrame()でフレームの最初に一回呼ぶように変更した.
-			////p_manager_->ResetFrameDescriptor(frame_index_);
-
 			// フレームインデックス更新
 			frame_index_ = frame_index;
 
