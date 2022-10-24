@@ -145,6 +145,35 @@ namespace ngl
 					std::cout << "[ERROR] Create Device" << std::endl;
 					return false;
 				}
+
+
+				// Featureチェック
+				// https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_feature
+				device_dxr_tier_ = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
+				p_device5_ = {};
+				{
+					D3D12_FEATURE_DATA_D3D12_OPTIONS5 d3d12_feature_opt_data = {};
+					const auto hresult_feature = p_device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &d3d12_feature_opt_data, sizeof(d3d12_feature_opt_data));
+					if (SUCCEEDED(hresult_feature))
+					{
+						device_dxr_tier_ = d3d12_feature_opt_data.RaytracingTier;
+						
+						if (D3D12_RAYTRACING_TIER_NOT_SUPPORTED != device_dxr_tier_)
+						{
+							// DXR対応ならDeviceInterfaceの問い合わせ.
+							if (FAILED(p_device_->QueryInterface(IID_PPV_ARGS(&p_device5_))))
+							{
+								std::cout << "[ERROR] Failed QueryInterface for ID3D12Device5" << std::endl;
+								return false;
+							}
+						}
+					}
+					else
+					{
+						std::cout << "[ERROR] CheckFeatureSupport " << hresult_feature << std::endl;
+						return false;
+					}
+				}
 			}
 
 			// PersistentDescriptorManager初期化
@@ -226,9 +255,17 @@ namespace ngl
 		{
 			return p_device_;
 		}
+		ID3D12Device5* DeviceDep::GetD3D12DeviceForDxr()
+		{
+			return p_device5_;
+		}
 		DeviceDep::DXGI_FACTORY_TYPE* DeviceDep::GetDxgiFactory()
 		{
 			return p_factory_;
+		}
+		bool DeviceDep::IsSupportDxr() const
+		{
+			return D3D12_RAYTRACING_TIER_NOT_SUPPORTED != device_dxr_tier_;
 		}
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------

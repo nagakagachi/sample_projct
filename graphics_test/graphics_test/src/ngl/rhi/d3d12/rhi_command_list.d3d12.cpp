@@ -28,15 +28,25 @@ namespace ngl
 			// Command Allocator
 			if (FAILED(p_device->GetD3D12Device()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&p_command_allocator_))))
 			{
-				std::cout << "ERROR: Create Command Allocator" << std::endl;
+				std::cout << "[ERROR] Create Command Allocator" << std::endl;
 				return false;
 			}
 
 			// Command List
 			if (FAILED(p_device->GetD3D12Device()->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, p_command_allocator_, nullptr, IID_PPV_ARGS(&p_command_list_))))
 			{
-				std::cout << "ERROR: Create Command List" << std::endl;
+				std::cout << "[ERROR] Create Command List" << std::endl;
 				return false;
+			}
+
+			// DXR対応Interfaceを取得(Deviceが対応しているなら).
+			p_command_list4_ = {};
+			if (p_device->IsSupportDxr())
+			{
+				if (FAILED(p_command_list_->QueryInterface(IID_PPV_ARGS(&p_command_list4_))))
+				{
+					std::cout << "[ERROR] QueryInterface for ID3D12GraphicsCommandList4" << std::endl;
+				}
 			}
 
 			// 初回クローズ. これがないと初回フレームの開始時ResetでComError発生.
@@ -48,7 +58,7 @@ namespace ngl
 			fdi_desc.stack_size = 2048;// スタックサイズは適当.
 			if (!frame_desc_interface_.Initialize(parent_device_->GetFrameDescriptorManager(), fdi_desc))
 			{
-				std::cout << "ERROR: Create FrameDescriptorInterface" << std::endl;
+				std::cout << "[ERROR] Create FrameDescriptorInterface" << std::endl;
 				return false;
 			}
 
@@ -59,7 +69,7 @@ namespace ngl
 			fdhpi_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
 			if (!frame_desc_page_interface_for_sampler_.Initialize(parent_device_->GetFrameDescriptorHeapPagePool(), fdhpi_desc))
 			{
-				std::cout << "ERROR: Create FrameDescriptorHeapPageInterface" << std::endl;
+				std::cout << "[ERROR] Create FrameDescriptorHeapPageInterface" << std::endl;
 				return false;
 			}
 

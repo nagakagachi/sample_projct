@@ -76,15 +76,19 @@ namespace ngl
 			// Deviceが管理するグローバルなフレームインデックスを取得.
 			u64	 GetDeviceFrameIndex() const { return frame_index_; }
 
-
 			const Desc& GetDesc() const { return desc_; }
 			const u32 GetFrameBufferIndex() const { return buffer_index_; }
 
-
 			ngl::platform::CoreWindow* GetWindow();
 
+			// DeviceのDxr対応Interfaceを取得.
 			ID3D12Device* GetD3D12Device();
+			// DeviceのDxr対応Interfaceを取得.
+			ID3D12Device5* GetD3D12DeviceForDxr();
+			// 
 			DXGI_FACTORY_TYPE* GetDxgiFactory();
+			// Dxrサポートの取得.
+			bool IsSupportDxr() const;
 
 			PersistentDescriptorAllocator* GetPersistentDescriptorAllocator()
 			{
@@ -107,8 +111,16 @@ namespace ngl
 
 			ngl::platform::CoreWindow* p_window_ = nullptr;
 
+			// Feature Level.
 			D3D_FEATURE_LEVEL device_feature_level_ = {};
+			// Raytracing DXR Tier.
+			D3D12_RAYTRACING_TIER device_dxr_tier_ = {};
+			
+			// base device.
 			CComPtr<ID3D12Device> p_device_;
+			// For Dxr Interface.
+			CComPtr<ID3D12Device5> p_device5_;
+
 			CComPtr<DXGI_FACTORY_TYPE> p_factory_;
 
 			// テスト中. フレームインデックス処理用.

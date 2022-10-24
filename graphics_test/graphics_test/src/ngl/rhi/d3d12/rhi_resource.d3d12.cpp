@@ -210,7 +210,7 @@ namespace ngl
 			// DefaultヒープリソースはMap不可
 			if (ResourceHeapType::Default == desc_.heap_type)
 			{
-				std::cout << "ERROR: Default Buffer can not Mapped" << std::endl;
+				std::cout << "[ERROR] Default Buffer can not Mapped" << std::endl;
 				return nullptr;
 			}
 			if (map_ptr_)
@@ -228,7 +228,7 @@ namespace ngl
 
 			if (FAILED(resource_->Map(0, &read_range, &map_ptr_)))
 			{
-				std::cout << "ERROR: Resouce Map" << std::endl;
+				std::cout << "[ERROR] Resouce Map" << std::endl;
 				map_ptr_ = nullptr;
 				return nullptr;
 			}
@@ -399,7 +399,7 @@ namespace ngl
 			// DefaultヒープリソースはMap不可
 			if (ResourceHeapType::Default == desc_.heap_type)
 			{
-				std::cout << "ERROR: Default Texture can not Mapped" << std::endl;
+				std::cout << "[ERROR] Default Texture can not Mapped" << std::endl;
 				return nullptr;
 			}
 			if (map_ptr_)
@@ -409,7 +409,7 @@ namespace ngl
 			}
 			if (FAILED(resource_->Map(0, nullptr, &map_ptr_)))
 			{
-				std::cout << "ERROR: Resouce Map" << std::endl;
+				std::cout << "[ERROR] Resouce Map" << std::endl;
 				map_ptr_ = nullptr;
 				return nullptr;
 			}

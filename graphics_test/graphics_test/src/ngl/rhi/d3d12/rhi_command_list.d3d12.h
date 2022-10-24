@@ -37,9 +37,15 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
+			// CommandListの標準Interfaceを取得.
 			ID3D12GraphicsCommandList* GetD3D12GraphicsCommandList()
 			{
 				return p_command_list_;
+			}
+			// CommandListのDxr対応Interfaceを取得.
+			ID3D12GraphicsCommandList4* GetD3D12GraphicsCommandListForDxr()
+			{
+				return p_command_list4_;
 			}
 
 			void Begin();
@@ -84,7 +90,10 @@ namespace ngl
 			FrameDescriptorHeapPageInterface	frame_desc_page_interface_for_sampler_ = {};
 
 			CComPtr<ID3D12CommandAllocator>		p_command_allocator_;
+
 			CComPtr<ID3D12GraphicsCommandList>	p_command_list_;
+			// For Dxr Interface.
+			CComPtr<ID3D12GraphicsCommandList4>	p_command_list4_;
 		};
 	}
 }

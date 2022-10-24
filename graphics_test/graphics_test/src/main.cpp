@@ -149,13 +149,13 @@ bool AppGame::Initialize()
 	device_desc.persistent_descriptor_size = 500000;
 	if (!device_.Initialize(&window_, device_desc))
 	{
-		std::cout << "ERROR: Device Initialize" << std::endl;
+		std::cout << "[ERROR] Device Initialize" << std::endl;
 		return false;
 	}
 
 	if (!graphics_queue_.Initialize(&device_))
 	{
-		std::cout << "ERROR: Command Queue Initialize" << std::endl;
+		std::cout << "[ERROR] Command Queue Initialize" << std::endl;
 		return false;
 	}
 	{
@@ -163,7 +163,7 @@ bool AppGame::Initialize()
 		swap_chain_desc.format = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;// DXGI_FORMAT_R10G10B10A2_UNORM;
 		if (!swapchain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
 		{
-			std::cout << "ERROR: SwapChain Initialize" << std::endl;
+			std::cout << "[ERROR] SwapChain Initialize" << std::endl;
 			return false;
 		}
 
@@ -188,13 +188,13 @@ bool AppGame::Initialize()
 
 		if (!tex_depth_.Initialize(&device_, desc))
 		{
-			std::cout << "ERROR: Create DepthTexture Initialize" << std::endl;
+			std::cout << "[ERROR] Create DepthTexture Initialize" << std::endl;
 			assert(false);
 		}
 
 		if (!tex_depth_dsv_.Initialize(&device_, &tex_depth_, 0, 0, 1))
 		{
-			std::cout << "ERROR: Create Dsv Initialize" << std::endl;
+			std::cout << "[ERROR] Create Dsv Initialize" << std::endl;
 			assert(false);
 		}
 
@@ -212,13 +212,13 @@ bool AppGame::Initialize()
 
 		if (!tex_rt_.Initialize(&device_, desc))
 		{
-			std::cout << "ERROR: Create RenderTarget Texture Initialize" << std::endl;
+			std::cout << "[ERROR] Create RenderTarget Texture Initialize" << std::endl;
 			assert(false);
 		}
 
 		if (!tex_rt_rtv_.Initialize(&device_, &tex_rt_, 0, 0, 1))
 		{
-			std::cout << "ERROR: Create Rtv Initialize" << std::endl;
+			std::cout << "[ERROR] Create Rtv Initialize" << std::endl;
 			assert(false);
 		}
 
@@ -236,13 +236,13 @@ bool AppGame::Initialize()
 
 		if (!tex_ua_.Initialize(&device_, desc))
 		{
-			std::cout << "ERROR: Create RenderTarget Texture Initialize" << std::endl;
+			std::cout << "[ERROR] Create RenderTarget Texture Initialize" << std::endl;
 			assert(false);
 		}
 
 		if (!tex_ua_uav_.Initialize(&device_, &tex_ua_, 0, 0, 1))
 		{
-			std::cout << "ERROR: Create Rtv Initialize" << std::endl;
+			std::cout << "[ERROR] Create Rtv Initialize" << std::endl;
 			assert(false);
 		}
 
@@ -252,13 +252,13 @@ bool AppGame::Initialize()
 	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};
 	if (!gfx_command_list_.Initialize(&device_, gcl_desc))
 	{
-		std::cout << "ERROR: CommandList Initialize" << std::endl;
+		std::cout << "[ERROR] CommandList Initialize" << std::endl;
 		return false;
 	}
 
 	if (!wait_fence_.Initialize(&device_))
 	{
-		std::cout << "ERROR: Fence Initialize" << std::endl;
+		std::cout << "[ERROR] Fence Initialize" << std::endl;
 		return false;
 	}
 
@@ -280,7 +280,7 @@ bool AppGame::Initialize()
 
 			if (!sample_vs_.Initialize(&device_, shader_desc))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 			}
 			reflect02.Initialize(&device_, &sample_vs_);
 		}
@@ -295,7 +295,7 @@ bool AppGame::Initialize()
 
 			if (!sample_ps_.Initialize(&device_, shader_desc))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 			}
 			reflect00.Initialize(&device_, &sample_ps_);
 		}
@@ -342,7 +342,7 @@ bool AppGame::Initialize()
 
 		if (!sample_pso_.Initialize(&device_, desc))
 		{
-			std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
+			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
 		}
 	}
 
@@ -469,7 +469,7 @@ bool AppGame::Initialize()
 		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
 		if (!samp_.Initialize(&device_, samp_desc))
 		{
-			std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+			std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
 			assert(false);
 		}
 	}
@@ -490,7 +490,7 @@ bool AppGame::Initialize()
 
 		if (!tex_.Initialize(&device_, tex_desc00))
 		{
-			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+			std::cout << "[ERROR] Create rhi::TextureDep" << std::endl;
 			assert(false);
 		}
 #else
@@ -506,7 +506,7 @@ bool AppGame::Initialize()
 
 		if (!tex_.Initialize(&device_, tex_desc00))
 		{
-			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+			std::cout << "[ERROR] Create rhi::TextureDep" << std::endl;
 			assert(false);
 		}
 #endif
@@ -514,7 +514,7 @@ bool AppGame::Initialize()
 		// TextureView
 		if (!tex_view_.InitializeAsTexture(&device_, &tex_, 0, 1, 0, 1))
 		{
-			std::cout << "ERROR: Create rhi::ShaderResourceViewDep" << std::endl;
+			std::cout << "[ERROR] Create rhi::ShaderResourceViewDep" << std::endl;
 			assert(false);
 		}
 	}
@@ -716,7 +716,7 @@ void AppGame::TestCode()
 
 		if (!buffer0.Initialize(&device_, buffer_desc0))
 		{
-			std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+			std::cout << "[ERROR] Create rhi::Buffer" << std::endl;
 			assert(false);
 		}
 
@@ -787,7 +787,7 @@ void AppGame::TestCode()
 		ngl::rhi::TextureDep tex00;
 		if (!tex00.Initialize( &device_, tex_desc00))
 		{
-			std::cout << "ERROR: Create rhi::TextureDep" << std::endl;
+			std::cout << "[ERROR] Create rhi::TextureDep" << std::endl;
 			assert(false);
 		}
 	}
@@ -816,7 +816,7 @@ void AppGame::TestCode()
 		{
 			if (!e.Initialize(&device_, samp_desc))
 			{
-				std::cout << "ERROR: Create rhi::SamplerDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
 				assert(false);
 			}
 		}
@@ -857,7 +857,7 @@ void AppGame::TestCode()
 
 			if (!pso.Initialize(&device_, desc))
 			{
-				std::cout << "ERROR: Create rhi::GraphicsPipelineState" << std::endl;
+				std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
 				assert(false);
 			}
 
@@ -880,7 +880,7 @@ void AppGame::TestCode()
 
 				if (!buffer0.Initialize(&device_, buffer_desc0))
 				{
-					std::cout << "ERROR: Create rhi::Buffer" << std::endl;
+					std::cout << "[ERROR] Create rhi::Buffer" << std::endl;
 					assert(false);
 				}
 
@@ -922,7 +922,7 @@ void AppGame::TestCode()
 			file_obj.ReadFile("./data/sample_vs.cso");
 			if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
 			}
 			reflect00.Initialize(&device_, &shader00);
@@ -935,7 +935,7 @@ void AppGame::TestCode()
 			file_obj.ReadFile("./data/sample_ps.cso");
 			if (!shader01.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
 			}
 			reflect00.Initialize(&device_, &shader01);
@@ -953,7 +953,7 @@ void AppGame::TestCode()
 
 			if (!shader00.Initialize(&device_, shader_desc))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
 			}
 			reflect00.Initialize(&device_, &shader00);
@@ -981,7 +981,7 @@ void AppGame::TestCode()
 
 			if (!shader01.Initialize(&device_, shader_desc))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
 			}
 			reflect01.Initialize(&device_, &shader01);
@@ -1003,7 +1003,7 @@ void AppGame::TestCode()
 
 			if (!shader02.Initialize(&device_, shader_desc))
 			{
-				std::cout << "ERROR: Create rhi::ShaderDep" << std::endl;
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
 			}
 			reflect02.Initialize(&device_, &shader02);

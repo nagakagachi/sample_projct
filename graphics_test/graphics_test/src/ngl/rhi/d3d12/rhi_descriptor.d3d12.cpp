@@ -44,7 +44,7 @@ namespace ngl
 
 				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
 				{
-					std::cout << "ERROR: Create DescriptorHeap" << std::endl;
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
 					return false;
 				}
 
@@ -250,7 +250,7 @@ namespace ngl
 
 				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
 				{
-					std::cout << "ERROR: Create DescriptorHeap" << std::endl;
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
 					return false;
 				}
 
@@ -637,7 +637,7 @@ namespace ngl
 				CComPtr<ID3D12DescriptorHeap> p_heap;
 				if (FAILED(p_device_->GetD3D12Device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&p_heap))))
 				{
-					std::cout << "ERROR: Create DescriptorHeap" << std::endl;
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
 					return nullptr;
 				}
 				// 生成したHeapをすべてスマートポインタで保持しておく.
