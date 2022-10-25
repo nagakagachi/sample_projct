@@ -71,8 +71,10 @@ private:
 	ngl::rhi::ResourceState						tex_depth_state_;
 
 
+	bool										tex_rt_rendered_ = false;
 	ngl::rhi::TextureDep						tex_rt_;
 	ngl::rhi::RenderTargetViewDep				tex_rt_rtv_;
+	ngl::rhi::ShaderResourceViewDep				tex_rt_srv_;
 	ngl::rhi::ResourceState						tex_rt_state_;
 
 	ngl::rhi::TextureDep						tex_ua_;
@@ -93,10 +95,13 @@ private:
 	ngl::rhi::BufferDep							ib_sample_;
 	ngl::rhi::IndexBufferViewDep				ibv_sample_;
 
+
+	ngl::rhi::ShaderDep							sample_fullscr_proc_vs_;
+	ngl::rhi::ShaderDep							sample_fullscr_proc_ps_;
+	ngl::rhi::GraphicsPipelineStateDep			sample_fullscr_proc_pso_;
+
+
 	ngl::rhi::SamplerDep						samp_;
-	
-	ngl::rhi::TextureDep						tex_;
-	ngl::rhi::ShaderResourceViewDep				tex_view_;
 };
 
 
@@ -215,7 +220,11 @@ bool AppGame::Initialize()
 			std::cout << "[ERROR] Create RenderTarget Texture Initialize" << std::endl;
 			assert(false);
 		}
-
+		if (!tex_rt_srv_.InitializeAsTexture(&device_, &tex_rt_, 0, 1, 0, 1))
+		{
+			std::cout << "[ERROR] Create Srv Initialize" << std::endl;
+			assert(false);
+		}
 		if (!tex_rt_rtv_.Initialize(&device_, &tex_rt_, 0, 0, 1))
 		{
 			std::cout << "[ERROR] Create Rtv Initialize" << std::endl;
@@ -299,6 +308,32 @@ bool AppGame::Initialize()
 			}
 			reflect00.Initialize(&device_, &sample_ps_);
 		}
+
+		{
+			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_fullscr_procedural_vs.hlsl";
+			shader_desc.entry_point_name = "main_vs";
+			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
+			shader_desc.shader_model_version = "6_0";
+
+			if (!sample_fullscr_proc_vs_.Initialize(&device_, shader_desc))
+			{
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
+			}
+		}
+		{
+			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_draw_procedural_ps.hlsl";
+			shader_desc.entry_point_name = "main_ps";
+			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+			shader_desc.shader_model_version = "6_0";
+
+			if (!sample_fullscr_proc_ps_.Initialize(&device_, shader_desc))
+			{
+				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
+			}
+		}
+
 	}
 
 	// PSO
@@ -309,18 +344,12 @@ bool AppGame::Initialize()
 
 		desc.num_render_targets = 1;
 		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
-		
-#if 1
-		// Dsv有効.
-		desc.depth_stencil_format = tex_depth_.GetFormat();
+	
 		desc.depth_stencil_state.depth_enable = true;
 		desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Less;
-
 		desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
-#else
-		desc.depth_stencil_state.depth_enable = false;
-#endif
 		desc.depth_stencil_state.stencil_enable = false;
+		desc.depth_stencil_format = tex_depth_.GetFormat();
 
 		desc.blend_state.target_blend_states[0].blend_enable = false;
 		desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
@@ -341,6 +370,25 @@ bool AppGame::Initialize()
 		input_elem_data[1].element_offset = sizeof(float)*4;
 
 		if (!sample_pso_.Initialize(&device_, desc))
+		{
+			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
+		}
+	}
+
+	// InputLayout無しのPSO
+	{
+		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+		desc.vs = &sample_fullscr_proc_vs_;
+		desc.ps = &sample_fullscr_proc_ps_;
+
+		desc.num_render_targets = 1;
+		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
+
+
+		desc.blend_state.target_blend_states[0].blend_enable = false;
+		desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
+
+		if (!sample_fullscr_proc_pso_.Initialize(&device_, desc))
 		{
 			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
 		}
@@ -387,13 +435,13 @@ bool AppGame::Initialize()
 
 		Vector4 sample_vtx_list[] =
 		{
-			{-0.5f, -0.5f, 0.0f, 1.0f,	0.0f, 0.0f},
-			{-0.5f, 0.5f, 0.0f, 1.0f,	0.0f, 1.0f },
-			{0.5f, -0.5f, 0.0f, 1.0f,	1.0f, 0.0f },
+			{-0.5f, 0.5f, 0.0f, 1.0f,	0.0f, 0.0f },
+			{0.5f, -0.5f, 0.0f, 1.0f,	1.0f, 1.0f },
+			{-0.5f, -0.5f, 0.0f, 1.0f,	0.0f, 1.0f},
 
-			{-0.5f, -0.5f, 0.0f, 1.0f,	0.0f, 0.0f},
-			{0.5f, 0.5f, 1.0f, 1.0f,	0.0f, 1.0f },
-			{0.5f, -0.5f, 1.0f, 1.0f,	1.0f, 0.0f },
+			{-0.5f, 0.5f, 0.0f, 1.0f,	0.0f, 0.0f },
+			{0.5f, 0.5f, 0.0f, 1.0f,	1.0f, 0.0f },
+			{0.5f, -0.5f, 0.0f, 1.0f,	1.0f, 1.0f},
 		};
 
 
@@ -452,20 +500,10 @@ bool AppGame::Initialize()
 	{
 		// Samplerテスト
 		ngl::rhi::SamplerDep::Desc samp_desc = {};
-		samp_desc.AddressU = ngl::rhi::TextureAddressMode::Repeat;
-		samp_desc.AddressV = ngl::rhi::TextureAddressMode::Repeat;
-		samp_desc.AddressW = ngl::rhi::TextureAddressMode::Repeat;
-		samp_desc.BorderColor[0] = 0.0f;
-		samp_desc.BorderColor[1] = 0.0f;
-		samp_desc.BorderColor[2] = 0.0f;
-		samp_desc.BorderColor[3] = 0.0f;
-		samp_desc.ComparisonFunc = ngl::rhi::CompFunc::Never;
-		samp_desc.Filter = ngl::rhi::TextureFilterMode::Min_Point_Mag_Point_Mip_Linear;
-		samp_desc.MaxAnisotropy = 0;
-		samp_desc.MaxLOD = FLT_MAX;
-		samp_desc.MinLOD = 0.0f;
-		samp_desc.MipLODBias = 0.0f;
-
+		samp_desc.Filter = ngl::rhi::TextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
+		samp_desc.AddressU = ngl::rhi::TextureAddressMode::Clamp;
+		samp_desc.AddressV = ngl::rhi::TextureAddressMode::Clamp;
+		samp_desc.AddressW = ngl::rhi::TextureAddressMode::Clamp;
 		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
 		if (!samp_.Initialize(&device_, samp_desc))
 		{
@@ -473,52 +511,6 @@ bool AppGame::Initialize()
 			assert(false);
 		}
 	}
-
-	{
-#if 1
-		// Textureテスト
-		ngl::rhi::TextureDep::Desc tex_desc00 = {};
-		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::Default;
-		tex_desc00.type = ngl::rhi::TextureType::Texture2D;
-		tex_desc00.width = 64;
-		tex_desc00.height = 64;
-		tex_desc00.depth = 1;
-		tex_desc00.format = ngl::rhi::ResourceFormat::Format_R8G8B8A8_SNORM;
-		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
-
-		//tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;// UAV
-
-		if (!tex_.Initialize(&device_, tex_desc00))
-		{
-			std::cout << "[ERROR] Create rhi::TextureDep" << std::endl;
-			assert(false);
-		}
-#else
-		// Textureテスト
-		ngl::rhi::TextureDep::Desc tex_desc00 = {};
-		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::UPLOAD;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
-		tex_desc00.dimension = ngl::rhi::TextureDep::Dimension::Texture2D;
-		tex_desc00.width = 64;
-		tex_desc00.height = 64;
-		tex_desc00.depth = 1;
-		tex_desc00.format = ngl::rhi::ResourceFormat::Format_R8G8B8A8_SNORM;
-		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
-
-		if (!tex_.Initialize(&device_, tex_desc00))
-		{
-			std::cout << "[ERROR] Create rhi::TextureDep" << std::endl;
-			assert(false);
-		}
-#endif
-
-		// TextureView
-		if (!tex_view_.InitializeAsTexture(&device_, &tex_, 0, 1, 0, 1))
-		{
-			std::cout << "[ERROR] Create rhi::ShaderResourceViewDep" << std::endl;
-			assert(false);
-		}
-	}
-
 
 	// テストコード
 	TestCode();
@@ -567,6 +559,54 @@ bool AppGame::Execute()
 		const auto swapchain_index = swapchain_.GetCurrentBufferIndex();
 		{
 			gfx_command_list_.Begin();
+
+
+
+			// RenderTargetとして描画したTextureをSrvとして利用するテスト.
+			// 初回に一度だけ描画する.
+			if(!tex_rt_rendered_)
+			{
+				tex_rt_rendered_ = true;
+
+				// Rtvへ遷移.
+				gfx_command_list_.ResourceBarrier(&tex_rt_, tex_rt_state_, ngl::rhi::ResourceState::RenderTarget);
+				tex_rt_state_ = ngl::rhi::ResourceState::RenderTarget;
+
+				{
+					// ターゲットテクスチャへフルスクリーン描画.
+					D3D12_VIEWPORT viewport;
+					viewport.MinDepth = 0.0f;
+					viewport.MaxDepth = 1.0f;
+					viewport.TopLeftX = 0.0f;
+					viewport.TopLeftY = 0.0f;
+					viewport.Width = static_cast<float>(tex_rt_.GetWidth());
+					viewport.Height = static_cast<float>(tex_rt_.GetHeight());
+					gfx_command_list_.SetViewports(1, &viewport);
+
+					D3D12_RECT scissor_rect;
+					scissor_rect.left = 0;
+					scissor_rect.top = 0;
+					scissor_rect.right = tex_rt_.GetWidth();
+					scissor_rect.bottom = tex_rt_.GetHeight();
+					gfx_command_list_.SetScissor(1, &scissor_rect);
+
+
+					const auto* p_rt = &tex_rt_rtv_;
+					gfx_command_list_.SetRenderTargets(&p_rt, 1, nullptr);
+
+					gfx_command_list_.SetPipelineState(&sample_fullscr_proc_pso_);
+
+					gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+					// 計算でTriangleを生成するVSでDraw.
+					gfx_command_list_.DrawInstanced(3, 1, 0, 0);
+				}
+
+				// Srvへ遷移.
+				gfx_command_list_.ResourceBarrier(&tex_rt_, tex_rt_state_, ngl::rhi::ResourceState::ShaderRead);
+				tex_rt_state_ = ngl::rhi::ResourceState::ShaderRead;
+			}
+
+
 
 			{
 				// Swapchain State to RenderTarget
@@ -618,7 +658,7 @@ bool AppGame::Execute()
 					// DescriptorSetに名前で定数バッファViewをセット
 					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
 
-					sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_view_.GetView().cpu_handle);
+					sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);
 					sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);
 
 					// DescriptorSetでViewを設定.
@@ -629,12 +669,9 @@ bool AppGame::Execute()
 
 				gfx_command_list_.SetVertexBuffers(0, 1, &vbv_sample_.GetView());
 
-#if 0
-				gfx_command_list_.DrawInstanced(3, 1, 0, 0);
-#else
+
 				gfx_command_list_.SetIndexBuffer(&ibv_sample_.GetView());
 				gfx_command_list_.DrawIndexedInstanced(6, 1, 0, 0, 0);
-#endif
 			}
 #endif
 

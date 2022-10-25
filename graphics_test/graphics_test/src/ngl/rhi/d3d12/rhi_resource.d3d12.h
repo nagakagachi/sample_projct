@@ -81,7 +81,7 @@ namespace ngl
 				TextureType			type = TextureType::Texture2D;
 
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				ResourceHeapType	heap_type = ResourceHeapType::Default;
+				ResourceHeapType	heap_type = ResourceHeapType::Default;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
 				ResourceState		initial_state = ResourceState::General;
 			};
 

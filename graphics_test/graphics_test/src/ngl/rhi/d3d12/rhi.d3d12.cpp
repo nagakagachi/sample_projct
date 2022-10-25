@@ -6,6 +6,10 @@
 #include <array>
 #include <algorithm>
 
+#ifdef _DEBUG
+#include <system_error>
+#endif
+
 // lib
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -631,7 +635,13 @@ namespace ngl
 					uint32_t codePage = CP_UTF8;
 					hr = dxc_library->CreateBlobFromFile(desc.shader_file_path, &codePage, &sourceBlob);
 					if (FAILED(hr))
+					{
+#ifdef _DEBUG
+						std::cout << "[ERROR] " << std::system_category().message(hr) << std::endl;
+						std::wcout << desc.shader_file_path << std::endl;
+#endif
 						compile_success &= false;
+					}
 				}
 
 				CComPtr<IDxcOperationResult> dxc_result;

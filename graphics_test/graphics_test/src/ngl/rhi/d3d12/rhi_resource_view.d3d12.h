@@ -103,16 +103,16 @@ namespace ngl
 			struct Desc
 			{
 				// TODO. あとで自前定義に置き換える.
-				TextureFilterMode	Filter;
-				TextureAddressMode	AddressU;
-				TextureAddressMode	AddressV;
-				TextureAddressMode	AddressW;
-				float				MipLODBias;
-				u32					MaxAnisotropy;
-				CompFunc			ComparisonFunc;
-				float				BorderColor[4];
-				float				MinLOD;
-				float				MaxLOD;
+				TextureFilterMode	Filter		= TextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
+				TextureAddressMode	AddressU	= TextureAddressMode::Repeat;
+				TextureAddressMode	AddressV	= TextureAddressMode::Repeat;
+				TextureAddressMode	AddressW	= TextureAddressMode::Repeat;
+				float				MipLODBias	= 0.0;
+				u32					MaxAnisotropy	= 0;
+				CompFunc			ComparisonFunc	= CompFunc::Never;
+				float				BorderColor[4]	= { 0.0f,0.0f,0.0f,0.0f };
+				float				MinLOD			= 0.0f;
+				float				MaxLOD			= 128.0f;
 
 				/*
 				Filter mMagFilter = Filter::Linear;

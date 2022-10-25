@@ -399,22 +399,22 @@ namespace ngl
 
 		struct DepthStencilOp
 		{
-			StencilOp		stencil_fail_op;
-			StencilOp		stencil_depth_fail_op;
-			StencilOp		stencil_pass_op;
-			CompFunc		stencil_func;
+			StencilOp		stencil_fail_op = StencilOp::Keep;
+			StencilOp		stencil_depth_fail_op = StencilOp::Keep;
+			StencilOp		stencil_pass_op = StencilOp::Keep;
+			CompFunc		stencil_func = CompFunc::Always;
 		};
 
 		struct DepthStencilState 
 		{
-			bool					depth_enable;
-			u32						depth_write_mask;		// D3D12_DEPTH_WRITE_MASK 
-			CompFunc				depth_func;
-			bool					stencil_enable;
-			u8						stencil_read_mask;
-			u8						stencil_write_mask;
-			DepthStencilOp			front_face;
-			DepthStencilOp			back_face;
+			bool					depth_enable = false;
+			u32						depth_write_mask = ~0u;		// D3D12_DEPTH_WRITE_MASK 
+			CompFunc				depth_func = ngl::rhi::CompFunc::Always;
+			bool					stencil_enable = false;
+			u8						stencil_read_mask = u8(~0u);
+			u8						stencil_write_mask = u8(~0u);
+			DepthStencilOp			front_face = {};
+			DepthStencilOp			back_face = {};
 		};
 
 		struct StreamOutputDesc
@@ -438,8 +438,8 @@ namespace ngl
 
 		struct InputLayout
 		{
-			const InputElement*		p_input_elements;
-			u32						num_elements;
+			const InputElement*		p_input_elements = nullptr;
+			u32						num_elements = 0;
 		};
 
 	}

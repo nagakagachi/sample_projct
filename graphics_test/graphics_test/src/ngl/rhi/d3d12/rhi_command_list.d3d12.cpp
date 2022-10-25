@@ -120,8 +120,9 @@ namespace ngl
 				rtvs[i] = pp_rtv[i]->GetD3D12DescriptorHandle();
 			}
 
-			D3D12_CPU_DESCRIPTOR_HANDLE dsv = p_dsv->GetD3D12DescriptorHandle();
-			GetD3D12GraphicsCommandList()->OMSetRenderTargets(num_rtv, rtvs, false, &dsv);
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle = (p_dsv) ? p_dsv->GetD3D12DescriptorHandle() : D3D12_CPU_DESCRIPTOR_HANDLE();
+			const D3D12_CPU_DESCRIPTOR_HANDLE* p_dsv_handle = (p_dsv) ? &dsv_handle : nullptr;
+			GetD3D12GraphicsCommandList()->OMSetRenderTargets(num_rtv, rtvs, false, p_dsv_handle);
 		};
 		void GraphicsCommandListDep::ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4])
 		{
