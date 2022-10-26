@@ -203,6 +203,11 @@ namespace ngl
 				ret = D3D12_RESOURCE_STATE_COPY_SOURCE;
 				break;
 			}
+			case ResourceState::RaytracingAccelerationStructure:
+			{
+				ret = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+				break;
+			}
 			case ResourceState::Present:
 			{
 				ret = D3D12_RESOURCE_STATE_PRESENT;

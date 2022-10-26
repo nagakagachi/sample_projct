@@ -48,7 +48,7 @@ namespace ngl
 
 		public:
 			u32 GetBufferSize() const { return allocated_byte_size_; }
-			u32 GetElementSize() const { return desc_.element_byte_size; }
+			u32 GetElementByteSize() const { return desc_.element_byte_size; }
 			u32 getElementCount() const { return desc_.element_count; }
 
 		private:

@@ -190,6 +190,7 @@ namespace ngl
 			IndirectArgument,
 			CopyDst,
 			CopySrc,
+			RaytracingAccelerationStructure,
 			Present,
 		};
 

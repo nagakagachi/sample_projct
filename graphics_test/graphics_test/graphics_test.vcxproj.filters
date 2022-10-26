@@ -143,6 +143,9 @@
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource_view.d3d12.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="src\ngl\gfx\rt_structure_manager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\ngl\text\hash_text.inl">

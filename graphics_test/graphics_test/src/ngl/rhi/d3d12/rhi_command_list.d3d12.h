@@ -75,6 +75,8 @@ namespace ngl
 			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
 			void ResourceBarrier(TextureDep* p_texture, ResourceState prev, ResourceState next);
 			void ResourceBarrier(BufferDep* p_buffer, ResourceState prev, ResourceState next);
+			// UAV同期Barrier.
+			void ResourceUavBarrier(BufferDep* p_buffer);
 
 		public:
 			// 検証中は直接利用するかもしれないので取得関数追加

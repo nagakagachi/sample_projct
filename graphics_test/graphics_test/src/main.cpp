@@ -20,6 +20,9 @@
 #include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
+// gfx
+#include "ngl/gfx/rt_structure_manager.h"
+
 
 struct CbSamplePs
 {
@@ -100,8 +103,10 @@ private:
 	ngl::rhi::ShaderDep							sample_fullscr_proc_ps_;
 	ngl::rhi::GraphicsPipelineStateDep			sample_fullscr_proc_pso_;
 
-
 	ngl::rhi::SamplerDep						samp_;
+
+
+	ngl::gfx::RaytraceStructureManager			rt_st_;
 };
 
 
@@ -156,6 +161,12 @@ bool AppGame::Initialize()
 	{
 		std::cout << "[ERROR] Device Initialize" << std::endl;
 		return false;
+	}
+
+	// Raytracing Support Check.
+	if (!device_.IsSupportDxr())
+	{
+		MessageBoxA(window_.Dep().GetWindowHandle(), "Raytracing is not supported on this device.", "Info", MB_OK);
 	}
 
 	if (!graphics_queue_.Initialize(&device_))
@@ -473,8 +484,6 @@ bool AppGame::Initialize()
 			0, 1, 2,
 			3, 4, 5,
 		};
-
-
 		ngl::rhi::BufferDep::Desc idx_desc = {};
 		idx_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
 		idx_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::IndexBuffer;
@@ -511,6 +520,18 @@ bool AppGame::Initialize()
 			assert(false);
 		}
 	}
+
+
+
+	{
+		if (!rt_st_.Initialize(&device_))
+		{
+			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
+			assert(false);
+		}
+	}
+
+
 
 	// テストコード
 	TestCode();
@@ -606,6 +627,11 @@ bool AppGame::Execute()
 				tex_rt_state_ = ngl::rhi::ResourceState::ShaderRead;
 			}
 
+
+			// Raytrace Structure Build.
+			{
+				rt_st_.UpdateOnRender(&device_, &gfx_command_list_);
+			}
 
 
 			{

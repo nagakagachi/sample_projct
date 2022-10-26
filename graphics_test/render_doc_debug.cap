@@ -5,7 +5,7 @@
         "commandLine": "",
         "environment": [
         ],
-        "executable": "V:\\sample_projct\\graphics_test\\x64\\Debug\\graphics_test.exe",
+        "executable": "K:\\GitHub\\sample_projct\\graphics_test\\x64\\Debug\\graphics_test.exe",
         "inject": false,
         "numQueuedFrames": 0,
         "options": {
@@ -22,6 +22,6 @@
             "verifyBufferAccess": false
         },
         "queuedFrameCap": 0,
-        "workingDir": "V:/sample_projct/graphics_test/graphics_test"
+        "workingDir": "K:/GitHub/sample_projct/graphics_test/graphics_test"
     }
 }

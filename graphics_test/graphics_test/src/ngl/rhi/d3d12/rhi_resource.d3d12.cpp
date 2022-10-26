@@ -107,11 +107,15 @@ namespace ngl
 		{
 			if (!p_device)
 				return false;
+			
+			// Raytrace BLASのGeomBufferはBindFlag=Noneなので許容.
+			/*
 			if (0 == desc.bind_flag)
 			{
 				assert(false);
 				return false;
 			}
+			*/
 
 			if (0 >= desc.element_byte_size || 0 >= desc.element_count)
 				return false;

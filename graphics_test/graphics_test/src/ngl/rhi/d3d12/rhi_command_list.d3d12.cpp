@@ -137,7 +137,7 @@ namespace ngl
 			GetD3D12GraphicsCommandList()->ClearDepthStencilView(p_dsv->GetD3D12DescriptorHandle(), D3D12_CLEAR_FLAGS(flags), depth, stencil, 0, nullptr);
 		};
 
-		// Barrier関連共通部.
+		// State Transition Barrier関連共通部.
 		void _Barrier(ID3D12GraphicsCommandList* p_command_list, ID3D12Resource* p_resource, ResourceState prev, ResourceState next)
 		{
 			D3D12_RESOURCE_STATES state_before = ConvertResourceState(prev);
@@ -145,7 +145,6 @@ namespace ngl
 
 			D3D12_RESOURCE_BARRIER desc = {};
 			desc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			desc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 
 			desc.Transition.pResource = p_resource;
 			desc.Transition.StateBefore = state_before;
@@ -155,6 +154,15 @@ namespace ngl
 
 			p_command_list->ResourceBarrier(1, &desc);
 		}
+		// UAV Barrier.
+		void _UavBarrier(ID3D12GraphicsCommandList* p_command_list, ID3D12Resource* p_resource_uav)
+		{
+			D3D12_RESOURCE_BARRIER desc = {};
+			desc.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			desc.Transition.pResource = p_resource_uav;
+			p_command_list->ResourceBarrier(1, &desc);
+		}
+
 		// バリア Swapchain.
 		void GraphicsCommandListDep::ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next)
 		{
@@ -178,6 +186,11 @@ namespace ngl
 				return;
 			auto* resource = p_buffer->GetD3D12Resource();
 			_Barrier(p_command_list_, resource, prev, next);
+		}
+		// UAV同期Barrier.
+		void GraphicsCommandListDep::ResourceUavBarrier(BufferDep* p_buffer)
+		{
+			_UavBarrier(p_command_list_, p_buffer->GetD3D12Resource());
 		}
 
 		void GraphicsCommandListDep::SetViewports(u32 num, const  D3D12_VIEWPORT* p_viewports)
