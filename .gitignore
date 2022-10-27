@@ -362,3 +362,4 @@ MigrationBackup/
 FodyWeavers.xsd
 
 *.cso
+graphics_test/nsight_debug/nsight_debug.ngfx-proj
