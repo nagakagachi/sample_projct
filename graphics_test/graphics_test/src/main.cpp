@@ -24,6 +24,10 @@
 #include "ngl/gfx/rt_structure_manager.h"
 
 
+struct CbSampleVs
+{
+	float cb_param_vs0[4];
+};
 struct CbSamplePs
 {
 	float cb_param0[4];
@@ -89,6 +93,8 @@ private:
 	ngl::rhi::ShaderDep							sample_ps_;
 	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
 
+	ngl::rhi::BufferDep							cb_sample_vs_;
+	ngl::rhi::ConstantBufferViewDep				cbv_sample_vs_;
 	ngl::rhi::BufferDep							cb_sample_ps_;
 	ngl::rhi::ConstantBufferViewDep				cbv_sample_ps_;
 
@@ -410,6 +416,31 @@ bool AppGame::Initialize()
 		ngl::rhi::BufferDep::Desc cb_desc = {};
 		cb_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
 		cb_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
+		cb_desc.element_byte_size = sizeof(CbSampleVs);
+		cb_desc.element_count = 1;
+
+		if (cb_sample_vs_.Initialize(&device_, cb_desc))
+		{
+			if (auto* map_data = reinterpret_cast<CbSampleVs*>(cb_sample_vs_.Map()))
+			{
+				map_data->cb_param_vs0[0] = 1.0f;
+				map_data->cb_param_vs0[1] = 0.5f;
+				map_data->cb_param_vs0[2] = 0.0f;
+				map_data->cb_param_vs0[3] = 1.0f;
+
+				cb_sample_vs_.Unmap();
+			}
+		}
+
+		// ConstantBufferView作成
+		ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
+		cbv_sample_vs_.Initialize(&cb_sample_vs_, cbv_desc);
+	}
+	{
+		// ConstantBuffer作成
+		ngl::rhi::BufferDep::Desc cb_desc = {};
+		cb_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+		cb_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 		cb_desc.element_byte_size = sizeof(CbSamplePs);
 		cb_desc.element_count = 1;
 
@@ -682,6 +713,7 @@ bool AppGame::Execute()
 					ngl::rhi::DescriptorSetDep empty_desc_set;
 					
 					// DescriptorSetに名前で定数バッファViewをセット
+					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSampleVs", cbv_sample_vs_.GetView().cpu_handle);
 					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
 
 					sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);

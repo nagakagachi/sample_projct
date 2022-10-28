@@ -153,7 +153,9 @@
     </None>
     <None Include="src\ngl\resource\shader\sample_fullscr_procedural_vs.hlsl" />
     <None Include="src\ngl\resource\shader\sample_draw_procedural_ps.hlsl" />
-    <None Include="src\ngl\resource\shader\sample_ps.hlsl" />
-    <None Include="src\ngl\resource\shader\sample_vs.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="src\ngl\resource\shader\sample_vs.hlsl" />
+    <FxCompile Include="src\ngl\resource\shader\sample_ps.hlsl" />
   </ItemGroup>
 </Project>
