@@ -39,6 +39,7 @@ namespace ngl
 
 			bool uavRequired = 0;
 			uavRequired |= check_bits(ResourceBindFlag::UnorderedAccess, flags);
+			// ASの場合に無条件でUAVにするのは止めて, 外部で必要に応じてUAV指定する.
 			//uavRequired |= check_bits(ResourceBindFlag::AccelerationStructure, flags);
 			
 			if (uavRequired)

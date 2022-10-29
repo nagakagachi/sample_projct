@@ -158,6 +158,7 @@ copy /Y "C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\D3D\\x64\\dxil.dll" 
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ngl\boot\win\boot_application.win.cpp" />
     <ClCompile Include="src\ngl\file\file.cpp" />
+    <ClCompile Include="src\ngl\gfx\rt_structure_manager.cpp" />
     <ClCompile Include="src\ngl\memory\boundary_tag_block.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />

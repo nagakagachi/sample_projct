@@ -231,6 +231,8 @@ namespace ngl
 			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count);
 			// BufferのByteAddressBufferView.
 			bool InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count);
+			// BufferのRaytracingAccelerationStructureView.
+			bool InitializeAsRaytracingAccelerationStructure(DeviceDep* p_device, const BufferDep* p_buffer);
 
 			void Finalize();
 

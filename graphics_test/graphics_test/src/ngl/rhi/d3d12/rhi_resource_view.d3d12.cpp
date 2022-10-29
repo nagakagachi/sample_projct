@@ -804,8 +804,17 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-			p_device->GetD3D12Device()->CreateShaderResourceView(p_buffer->GetD3D12Resource(), &desc, out_desc_info.cpu_handle);
 
+			if (D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE == desc.ViewDimension)
+			{
+				// ASの場合はCreateShaderResourceViewの第一引数はnullptrで, descのメンバでGPU Addressが指定される.
+				p_device->GetD3D12Device()->CreateShaderResourceView(nullptr, &desc, out_desc_info.cpu_handle);
+			}
+			else
+			{
+				assert(p_buffer);
+				p_device->GetD3D12Device()->CreateShaderResourceView(p_buffer->GetD3D12Resource(), &desc, out_desc_info.cpu_handle);
+			}
 			return true;
 		}
 		// TextureのView.
@@ -889,6 +898,24 @@ namespace ngl
 			}
 
 			D3D12_SHADER_RESOURCE_VIEW_DESC desc = createBufferSrvDesc(p_buffer, BufferViewMode::ByteAddress, {}, {}, element_offset, element_count);
+			return _Initialize(p_device, p_buffer, desc, view_);
+		}
+		// BufferのRaytracingAccelerationStructureView.
+		bool ShaderResourceViewDep::InitializeAsRaytracingAccelerationStructure(DeviceDep* p_device, const BufferDep* p_buffer)
+		{
+			assert(p_device && p_buffer);
+			if (!p_device || !p_buffer)
+				return false;
+			if (!check_bits(ResourceBindFlag::ShaderResource, p_buffer->GetDesc().bind_flag))
+			{
+				assert(false);
+				return false;
+			}
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+			desc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;// RaytracingAS.
+			desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			desc.RaytracingAccelerationStructure.Location = p_buffer->GetD3D12Resource()->GetGPUVirtualAddress();// RaytracingASの場合はdescにGPU Address指定する.
 			return _Initialize(p_device, p_buffer, desc, view_);
 		}
 
