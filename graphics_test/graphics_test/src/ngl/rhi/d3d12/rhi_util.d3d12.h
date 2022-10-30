@@ -24,7 +24,6 @@ namespace ngl
 {
 	namespace rhi
 	{
-
 		using ResourceViewName = ngl::text::FixedString<32>;
 
 		enum class RootParameterType : u16
@@ -83,5 +82,13 @@ namespace ngl
 		D3D12_FILTER ConvertTextureFilter(TextureFilterMode v);
 
 		D3D12_TEXTURE_ADDRESS_MODE ConvertTextureAddressMode(TextureAddressMode v);
+
+
+
+		constexpr uint32_t align_to(uint32_t alignment, uint32_t value)
+		{
+			return (((value + alignment - 1) / alignment) * alignment);
+		}
+
 	}
 }

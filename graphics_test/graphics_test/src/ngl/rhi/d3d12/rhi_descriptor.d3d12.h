@@ -457,8 +457,9 @@ namespace ngl
 
 
 
-		// 巨大な単一HeapではなくPage単位で確保するHeapManager. 一つのHeapのサイズに制限があるSampler向けだが, CBV_SRV_UAVでも利用可能.
-		// 返却されたPageの利用可能リストへの移動などの処理はDeviceのフレームインデックスと協調して自動的に実行される. (Allocate時についでに処理している).
+		// Page単位でDescriptorHeapを確保するManager. 一つのHeapサイズに制限があるSampler向けだが, CBV_SRV_UAVでも利用可能.
+		//	基本的にはFrameDescriptorHeapPageInterface経由で利用され, Allocで足りなくなった場合は持っていたPageをPoolに返却して新たなPageを取得するというライフサイクル.
+		//	返却されたPageの利用可能リストへの移動などの処理はDeviceのフレームインデックスと協調して自動的に実行される. (Allocate時についでに処理している).
 		class FrameDescriptorHeapPagePool
 		{
 		public:

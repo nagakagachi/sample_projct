@@ -384,18 +384,11 @@ namespace ngl
 						auto& parame_elem = root_param.back();
 						parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 						parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-						parame_elem.DescriptorTable.NumDescriptorRanges = 1;
+						parame_elem.DescriptorTable.NumDescriptorRanges = 2;
 						parame_elem.DescriptorTable.pDescriptorRanges = &range_array[0];
 					}
-					{
-						root_param.push_back({});
-						auto& parame_elem = root_param.back();
-						parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-						parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-						parame_elem.DescriptorTable.NumDescriptorRanges = 1;
-						parame_elem.DescriptorTable.pDescriptorRanges = &range_array[1];
-					}
 
+					// GlobalでDescriptorTable一つでUAVとSRVを設定するSignature.
 					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 					root_signature_desc.NumParameters = (uint32_t)root_param.size();
 					root_signature_desc.pParameters = root_param.data();
@@ -444,7 +437,7 @@ namespace ngl
 
 				// HitGroup
 				subobject::SubobjectHitGroup so_hitgroup = {};
-				so_hitgroup.Setup(nullptr, "closestHit", nullptr, "HitGroup");
+				so_hitgroup.Setup(nullptr, "closestHit", nullptr, "hitGroup");
 
 
 				// Local Root Signature.
@@ -490,7 +483,72 @@ namespace ngl
 				}
 			}
 
+			// Shader Table.
+			{
+				// https://github.com/Monsho/D3D12Samples/blob/95d1c3703cdcab816bab0b5dcf1a1e42377ab803/Sample013/src/main.cpp
+				// https://github.com/microsoft/DirectX-Specs/blob/master/d3d/Raytracing.md#shader-tables
 
+				// 現状の最大はRayGenのTable一つなので * 1.
+				// Table一つで TLAS(srv)とOutput(uav)を設定.
+				const uint32_t rt_scene_max_shader_record_discriptor_table_count = 1;
+				// raygen, miss, hitgroup の3つ
+				const uint32_t rt_scene_shader_count = 3;
+
+				constexpr uint32_t k_shader_identifier_byte_size = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+				// Table一つにつきベースのGPU Descriptor Handleを書き込むためのサイズ計算.
+				const uint32_t shader_record_resource_byte_size = sizeof(D3D12_GPU_DESCRIPTOR_HANDLE) * rt_scene_max_shader_record_discriptor_table_count;
+
+				const uint32_t shader_record_byte_size = rhi::align_to(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, k_shader_identifier_byte_size + shader_record_resource_byte_size);
+
+				const uint32_t shader_table_byte_size = shader_record_byte_size * rt_scene_shader_count;
+
+				// バッファ確保.
+				rhi::BufferDep::Desc rt_shader_table_desc = {};
+				rt_shader_table_desc.element_count = 1;
+				rt_shader_table_desc.element_byte_size = shader_table_byte_size;
+				rt_shader_table_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUから直接書き込むため.
+				if (!rt_shader_table_.Initialize(p_device, rt_shader_table_desc))
+				{
+					assert(false);
+					return false;
+				}
+
+				// レコード書き込み.
+				if (auto* mapped = static_cast<uint8_t*>(rt_shader_table_.Map()))
+				{
+					CComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
+					if (FAILED(rt_state_oject_->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
+					{
+						assert(false);
+					}
+
+					// raygen
+					{
+						memcpy(mapped + (shader_record_byte_size * 0), p_rt_so_prop->GetShaderIdentifier(L"rayGen"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					}
+
+					// miss
+					{
+						memcpy(mapped + (shader_record_byte_size * 1), p_rt_so_prop->GetShaderIdentifier(L"miss"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					}
+
+					// hitGroup
+					{
+						memcpy(mapped + (shader_record_byte_size * 2), p_rt_so_prop->GetShaderIdentifier(L"hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					}
+
+
+					rt_shader_table_.Unmap();
+				}
+
+			}
+		
 			return true;
 		}
 

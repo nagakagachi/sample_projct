@@ -390,9 +390,6 @@ namespace ngl
 
 			// Raytracing StateObject.
 			CComPtr<ID3D12StateObject> rt_state_oject_;
-
-
-			
 		};
 
 	}
