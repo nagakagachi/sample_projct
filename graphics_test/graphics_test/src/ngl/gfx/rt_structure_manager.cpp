@@ -305,7 +305,6 @@ namespace ngl
 
 
 
-
 		RaytraceStructureManager::RaytraceStructureManager()
 		{
 		}
@@ -358,6 +357,130 @@ namespace ngl
 				assert(false);
 				return false;
 			}
+
+			// RtPso等.
+			{
+				// Global Root Signature.
+				{
+					std::vector<D3D12_DESCRIPTOR_RANGE> range_array;
+					range_array.resize(2);
+					range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+					range_array[0].OffsetInDescriptorsFromTableStart = 0;// D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+					range_array[0].NumDescriptors = 1;
+
+					range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+					range_array[1].OffsetInDescriptorsFromTableStart = 1;// D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+					range_array[1].NumDescriptors = 1;
+					
+
+					std::vector<D3D12_ROOT_PARAMETER> root_param;
+					{
+						root_param.push_back({});
+						auto& parame_elem = root_param.back();
+						parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+						parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+						parame_elem.DescriptorTable.NumDescriptorRanges = (uint32_t)range_array.size();
+						parame_elem.DescriptorTable.pDescriptorRanges = range_array.data();
+					}
+
+					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+					root_signature_desc.NumParameters = 1;
+					root_signature_desc.pParameters = root_param.data();
+					root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+					if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, rt_global_root_signature_))
+					{
+						assert(false);
+						return false;
+					}
+				}
+
+				// TODO Subobject Global Root Signature.
+				SubobjectGlobalRootSignature so_grs = {};
+				so_grs.Setup(rt_global_root_signature_);
+
+
+				// Shader Config.
+				SubobjectRaytracingShaderConfig so_shader_config = {};
+				so_shader_config.Setup(sizeof(uint32_t));
+
+				// Pipeline Config.
+				SubobjectRaytracingPipelineConfig so_pipeline_config = {};
+				so_pipeline_config.Setup(1);
+
+				// ShaderLibrary.
+				ngl::rhi::ShaderDep::Desc shader_desc = {};
+				shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
+				shader_desc.shader_model_version = "6_3";
+				shader_desc.shader_file_path = "./src/ngl/resource/shader/dxr_sample_lib.hlsl";
+				if (!rt_shader_lib0_.Initialize(p_device, shader_desc))
+				{
+					std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
+					assert(false);
+				}
+
+				// DxilLibrary.
+				ngl::gfx::SubobjectDxilLibrary so_shader_lib = {};
+				const char* rt_entries[] =
+				{
+					"rayGen",
+					"miss",
+					"closestHit",
+				};
+				so_shader_lib.Setup(&rt_shader_lib0_, rt_entries, (int)std::size(rt_entries));
+
+				// HitGroup
+				ngl::gfx::SubobjectHitGroup so_hitgroup = {};
+				so_hitgroup.Setup(nullptr, "closestHit", nullptr, "HitGroup");
+
+
+				// TODO Subobject Local Root Signature.
+
+
+
+				// subobject array.
+				std::vector<D3D12_STATE_SUBOBJECT> state_subobject_array;
+				state_subobject_array.resize(6);
+				int cnt_subobject = 0;
+				state_subobject_array[cnt_subobject++] = (so_shader_lib.subobject_);
+				state_subobject_array[cnt_subobject++] = (so_hitgroup.subobject_);
+				const int index_shader_config = cnt_subobject;
+				state_subobject_array[cnt_subobject++] = (so_shader_config.subobject_);
+
+				// TODO
+				// so_shader_config -> 各シェーダへの Assosiationが必要?
+				D3D12_STATE_SUBOBJECT so_association = {};
+				D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION association = {};
+				const WCHAR* shaderExports[] = {
+					L"rayGen",
+					L"miss",
+					L"closestHit",
+				};
+				association.NumExports = (uint32_t)std::size(shaderExports);
+				association.pExports = shaderExports;
+				association.pSubobjectToAssociate = &state_subobject_array[index_shader_config];
+
+				state_subobject_array[cnt_subobject].Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+				state_subobject_array[cnt_subobject].pDesc = &association;
+				cnt_subobject++;
+
+				state_subobject_array[cnt_subobject++] = (so_pipeline_config.subobject_);
+				state_subobject_array[cnt_subobject++] = (so_grs.subobject_);
+
+
+				D3D12_STATE_OBJECT_DESC state_object_desc = {};
+				state_object_desc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
+				state_object_desc.NumSubobjects = (uint32_t)state_subobject_array.size();
+				state_object_desc.pSubobjects = state_subobject_array.data();
+
+				// NOTE Crash.
+				if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&rt_state_oject_))))
+				{
+					assert(false);
+					return false;
+				}
+			}
+
 
 			return true;
 		}

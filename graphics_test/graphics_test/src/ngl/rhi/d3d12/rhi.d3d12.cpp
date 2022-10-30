@@ -1,10 +1,13 @@
 ﻿
-
 #include "rhi.d3d12.h"
 #include "rhi_command_list.d3d12.h"
 
 #include <array>
 #include <algorithm>
+
+// for wchar convert.
+#include <stdlib.h>
+
 
 #ifdef _DEBUG
 #include <system_error>
@@ -22,6 +25,29 @@
 
 #include <dxcapi.h>
 #pragma comment(lib, "dxcompiler.lib")
+
+
+namespace
+{
+
+	// wchar_t to char.
+	// ビルドを通すために _CRT_SECURE_NO_WARNINGS が必要.
+	int mbs_to_wcs(wchar_t* dst, int dst_len, const char* src)
+	{
+		size_t cnt = 0;
+		mbstowcs_s(&cnt, dst, dst_len, src, dst_len);
+		return static_cast<int>(cnt);
+	}
+	// char to wchar_t.
+	// ビルドを通すために _CRT_SECURE_NO_WARNINGS が必要.
+	int wcs_to_mb(char* dst, int dst_len, const wchar_t* src)
+	{
+		size_t cnt = 0;
+		wcstombs_s(&cnt, dst, dst_len, src, dst_len);
+		return static_cast<int>(cnt);
+	}
+
+}
 
 namespace ngl
 {
@@ -67,6 +93,32 @@ namespace ngl
 				return D3D12_SHADER_VISIBILITY_ALL;
 			}
 		}
+
+		namespace helper
+		{
+			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, CComPtr<ID3D12RootSignature>& out_root_signature)
+			{
+				auto device = p_device->GetD3D12Device();
+				CComPtr<ID3DBlob> blob;
+				CComPtr<ID3DBlob> error;
+
+				if (FAILED(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)))
+				{
+					std::cout << "[ERROR] SerializeRootSignature" << std::endl;
+					std::wcout << static_cast<wchar_t*>(error->GetBufferPointer()) << std::endl;
+					assert(false);
+					return false;
+				}
+				if (FAILED(device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&out_root_signature))))
+				{
+					std::cout << "[ERROR] CreateRootSignature" << std::endl;
+					assert(false);
+					return false;
+				}
+				return true;
+			}
+		}
+
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -539,7 +591,6 @@ namespace ngl
 			data_.resize(shader_binary_size);
 			memcpy(data_.data(), shader_binary_ptr, shader_binary_size);
 
-
 			// reflection取得
 			// fxcとdxcで取得方法が違う
 			// ヘッダ部にある DXC などの文字列で切り替えができるか？
@@ -553,22 +604,32 @@ namespace ngl
 
 			auto stage_id = static_cast<int>(desc.stage);
 
-			if (!p_device || !desc.shader_file_path || !desc.entry_point_name || !desc.shader_model_version)
+			// DXRのShaderLibの場合はコンパイル時にentry_pointを指定しないためentry_point_nameはチェックしない.
+			if (!p_device || !desc.shader_file_path || !desc.shader_model_version)
 			{
 				return false;
 			}
+
+			// 処理用のwchar化.
+			constexpr int k_len_wstr_len = 256;
+			wchar_t shader_file_path_ws[k_len_wstr_len];
+			assert(k_len_wstr_len > strlen(desc.shader_file_path));
+			mbs_to_wcs(shader_file_path_ws, (int)std::size(shader_file_path_ws), desc.shader_file_path);
 
 			// シェーダステージ名_シェーダモデル名 の文字列を生成.
 			char shader_model_name[32];
 			{
 				static const char* shader_stage_names[] =
 				{
-					"vs",
-					"hs",
-					"ds",
-					"gs",
-					"ps",
-					"cs",
+					"vs",	// Vertex.
+					"hs",	// Hull.
+					"ds",	// Domain.
+					"gs",	// Geometry.
+					"ps",	// Pixel.
+
+					"cs",	// Compute.
+
+					"lib",	// Shader Library (for DXR).
 				};
 				static_assert(static_cast<int>(ShaderStage::_Max) == std::size(shader_stage_names),"Shader Stage Name Array Size is Invalid");
 
@@ -601,20 +662,15 @@ namespace ngl
 			// 先にdxcによるコンパイルを試みる.
 			{
 				bool compile_success = true;
-
-				auto char2wchar = [](wchar_t* dst, size_t dst_size, const char* src)
-				{
-					size_t convertedChars = 0;
-					mbstowcs_s(&convertedChars, dst, dst_size, src, _TRUNCATE);
-				};
 				// shader model profile name.  char -> wchar
 				wchar_t shader_model_name_w[64];
-				char2wchar(shader_model_name_w, std::size(shader_model_name_w), shader_model_name);
+				mbs_to_wcs(shader_model_name_w, (int)std::size(shader_model_name_w), shader_model_name);
 
-				// entry point name. char -> wchar
-				wchar_t shader_entry_point_name_w[128];
-				char2wchar(shader_entry_point_name_w, std::size(shader_entry_point_name_w), desc.entry_point_name);
-
+				wchar_t shader_entry_point_name_w[128] = L"\0";
+				if (desc.entry_point_name)
+				{
+					mbs_to_wcs(shader_entry_point_name_w, (int)std::size(shader_entry_point_name_w), desc.entry_point_name);
+				}
 
 				CComPtr<IDxcLibrary> dxc_library;
 				HRESULT hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&dxc_library));
@@ -633,12 +689,11 @@ namespace ngl
 				if (compile_success)
 				{
 					uint32_t codePage = CP_UTF8;
-					hr = dxc_library->CreateBlobFromFile(desc.shader_file_path, &codePage, &sourceBlob);
+					hr = dxc_library->CreateBlobFromFile(shader_file_path_ws, &codePage, &sourceBlob);
 					if (FAILED(hr))
 					{
 #ifdef _DEBUG
-						std::cout << "[ERROR] " << std::system_category().message(hr) << std::endl;
-						std::wcout << desc.shader_file_path << std::endl;
+						std::cout << "[ERROR] " << std::system_category().message(hr) << " " << desc.shader_file_path << std::endl;
 #endif
 						compile_success &= false;
 					}
@@ -649,7 +704,7 @@ namespace ngl
 				{
 					hr = dxc_compiler->Compile(
 						sourceBlob,
-						desc.shader_file_path,
+						shader_file_path_ws,
 						shader_entry_point_name_w,
 						shader_model_name_w,	// "PS_6_0"
 						NULL, 0,				// pArguments, argCount
@@ -704,7 +759,7 @@ namespace ngl
 
 				CComPtr<ID3DBlob> p_compile_data;
 				CComPtr<ID3DBlob>  error_blob;
-				auto hr = D3DCompileFromFile(desc.shader_file_path, nullptr, include_object, desc.entry_point_name, shader_model_name, commpile_flag, 0, &p_compile_data, &error_blob);
+				auto hr = D3DCompileFromFile(shader_file_path_ws, nullptr, include_object, desc.entry_point_name, shader_model_name, commpile_flag, 0, &p_compile_data, &error_blob);
 				if (FAILED(hr))
 				{
 					// 失敗.
@@ -1301,28 +1356,7 @@ namespace ngl
 				root_signature_desc.pParameters = rootParameters.data();
 			}
 
-			// TODO. Descriptor
-			CComPtr<ID3DBlob> root_signature_blob;
-			CComPtr<ID3DBlob> root_signature_error_blob;
-			auto hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &root_signature_blob, &root_signature_error_blob);
-			if (FAILED(hr) && root_signature_error_blob)
-			{
-				wprintf(L"[ERROR] D3D12SerializeRootSignature:\n%hs\n",
-					(const char*)root_signature_error_blob->GetBufferPointer());
-				assert(false);
-				return false;
-			}
-			if (SUCCEEDED(hr))
-			{
-				hr = p_device->GetD3D12Device()->CreateRootSignature(0, root_signature_blob->GetBufferPointer(), root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature_));
-				if (FAILED(hr))
-				{
-					root_signature_ = nullptr;
-					std::cout << "[ERROR] CreateRootSignature" << std::endl;
-					assert(false);
-					return false;
-				}
-			}
+			helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, root_signature_);
 
 			return true;
 		}

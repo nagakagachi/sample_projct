@@ -1,5 +1,8 @@
 ﻿#pragma once
 
+// for mbstowcs, wcstombs
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "ngl/rhi/rhi.h"
 #include "rhi_util.d3d12.h"
 
@@ -46,6 +49,12 @@ namespace ngl
 		class FrameDescriptorManager;
 		class FrameDescriptorHeapPagePool;
 		class DescriptorSetDep;
+
+
+		namespace helper
+		{
+			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, CComPtr<ID3D12RootSignature>& out_root_signature);
+		}
 
 
 		// Device
@@ -239,7 +248,7 @@ namespace ngl
 			{
 				// シェーダファイルパス.
 				// "./sample.hlsl"
-				const wchar_t*	shader_file_path = nullptr;
+				const char*		shader_file_path = nullptr;
 				// エントリポイント名. 
 				// "main_ps"
 				const char*		entry_point_name = nullptr;

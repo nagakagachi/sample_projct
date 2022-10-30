@@ -210,8 +210,11 @@ namespace ngl
 			Domain,
 			Geometry,
 			Pixel,
+
 			Compute,
 
+			ShaderLibrary,
+			
 			_Max,
 		};
 

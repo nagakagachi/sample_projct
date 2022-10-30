@@ -1,4 +1,5 @@
-﻿#include <iostream>
+﻿
+#include <iostream>
 #include <vector>
 #include <array>
 #include <unordered_map>
@@ -113,6 +114,7 @@ private:
 
 
 	ngl::gfx::RaytraceStructureManager			rt_st_;
+	ngl::rhi::ShaderDep							rt_shaderlib0_;
 };
 
 
@@ -132,7 +134,6 @@ int main()
 	std::cout << "App Time: " << ngl::time::Timer::Instance().GetElapsedSec("AppGameTime") << std::endl;
 	return 0;
 }
-
 
 
 AppGame::AppGame()
@@ -196,8 +197,24 @@ bool AppGame::Initialize()
 			swapchain_rtvs_[i].Initialize( &device_, &swapchain_, i );
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
+	}
+
+
+
+
+	{
+		// AS他.
+		if (!rt_st_.Initialize(&device_))
+		{
+			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
+			assert(false);
+		}
 
 	}
+
+
+
+
 
 	// DepthBuffer
 	{
@@ -299,7 +316,7 @@ bool AppGame::Initialize()
 		ngl::rhi::ShaderReflectionDep reflect02;
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_vs.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
 			shader_desc.shader_model_version = "6_0";
@@ -314,7 +331,7 @@ bool AppGame::Initialize()
 		ngl::rhi::ShaderReflectionDep reflect00;
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "6_0";
@@ -328,7 +345,7 @@ bool AppGame::Initialize()
 
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_fullscr_procedural_vs.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_fullscr_procedural_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
 			shader_desc.shader_model_version = "6_0";
@@ -340,7 +357,7 @@ bool AppGame::Initialize()
 		}
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_draw_procedural_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_draw_procedural_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "6_0";
@@ -548,16 +565,6 @@ bool AppGame::Initialize()
 		if (!samp_.Initialize(&device_, samp_desc))
 		{
 			std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
-			assert(false);
-		}
-	}
-
-
-
-	{
-		if (!rt_st_.Initialize(&device_))
-		{
-			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
 			assert(false);
 		}
 	}
@@ -1041,7 +1048,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderReflectionDep reflect00;
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "5_0";
@@ -1069,7 +1076,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderReflectionDep reflect01;
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "6_0";
@@ -1091,7 +1098,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderReflectionDep reflect02;
 		{
 			ngl::rhi::ShaderDep::Desc shader_desc = {};
-			shader_desc.shader_file_path = L"./src/ngl/resource/shader/sample_vs.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
 			shader_desc.shader_model_version = "5_0";
