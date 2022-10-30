@@ -177,57 +177,57 @@ namespace ngl
 			}
 			// TODO. アダプタ検索する場合はここでFactoryから.
 
+
+
+			D3D_FEATURE_LEVEL feature_levels[] =
 			{
-				D3D_FEATURE_LEVEL feature_levels[] =
-				{
-					D3D_FEATURE_LEVEL_12_1,
-					D3D_FEATURE_LEVEL_12_0,
-					D3D_FEATURE_LEVEL_11_1,
-					D3D_FEATURE_LEVEL_11_0,
-				};
+				D3D_FEATURE_LEVEL_12_1,
+				D3D_FEATURE_LEVEL_12_0,
+				D3D_FEATURE_LEVEL_11_1,
+				D3D_FEATURE_LEVEL_11_0,
+			};
 
-				device_feature_level_ = {};
-				for (auto l : feature_levels)
+			device_feature_level_ = {};
+			device_dxr_tier_ = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
+			p_device5_ = {};
+
+			{
+				bool end_create_device = false;
+
+				// Find the HW adapter
+				CComPtr<IDXGIAdapter1> pAdapter;
+				for (uint32_t i = 0; !end_create_device && DXGI_ERROR_NOT_FOUND != p_factory_->EnumAdapters1(i, &pAdapter); i++)
 				{
-					if (SUCCEEDED(D3D12CreateDevice(nullptr, l, IID_PPV_ARGS(&p_device_))))
+					DXGI_ADAPTER_DESC1 desc;
+					pAdapter->GetDesc1(&desc);
+
+					// Skip SW adapters
+					if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+
+
+					for (auto l : feature_levels)
 					{
-						device_feature_level_ = l;
-						break;
-					}
-				}
-				if (!p_device_)
-				{
-					// デバイス生成失敗.
-					std::cout << "[ERROR] Create Device" << std::endl;
-					return false;
-				}
-
-
-				// Featureチェック
-				// https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_feature
-				device_dxr_tier_ = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
-				p_device5_ = {};
-				{
-					D3D12_FEATURE_DATA_D3D12_OPTIONS5 d3d12_feature_opt_data = {};
-					const auto hresult_feature = p_device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &d3d12_feature_opt_data, sizeof(d3d12_feature_opt_data));
-					if (SUCCEEDED(hresult_feature))
-					{
-						device_dxr_tier_ = d3d12_feature_opt_data.RaytracingTier;
-						
-						if (D3D12_RAYTRACING_TIER_NOT_SUPPORTED != device_dxr_tier_)
+						if (SUCCEEDED(D3D12CreateDevice(pAdapter, l, IID_PPV_ARGS(&p_device_))))
 						{
-							// DXR対応ならDeviceInterfaceの問い合わせ.
-							if (FAILED(p_device_->QueryInterface(IID_PPV_ARGS(&p_device5_))))
+							D3D12_FEATURE_DATA_D3D12_OPTIONS5 features5;
+							HRESULT hr = p_device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features5, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
+							if (SUCCEEDED(hr) && features5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED)
 							{
-								std::cout << "[ERROR] Failed QueryInterface for ID3D12Device5" << std::endl;
-								return false;
+								// DXR対応ならDeviceInterfaceの問い合わせ.
+								if (FAILED(p_device_->QueryInterface(IID_PPV_ARGS(&p_device5_))))
+								{
+									std::cout << "[ERROR] Failed QueryInterface for ID3D12Device5" << std::endl;
+									continue;
+								}
+
+								// 目的のDeviceが生成できれば完了.
+								device_dxr_tier_ = features5.RaytracingTier;
+								device_feature_level_ = l;
+								end_create_device = true;
+
+								break;
 							}
 						}
-					}
-					else
-					{
-						std::cout << "[ERROR] CheckFeatureSupport " << hresult_feature << std::endl;
-						return false;
 					}
 				}
 			}

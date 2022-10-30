@@ -118,8 +118,6 @@ private:
 };
 
 
-
-
 int main()
 {
 	std::cout << "Hello World!" << std::endl;
@@ -160,6 +158,7 @@ bool AppGame::Initialize()
 		return false;
 	}
 
+
 	ngl::rhi::DeviceDep::Desc device_desc = {};
 	device_desc.enable_debug_layer = true;	// デバッグレイヤ
 	device_desc.frame_descriptor_size = 500000;
@@ -198,23 +197,6 @@ bool AppGame::Initialize()
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 	}
-
-
-
-
-	{
-		// AS他.
-		if (!rt_st_.Initialize(&device_))
-		{
-			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
-			assert(false);
-		}
-
-	}
-
-
-
-
 
 	// DepthBuffer
 	{
@@ -569,6 +551,18 @@ bool AppGame::Initialize()
 		}
 	}
 
+
+
+	// StateObjec生成に失敗するためここでテスト.
+	{
+		// AS他.
+		if (!rt_st_.Initialize(&device_))
+		{
+			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
+			assert(false);
+		}
+
+	}
 
 
 	// テストコード
