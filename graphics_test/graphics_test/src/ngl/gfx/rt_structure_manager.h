@@ -373,7 +373,6 @@ namespace ngl
 			rhi::BufferDep test_geom_vb_;
 			// BLAS.
 			RaytraceStructureBottom test_blas_;
-
 			// TLAS.
 			RaytraceStructureTop test_tlas_;
 
@@ -386,10 +385,14 @@ namespace ngl
 			// global root signature.
 			CComPtr<ID3D12RootSignature> rt_global_root_signature_;
 
-			rhi::BufferDep	rt_shader_table_;
-
 			// Raytracing StateObject.
 			CComPtr<ID3D12StateObject> rt_state_oject_;
+
+			rhi::BufferDep	rt_shader_table_;
+
+			// Raytrace ShaderTableのCBV,SRV,UAV用Heap.
+			// 更新や足りなくなったら作り直される予定.
+			CComPtr<ID3D12DescriptorHeap>	rt_resource_descriptor_heap_;
 		};
 
 	}

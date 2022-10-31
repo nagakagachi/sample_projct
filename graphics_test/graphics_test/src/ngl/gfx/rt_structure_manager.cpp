@@ -513,6 +513,22 @@ namespace ngl
 					return false;
 				}
 
+
+				// リソース用DescriptorHeapを生成.
+				{
+					D3D12_DESCRIPTOR_HEAP_DESC resource_descriptor_desc = {};
+					resource_descriptor_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+					resource_descriptor_desc.NumDescriptors = (rt_scene_max_shader_record_discriptor_table_count * rt_scene_shader_count);
+					// Shaderから可視のHeap. CPUから直接書き込めないのでrhi::PersistentDescriptorAllocator等のDescriptorをコピーすること前提.
+					resource_descriptor_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+					if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&resource_descriptor_desc, IID_PPV_ARGS(&rt_resource_descriptor_heap_))))
+					{
+						assert(false);
+						return false;
+					}
+				}
+
+
 				// レコード書き込み.
 				if (auto* mapped = static_cast<uint8_t*>(rt_shader_table_.Map()))
 				{
@@ -546,7 +562,6 @@ namespace ngl
 
 					rt_shader_table_.Unmap();
 				}
-
 			}
 		
 			return true;
