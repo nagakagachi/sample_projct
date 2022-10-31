@@ -69,10 +69,10 @@ namespace ngl
 			RaytraceStructureBottom();
 			~RaytraceStructureBottom();
 
-			// BLAS setup.
+			// BLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(rhi::BufferDep* vertex_buffer, rhi::BufferDep* index_buffer = nullptr);
+			bool Setup(rhi::DeviceDep* p_device, rhi::BufferDep* vertex_buffer, rhi::BufferDep* index_buffer = nullptr);
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
@@ -93,12 +93,15 @@ namespace ngl
 			rhi::BufferDep* p_vertex_buffer_ = nullptr;
 			rhi::BufferDep* p_index_buffer_ = nullptr;
 
+			// build info.
+			// Setupでバッファや設定を登録される. これを用いてRenderThreadでCommandListにビルドタスクを発行する.
+			D3D12_RAYTRACING_GEOMETRY_DESC geom_desc_ = {};
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS build_setup_info_ = {};
+
+
 			// built data.
 			rhi::BufferDep scratch_;
 			rhi::BufferDep main_;
-
-			// for TLAS only.
-			rhi::BufferDep instance_desc_;
 		};
 
 		// TLAS.
@@ -114,10 +117,10 @@ namespace ngl
 			RaytraceStructureTop();
 			~RaytraceStructureTop();
 
-			// TLAS setup.
+			// TLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(RaytraceStructureBottom* p_blas, const std::vector<Mat34>& instance_transform_array);
+			bool Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, const std::vector<Mat34>& instance_transform_array);
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
@@ -137,6 +140,9 @@ namespace ngl
 			RaytraceStructureBottom* p_blas_ = nullptr;
 			std::vector<Mat34> transform_array_;
 
+			// build info.
+			// Setupでバッファや設定を登録される. これを用いてRenderThreadでCommandListにビルドタスクを発行する.
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS build_setup_info_ = {};
 
 			// built data.
 			rhi::BufferDep instance_buffer_;
