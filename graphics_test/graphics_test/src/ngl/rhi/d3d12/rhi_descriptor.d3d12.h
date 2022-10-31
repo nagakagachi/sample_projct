@@ -235,6 +235,68 @@ namespace ngl
 		}
 
 
+		// DescriptorHeadpの管理Wrapper.
+		class DescriptorHeapWrapper
+		{
+		public:
+			struct Desc
+			{
+				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+				u32							allocate_descriptor_count_ = 0;
+				// Shaderからの可視性. trueの場合GPU常駐メモリに確保される.
+				// CopyDescriptorsのSrcに利用するHeapはfalseでなければならない.
+				// RTV/DSVのHeapはtrueの場合ValidationErrorとなる.
+				// trueとしたHeapに直接CPUから書き込む運用も特に問題はない(https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_descriptor_heap_flags).
+				bool						shader_visible = true;
+			};
+
+			DescriptorHeapWrapper();
+			~DescriptorHeapWrapper();
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			const Desc& GetDesc() const
+			{
+				return desc_;
+			}
+			ID3D12DescriptorHeap* GetD3D12()
+			{
+				return p_heap_;
+			}
+			const ID3D12DescriptorHeap* GetD3D12() const
+			{
+				return p_heap_;
+			}
+			u32 GetHandleIncrementSize() const
+			{
+				return handle_increment_size_;
+			}
+			const D3D12_CPU_DESCRIPTOR_HANDLE& GetCpuHandleStart() const
+			{
+				return cpu_handle_start_;
+			}
+			const D3D12_GPU_DESCRIPTOR_HANDLE& GetGpuHandleStart() const
+			{
+				return gpu_handle_start_;
+			}
+
+		private:
+			// オブジェクト初期化情報
+			Desc		desc_ = {};
+
+			// Heap本体
+			CComPtr<ID3D12DescriptorHeap>	p_heap_ = nullptr;
+			// Headの定義情報
+			D3D12_DESCRIPTOR_HEAP_DESC		heap_desc_{};
+			// Heap上の要素アドレスサイズ
+			u32								handle_increment_size_ = 0;
+			// CPU/GPUハンドル先頭
+			D3D12_CPU_DESCRIPTOR_HANDLE		cpu_handle_start_ = {};
+			D3D12_GPU_DESCRIPTOR_HANDLE		gpu_handle_start_ = {};
+		};
+
+
+		// PersistentDescriptorAllocator から取得したDescriptorHandleの管理.
 		struct PersistentDescriptorInfo
 		{
 			static constexpr u32 k_invalid_allocation_index = ~u32(0);
@@ -258,6 +320,7 @@ namespace ngl
 
 		/*
 			リソースのDescriptorを配置する目的のグローバルなHeapを管理する
+			現状はShaderから不可視(ShaderVisible=false)なHeapを管理する.
 			ここで管理されているDescriptorは直接描画には利用されず,別実装のFrameDescriptorHeap上に描画直前にCopyDescriptorsでコピーされて利用される.
 
 			mutexによって Allocate と Deallocate はスレッドセーフ.
@@ -287,10 +350,10 @@ namespace ngl
 			}
 
 		private:
-			std::mutex					mutex_;
+			std::mutex			mutex_;
 
 			// オブジェクト初期化情報
-			Desc		desc_ = {};
+			Desc				desc_ = {};
 
 			// 要素のアロケーション状態フラグ.
 			u32					num_use_flag_elem_ = 0;
@@ -303,6 +366,7 @@ namespace ngl
 			// デバッグ用の端数部マスク
 			u32					tail_fraction_bit_mask_ = 0;
 
+			/*
 			// Heap本体
 			CComPtr<ID3D12DescriptorHeap>	p_heap_ = nullptr;
 			// Headの定義情報
@@ -312,7 +376,8 @@ namespace ngl
 			// CPU/GPUハンドル先頭
 			D3D12_CPU_DESCRIPTOR_HANDLE		cpu_handle_start_ = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE		gpu_handle_start_ = {};
-
+			*/
+			DescriptorHeapWrapper			heap_wrapper_ = {};
 
 			// 安全のために未使用スロットへコピーするための空のデフォルトDescriptor.
 			PersistentDescriptorInfo		default_persistent_descriptor_;

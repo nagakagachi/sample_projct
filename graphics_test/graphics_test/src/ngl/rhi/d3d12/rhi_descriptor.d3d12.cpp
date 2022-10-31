@@ -13,6 +13,53 @@ namespace ngl
 {
 	namespace rhi
 	{
+
+		DescriptorHeapWrapper::DescriptorHeapWrapper()
+		{
+		}
+		DescriptorHeapWrapper::~DescriptorHeapWrapper()
+		{
+			Finalize();
+		}
+		bool DescriptorHeapWrapper::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			assert(p_device);
+			assert(0 < desc.allocate_descriptor_count_);
+			if (!p_device || 0 >= desc.allocate_descriptor_count_)
+			{
+				return false;
+			}
+
+			desc_ = desc;
+			// Heap作成
+			{
+				heap_desc_ = {};
+				heap_desc_.Type = desc_.type;
+				heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
+				heap_desc_.NodeMask = 0;
+				// SHaderからの可視性.
+				//https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-copydescriptors
+				heap_desc_.Flags = (desc.shader_visible)? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
+				{
+					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
+					return false;
+				}
+
+				handle_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
+				cpu_handle_start_ = p_heap_->GetCPUDescriptorHandleForHeapStart();
+				gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
+			}
+			return true;
+		}
+		void DescriptorHeapWrapper::Finalize()
+		{
+			// CComPtrで解放
+			p_heap_ = nullptr;
+		}
+
+
 		PersistentDescriptorAllocator::PersistentDescriptorAllocator()
 		{
 		}
@@ -33,29 +80,24 @@ namespace ngl
 
 			// Heap作成
 			{
-				heap_desc_ = {};
-				heap_desc_.Type = desc_.type;
-				heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
-				heap_desc_.NodeMask = 0;
 				// このHeap上のDescriptorは直接描画に利用しないためNone指定によってシェーダから不可視(InVisible)とする.
-				// CopyDescriptorsのコピー元として利用するため, シェーダから不可視とする必要がある. シェーダから可視なヒープはCPUからのアクセスが低速でパフォーマンスに影響があるため.
+				// CopyDescriptorsのコピー元はシェーダから不可視とする必要があるためD3D12_DESCRIPTOR_HEAP_FLAG_NONE.
+				// シェーダから可視なヒープはCPUからのアクセスが低速でパフォーマンスに影響があるため.
+				// 
 				//https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-copydescriptors
-				heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+				DescriptorHeapWrapper::Desc heap_desc = {};
+				heap_desc.allocate_descriptor_count_ = desc.allocate_descriptor_count_;
+				heap_desc.type = desc.type;
+				heap_desc.shader_visible = false;
 
-				if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
+				if (!heap_wrapper_.Initialize(p_device, heap_desc))
 				{
-					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
 					return false;
 				}
-
-				handle_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
-				cpu_handle_start_ = p_heap_->GetCPUDescriptorHandleForHeapStart();
-				gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
 			}
 
 			{
 				// 管理用情報構築
-				//constexpr auto num_flag_elem_bit = sizeof(decltype(*use_flag_bit_array_.data())) * 8;
 				num_use_flag_elem_ = (desc_.allocate_descriptor_count_ + (k_num_flag_elem_bit_ - 1)) / k_num_flag_elem_bit_;
 				use_flag_bit_array_.resize(num_use_flag_elem_);
 				
@@ -90,8 +132,7 @@ namespace ngl
 		{
 			Deallocate(default_persistent_descriptor_);
 
-			// CComPtrで解放
-			p_heap_ = nullptr;
+			heap_wrapper_.Finalize();
 		}
 
 		/*
@@ -173,10 +214,10 @@ namespace ngl
 			ret.allocator = this;
 			ret.allocation_index = allocation_index;
 			// ハンドルセット
-			ret.cpu_handle = cpu_handle_start_;
-			ret.gpu_handle = gpu_handle_start_;
+			ret.cpu_handle = heap_wrapper_.GetCpuHandleStart();// cpu_handle_start_;
+			ret.gpu_handle = heap_wrapper_.GetGpuHandleStart();// gpu_handle_start_;
 			// アドレスオフセット
-			const auto handle_offset = handle_increment_size_ * ret.allocation_index;
+			const auto handle_offset = heap_wrapper_.GetHandleIncrementSize() * ret.allocation_index;
 			ret.cpu_handle.ptr += static_cast<size_t>(handle_offset);
 			ret.gpu_handle.ptr += static_cast<size_t>(handle_offset);
 
