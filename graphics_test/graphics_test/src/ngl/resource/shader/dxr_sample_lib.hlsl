@@ -26,10 +26,10 @@ void rayGen()
 	float2 screen_size_f = float2(launch_dim.xy);
 
 
-	float2 aspect = screen_size_f.x / screen_size_f.y;
+	float aspect = screen_size_f.x / screen_size_f.y;
 	float2 ray_dir_xy = ((screen_pos_f / screen_size_f) * 2.0 - 1.0) * float2(1.0, -1.0);
 
-	float3 ray_dir = normalize(float3(ray_dir_xy, 1.0));
+	float3 ray_dir = normalize(float3(ray_dir_xy.x * aspect, ray_dir_xy.y, 1.0));
 
 	RayDesc ray;
 	ray.Origin = float3(0.0, 0.0, -2.0);
