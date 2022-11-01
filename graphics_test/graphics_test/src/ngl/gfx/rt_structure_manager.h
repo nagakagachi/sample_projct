@@ -129,8 +129,13 @@ namespace ngl
 
 			bool IsSetuped() const;
 			bool IsBuilt() const;
+
+			// Get AccelerationStructure Buffer.
 			rhi::BufferDep* GetBuffer();
 			const rhi::BufferDep* GetBuffer() const;
+			// Get AccelerationStructure Srv.
+			rhi::ShaderResourceViewDep* GetSrv();
+			const rhi::ShaderResourceViewDep* GetSrv() const;
 
 		private:
 			bool is_built_ = false;
@@ -376,6 +381,12 @@ namespace ngl
 
 			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
 
+
+			const rhi::ShaderResourceViewDep* GetResultSrv() const
+			{
+				return &ray_result_srv_;
+			}
+
 		private:
 			// Vtx Buffer for BLAS.
 			rhi::BufferDep test_geom_vb_;
@@ -406,8 +417,10 @@ namespace ngl
 
 
 			// テスト用のRayDispatch出力先UAV.
-			rhi::TextureDep ray_result_;
-			rhi::UnorderedAccessView ray_result_uav_;
+			rhi::TextureDep				ray_result_;
+			rhi::ShaderResourceViewDep	ray_result_srv_;
+			rhi::UnorderedAccessView	ray_result_uav_;
+			rhi::ResourceState			ray_result_state_ = {};
 		};
 
 	}

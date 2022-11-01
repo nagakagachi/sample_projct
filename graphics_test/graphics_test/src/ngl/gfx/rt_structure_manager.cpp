@@ -313,7 +313,14 @@ namespace ngl
 		{
 			return &main_;
 		}
-
+		rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv()
+		{
+			return &main_srv_;
+		}
+		const rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv() const
+		{
+			return &main_srv_;
+		}
 
 
 
@@ -538,19 +545,6 @@ namespace ngl
 
 				// リソース用DescriptorHeapを生成.
 				{
-					/*
-					D3D12_DESCRIPTOR_HEAP_DESC resource_descriptor_desc = {};
-					resource_descriptor_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-					resource_descriptor_desc.NumDescriptors = (rt_scene_max_shader_record_discriptor_table_count * rt_scene_shader_count);
-					// Shaderから可視のHeap. CPUから直接書き込めないのでrhi::PersistentDescriptorAllocator等のDescriptorをコピーすること前提.
-					resource_descriptor_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-					if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&resource_descriptor_desc, IID_PPV_ARGS(&rt_resource_descriptor_heap_))))
-					{
-						assert(false);
-						return false;
-					}
-					*/
-
 					rhi::DescriptorHeapWrapper::Desc heap_desc = {};
 					heap_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 					heap_desc.allocate_descriptor_count_ = (rt_scene_max_shader_record_discriptor_table_count * rt_scene_shader_count);
@@ -598,9 +592,7 @@ namespace ngl
 			}
 
 
-
-
-			// 出力テスト用のTexture UAV.
+			// 出力テスト用のTextureとUAV.
 			{
 				rhi::TextureDep::Desc tex_desc = {};
 				tex_desc.type = rhi::TextureType::Texture2D;
@@ -613,27 +605,32 @@ namespace ngl
 				{
 					assert(false);
 				}
+				// この生成はDeviceの持つシェーダから不可視のPersistentHeap上に作られる. 実際にはDispatch時のHeap上に CopyDescriptors をする.
+				if (!ray_result_uav_.Initialize(p_device, &ray_result_, 0, 0, 1))
+				{
+					assert(false);
+				}
+				// 同様にPersistent
+				if (!ray_result_srv_.InitializeAsTexture(p_device, &ray_result_, 0, 1, 0, 1))
+				{
+					assert(false);
+				}
+				// 初期ステート.
+				ray_result_state_ = rhi::ResourceState::General;
 
-				// rt_resource_descriptor_heap_に直接生成.
-				// Global Root Signatureで指定している配置になるように注意.
-				D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
-				uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-				auto uav_ptr = rt_descriptor_heap_.GetCpuHandleStart();
-				p_device->GetD3D12Device()->CreateUnorderedAccessView(ray_result_.GetD3D12Resource(), nullptr, &uav_desc, uav_ptr);
 
-				// Global Root Signatureに設定するためのASのSRV.
-				D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-				srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-				srvDesc.RaytracingAccelerationStructure.Location = test_tlas_.GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress();
-				D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = rt_descriptor_heap_.GetCpuHandleStart();
-				srvHandle.ptr += rt_descriptor_heap_.GetHandleIncrementSize() * 1;
-				p_device->GetD3D12Device()->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
+				// Rt用のHeapにUAVをコピー.
+				D3D12_CPU_DESCRIPTOR_HANDLE dst_uav_handle = rt_descriptor_heap_.GetCpuHandleStart();
+				uint32_t copy_uav_count = 1;
+				p_device->GetD3D12Device()->CopyDescriptors(1, &dst_uav_handle, &copy_uav_count, 1, &ray_result_uav_.GetView().cpu_handle, &copy_uav_count, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV );
 
+				// Rt用のHeapにSRVをコピー.
+				D3D12_CPU_DESCRIPTOR_HANDLE dst_srv_handle = rt_descriptor_heap_.GetCpuHandleStart();
+				dst_srv_handle.ptr += rt_descriptor_heap_.GetHandleIncrementSize() * 1;
+				uint32_t copy_srv_count = 1;
+				p_device->GetD3D12Device()->CopyDescriptors(1, &dst_srv_handle, &copy_srv_count, 1, &test_tlas_.GetSrv()->GetView().cpu_handle, &copy_srv_count, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 			}
 
-
-		
 			return true;
 		}
 
@@ -661,8 +658,14 @@ namespace ngl
 		void RaytraceStructureManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
 		{
 			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
-
 			auto shader_table_head = rt_shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
+
+
+			// to UAV.
+			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::UnorderedAccess);
+			ray_result_state_ = rhi::ResourceState::UnorderedAccess;
+
+
 
 			D3D12_DISPATCH_RAYS_DESC raytraceDesc = {};
 			raytraceDesc.Width = ray_result_.GetDesc().width;
@@ -708,10 +711,11 @@ namespace ngl
 			d3d_command_list->SetPipelineState1(rt_state_oject_);
 			d3d_command_list->DispatchRays(&raytraceDesc);
 
-			// Copy the results to the back-buffer
-			p_command_list->ResourceBarrier(&ray_result_, rhi::ResourceState::UnorderedAccess, rhi::ResourceState::UnorderedAccess);
 
 
+			// to SRV.
+			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::ShaderRead);
+			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}
 
 

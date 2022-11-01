@@ -723,7 +723,12 @@ bool AppGame::Execute()
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSampleVs", cbv_sample_vs_.GetView().cpu_handle);
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
 
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);
+
+						//sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);
+						// Raytraceの出力バッファをシェーダリソースに利用するテスト.
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", rt_st_.GetResultSrv()->GetView().cpu_handle);
+
+
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);
 
 						// DescriptorSetでViewを設定.
