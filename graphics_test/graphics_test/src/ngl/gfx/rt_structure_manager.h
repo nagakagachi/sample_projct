@@ -374,6 +374,8 @@ namespace ngl
 			bool Initialize(rhi::DeviceDep* p_device);
 			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
 
+			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
+
 		private:
 			// Vtx Buffer for BLAS.
 			rhi::BufferDep test_geom_vb_;
@@ -395,10 +397,17 @@ namespace ngl
 			CComPtr<ID3D12StateObject> rt_state_oject_;
 
 			rhi::BufferDep	rt_shader_table_;
+			uint32_t		rt_shader_table_entry_byte_size_ = 0;
 
-			// Raytrace ShaderTableのCBV,SRV,UAV用Heap.
+			// Raytrace用のCBV,SRV,UAV用Heap.
 			// 更新や足りなくなったら作り直される予定.
-			CComPtr<ID3D12DescriptorHeap>	rt_resource_descriptor_heap_;
+			//CComPtr<ID3D12DescriptorHeap>	rt_resource_descriptor_heap_;
+			rhi::DescriptorHeapWrapper	rt_descriptor_heap_;
+
+
+			// テスト用のRayDispatch出力先UAV.
+			rhi::TextureDep ray_result_;
+			rhi::UnorderedAccessView ray_result_uav_;
 		};
 
 	}

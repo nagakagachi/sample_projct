@@ -236,7 +236,7 @@ namespace ngl
 			}
 			// Main Buffer.
 			rhi::BufferDep::Desc main_desc = {};
-			main_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::ShaderResource; // Srvフラグ必要かも
+			main_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::ShaderResource; // シェーダからはSRVとして見えるためShaderResourceフラグも設定.
 			main_desc.initial_state = rhi::ResourceState::RaytracingAccelerationStructure;
 			main_desc.heap_type = rhi::ResourceHeapType::Default;
 			main_desc.element_count = 1;
@@ -521,6 +521,9 @@ namespace ngl
 
 				const uint32_t shader_table_byte_size = shader_record_byte_size * rt_scene_shader_count;
 
+				// あとで書き込み位置調整に使うので保存.
+				rt_shader_table_entry_byte_size_ = shader_record_byte_size;
+
 				// バッファ確保.
 				rhi::BufferDep::Desc rt_shader_table_desc = {};
 				rt_shader_table_desc.element_count = 1;
@@ -535,6 +538,7 @@ namespace ngl
 
 				// リソース用DescriptorHeapを生成.
 				{
+					/*
 					D3D12_DESCRIPTOR_HEAP_DESC resource_descriptor_desc = {};
 					resource_descriptor_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 					resource_descriptor_desc.NumDescriptors = (rt_scene_max_shader_record_discriptor_table_count * rt_scene_shader_count);
@@ -544,6 +548,16 @@ namespace ngl
 					{
 						assert(false);
 						return false;
+					}
+					*/
+
+					rhi::DescriptorHeapWrapper::Desc heap_desc = {};
+					heap_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+					heap_desc.allocate_descriptor_count_ = (rt_scene_max_shader_record_discriptor_table_count * rt_scene_shader_count);
+					heap_desc.shader_visible = true;
+					if (!rt_descriptor_heap_.Initialize(p_device, heap_desc))
+					{
+						assert(false);
 					}
 				}
 
@@ -582,6 +596,43 @@ namespace ngl
 					rt_shader_table_.Unmap();
 				}
 			}
+
+
+
+
+			// 出力テスト用のTexture UAV.
+			{
+				rhi::TextureDep::Desc tex_desc = {};
+				tex_desc.type = rhi::TextureType::Texture2D;
+				tex_desc.format = rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
+				tex_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::ShaderResource;
+				tex_desc.width = 1920;
+				tex_desc.height = 1080;
+
+				if (!ray_result_.Initialize(p_device, tex_desc))
+				{
+					assert(false);
+				}
+
+				// rt_resource_descriptor_heap_に直接生成.
+				// Global Root Signatureで指定している配置になるように注意.
+				D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
+				uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+				auto uav_ptr = rt_descriptor_heap_.GetCpuHandleStart();
+				p_device->GetD3D12Device()->CreateUnorderedAccessView(ray_result_.GetD3D12Resource(), nullptr, &uav_desc, uav_ptr);
+
+				// Global Root Signatureに設定するためのASのSRV.
+				D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+				srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+				srvDesc.RaytracingAccelerationStructure.Location = test_tlas_.GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress();
+				D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = rt_descriptor_heap_.GetCpuHandleStart();
+				srvHandle.ptr += rt_descriptor_heap_.GetHandleIncrementSize() * 1;
+				p_device->GetD3D12Device()->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
+
+			}
+
+
 		
 			return true;
 		}
@@ -607,6 +658,61 @@ namespace ngl
 			}
 		}
 
+		void RaytraceStructureManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
+		{
+			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
+
+			auto shader_table_head = rt_shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
+
+			D3D12_DISPATCH_RAYS_DESC raytraceDesc = {};
+			raytraceDesc.Width = ray_result_.GetDesc().width;
+			raytraceDesc.Height = ray_result_.GetDesc().height;
+			raytraceDesc.Depth = 1;
+
+			// RayGen is the first entry in the shader-table
+			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + 0 * rt_shader_table_entry_byte_size_;
+			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = rt_shader_table_entry_byte_size_;
+
+			// Miss is the second entry in the shader-table
+			size_t missOffset = 1 * rt_shader_table_entry_byte_size_;
+			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + missOffset;
+			raytraceDesc.MissShaderTable.StrideInBytes = rt_shader_table_entry_byte_size_;
+			raytraceDesc.MissShaderTable.SizeInBytes = rt_shader_table_entry_byte_size_;   // Only a s single miss-entry
+
+			// Hit is the third entry in the shader-table
+			size_t hitOffset = 2 * rt_shader_table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + hitOffset;
+			raytraceDesc.HitGroupTable.StrideInBytes = rt_shader_table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.SizeInBytes = rt_shader_table_entry_byte_size_;
+
+
+			// Bind the empty root signature
+			d3d_command_list->SetComputeRootSignature(rt_global_root_signature_);
+			// heap
+			auto* res_heap = rt_descriptor_heap_.GetD3D12();
+			d3d_command_list->SetDescriptorHeaps(1, &res_heap);
+
+			{
+				// Descriptor Table.
+				// Global Root Signatureではテーブル0でUAVとAS-SRVをバインドしているのでその通りに.
+
+				D3D12_GPU_DESCRIPTOR_HANDLE heap_head = rt_descriptor_heap_.GetGpuHandleStart();
+				auto handle_size = rt_descriptor_heap_.GetHandleIncrementSize();
+
+				D3D12_GPU_DESCRIPTOR_HANDLE table0 = heap_head;
+				d3d_command_list->SetComputeRootDescriptorTable(0, table0);
+			}
+
+
+			// Dispatch
+			d3d_command_list->SetPipelineState1(rt_state_oject_);
+			d3d_command_list->DispatchRays(&raytraceDesc);
+
+			// Copy the results to the back-buffer
+			p_command_list->ResourceBarrier(&ray_result_, rhi::ResourceState::UnorderedAccess, rhi::ResourceState::UnorderedAccess);
+
+
+		}
 
 
 	}

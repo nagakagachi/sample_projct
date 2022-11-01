@@ -14,6 +14,7 @@ void rayGen()
 	float2 col = frac(ray_index.xy / 100.0);
 
 	out_uav[ray_index.xy] = float4(col.x, col.y, 0.0, 0.0);
+	//out_uav[ray_index.xy] = float4(1.0, 0.0, 0.0, 0.0);
 }
 
 struct Payload

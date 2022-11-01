@@ -660,79 +660,86 @@ bool AppGame::Execute()
 			}
 
 
-			// Raytrace Structure Build.
+			// Raytrace Structure ビルド.
 			{
 				rt_st_.UpdateOnRender(&device_, &gfx_command_list_);
 			}
 
 
+			// Raytrace Dispatch.
 			{
-				// Swapchain State to RenderTarget
-				gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
-				swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
-			}
-			{
-				// Dsv State
-				gfx_command_list_.ResourceBarrier(&tex_depth_, tex_depth_state_, ngl::rhi::ResourceState::DepthWrite);
-				tex_depth_state_ = ngl::rhi::ResourceState::DepthWrite;
+				rt_st_.DispatchRay(&gfx_command_list_);
 			}
 
-			// Rtvクリア.
-			gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_);
-			// Dsvクリア.
-			gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 1.0f, 0, true, false);
-
-			// Rtv, Dsv セット.
 			{
-				const auto* p_rtv = &swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()];
-				gfx_command_list_.SetRenderTargets(&p_rtv, 1, &tex_depth_dsv_);
-			}
+				{
+					// Swapchain State to RenderTarget
+					gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
+					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
+				}
+				{
+					// Dsv State
+					gfx_command_list_.ResourceBarrier(&tex_depth_, tex_depth_state_, ngl::rhi::ResourceState::DepthWrite);
+					tex_depth_state_ = ngl::rhi::ResourceState::DepthWrite;
+				}
+
+				// Rtvクリア.
+				gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_);
+				// Dsvクリア.
+				gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 1.0f, 0, true, false);
+
+				// Rtv, Dsv セット.
+				{
+					const auto* p_rtv = &swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()];
+					gfx_command_list_.SetRenderTargets(&p_rtv, 1, &tex_depth_dsv_);
+				}
 
 #if 1
-			// Draw Polygon
-			{
-
-				D3D12_VIEWPORT viewport;
-				viewport.MinDepth = 0.0f;
-				viewport.MaxDepth = 1.0f;
-				viewport.TopLeftX = 0.0f;
-				viewport.TopLeftY = 0.0f;
-				viewport.Width = static_cast<float>(screen_w);
-				viewport.Height = static_cast<float>(screen_h);
-				gfx_command_list_.SetViewports(1, &viewport);
-
-				D3D12_RECT scissor_rect;
-				scissor_rect.left = 0;
-				scissor_rect.top = 0;
-				scissor_rect.right = screen_w;
-				scissor_rect.bottom = screen_h;
-				gfx_command_list_.SetScissor(1, &scissor_rect);
-
-				gfx_command_list_.SetPipelineState(&sample_pso_);
-				
+				// Draw Polygon
 				{
-					ngl::rhi::DescriptorSetDep empty_desc_set;
-					
-					// DescriptorSetに名前で定数バッファViewをセット
-					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSampleVs", cbv_sample_vs_.GetView().cpu_handle);
-					sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
 
-					sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);
-					sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);
+					D3D12_VIEWPORT viewport;
+					viewport.MinDepth = 0.0f;
+					viewport.MaxDepth = 1.0f;
+					viewport.TopLeftX = 0.0f;
+					viewport.TopLeftY = 0.0f;
+					viewport.Width = static_cast<float>(screen_w);
+					viewport.Height = static_cast<float>(screen_h);
+					gfx_command_list_.SetViewports(1, &viewport);
 
-					// DescriptorSetでViewを設定.
-					gfx_command_list_.SetDescriptorSet(&sample_pso_, &empty_desc_set);
+					D3D12_RECT scissor_rect;
+					scissor_rect.left = 0;
+					scissor_rect.top = 0;
+					scissor_rect.right = screen_w;
+					scissor_rect.bottom = screen_h;
+					gfx_command_list_.SetScissor(1, &scissor_rect);
+
+					gfx_command_list_.SetPipelineState(&sample_pso_);
+
+					{
+						ngl::rhi::DescriptorSetDep empty_desc_set;
+
+						// DescriptorSetに名前で定数バッファViewをセット
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSampleVs", cbv_sample_vs_.GetView().cpu_handle);
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
+
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);
+
+						// DescriptorSetでViewを設定.
+						gfx_command_list_.SetDescriptorSet(&sample_pso_, &empty_desc_set);
+					}
+
+					gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+
+					gfx_command_list_.SetVertexBuffers(0, 1, &vbv_sample_.GetView());
+
+
+					gfx_command_list_.SetIndexBuffer(&ibv_sample_.GetView());
+					gfx_command_list_.DrawIndexedInstanced(6, 1, 0, 0, 0);
 				}
-				
-				gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
-
-				gfx_command_list_.SetVertexBuffers(0, 1, &vbv_sample_.GetView());
-
-
-				gfx_command_list_.SetIndexBuffer(&ibv_sample_.GetView());
-				gfx_command_list_.DrawIndexedInstanced(6, 1, 0, 0, 0);
-			}
 #endif
+			}
 
 
 			// Swapchain State to Present
