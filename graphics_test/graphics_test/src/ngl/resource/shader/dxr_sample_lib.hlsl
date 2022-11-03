@@ -11,7 +11,7 @@ RWTexture2D<float4>				out_uav : register(u0);
 
 struct Payload
 {
-	uint hit;
+	float4 color;
 };
 
 
@@ -40,22 +40,44 @@ void rayGen()
 	
 	Payload payload;
 	const int ray_flag = 0;
-	const int ray_index = 0;
-	TraceRay(rt_as, ray_flag, 0xff, ray_index, 0, 0, ray, payload );
+	const int local_offset_to_hitgroup = 0;
+	// BLAS中のSubGeometryIndexに乗算される値. 結果はHitGroupIndex計算時に加算される.
+	// BLAS中のSubGeometryIndexがそれぞれ別のHitGroupを利用する場合は1等, BLAS中のすべてが同じHitGroupなら0を指定するなどが考えられる.
+	const int multiplier_for_subgeometry_index = 1;
+	const int miss_shader_index = 0;
+	TraceRay(rt_as, ray_flag, 0xff, local_offset_to_hitgroup, multiplier_for_subgeometry_index, miss_shader_index, ray, payload );
 
-	float3 col = (0 != payload.hit) ? float3(1.0, 1.0, 1.0) : float3(0.0, 0.0, 1.0);
+	float3 col = payload.color.xyz;
 
 	out_uav[launch_index.xy] = float4(col, 0.0);
 }
 
+
 [shader("miss")]
 void miss(inout Payload payload)
 {
-	payload.hit = 0;
+	payload.color = float4(0.0, 0.0, 0.0, 0.0);
 }
+
+// 2つ目のMissShaderテスト. TraceRayの引数でどのMissShaderを利用するか直接的に指定する.
+[shader("miss")]
+void miss2(inout Payload payload)
+{
+	payload.color = float4(0.0, 0.8, 0.8, 0.0);
+}
+
+
+
 
 [shader("closesthit")]
 void closestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	payload.hit = 1;
+	payload.color = float4(1.0, 0.0, 0.0, 0.0);
+}
+
+// 2つ目のhitgroupテスト.
+[shader("closesthit")]
+void closestHit2(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+	payload.color = float4(0.0, 1.0, 0.0, 0.0);
 }

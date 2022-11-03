@@ -333,6 +333,7 @@ namespace ngl
 
 			// Association
 			// 基本的には SubobjectLocalRootSignature と一対一で Local Root Signatureとシェーダレコード(shadow hitGroup等)をバインドするためのもの.
+			// NVIDIAサンプルではShaderNameとShaderConfig(Payloadサイズ等)のバインドもしているように見える.
 			struct SubobjectExportsAssociation : public SubobjectBase
 			{
 				SubobjectExportsAssociation()
@@ -409,6 +410,12 @@ namespace ngl
 
 			rhi::BufferDep	rt_shader_table_;
 			uint32_t		rt_shader_table_entry_byte_size_ = 0;
+			// ShaderTable上のHitGroup領域の先頭へのオフセット.
+
+			uint32_t		rt_shader_table_raygen_offset = 0;
+			uint32_t		rt_shader_table_miss_offset = 0;
+			uint32_t		rt_shader_table_hitgroup_offset = 0;
+
 
 			// Raytrace用のCBV,SRV,UAV用Heap.
 			// 更新や足りなくなったら作り直される予定.
