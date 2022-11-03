@@ -40,12 +40,13 @@ void rayGen()
 	
 	Payload payload;
 	const int ray_flag = 0;
-	const int local_offset_to_hitgroup = 0;
+	// HItGroupIndex計算時に加算される値. ShadowやAO等のPass毎のシェーダを切り替える際のインデックスに使うなど.
+	const int ray_contribution_to_hitgroup = 0;
 	// BLAS中のSubGeometryIndexに乗算される値. 結果はHitGroupIndex計算時に加算される.
 	// BLAS中のSubGeometryIndexがそれぞれ別のHitGroupを利用する場合は1等, BLAS中のすべてが同じHitGroupなら0を指定するなどが考えられる.
 	const int multiplier_for_subgeometry_index = 1;
 	const int miss_shader_index = 0;
-	TraceRay(rt_as, ray_flag, 0xff, local_offset_to_hitgroup, multiplier_for_subgeometry_index, miss_shader_index, ray, payload );
+	TraceRay(rt_as, ray_flag, 0xff, ray_contribution_to_hitgroup, multiplier_for_subgeometry_index, miss_shader_index, ray, payload );
 
 	float3 col = payload.color.xyz;
 
