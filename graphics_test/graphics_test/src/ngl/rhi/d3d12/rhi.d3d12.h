@@ -242,9 +242,9 @@ namespace ngl
 			virtual ~ShaderDep();
 
 			// コンパイル済みシェーダバイナリから初期化
-			bool Initialize(DeviceDep* p_device, const void* shader_binary_ptr, u32 shader_binary_size);
+			bool Initialize(DeviceDep* p_device, ShaderStage stage, const void* shader_binary_ptr, u32 shader_binary_size);
 
-			struct Desc
+			struct InitFileDesc
 			{
 				// シェーダファイルパス.
 				// "./sample.hlsl"
@@ -268,12 +268,13 @@ namespace ngl
 
 			};
 			// ファイルから
-			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			bool Initialize(DeviceDep* p_device, const InitFileDesc& desc);
 			void Finalize();
 
 			u32		GetShaderBinarySize() const;
 			const void*	GetShaderBinaryPtr() const;
 		private:
+			ShaderStage stage_;
 			std::vector<u8>	data_;
 		};
 

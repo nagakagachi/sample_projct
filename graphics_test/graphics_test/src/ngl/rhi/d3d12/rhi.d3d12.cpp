@@ -580,7 +580,7 @@ namespace ngl
 		}
 
 		// コンパイル済みシェーダバイナリから初期化
-		bool ShaderDep::Initialize(DeviceDep* p_device, const void* shader_binary_ptr, u32 shader_binary_size)
+		bool ShaderDep::Initialize(DeviceDep* p_device, ShaderStage stage, const void* shader_binary_ptr, u32 shader_binary_size)
 		{
 			if (!p_device)
 				return false;
@@ -590,15 +590,13 @@ namespace ngl
 			// 内部でメモリ確保
 			data_.resize(shader_binary_size);
 			memcpy(data_.data(), shader_binary_ptr, shader_binary_size);
-
-			// reflection取得
-			// fxcとdxcで取得方法が違う
-			// ヘッダ部にある DXC などの文字列で切り替えができるか？
+			// ステージ保存.
+			stage_ = stage;
 
 			return true;
 		}
 		// ファイルからコンパイル.
-		bool ShaderDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		bool ShaderDep::Initialize(DeviceDep* p_device, const InitFileDesc& desc)
 		{
 			auto include_object = D3D_COMPILE_STANDARD_FILE_INCLUDE;
 
@@ -737,14 +735,12 @@ namespace ngl
 					// 成功
 					CComPtr<IDxcBlob> code;
 					dxc_result->GetResult(&code);
-
-					// コンパイル済みバイナリを内部メモリにコピー
-					data_.resize(code->GetBufferSize());
-					memcpy(data_.data(), code->GetBufferPointer(), code->GetBufferSize());
+					compile_success = Initialize(p_device, desc.stage, code->GetBufferPointer(), (u32)code->GetBufferSize());
 				}
 
 				result = compile_success;
 			}
+
 			// dxcでのコンパイルに失敗した場合はd3dcompilerでのコンパイルを試みる
 			if (!result)
 			{
@@ -755,6 +751,7 @@ namespace ngl
 				const int flag_optimization = (!desc.option_enable_optimization) ? D3DCOMPILE_SKIP_OPTIMIZATION : 0;
 				const int flag_matrix_row_major = (!desc.option_matrix_row_major) ? D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR : D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
 
+				// フラグ.
 				const int commpile_flag = flag_debug | flag_validation | flag_optimization | flag_matrix_row_major;
 
 				CComPtr<ID3DBlob> p_compile_data;
@@ -781,9 +778,7 @@ namespace ngl
 				}
 				if (compile_success)
 				{
-					// コンパイル済みバイナリを内部メモリにコピー
-					data_.resize(p_compile_data->GetBufferSize());
-					memcpy(data_.data(), p_compile_data->GetBufferPointer(), p_compile_data->GetBufferSize());
+					compile_success = Initialize(p_device, desc.stage, p_compile_data->GetBufferPointer(), (u32)p_compile_data->GetBufferSize());
 				}
 
 				result = compile_success;
@@ -829,14 +824,15 @@ namespace ngl
 			const auto bin_size = p_shader->GetShaderBinarySize();
 			const auto bin_ptr = p_shader->GetShaderBinaryPtr();
 
-			// Refrection
 
-			bool hresult = true;
+			// ShaderReflectionかLibraryReflectionのどちらか.
 			CComPtr<ID3D12ShaderReflection> shader_reflect;
-
-			// 最初にDxcApiを試行する
-			// ShaderModel6以降はDxcAPIを利用する
+			CComPtr<ID3D12LibraryReflection> lib_reflect;
 			{
+				bool hresult = true;
+
+				// 最初にDxcApiを試行する
+				// ShaderModel6以降はDxcAPIを利用する
 				CComPtr<IDxcLibrary> lib;
 				hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&lib)));
 
@@ -851,7 +847,7 @@ namespace ngl
 					hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&refl)));
 				}
 				UINT shdIndex = 0;
-				if(hresult)
+				if (hresult)
 				{
 					// シェーダーバイナリデータをロードし、DXILチャンクブロック（のインデックス）を得る.
 					hresult = SUCCEEDED(refl->Load(binBlob));
@@ -864,28 +860,73 @@ namespace ngl
 #undef MAKEFOURCC
 					}
 				}
-				// シェーダーリフレクションインターフェース取得.
+
+				// リフレクションインターフェース取得.
 				if (hresult)
 				{
+					// ShaderReflectionをDxcAPIで取得を試行.
 					hresult = SUCCEEDED(refl->GetPartReflection(shdIndex, IID_PPV_ARGS(&shader_reflect)));
+
+					// ShaderReflection取得に失敗した場合はLibraryReflectionの取得を試みる.
+					// 先にLibraryReflectionの取得をするとlibプロファイルではない場合も取得できてしまうらしいのでShaderReflection取得に失敗した場合に試行する.
+					if (!hresult)
+					{
+						hresult = SUCCEEDED(refl->GetPartReflection(shdIndex, IID_PPV_ARGS(&lib_reflect)));
+					}
+				}
+				if (!hresult)
+				{
+					// DxcApiで取得できなかった場合はD3DRefrectを試行.
+					// (ShaderModel5以前はD3DReflectを利用する
+					hresult = SUCCEEDED(D3DReflect(bin_ptr, bin_size, IID_PPV_ARGS(&shader_reflect)));
+				}
+
+				if (!hresult)
+				{
+					assert(hresult);
+					// ShaderでもLibraryでもなく取得に失敗.
+					return false;
 				}
 			}
-			// DxcApiで取得できなかった場合はD3DRefrectを試行する
-			// ShaderModel5以前はD3DReflectを利用する
-			if(!hresult)
+
+#if 0
+			// LibraryReflectionのテスト(DXR).
+			if (lib_reflect.p)
 			{
-				hresult = SUCCEEDED(D3DReflect(bin_ptr, bin_size, IID_PPV_ARGS(&shader_reflect)));
+				// プロファイル違いでもGetDescできる上にメモリアクセス違反が発生するらしいのでunitonでメモリ範囲確保して安全にする.
+				// https://blog.techlab-xe.net/dxc-shader-reflection/
+				union {
+					D3D12_SHADER_DESC shader_desc;
+					D3D12_LIBRARY_DESC lib_desc;
+				} LibraryReflectionDesc;
+
+				// DXR等のLibプロファイルから情報取得.
+				if (FAILED(lib_reflect->GetDesc(&LibraryReflectionDesc.lib_desc)))
+				{
+					assert(false);
+					return false;
+				}
+				for (u32 fi = 0; fi < LibraryReflectionDesc.lib_desc.FunctionCount; ++fi)
+				{
+					// raygeneration や closesthit 等の関数毎に情報取得できる.
+					auto p_function = lib_reflect->GetFunctionByIndex(fi);
+
+					D3D12_FUNCTION_DESC func_desc = {};
+					if (SUCCEEDED(p_function->GetDesc(&func_desc)))
+					{
+						// ここで取得できる関数名は先頭に 謎のコードが挿入されていたり終端が無かったりと正しくない( 2022/11/06 )
+						std::cout << "ShaderLibFUnc: " << func_desc.Name << std::endl;
+					}
+				}
 			}
+#endif
 
 			// ----------------------------------------------------------------
 			// ID3D12ShaderReflectionが取得できればそこから情報取得
-			if (hresult)
+			if (shader_reflect.p)
 			{
 				D3D12_SHADER_DESC shader_desc = {};
-				if (hresult)
-				{
-					hresult = SUCCEEDED(shader_reflect->GetDesc(&shader_desc));
-				}
+				bool hresult = SUCCEEDED(shader_reflect->GetDesc(&shader_desc));
 				if (hresult)
 				{
 					// Constant Buffer

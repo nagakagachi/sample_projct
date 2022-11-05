@@ -445,7 +445,7 @@ namespace ngl
 
 
 				// ShaderLibrary.
-				ngl::rhi::ShaderDep::Desc shader_desc = {};
+				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 				shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
 				shader_desc.shader_model_version = "6_3";
 				shader_desc.shader_file_path = "./src/ngl/resource/shader/dxr_sample_lib.hlsl";
@@ -453,6 +453,13 @@ namespace ngl
 				{
 					std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
 					assert(false);
+				}
+				{
+					// shaderlibのリフレクションテスト.
+					rhi::ShaderReflectionDep ref0;
+					if (ref0.Initialize(p_device, &rt_shader_lib0_))
+					{
+					}
 				}
 
 				// DxilLibrary.

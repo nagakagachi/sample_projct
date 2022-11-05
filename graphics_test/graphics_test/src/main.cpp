@@ -297,7 +297,7 @@ bool AppGame::Initialize()
 		// HLSLからコンパイルして初期化.
 		ngl::rhi::ShaderReflectionDep reflect02;
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
@@ -312,7 +312,7 @@ bool AppGame::Initialize()
 		// HLSLからコンパイルして初期化.
 		ngl::rhi::ShaderReflectionDep reflect00;
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
@@ -326,7 +326,7 @@ bool AppGame::Initialize()
 		}
 
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_fullscr_procedural_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
@@ -338,7 +338,7 @@ bool AppGame::Initialize()
 			}
 		}
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_draw_procedural_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
@@ -1028,7 +1028,7 @@ void AppGame::TestCode()
 			ngl::rhi::ShaderDep	shader00;
 			ngl::rhi::ShaderReflectionDep reflect00;
 			file_obj.ReadFile("./data/sample_vs.cso");
-			if (!shader00.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
+			if (!shader00.Initialize(&device_, ngl::rhi::ShaderStage::Vertex, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
 				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
@@ -1041,7 +1041,7 @@ void AppGame::TestCode()
 			ngl::rhi::ShaderDep	shader01;
 			ngl::rhi::ShaderReflectionDep reflect00;
 			file_obj.ReadFile("./data/sample_ps.cso");
-			if (!shader01.Initialize(&device_, file_obj.GetFileData(), file_obj.GetFileSize()))
+			if (!shader01.Initialize(&device_, ngl::rhi::ShaderStage::Pixel, file_obj.GetFileData(), file_obj.GetFileSize()))
 			{
 				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 				assert(false);
@@ -1053,7 +1053,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderDep shader00;
 		ngl::rhi::ShaderReflectionDep reflect00;
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
@@ -1081,7 +1081,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderDep shader01;
 		ngl::rhi::ShaderReflectionDep reflect01;
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
@@ -1103,7 +1103,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderDep shader02;
 		ngl::rhi::ShaderReflectionDep reflect02;
 		{
-			ngl::rhi::ShaderDep::Desc shader_desc = {};
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
