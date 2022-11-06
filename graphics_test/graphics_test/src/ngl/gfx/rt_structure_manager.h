@@ -40,6 +40,10 @@ namespace ngl
 {
 	namespace gfx
 	{
+		// shader resource t65535 に
+		static constexpr uint32_t k_system_raytracing_structure_srv_register = 65535;
+
+
 		struct Mat34
 		{
 			float m[3][4];
@@ -183,6 +187,7 @@ namespace ngl
 		};
 
 		// RaytracingのStateObject生成と管理.
+		// マテリアルシェーダが動的に追加されるような状況では作り直しになるが, ShaderTable側を一旦デフォルトに割り当てて数フレーム後に作り直したStateで置き換える等を検討中.
 		class RaytraceStateObject
 		{
 		public:
@@ -282,11 +287,6 @@ namespace ngl
 			uint32_t		rt_shader_table_raygen_offset = 0;
 			uint32_t		rt_shader_table_miss_offset = 0;
 			uint32_t		rt_shader_table_hitgroup_offset = 0;
-
-
-			// Raytrace用のCBV,SRV,UAV用Heap.
-			// 更新や足りなくなったら作り直される予定.
-			rhi::DescriptorHeapWrapper	rt_descriptor_heap_;
 
 
 			// テスト用のRayDispatch出力先UAV.

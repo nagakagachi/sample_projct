@@ -6,6 +6,9 @@ namespace ngl
 {
 	namespace gfx
 	{
+		static constexpr uint32_t k_frame_descriptor_cbvsrvuav_table_size = 16;
+		static constexpr uint32_t k_frame_descriptor_sampler_table_size = 16;
+
 
 		RaytraceStructureBottom::RaytraceStructureBottom()
 		{
@@ -712,32 +715,64 @@ namespace ngl
 			// Global Root Signature. 
 			// TODO 現状はかなり固定.
 			{
+				// おそらく使わないであろうレジスタにASを設定.
+				// t65535 -> AccelerationStructure.
+
+				std::vector<D3D12_ROOT_PARAMETER> root_param;
+				{
+					// GlobalRootSignature 0 は固定でAccelerationStructure用SRV.
+					root_param.push_back({});
+					auto& parame_elem = root_param.back();
+					parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+					parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;  // SRV Descriptor直接.
+					parame_elem.Descriptor.ShaderRegister = 65535; // t65535にシステムからASを設定.
+					parame_elem.Descriptor.RegisterSpace = 0; // space 0
+				}
+
+
+				// CBV		-> GlobalRoot Table1. b0.
+				// SRV		-> GlobalRoot Table2. t0.
+				// Sampler	-> GlobalRoot Table3. s0.
+				// UAV		-> GlobalRoot Table4. u0.
+
 				std::vector<D3D12_DESCRIPTOR_RANGE> range_array;
-				range_array.resize(2);
-				range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+				range_array.resize(4);
+				range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 				range_array[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-				range_array[0].NumDescriptors = 1;
-				range_array[0].BaseShaderRegister = 0;
+				range_array[0].NumDescriptors = k_frame_descriptor_cbvsrvuav_table_size;
+				range_array[0].BaseShaderRegister = 0;// バインド先開始レジスタ.
 				range_array[0].RegisterSpace = 0;
 
 				range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 				range_array[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-				range_array[1].NumDescriptors = 1;
-				range_array[1].BaseShaderRegister = 0;
+				range_array[1].NumDescriptors = k_frame_descriptor_cbvsrvuav_table_size;
+				range_array[1].BaseShaderRegister = 0;// バインド先開始レジスタ.
 				range_array[1].RegisterSpace = 0;
 
+				range_array[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+				range_array[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+				range_array[2].NumDescriptors = k_frame_descriptor_sampler_table_size;
+				range_array[2].BaseShaderRegister = 0;// バインド先開始レジスタ.
+				range_array[2].RegisterSpace = 0;
 
-				std::vector<D3D12_ROOT_PARAMETER> root_param;
+				range_array[3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+				range_array[3].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+				range_array[3].NumDescriptors = k_frame_descriptor_cbvsrvuav_table_size;
+				range_array[3].BaseShaderRegister = 0;// バインド先開始レジスタ.
+				range_array[3].RegisterSpace = 0;
+
+				for(auto i = 0; i < range_array.size(); ++i)
 				{
+					// GlobalRootSignature Parameter[1] 以降は色々固定のTable.
+
 					root_param.push_back({});
 					auto& parame_elem = root_param.back();
 					parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 					parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-					parame_elem.DescriptorTable.NumDescriptorRanges = 2;
-					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[0];
+					parame_elem.DescriptorTable.NumDescriptorRanges = 1; // 1Table 1用途.
+					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[i];
 				}
 
-				// GlobalでDescriptorTable一つでUAVとSRVを設定するSignature.
 				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 				root_signature_desc.NumParameters = (uint32_t)root_param.size();
 				root_signature_desc.pParameters = root_param.data();
@@ -917,20 +952,6 @@ namespace ngl
 					return false;
 				}
 
-
-				// リソース用DescriptorHeapを生成.
-				{
-					rhi::DescriptorHeapWrapper::Desc heap_desc = {};
-					heap_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-					heap_desc.allocate_descriptor_count_ = (rt_scene_max_shader_record_discriptor_table_count * rt_scene_shader_count);
-					heap_desc.shader_visible = true;
-					if (!rt_descriptor_heap_.Initialize(p_device, heap_desc))
-					{
-						assert(false);
-					}
-				}
-
-
 				// レコード書き込み.
 				if (auto* mapped = static_cast<uint8_t*>(rt_shader_table_.Map()))
 				{
@@ -1023,18 +1044,6 @@ namespace ngl
 				}
 				// 初期ステート.
 				ray_result_state_ = rhi::ResourceState::General;
-
-
-				// Rt用のHeapにUAVをコピー.
-				D3D12_CPU_DESCRIPTOR_HANDLE dst_uav_handle = rt_descriptor_heap_.GetCpuHandleStart();
-				uint32_t copy_uav_count = 1;
-				p_device->GetD3D12Device()->CopyDescriptors(1, &dst_uav_handle, &copy_uav_count, 1, &ray_result_uav_.GetView().cpu_handle, &copy_uav_count, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV );
-
-				// Rt用のHeapにSRVをコピー.
-				D3D12_CPU_DESCRIPTOR_HANDLE dst_srv_handle = rt_descriptor_heap_.GetCpuHandleStart();
-				dst_srv_handle.ptr += rt_descriptor_heap_.GetHandleIncrementSize() * 1;
-				uint32_t copy_srv_count = 1;
-				p_device->GetD3D12Device()->CopyDescriptors(1, &dst_srv_handle, &copy_srv_count, 1, &test_tlas_.GetSrv()->GetView().cpu_handle, &copy_srv_count, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 			}
 
 			return true;
@@ -1066,6 +1075,9 @@ namespace ngl
 
 		void RaytraceStructureManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
 		{
+			rhi::DeviceDep* p_device = p_command_list->GetDevice();
+			auto* d3d_device = p_device->GetD3D12Device();
+
 			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
 			auto shader_table_head = rt_shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 
@@ -1076,50 +1088,109 @@ namespace ngl
 
 
 
+			// Bind the empty root signature
+			d3d_command_list->SetComputeRootSignature(p_state_object_->GetGlobalRootSignature());
+			// State.
+			d3d_command_list->SetPipelineState1(p_state_object_->GetStateObject());
+
+			// リソース設定.
+			{
+				// ASとCBV,SRV,UAVの3種それぞれに固定数分でframe descriptor heap確保.
+				const int num_frame_descriptor_cbvsrvuav_count = k_frame_descriptor_cbvsrvuav_table_size * 3;
+				const int num_frame_descriptor_sampler_count = k_frame_descriptor_sampler_table_size;
+
+
+				struct DescriptorHandleSet
+				{
+					DescriptorHandleSet() { }
+					DescriptorHandleSet(const D3D12_CPU_DESCRIPTOR_HANDLE& cpu_handle, const D3D12_GPU_DESCRIPTOR_HANDLE& gpu_handle)
+					{
+						h_cpu = cpu_handle;
+						h_gpu = gpu_handle;
+					}
+					D3D12_CPU_DESCRIPTOR_HANDLE h_cpu = {};
+					D3D12_GPU_DESCRIPTOR_HANDLE h_gpu = {};
+				};
+
+				const auto handle_increment_size = p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetHandleIncrementSize();
+				auto get_descriptor_with_pos = [handle_increment_size](const DescriptorHandleSet& base,  int i) -> DescriptorHandleSet
+				{
+					DescriptorHandleSet ret(base);
+					ret.h_cpu.ptr += handle_increment_size * i;
+					ret.h_gpu.ptr += handle_increment_size * i;
+					return ret;
+				};
+
+
+				DescriptorHandleSet res_heap_head;
+				DescriptorHandleSet sampler_heap_head;
+				// CbvSrvUavのFrame Heap確保.
+				if (!p_command_list->GetFrameDescriptorInterface()->Allocate(num_frame_descriptor_cbvsrvuav_count, res_heap_head.h_cpu, res_heap_head.h_gpu))
+				{
+					assert(false);
+				}
+				// SamplerのFrame Heap確保. ここの確保でHeapのページが足りない場合は別のHeapが確保されて切り替わるの.
+				// そのためSetDescriptorHeapsのためのSampler用Heapを取得する場合は確保のあとにGetD3D12DescriptorHeapをすること.
+				if (!p_command_list->GetFrameSamplerDescriptorHeapInterface()->Allocate(num_frame_descriptor_sampler_count, sampler_heap_head.h_cpu, sampler_heap_head.h_gpu))
+				{
+					assert(false);
+				}
+
+				// frame heap 上のそれぞれの配置.
+				DescriptorHandleSet descriptor_table_base_cbv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 0);
+				DescriptorHandleSet descriptor_table_base_srv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 1);
+				DescriptorHandleSet descriptor_table_base_uav = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 2);
+				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_frame_descriptor_sampler_table_size * 0);
+				{
+					// FrameHeapにコピーする.
+
+					// uav 今のところこれだけだが今後ほかのSRVやその他UAV等も.
+					d3d_device->CopyDescriptorsSimple(1, descriptor_table_base_uav.h_cpu, ray_result_uav_.GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+					// TODO.
+				}
+
+				// Heap設定.
+				{
+					std::vector<ID3D12DescriptorHeap*> use_heap_array = {};
+					use_heap_array.push_back(p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetD3D12DescriptorHeap());
+					use_heap_array.push_back(p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetD3D12DescriptorHeap());
+
+					// 使用しているHeapをセット.
+					d3d_command_list->SetDescriptorHeaps((uint32_t)use_heap_array.size(), use_heap_array.data());
+				}
+
+				// Table設定.
+				d3d_command_list->SetComputeRootShaderResourceView(0, test_tlas_.GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress());
+				d3d_command_list->SetComputeRootDescriptorTable(1, descriptor_table_base_cbv.h_gpu);
+				d3d_command_list->SetComputeRootDescriptorTable(2, descriptor_table_base_srv.h_gpu);
+				d3d_command_list->SetComputeRootDescriptorTable(3, sampler_heap_head.h_gpu);
+				d3d_command_list->SetComputeRootDescriptorTable(4, descriptor_table_base_uav.h_gpu);
+			}
+
+
+			// Dispatch.
 			D3D12_DISPATCH_RAYS_DESC raytraceDesc = {};
 			raytraceDesc.Width = ray_result_.GetDesc().width;
 			raytraceDesc.Height = ray_result_.GetDesc().height;
 			raytraceDesc.Depth = 1;
 
-			// RayGen is the first entry in the shader-table
+			// RayGeneration Shaderのテーブル位置.
 			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + rt_shader_table_raygen_offset;
 			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = rt_shader_table_entry_byte_size_;
 
-			// Miss is the second entry in the shader-table
+			// Miss Shaderのテーブル位置.
 			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + rt_shader_table_miss_offset;
 			raytraceDesc.MissShaderTable.StrideInBytes = rt_shader_table_entry_byte_size_;
 			raytraceDesc.MissShaderTable.SizeInBytes = rt_shader_table_entry_byte_size_;   // Only a s single miss-entry
 
-			// Hit is the third entry in the shader-table
+			// HitGroup群の先頭のテーブル位置.
 			// マテリアル毎のHitGroupはここから連続領域に格納. Instanceに設定されたHitGroupIndexでアクセスされる.
 			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + rt_shader_table_hitgroup_offset;
 			raytraceDesc.HitGroupTable.StrideInBytes = rt_shader_table_entry_byte_size_;
 			raytraceDesc.HitGroupTable.SizeInBytes = rt_shader_table_entry_byte_size_;
-
-			// Bind the empty root signature
-			d3d_command_list->SetComputeRootSignature(p_state_object_->GetGlobalRootSignature());
-
-			// heap
-			auto* res_heap = rt_descriptor_heap_.GetD3D12();
-			d3d_command_list->SetDescriptorHeaps(1, &res_heap);
-
-			{
-				// Descriptor Table.
-				// Global Root Signatureではテーブル0でUAVとAS-SRVをバインドしているのでその通りに.
-
-				D3D12_GPU_DESCRIPTOR_HANDLE heap_head = rt_descriptor_heap_.GetGpuHandleStart();
-				auto handle_size = rt_descriptor_heap_.GetHandleIncrementSize();
-
-				D3D12_GPU_DESCRIPTOR_HANDLE table0 = heap_head;
-				d3d_command_list->SetComputeRootDescriptorTable(0, table0);
-			}
-
-
-			// Dispatch
-			d3d_command_list->SetPipelineState1(p_state_object_->GetStateObject());
-
+			
 			d3d_command_list->DispatchRays(&raytraceDesc);
-
 
 
 			// to SRV.

@@ -5,7 +5,9 @@
 
 
 
-RaytracingAccelerationStructure	rt_as : register(t0);
+
+RaytracingAccelerationStructure	rt_as : register(t65535);// システム供給のASは固定のレジスタ(space使うべきか?)
+
 RWTexture2D<float4>				out_uav : register(u0);
 
 

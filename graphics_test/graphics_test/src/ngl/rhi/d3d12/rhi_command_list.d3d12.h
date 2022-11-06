@@ -79,8 +79,10 @@ namespace ngl
 			void ResourceUavBarrier(BufferDep* p_buffer);
 
 		public:
-			// 検証中は直接利用するかもしれないので取得関数追加
 			FrameDescriptorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
+			FrameDescriptorHeapPageInterface* GetFrameSamplerDescriptorHeapInterface() { return &frame_desc_page_interface_for_sampler_; }
+
+			DeviceDep* GetDevice() { return parent_device_; }
 
 		private:
 			DeviceDep* parent_device_	= nullptr;
