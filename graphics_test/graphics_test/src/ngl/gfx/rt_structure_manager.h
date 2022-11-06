@@ -43,7 +43,7 @@ namespace ngl
 		struct Mat34
 		{
 			float m[3][4];
-			
+
 			static constexpr Mat34 Identity()
 			{
 				constexpr Mat34 m = {
@@ -231,22 +231,22 @@ namespace ngl
 					hit_group_desc_ = {};
 					hit_group_desc_.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES;
 
-					if (anyhit)
+					if (anyhit && ('\0' != anyhit[0]))
 					{
 						anyhit_name_cache_ = str_to_wstr(anyhit);
 						hit_group_desc_.AnyHitShaderImport = anyhit_name_cache_.c_str();
 					}
-					if (closesthit)
+					if (closesthit && ('\0' != closesthit[0]))
 					{
 						closesthit_name_cache_ = str_to_wstr(closesthit);
 						hit_group_desc_.ClosestHitShaderImport = closesthit_name_cache_.c_str();
 					}
-					if (intersection)
+					if (intersection && ('\0' != intersection[0]))
 					{
 						intersection_name_cache_ = str_to_wstr(intersection);
 						hit_group_desc_.IntersectionShaderImport = intersection_name_cache_.c_str();
 					}
-					if (hitgroup_name)
+					if (hitgroup_name && ('\0' != hitgroup_name[0]))
 					{
 						hitgroup_name_cache_ = str_to_wstr(hitgroup_name);
 						hit_group_desc_.HitGroupExport = hitgroup_name_cache_.c_str();
@@ -321,6 +321,15 @@ namespace ngl
 				SubobjectLocalRootSignature()
 					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, nullptr)
 				{}
+
+				/*
+					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+					root_signature_desc.NumParameters = 0;
+					root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;// Local設定.
+					rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, rt_local_root_signature0_);
+					
+					Setup(rt_local_root_signature0_);
+				*/
 				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
 				{
 					p_root_signature_ = p_root_signature;
@@ -363,11 +372,97 @@ namespace ngl
 				}
 			private:
 				D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION	exports_ = {};
-				const D3D12_STATE_SUBOBJECT*			p_subobject_ = {};
+				const D3D12_STATE_SUBOBJECT* p_subobject_ = {};
 				std::vector<std::wstring>				export_name_cache_;
 				std::vector<const wchar_t*>				export_name_array_;
 			};
 		}
+
+
+
+		struct RaytraceShaderRegisterInfo
+		{
+			struct HitgroupInfo
+			{
+				std::string hitgorup_name = {};
+				std::string any_hit_name = {};
+				std::string closest_hit_name = {};
+				std::string intersection_name = {};
+			};
+
+			// 登録シェーダ.
+			const rhi::ShaderDep* p_shader_library = nullptr;
+
+			// 登録シェーダから公開するRayGenerationShader名配列.
+			std::vector<std::string> ray_generation_shader_array = {};
+			// 登録シェーダから公開するMissShader名配列.
+			std::vector<std::string> miss_shader_array = {};
+
+			// ShaderLib内でのHitgroup定義配列.
+			//	 hitgroupを構成する関数は一つのShaderLib内に含まれているものとする (別のShaderLibからIntersectionだけを利用するといったことはしない).
+			std::vector<HitgroupInfo> hitgroup_array = {};
+		};
+
+		class RaytraceStateObject
+		{
+		public:
+			RaytraceStateObject() {}
+			~RaytraceStateObject() {}
+
+			bool Initialize(rhi::DeviceDep* p_device,
+				const std::vector<RaytraceShaderRegisterInfo>& shader_info_array, 
+				uint32_t payload_byte_size = sizeof(float) * 4, uint32_t attribute_byte_size = sizeof(float) * 2, uint32_t max_trace_recursion = 1);
+
+			CComPtr<ID3D12StateObject> GetStateObject() const
+			{
+				return state_oject_;
+			}
+			CComPtr<ID3D12RootSignature> GetGlobalRootSignature() const
+			{
+				return global_root_signature_;
+			}
+		private:
+			bool initialized_ = false;
+
+			// 内部管理用.
+			struct RayGenerationInfo
+			{
+				int  shader_index = -1;// 登録元のShaderRef.
+				
+				std::string ray_generation_name = {};
+			};
+			// 内部管理用.
+			struct MissInfo
+			{
+				int  shader_index = -1;// 登録元のShaderRef.
+
+				std::string miss_name = {};
+			};
+			// 内部管理用.
+			struct HitgroupInfo
+			{
+				int  shader_index = -1;// 登録元のShaderRef.
+
+				std::string hitgorup_name = {};
+
+				std::string any_hit_name = {};
+				std::string closest_hit_name = {};
+				std::string intersection_name = {};
+			};
+
+			std::vector<const rhi::ShaderDep*>	shader_database_ = {};
+			std::vector<RayGenerationInfo>	raygen_database_ = {};
+			std::vector<MissInfo>			miss_database_ = {};
+			std::vector<HitgroupInfo>		hitgroup_database_ = {};
+
+
+			uint32_t						payload_byte_size_ = sizeof(float)*4;
+			uint32_t						attribute_byte_size_ = sizeof(float) * 2;
+			uint32_t						max_trace_recursion_ = 1;
+
+			CComPtr<ID3D12RootSignature>	global_root_signature_ = {};
+			CComPtr<ID3D12StateObject>		state_oject_ = {};
+		};
 
 
 		// Raytracing Scene Manager.
@@ -397,16 +492,12 @@ namespace ngl
 			RaytraceStructureTop test_tlas_;
 
 
+			
+
 			// Shader lib.
 			rhi::ShaderDep rt_shader_lib0_;
-			// local root signature.
-			CComPtr<ID3D12RootSignature> rt_local_root_signature0_;
 
-			// global root signature.
-			CComPtr<ID3D12RootSignature> rt_global_root_signature_;
-
-			// Raytracing StateObject.
-			CComPtr<ID3D12StateObject> rt_state_oject_;
+			RaytraceStateObject state_object_;
 
 			rhi::BufferDep	rt_shader_table_;
 			uint32_t		rt_shader_table_entry_byte_size_ = 0;

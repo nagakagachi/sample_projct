@@ -1,5 +1,7 @@
 ﻿#include "rt_structure_manager.h"
 
+#include <unordered_map>
+
 namespace ngl
 {
 	namespace gfx
@@ -325,8 +327,270 @@ namespace ngl
 		{
 			return &main_srv_;
 		}
+		// -------------------------------------------------------------------------------
 
 
+
+		bool RaytraceStateObject::Initialize(rhi::DeviceDep* p_device, 
+			const std::vector<RaytraceShaderRegisterInfo>& shader_info_array, 
+			uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursion)
+		{
+			if (initialized_)
+				return false;
+
+			if (0 >= payload_byte_size || 0 >= attribute_byte_size)
+			{
+				assert(false);
+				return false;
+			}
+			initialized_ = true;
+
+			// 設定を保存.
+			payload_byte_size_ = payload_byte_size;
+			attribute_byte_size_ = attribute_byte_size;
+			max_trace_recursion_ = max_trace_recursion;
+
+
+			std::unordered_map<const rhi::ShaderDep*, int> shader_map;
+			// これらの名前はStateObject内で重複禁止のためMapでチェック.
+			std::unordered_map<std::string, int> raygen_map;
+			std::unordered_map<std::string, int> miss_map;
+			std::unordered_map<std::string, int> hitgroup_map;
+			for (int i = 0; i < shader_info_array.size(); ++i)
+			{
+				const auto& info = shader_info_array[i];
+
+				// ターゲットのシェーダ参照は必須.
+				if (nullptr == info.p_shader_library)
+				{
+					assert(false);
+					continue;
+				}
+
+				// 管理用シェーダ参照登録.
+				if (shader_map.end() == shader_map.find(info.p_shader_library))
+				{
+					shader_map.insert(std::make_pair(info.p_shader_library, (int)shader_database_.size()));
+					// 内部シェーダ登録.
+					shader_database_.push_back(info.p_shader_library);
+				}
+				// 内部シェーダインデックス.
+				int shader_index = shader_map.find(info.p_shader_library)->second;
+
+				// RayGeneration.
+				for (auto& register_elem : info.ray_generation_shader_array)
+				{
+					if (raygen_map.end() == raygen_map.find(register_elem))
+					{
+						raygen_map.insert(std::make_pair(register_elem, shader_index));
+
+						RayGenerationInfo new_elem = {};
+						new_elem.shader_index = shader_index;
+						new_elem.ray_generation_name = register_elem;
+						raygen_database_.push_back(new_elem);
+					}
+					else
+					{
+						// 同名はエラー.
+						assert(false);
+					}
+				}
+				// Miss.
+				for (auto& register_elem : info.miss_shader_array)
+				{
+					if (miss_map.end() == miss_map.find(register_elem))
+					{
+						miss_map.insert(std::make_pair(register_elem, shader_index));
+
+						MissInfo new_elem = {};
+						new_elem.shader_index = shader_index;
+						new_elem.miss_name = register_elem;
+						miss_database_.push_back(new_elem);
+					}
+					else
+					{
+						// 同名登録はエラー.
+						assert(false);
+					}
+				}
+				// HitGroup.
+				for (auto& register_elem : info.hitgroup_array)
+				{
+					if (hitgroup_map.end() == hitgroup_map.find(register_elem.hitgorup_name))
+					{
+						hitgroup_map.insert(std::make_pair(register_elem.hitgorup_name, shader_index));
+
+						HitgroupInfo new_elem = {};
+						new_elem.shader_index = shader_index;
+						new_elem.hitgorup_name = register_elem.hitgorup_name;
+						
+						new_elem.any_hit_name = register_elem.any_hit_name;
+						new_elem.closest_hit_name = register_elem.closest_hit_name;
+						new_elem.intersection_name = register_elem.intersection_name;
+
+						hitgroup_database_.push_back(new_elem);
+					}
+					else
+					{
+						// 同名登録はエラー.
+						assert(false);
+					}
+				}
+			}
+
+
+			// Subobject ShaderLib Exportセットアップ.
+			std::vector<subobject::SubobjectDxilLibrary> subobject_shaderlib_array;
+			subobject_shaderlib_array.resize(shader_database_.size());
+			{
+				std::vector<std::vector<const char*>> shader_function_export_info = {};
+				shader_function_export_info.resize(shader_database_.size());
+
+				auto func_push_func_name_cp = [](auto& name_vec, const std::string& name)
+				{
+					if (0 < name.length())
+						name_vec.push_back(name.c_str());
+				};
+
+				for (const auto& e : raygen_database_)
+				{
+					func_push_func_name_cp(shader_function_export_info[e.shader_index], e.ray_generation_name);
+				}
+				for (const auto& e : miss_database_)
+				{
+					func_push_func_name_cp(shader_function_export_info[e.shader_index], e.miss_name);
+				}
+
+				for (const auto& e : hitgroup_database_)
+				{
+					func_push_func_name_cp(shader_function_export_info[e.shader_index], e.any_hit_name);
+					func_push_func_name_cp(shader_function_export_info[e.shader_index], e.closest_hit_name);
+					func_push_func_name_cp(shader_function_export_info[e.shader_index], e.intersection_name);
+				}
+
+				for (int si = 0; si < shader_database_.size(); ++si)
+				{
+					subobject_shaderlib_array[si].Setup(shader_database_[si], shader_function_export_info[si].data(), (int)shader_function_export_info[si].size());
+				}
+			}
+
+			// Subobject Hitgroupセットアップ.
+			std::vector<subobject::SubobjectHitGroup> subobject_hitgroup_array;
+			subobject_hitgroup_array.resize(hitgroup_database_.size());
+			{
+				for (int hi = 0; hi < hitgroup_database_.size(); ++hi)
+				{
+					const auto p_hitgroup		= hitgroup_database_[hi].hitgorup_name.c_str();
+					const auto p_anyhit			= hitgroup_database_[hi].any_hit_name.c_str();
+					const auto p_closesthit		= hitgroup_database_[hi].closest_hit_name.c_str();
+					const auto p_intersection	= hitgroup_database_[hi].intersection_name.c_str();
+
+					subobject_hitgroup_array[hi].Setup(p_anyhit, p_closesthit, p_intersection, p_hitgroup);
+				}
+			}
+
+
+			// Global Root Signature. 
+			// TODO 現状はかなり固定.
+			{
+				std::vector<D3D12_DESCRIPTOR_RANGE> range_array;
+				range_array.resize(2);
+				range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+				range_array[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+				range_array[0].NumDescriptors = 1;
+				range_array[0].BaseShaderRegister = 0;
+				range_array[0].RegisterSpace = 0;
+
+				range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+				range_array[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+				range_array[1].NumDescriptors = 1;
+				range_array[1].BaseShaderRegister = 0;
+				range_array[1].RegisterSpace = 0;
+
+
+				std::vector<D3D12_ROOT_PARAMETER> root_param;
+				{
+					root_param.push_back({});
+					auto& parame_elem = root_param.back();
+					parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+					parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+					parame_elem.DescriptorTable.NumDescriptorRanges = 2;
+					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[0];
+				}
+
+				// GlobalでDescriptorTable一つでUAVとSRVを設定するSignature.
+				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+				root_signature_desc.NumParameters = (uint32_t)root_param.size();
+				root_signature_desc.pParameters = root_param.data();
+				root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+				if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, global_root_signature_))
+				{
+					assert(false);
+					return false;
+				}
+			}
+			// Subobject Global Root Signature.
+			subobject::SubobjectGlobalRootSignature so_grs = {};
+			so_grs.Setup(global_root_signature_);
+
+			/*
+			// Local Root Signatureはとりあえず無し.
+			*/
+
+			// Shader Config.
+			subobject::SubobjectRaytracingShaderConfig so_shader_config = {};
+			so_shader_config.Setup(payload_byte_size, attribute_byte_size);
+			// Pipeline Config.
+			subobject::SubobjectRaytracingPipelineConfig so_pipeline_config = {};
+			so_pipeline_config.Setup(max_trace_recursion);
+
+
+
+
+			// Subobject間の参照が必要になる場合があるため改めて連続メモリにSUBOBJECTを構築. Resolveフェーズを入れるのも予定.
+			int num_subobject = 0;
+			num_subobject += 1; // Global Root Signature.
+			num_subobject += 1; // ShaderConfig.
+			num_subobject += 1; // PipelineConfig.
+			num_subobject += (int)subobject_shaderlib_array.size();
+			num_subobject += (int)subobject_hitgroup_array.size();
+
+			// subobject array.
+			std::vector<D3D12_STATE_SUBOBJECT> state_subobject_array;
+			state_subobject_array.resize(num_subobject);
+
+			// Subobject間の参照はとりあえず無視して積み込み.
+			int cnt_subobject = 0;
+			state_subobject_array[cnt_subobject++] = (so_grs.subobject_);
+			state_subobject_array[cnt_subobject++] = (so_shader_config.subobject_);
+			state_subobject_array[cnt_subobject++] = (so_pipeline_config.subobject_);
+			for (const auto& e : subobject_shaderlib_array)
+			{
+				state_subobject_array[cnt_subobject++] = e.subobject_;
+			}
+			for (const auto& e : subobject_hitgroup_array)
+			{
+				state_subobject_array[cnt_subobject++] = e.subobject_;
+			}
+
+			D3D12_STATE_OBJECT_DESC state_object_desc = {};
+			state_object_desc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
+			state_object_desc.NumSubobjects = (uint32_t)state_subobject_array.size();
+			state_object_desc.pSubobjects = state_subobject_array.data();
+
+			// 生成.
+			if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&state_oject_))))
+			{
+				assert(false);
+				return false;
+			}
+
+			return true;
+		}
+
+
+		// -------------------------------------------------------------------------------
 
 		RaytraceStructureManager::RaytraceStructureManager()
 		{
@@ -389,145 +653,62 @@ namespace ngl
 			}
 
 
-			// RtPso等.
+
+
+			// ShaderLibrary.
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
+			shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
+			shader_desc.shader_model_version = "6_3";
+			shader_desc.shader_file_path = "./src/ngl/resource/shader/dxr_sample_lib.hlsl";
+			if (!rt_shader_lib0_.Initialize(p_device, shader_desc))
 			{
-				// Global Root Signature.
+				std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
+				assert(false);
+			}
+			// StateObject生成.
+			{
+				std::vector<RaytraceShaderRegisterInfo> shader_reg_info_array = {};
 				{
-					std::vector<D3D12_DESCRIPTOR_RANGE> range_array;
-					range_array.resize(2);
-					range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-					range_array[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-					range_array[0].NumDescriptors = 1;
-					range_array[0].BaseShaderRegister = 0;
-					range_array[0].RegisterSpace = 0;
+					// Shader登録エントリ新規.
+					auto shader_index = shader_reg_info_array.size();
+					shader_reg_info_array.push_back({});
 
-					range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-					range_array[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-					range_array[1].NumDescriptors = 1;
-					range_array[1].BaseShaderRegister = 0;
-					range_array[1].RegisterSpace = 0;
+					// 関数登録元ShaderLib参照.
+					shader_reg_info_array[shader_index].p_shader_library = &rt_shader_lib0_;
 
+					// シェーダから公開するRaygenerationShader名.
+					shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
 
-					std::vector<D3D12_ROOT_PARAMETER> root_param;
+					// シェーダから公開するMissShader名.
+					shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
+					shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
+
+					// シェーダから公開するHitGroup関連情報.
 					{
-						root_param.push_back({});
-						auto& parame_elem = root_param.back();
-						parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-						parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-						parame_elem.DescriptorTable.NumDescriptorRanges = 2;
-						parame_elem.DescriptorTable.pDescriptorRanges = &range_array[0];
+						auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+						shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+						shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
+						// このHitGroupはClosestHitのみ.
+						shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
 					}
-
-					// GlobalでDescriptorTable一つでUAVとSRVを設定するSignature.
-					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-					root_signature_desc.NumParameters = (uint32_t)root_param.size();
-					root_signature_desc.pParameters = root_param.data();
-					root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-
-					if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, rt_global_root_signature_))
 					{
-						assert(false);
-						return false;
-					}
-				}
-				// Subobject Global Root Signature.
-				subobject::SubobjectGlobalRootSignature so_grs = {};
-				so_grs.Setup(rt_global_root_signature_);
+						auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+						shader_reg_info_array[shader_index].hitgroup_array.push_back({});
 
-
-				// Shader Config.
-				subobject::SubobjectRaytracingShaderConfig so_shader_config = {};
-				so_shader_config.Setup(sizeof(float)*4);
-
-				// Pipeline Config.
-				subobject::SubobjectRaytracingPipelineConfig so_pipeline_config = {};
-				so_pipeline_config.Setup(1);
-
-
-				// ShaderLibrary.
-				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-				shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
-				shader_desc.shader_model_version = "6_3";
-				shader_desc.shader_file_path = "./src/ngl/resource/shader/dxr_sample_lib.hlsl";
-				if (!rt_shader_lib0_.Initialize(p_device, shader_desc))
-				{
-					std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
-					assert(false);
-				}
-				{
-					// shaderlibのリフレクションテスト.
-					rhi::ShaderReflectionDep ref0;
-					if (ref0.Initialize(p_device, &rt_shader_lib0_))
-					{
+						shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
+						// このHitGroupはClosestHitのみ.
+						shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
 					}
 				}
 
-				// DxilLibrary.
-				subobject::SubobjectDxilLibrary so_shader_lib = {};
-				const char* rt_entries[] =
-				{
-					"rayGen",
-					
-					"miss",
-					"miss2",
-
-					"closestHit",
-					"closestHit2",
-				};
-				so_shader_lib.Setup(&rt_shader_lib0_, rt_entries, (int)std::size(rt_entries));
-
-				// HitGroup
-				subobject::SubobjectHitGroup so_hitgroup = {};
-				so_hitgroup.Setup(nullptr, "closestHit", nullptr, "hitGroup");
-
-				// HitGroup2
-				subobject::SubobjectHitGroup so_hitgroup2 = {};
-				so_hitgroup2.Setup(nullptr, "closestHit2", nullptr, "hitGroup2");
-
-				// Local Root Signature.
-				{
-					// 空.
-					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-					root_signature_desc.NumParameters = 0;
-					root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
-
-					if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, rt_local_root_signature0_))
-					{
-						assert(false);
-						return false;
-					}
-				}
-				// テスト用に空のLocalRootSignature
-				subobject::SubobjectLocalRootSignature so_lrs0 = {};
-				so_lrs0.Setup(rt_local_root_signature0_);
-
-
-				// subobject array.
-				std::vector<D3D12_STATE_SUBOBJECT> state_subobject_array;
-				state_subobject_array.resize(10);
-				int cnt_subobject = 0;
-
-				state_subobject_array[cnt_subobject++] = (so_shader_config.subobject_);
-				state_subobject_array[cnt_subobject++] = (so_pipeline_config.subobject_);
-				state_subobject_array[cnt_subobject++] = (so_grs.subobject_);
-				state_subobject_array[cnt_subobject++] = (so_lrs0.subobject_);
-
-				state_subobject_array[cnt_subobject++] = (so_shader_lib.subobject_);
-				state_subobject_array[cnt_subobject++] = (so_hitgroup.subobject_);
-				state_subobject_array[cnt_subobject++] = (so_hitgroup2.subobject_);
-
-				D3D12_STATE_OBJECT_DESC state_object_desc = {};
-				state_object_desc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
-				state_object_desc.NumSubobjects = (uint32_t)cnt_subobject;
-				state_object_desc.pSubobjects = state_subobject_array.data();
-
-				// 生成.
-				if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&rt_state_oject_))))
+				if (!state_object_.Initialize(p_device, shader_reg_info_array, sizeof(float) * 4, sizeof(float) * 2, 1))
 				{
 					assert(false);
 					return false;
 				}
 			}
+
 
 			// Shader Table.
 			{
@@ -580,7 +761,7 @@ namespace ngl
 				if (auto* mapped = static_cast<uint8_t*>(rt_shader_table_.Map()))
 				{
 					CComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
-					if (FAILED(rt_state_oject_->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
+					if (FAILED(state_object_.GetStateObject()->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
 					{
 						assert(false);
 					}
@@ -697,7 +878,6 @@ namespace ngl
 
 				// ビルド後には入力VertexBuffer等のバッファは不要となる.
 				// 実際にはラスタライズパイプラインが同時に動く場合はそのままVertexBufferを使うので捨てないことのほうが多いかも.
-
 			}
 
 			// TLAS.
@@ -742,9 +922,9 @@ namespace ngl
 			raytraceDesc.HitGroupTable.StrideInBytes = rt_shader_table_entry_byte_size_;
 			raytraceDesc.HitGroupTable.SizeInBytes = rt_shader_table_entry_byte_size_;
 
-
 			// Bind the empty root signature
-			d3d_command_list->SetComputeRootSignature(rt_global_root_signature_);
+			d3d_command_list->SetComputeRootSignature(state_object_.GetGlobalRootSignature());
+
 			// heap
 			auto* res_heap = rt_descriptor_heap_.GetD3D12();
 			d3d_command_list->SetDescriptorHeaps(1, &res_heap);
@@ -762,7 +942,8 @@ namespace ngl
 
 
 			// Dispatch
-			d3d_command_list->SetPipelineState1(rt_state_oject_);
+			d3d_command_list->SetPipelineState1(state_object_.GetStateObject());
+
 			d3d_command_list->DispatchRays(&raytraceDesc);
 
 
