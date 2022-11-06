@@ -158,228 +158,7 @@ namespace ngl
 		};
 
 
-
-		namespace subobject
-		{
-			// Subobjectが必ず持つ情報の管理する基底.
-			struct SubobjectBase
-			{
-				SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE type, void* p_desc)
-				{
-					subobject_.Type = type;
-					subobject_.pDesc = p_desc;
-				}
-
-				D3D12_STATE_SUBOBJECT	subobject_ = {};
-
-			protected:
-			};
-
-			// Subobject DXIL Library.
-			// 複数のシェーダを含んだオブジェクト.
-			struct SubobjectDxilLibrary : public SubobjectBase
-			{
-				SubobjectDxilLibrary()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &library_desc_)
-				{}
-
-				void Setup(const rhi::ShaderDep* p_shader, const char* entry_point_array[], int num_entry_point)
-				{
-					library_desc_ = {};
-					export_name_cache_.resize(num_entry_point);
-					export_desc_.resize(num_entry_point);
-					if (p_shader)
-					{
-						p_shader_lib_ = p_shader;
-
-						library_desc_.DXILLibrary.pShaderBytecode = p_shader_lib_->GetShaderBinaryPtr();
-						library_desc_.DXILLibrary.BytecodeLength = p_shader_lib_->GetShaderBinarySize();
-						library_desc_.NumExports = num_entry_point;
-						library_desc_.pExports = export_desc_.data();
-
-						for (int i = 0; i < num_entry_point; ++i)
-						{
-							wchar_t tmp_ws[64];
-							mbstowcs_s(nullptr, tmp_ws, entry_point_array[i], std::size(tmp_ws));
-							// 内部にキャッシュ.
-							export_name_cache_[i] = tmp_ws;
-
-							export_desc_[i] = {};
-							export_desc_[i].Name = export_name_cache_[i].c_str();
-							export_desc_[i].Flags = D3D12_EXPORT_FLAG_NONE;
-							export_desc_[i].ExportToRename = nullptr;
-						}
-					}
-				}
-			private:
-				D3D12_DXIL_LIBRARY_DESC			library_desc_ = {};
-				const rhi::ShaderDep* p_shader_lib_ = nullptr;
-				std::vector<std::wstring>		export_name_cache_;
-				std::vector<D3D12_EXPORT_DESC>	export_desc_;
-			};
-
-			// HitGroup.
-			// マテリアル毎のRaytraceシェーダグループ.
-			struct SubobjectHitGroup : public SubobjectBase
-			{
-				SubobjectHitGroup()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, &hit_group_desc_)
-				{}
-
-				void Setup(const char* anyhit, const char* closesthit, const char* intersection, const char* hitgroup_name)
-				{
-					hit_group_desc_ = {};
-					hit_group_desc_.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES;
-
-					if (anyhit && ('\0' != anyhit[0]))
-					{
-						anyhit_name_cache_ = str_to_wstr(anyhit);
-						hit_group_desc_.AnyHitShaderImport = anyhit_name_cache_.c_str();
-					}
-					if (closesthit && ('\0' != closesthit[0]))
-					{
-						closesthit_name_cache_ = str_to_wstr(closesthit);
-						hit_group_desc_.ClosestHitShaderImport = closesthit_name_cache_.c_str();
-					}
-					if (intersection && ('\0' != intersection[0]))
-					{
-						intersection_name_cache_ = str_to_wstr(intersection);
-						hit_group_desc_.IntersectionShaderImport = intersection_name_cache_.c_str();
-					}
-					if (hitgroup_name && ('\0' != hitgroup_name[0]))
-					{
-						hitgroup_name_cache_ = str_to_wstr(hitgroup_name);
-						hit_group_desc_.HitGroupExport = hitgroup_name_cache_.c_str();
-					}
-				}
-			private:
-				D3D12_HIT_GROUP_DESC hit_group_desc_ = {};
-				std::wstring anyhit_name_cache_ = {};
-				std::wstring closesthit_name_cache_ = {};
-				std::wstring intersection_name_cache_ = {};
-				std::wstring hitgroup_name_cache_ = {};
-			};
-
-
-			// Shader Config.
-			// RtPSOの全体に対する設定と思われる.
-			struct SubobjectRaytracingShaderConfig : public SubobjectBase
-			{
-				// デフォルト値として BuiltInTriangleIntersectionAttributes のサイズ (float2 barycentrics).
-				static constexpr uint32_t k_default_attribute_size = 2 * sizeof(float);
-
-				SubobjectRaytracingShaderConfig()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, &shader_config_)
-				{}
-
-				// RaytracingのPayloadとAttributeのサイズ.
-				void Setup(uint32_t raytracing_payload_size, uint32_t raytracing_attribute_size = k_default_attribute_size)
-				{
-					shader_config_.MaxAttributeSizeInBytes = raytracing_attribute_size;
-					shader_config_.MaxPayloadSizeInBytes = raytracing_payload_size;
-				}
-			private:
-				D3D12_RAYTRACING_SHADER_CONFIG shader_config_ = {};
-			};
-
-			// Pipeline Config.
-			// RtPSOの全体に対する設定と思われる.
-			struct SubobjectRaytracingPipelineConfig : public SubobjectBase
-			{
-				SubobjectRaytracingPipelineConfig()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, &pipeline_config_)
-				{}
-
-				// Rayの最大再帰回数.
-				void Setup(uint32_t max_trace_recursion_depth)
-				{
-					pipeline_config_.MaxTraceRecursionDepth = max_trace_recursion_depth;
-				}
-			private:
-				D3D12_RAYTRACING_PIPELINE_CONFIG pipeline_config_ = {};
-			};
-
-			// Global Root Signature.
-			struct SubobjectGlobalRootSignature : public SubobjectBase
-			{
-				SubobjectGlobalRootSignature()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, nullptr)
-				{}
-				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
-				{
-					p_root_signature_ = p_root_signature;
-					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
-					this->subobject_.pDesc = &p_root_signature_.p;
-				}
-			private:
-				CComPtr<ID3D12RootSignature> p_root_signature_;
-			};
-
-			// Local Root Signature.
-			struct SubobjectLocalRootSignature : public SubobjectBase
-			{
-				SubobjectLocalRootSignature()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, nullptr)
-				{}
-
-				/*
-					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-					root_signature_desc.NumParameters = 0;
-					root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;// Local設定.
-					rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, rt_local_root_signature0_);
-					
-					Setup(rt_local_root_signature0_);
-				*/
-				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
-				{
-					p_root_signature_ = p_root_signature;
-					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
-					this->subobject_.pDesc = &p_root_signature_.p;
-				}
-			private:
-				CComPtr<ID3D12RootSignature> p_root_signature_;
-			};
-
-			// Association
-			// 基本的には SubobjectLocalRootSignature と一対一で Local Root Signatureとシェーダレコード(shadow hitGroup等)をバインドするためのもの.
-			// NVIDIAサンプルではShaderNameとShaderConfig(Payloadサイズ等)のバインドもしているように見える.
-			struct SubobjectExportsAssociation : public SubobjectBase
-			{
-				SubobjectExportsAssociation()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION, &exports_)
-				{}
-
-				void Setup(const D3D12_STATE_SUBOBJECT* p_subobject, const char* export_name_array[], int num)
-				{
-					exports_ = {};
-
-					export_name_cache_.resize(num);
-					export_name_array_.resize(num);
-					for (int i = 0; i < num; ++i)
-					{
-						wchar_t tmp_ws[64];
-						mbstowcs_s(nullptr, tmp_ws, export_name_array[i], std::size(tmp_ws));
-						// 内部にキャッシュ.
-						export_name_cache_[i] = tmp_ws;
-						// 名前配列.
-						export_name_array_[i] = export_name_cache_[i].c_str();
-					}
-
-					exports_.pSubobjectToAssociate = p_subobject;
-					exports_.pExports = export_name_array_.data();
-					exports_.NumExports = num;
-
-				}
-			private:
-				D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION	exports_ = {};
-				const D3D12_STATE_SUBOBJECT* p_subobject_ = {};
-				std::vector<std::wstring>				export_name_cache_;
-				std::vector<const wchar_t*>				export_name_array_;
-			};
-		}
-
-
-
+		// RaytraceStateObjectの初期化用シェーダ情報.
 		struct RaytraceShaderRegisterInfo
 		{
 			struct HitgroupInfo
@@ -403,6 +182,7 @@ namespace ngl
 			std::vector<HitgroupInfo> hitgroup_array = {};
 		};
 
+		// RaytracingのStateObject生成と管理.
 		class RaytraceStateObject
 		{
 		public:
@@ -465,14 +245,14 @@ namespace ngl
 		};
 
 
-		// Raytracing Scene Manager.
+		// RaytracingのAS管理.
 		class RaytraceStructureManager
 		{
 		public:
 			RaytraceStructureManager();
 			~RaytraceStructureManager();
 
-			bool Initialize(rhi::DeviceDep* p_device);
+			bool Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state);
 			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
 
 			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
@@ -492,17 +272,13 @@ namespace ngl
 			RaytraceStructureTop test_tlas_;
 
 
-			
 
-			// Shader lib.
-			rhi::ShaderDep rt_shader_lib0_;
-
-			RaytraceStateObject state_object_;
+			// テスト用StateObject.
+			RaytraceStateObject* p_state_object_ = {};
 
 			rhi::BufferDep	rt_shader_table_;
 			uint32_t		rt_shader_table_entry_byte_size_ = 0;
 			// ShaderTable上のHitGroup領域の先頭へのオフセット.
-
 			uint32_t		rt_shader_table_raygen_offset = 0;
 			uint32_t		rt_shader_table_miss_offset = 0;
 			uint32_t		rt_shader_table_hitgroup_offset = 0;
@@ -510,7 +286,6 @@ namespace ngl
 
 			// Raytrace用のCBV,SRV,UAV用Heap.
 			// 更新や足りなくなったら作り直される予定.
-			//CComPtr<ID3D12DescriptorHeap>	rt_resource_descriptor_heap_;
 			rhi::DescriptorHeapWrapper	rt_descriptor_heap_;
 
 

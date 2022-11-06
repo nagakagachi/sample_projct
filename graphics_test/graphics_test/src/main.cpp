@@ -114,7 +114,9 @@ private:
 
 
 	ngl::gfx::RaytraceStructureManager			rt_st_;
-	ngl::rhi::ShaderDep							rt_shaderlib0_;
+
+	ngl::rhi::ShaderDep							rt_shader_lib0_;
+	ngl::gfx::RaytraceStateObject				rt_state_object_;
 };
 
 
@@ -552,11 +554,66 @@ bool AppGame::Initialize()
 	}
 
 
-
-	// StateObjec生成に失敗するためここでテスト.
 	{
+		// ShaderLibrary.
+		ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
+		shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
+		shader_desc.shader_model_version = "6_3";
+		shader_desc.shader_file_path = "./src/ngl/resource/shader/dxr_sample_lib.hlsl";
+		if (!rt_shader_lib0_.Initialize(&device_, shader_desc))
+		{
+			std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
+			assert(false);
+		}
+
+		// StateObject生成.
+		{
+			std::vector<ngl::gfx::RaytraceShaderRegisterInfo> shader_reg_info_array = {};
+			{
+				// Shader登録エントリ新規.
+				auto shader_index = shader_reg_info_array.size();
+				shader_reg_info_array.push_back({});
+
+				// 関数登録元ShaderLib参照.
+				shader_reg_info_array[shader_index].p_shader_library = &rt_shader_lib0_;
+
+				// シェーダから公開するRaygenerationShader名.
+				shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
+
+				// シェーダから公開するMissShader名.
+				shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
+				shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
+
+				// シェーダから公開するHitGroup関連情報.
+				{
+					auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+					shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
+					// このHitGroupはClosestHitのみ.
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
+				}
+				{
+					auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+					shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
+					// このHitGroupはClosestHitのみ.
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
+				}
+			}
+
+			if (!rt_state_object_.Initialize(&device_, shader_reg_info_array, sizeof(float) * 4, sizeof(float) * 2, 1))
+			{
+				assert(false);
+				return false;
+			}
+		}
+
+
+
 		// AS他.
-		if (!rt_st_.Initialize(&device_))
+		if (!rt_st_.Initialize(&device_, &rt_state_object_))
 		{
 			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
 			assert(false);
