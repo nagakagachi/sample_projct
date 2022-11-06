@@ -80,5 +80,10 @@ void closestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes 
 [shader("closesthit")]
 void closestHit2(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	payload.color = float4(0.0, 1.0, 0.0, 0.0);
+	uint instanceId = InstanceID();
+
+	// 重心座標の可視化テスト.
+	float3 bary = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
+
+	payload.color = float4(bary, 0.0);
 }
