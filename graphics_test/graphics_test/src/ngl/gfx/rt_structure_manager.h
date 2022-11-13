@@ -124,7 +124,7 @@ namespace ngl
 			// TLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, const std::vector<Mat34>& instance_transform_array);
+			bool Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, const std::vector<Mat34>& instance_transform_array, const std::vector<uint32_t>& instance_hitgroup_id_array);
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
@@ -141,6 +141,10 @@ namespace ngl
 			rhi::ShaderResourceViewDep* GetSrv();
 			const rhi::ShaderResourceViewDep* GetSrv() const;
 
+
+			uint32_t NumInstance() const;
+			const std::vector<uint32_t>& GetInstanceHitgroupIndexArray() const;
+
 		private:
 			bool is_built_ = false;
 
@@ -148,6 +152,7 @@ namespace ngl
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;
 			RaytraceStructureBottom* p_blas_ = nullptr;
 			std::vector<Mat34> transform_array_;
+			std::vector<uint32_t> hitgroup_id_array_;
 
 			// build info.
 			// Setupでバッファや設定を登録される. これを用いてRenderThreadでCommandListにビルドタスクを発行する.
@@ -206,6 +211,13 @@ namespace ngl
 			{
 				return global_root_signature_;
 			}
+
+			const char* GetHitgroupName(uint32_t hitgroup_id) const 
+			{
+				assert(hitgroup_database_.size() > hitgroup_id);
+				return hitgroup_database_[hitgroup_id].hitgorup_name.c_str();
+			}
+
 		private:
 			bool initialized_ = false;
 
@@ -250,6 +262,24 @@ namespace ngl
 		};
 
 
+		class RaytraceShaderTable
+		{
+		public:
+			RaytraceShaderTable() {}
+			~RaytraceShaderTable() {}
+
+
+			rhi::BufferDep	shader_table_;
+
+			uint32_t		table_entry_byte_size_ = 0;
+
+			uint32_t		table_raygen_offset_ = 0;
+			uint32_t		table_miss_offset_ = 0;
+			uint32_t		table_hitgroup_offset_ = 0;
+		};
+		static bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device, const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count);
+
+
 		// RaytracingのAS管理.
 		class RaytraceStructureManager
 		{
@@ -269,6 +299,7 @@ namespace ngl
 			}
 
 		private:
+		private:
 			// Vtx Buffer for BLAS.
 			rhi::BufferDep test_geom_vb_;
 			// BLAS.
@@ -277,17 +308,11 @@ namespace ngl
 			RaytraceStructureTop test_tlas_;
 
 
-
 			// テスト用StateObject.
 			RaytraceStateObject* p_state_object_ = {};
 
-			rhi::BufferDep	rt_shader_table_;
-			uint32_t		rt_shader_table_entry_byte_size_ = 0;
-			// ShaderTable上のHitGroup領域の先頭へのオフセット.
-			uint32_t		rt_shader_table_raygen_offset = 0;
-			uint32_t		rt_shader_table_miss_offset = 0;
-			uint32_t		rt_shader_table_hitgroup_offset = 0;
-
+			// テスト用ShaderTable.
+			RaytraceShaderTable shader_table_;
 
 			// テスト用のRayDispatch出力先UAV.
 			rhi::TextureDep				ray_result_;

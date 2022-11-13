@@ -1,6 +1,7 @@
 ﻿#include "rt_structure_manager.h"
 
 #include <unordered_map>
+#include <algorithm>
 
 namespace ngl
 {
@@ -156,7 +157,8 @@ namespace ngl
 		// TLAS setup.
 		// index_buffer : optional.
 		// bufferの管理責任は外部.
-		bool RaytraceStructureTop::Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, const std::vector<Mat34>& instance_transform_array)
+		bool RaytraceStructureTop::Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, 
+			const std::vector<Mat34>& instance_transform_array, const std::vector<uint32_t>& instance_hitgroup_id_array)
 		{
 			if (is_built_)
 				return false;
@@ -174,8 +176,18 @@ namespace ngl
 
 			setup_type_ = SETUP_TYPE::TLAS;
 			p_blas_ = p_blas;
-			transform_array_ = instance_transform_array;// copy.
-
+			{
+				transform_array_ = instance_transform_array;// copy.
+			
+				hitgroup_id_array_.resize(transform_array_.size());
+				const auto num_copy_hitgroup_id_count = std::min(instance_hitgroup_id_array.size(), hitgroup_id_array_.size());
+				std::copy_n(instance_hitgroup_id_array.begin(), num_copy_hitgroup_id_count, hitgroup_id_array_.begin());
+				if (num_copy_hitgroup_id_count < hitgroup_id_array_.size())
+				{
+					// コピーされなかった部分を0fill.
+					std::fill_n(hitgroup_id_array_.data() + num_copy_hitgroup_id_count, hitgroup_id_array_.size() - num_copy_hitgroup_id_count, 0);
+				}
+			}
 
 			// BLASはSetup済みである必要がある(Setupでバッファ確保等までは完了している必要がある. BLASのBuildはこの時点では不要.)
 			assert(p_blas_ && p_blas_->IsSetuped());
@@ -329,6 +341,15 @@ namespace ngl
 		const rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv() const
 		{
 			return &main_srv_;
+		}
+
+		uint32_t RaytraceStructureTop::NumInstance() const
+		{
+			return static_cast<uint32_t>(hitgroup_id_array_.size());
+		}
+		const std::vector<uint32_t>& RaytraceStructureTop::GetInstanceHitgroupIndexArray() const
+		{
+			return hitgroup_id_array_;
 		}
 		// -------------------------------------------------------------------------------
 
@@ -842,8 +863,102 @@ namespace ngl
 
 			return true;
 		}
+		// -------------------------------------------------------------------------------
 
 
+		// per_entry_descriptor_param_count が0だとAlignmentエラーになるため注意.
+		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
+			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count)
+		{
+			out = {};
+
+			// Shader Table.
+			// TODO. ASのインスタンス毎のマテリアルシェーダ情報からStateObjectのShaderIdentifierを取得してテーブルを作る.
+			// https://github.com/Monsho/D3D12Samples/blob/95d1c3703cdcab816bab0b5dcf1a1e42377ab803/Sample013/src/main.cpp
+			// https://github.com/microsoft/DirectX-Specs/blob/master/d3d/Raytracing.md#shader-tables
+
+			constexpr uint32_t k_shader_identifier_byte_size = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+			// Table一つにつきベースのGPU Descriptor Handleを書き込むためのサイズ計算.
+			const uint32_t shader_record_resource_byte_size = sizeof(D3D12_GPU_DESCRIPTOR_HANDLE) * per_entry_descriptor_param_count;
+
+			const uint32_t shader_record_byte_size = rhi::align_to(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, k_shader_identifier_byte_size + shader_record_resource_byte_size);
+
+			// 現状は全Instanceが別Table.
+			// RayGenとMissが一つずつとする(Missは一応複数登録可だが簡易化のため一旦1つに).
+			constexpr uint32_t num_raygen = 1;
+			const uint32_t num_miss = 1;
+			const uint32_t shader_table_byte_size = shader_record_byte_size * (num_raygen + num_miss + tlas.NumInstance());
+
+			// あとで書き込み位置調整に使うので保存.
+			out.table_entry_byte_size_ = shader_record_byte_size;
+
+			// バッファ確保.
+			rhi::BufferDep::Desc rt_shader_table_desc = {};
+			rt_shader_table_desc.element_count = 1;
+			rt_shader_table_desc.element_byte_size = shader_table_byte_size;
+			rt_shader_table_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUから直接書き込むため.
+			if (!out.shader_table_.Initialize(p_device, rt_shader_table_desc))
+			{
+				assert(false);
+				return false;
+			}
+
+			// レコード書き込み.
+			if (auto* mapped = static_cast<uint8_t*>(out.shader_table_.Map()))
+			{
+				CComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
+				if (FAILED(state_object.GetStateObject()->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
+				{
+					assert(false);
+				}
+
+				uint32_t table_cnt = 0;
+
+				// raygen
+				out.table_raygen_offset_ = (shader_record_byte_size * table_cnt);
+				{
+					{
+						memcpy(mapped + out.table_raygen_offset_, p_rt_so_prop->GetShaderIdentifier(str_to_wstr(raygen_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					}
+					++table_cnt;
+				}
+
+				out.table_miss_offset_ = (shader_record_byte_size * table_cnt);
+				{
+					// miss
+					{
+						memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(miss_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					}
+					++table_cnt;
+				}
+
+				// HitGroup
+				/// マテリアル分存在するHitGroupは連続領域でInstanceに指定したインデックスでアクセスされるためここ以降に順序に気をつけて書き込み.
+				out.table_hitgroup_offset_ = shader_record_byte_size * table_cnt;
+				for (uint32_t i = 0u; i < tlas.NumInstance(); ++i)
+				{
+					const uint32_t hitgroup_id = tlas.GetInstanceHitgroupIndexArray()[i];
+
+					const char* hitgroup_name = state_object.GetHitgroupName(hitgroup_id);
+					assert(nullptr != hitgroup_name);
+
+					// hitGroup
+					{
+						memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(hitgroup_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					}
+					++table_cnt;
+				}
+
+				out.shader_table_.Unmap();
+			}
+			return true;
+		}
 		// -------------------------------------------------------------------------------
 
 		RaytraceStructureManager::RaytraceStructureManager()
@@ -902,122 +1017,29 @@ namespace ngl
 
 			// TLAS Setup.
 			std::vector<Mat34> test_inst_transforms;
+			std::vector<uint32_t> test_inst_hitgroup_index;
 			{
 				test_inst_transforms.push_back(Mat34::Identity());
+				test_inst_hitgroup_index.push_back(0);
 
 				Mat34 tmp_m = Mat34::Identity();
 				tmp_m.m[0][3] = 2.0f;
 				test_inst_transforms.push_back(tmp_m);
+				test_inst_hitgroup_index.push_back(1);
 
 			}
-			if (!test_tlas_.Setup(p_device, &test_blas_, test_inst_transforms))
+			if (!test_tlas_.Setup(p_device, &test_blas_, test_inst_transforms, test_inst_hitgroup_index))
 			{
 				assert(false);
 				return false;
 			}
 
 
-
-			// Shader Table.
-			// TODO. ASのインスタンス毎のマテリアルシェーダ情報からStateObjectのShaderIdentifierを取得してテーブルを作る.
+			if (!CreateShaderTable(shader_table_, p_device, test_tlas_, *p_state_object_, "rayGen", "miss", 1))
 			{
-				// https://github.com/Monsho/D3D12Samples/blob/95d1c3703cdcab816bab0b5dcf1a1e42377ab803/Sample013/src/main.cpp
-				// https://github.com/microsoft/DirectX-Specs/blob/master/d3d/Raytracing.md#shader-tables
-
-				// 現状の最大はRayGenのTable一つなので * 1.
-				// Table一つで TLAS(srv)とOutput(uav)を設定.
-				const uint32_t rt_scene_max_shader_record_discriptor_table_count = 1;
-				// 全シェーダ数.
-				const uint32_t rt_scene_shader_count = 5;
-
-				constexpr uint32_t k_shader_identifier_byte_size = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-				// Table一つにつきベースのGPU Descriptor Handleを書き込むためのサイズ計算.
-				const uint32_t shader_record_resource_byte_size = sizeof(D3D12_GPU_DESCRIPTOR_HANDLE) * rt_scene_max_shader_record_discriptor_table_count;
-
-				const uint32_t shader_record_byte_size = rhi::align_to(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, k_shader_identifier_byte_size + shader_record_resource_byte_size);
-
-				const uint32_t shader_table_byte_size = shader_record_byte_size * rt_scene_shader_count;
-
-				// あとで書き込み位置調整に使うので保存.
-				rt_shader_table_entry_byte_size_ = shader_record_byte_size;
-
-				// バッファ確保.
-				rhi::BufferDep::Desc rt_shader_table_desc = {};
-				rt_shader_table_desc.element_count = 1;
-				rt_shader_table_desc.element_byte_size = shader_table_byte_size;
-				rt_shader_table_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUから直接書き込むため.
-				if (!rt_shader_table_.Initialize(p_device, rt_shader_table_desc))
-				{
-					assert(false);
-					return false;
-				}
-
-				// レコード書き込み.
-				if (auto* mapped = static_cast<uint8_t*>(rt_shader_table_.Map()))
-				{
-					CComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
-					if (FAILED(p_state_object_->GetStateObject()->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
-					{
-						assert(false);
-					}
-
-					uint32_t table_cnt = 0;
-
-					// raygen
-					rt_shader_table_raygen_offset = (shader_record_byte_size * table_cnt);
-					{
-						memcpy(mapped + rt_shader_table_raygen_offset, p_rt_so_prop->GetShaderIdentifier(L"rayGen"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
-					}
-					++table_cnt;
-
-					rt_shader_table_miss_offset = (shader_record_byte_size * table_cnt);
-					{
-						// miss
-						{
-							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(L"miss"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
-						}
-						++table_cnt;
-
-
-						// miss2
-						{
-							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(L"miss2"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
-						}
-						++table_cnt;
-					}
-
-
-
-					// HitGroup
-					/// マテリアル分存在するHitGroupは連続領域でInstanceに指定したインデックスでアクセスされるためここ以降に順序に気をつけて書き込み.
-					rt_shader_table_hitgroup_offset = shader_record_byte_size * table_cnt;
-					{
-						// hitGroup
-						{
-							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(L"hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
-						}
-						++table_cnt;
-
-						// hitGroup2
-						{
-							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(L"hitGroup2"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
-						}
-						++table_cnt;
-					}
-					rt_shader_table_.Unmap();
-				}
+				assert(false);
+				return false;
 			}
-
 
 			// 出力テスト用のTextureとUAV.
 			{
@@ -1079,7 +1101,8 @@ namespace ngl
 			auto* d3d_device = p_device->GetD3D12Device();
 
 			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
-			auto shader_table_head = rt_shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
+			//auto shader_table_head = rt_shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
+			auto shader_table_head = shader_table_.shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 
 
 			// to UAV.
@@ -1177,19 +1200,19 @@ namespace ngl
 			raytraceDesc.Depth = 1;
 
 			// RayGeneration Shaderのテーブル位置.
-			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + rt_shader_table_raygen_offset;
-			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = rt_shader_table_entry_byte_size_;
+			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + shader_table_.table_raygen_offset_;
+			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = shader_table_.table_entry_byte_size_;
 
 			// Miss Shaderのテーブル位置.
-			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + rt_shader_table_miss_offset;
-			raytraceDesc.MissShaderTable.StrideInBytes = rt_shader_table_entry_byte_size_;
-			raytraceDesc.MissShaderTable.SizeInBytes = rt_shader_table_entry_byte_size_;   // Only a s single miss-entry
+			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + shader_table_.table_miss_offset_;
+			raytraceDesc.MissShaderTable.StrideInBytes = shader_table_.table_entry_byte_size_;
+			raytraceDesc.MissShaderTable.SizeInBytes = shader_table_.table_entry_byte_size_;   // Only a s single miss-entry
 
 			// HitGroup群の先頭のテーブル位置.
 			// マテリアル毎のHitGroupはここから連続領域に格納. Instanceに設定されたHitGroupIndexでアクセスされる.
-			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + rt_shader_table_hitgroup_offset;
-			raytraceDesc.HitGroupTable.StrideInBytes = rt_shader_table_entry_byte_size_;
-			raytraceDesc.HitGroupTable.SizeInBytes = rt_shader_table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + shader_table_.table_hitgroup_offset_;
+			raytraceDesc.HitGroupTable.StrideInBytes = shader_table_.table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.SizeInBytes = shader_table_.table_entry_byte_size_;
 			
 			d3d_command_list->DispatchRays(&raytraceDesc);
 
