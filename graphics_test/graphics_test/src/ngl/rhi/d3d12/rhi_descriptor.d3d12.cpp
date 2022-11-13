@@ -753,7 +753,10 @@ namespace ngl
 				p_cur_heap_ = nullptr;
 			}
 		}
-
+		u32	FrameDescriptorHeapPageInterface::GetHandleIncrementSize() const
+		{
+			return p_pool_->GetHandleIncrementSize(desc_.type);
+		}
 		bool FrameDescriptorHeapPageInterface::Allocate(u32 handle_count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
 		{
 			assert(p_pool_);

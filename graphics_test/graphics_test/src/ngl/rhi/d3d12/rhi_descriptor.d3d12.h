@@ -607,6 +607,7 @@ namespace ngl
 			bool Allocate(u32 handle_count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
 			ID3D12DescriptorHeap* GetD3D12DescriptorHeap() { return p_cur_heap_; }
 
+			u32	GetHandleIncrementSize() const;
 		private:
 			Desc							desc_ = {};
 			FrameDescriptorHeapPagePool*	 p_pool_ = {};

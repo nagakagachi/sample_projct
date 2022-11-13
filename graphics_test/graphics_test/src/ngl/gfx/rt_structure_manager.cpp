@@ -927,8 +927,8 @@ namespace ngl
 				// 現状の最大はRayGenのTable一つなので * 1.
 				// Table一つで TLAS(srv)とOutput(uav)を設定.
 				const uint32_t rt_scene_max_shader_record_discriptor_table_count = 1;
-				// raygen, miss, hitgroup hitgroup2
-				const uint32_t rt_scene_shader_count = 4;
+				// 全シェーダ数.
+				const uint32_t rt_scene_shader_count = 5;
 
 				constexpr uint32_t k_shader_identifier_byte_size = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 				// Table一つにつきベースのGPU Descriptor Handleを書き込むためのサイズ計算.
@@ -1112,12 +1112,13 @@ namespace ngl
 					D3D12_GPU_DESCRIPTOR_HANDLE h_gpu = {};
 				};
 
-				const auto handle_increment_size = p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetHandleIncrementSize();
-				auto get_descriptor_with_pos = [handle_increment_size](const DescriptorHandleSet& base,  int i) -> DescriptorHandleSet
+				const auto resource_descriptor_step_size = p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetHandleIncrementSize();
+				const auto sampler_descriptor_step_size = p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetHandleIncrementSize();
+				auto get_descriptor_with_pos = [](const DescriptorHandleSet& base,  int i, u32 handle_step_size) -> DescriptorHandleSet
 				{
 					DescriptorHandleSet ret(base);
-					ret.h_cpu.ptr += handle_increment_size * i;
-					ret.h_gpu.ptr += handle_increment_size * i;
+					ret.h_cpu.ptr += handle_step_size * i;
+					ret.h_gpu.ptr += handle_step_size * i;
 					return ret;
 				};
 
@@ -1129,18 +1130,18 @@ namespace ngl
 				{
 					assert(false);
 				}
-				// SamplerのFrame Heap確保. ここの確保でHeapのページが足りない場合は別のHeapが確保されて切り替わるの.
-				// そのためSetDescriptorHeapsのためのSampler用Heapを取得する場合は確保のあとにGetD3D12DescriptorHeapをすること.
+				// SamplerのFrame Heap確保. ここの確保でHeapのページが足りない場合は別のHeapが確保されて切り替わる.
+				// そのためSetDescriptorHeaps用のSampler用Heapを取得する場合は確保のあとにGetD3D12DescriptorHeapをすること.
 				if (!p_command_list->GetFrameSamplerDescriptorHeapInterface()->Allocate(num_frame_descriptor_sampler_count, sampler_heap_head.h_cpu, sampler_heap_head.h_gpu))
 				{
 					assert(false);
 				}
 
 				// frame heap 上のそれぞれの配置.
-				DescriptorHandleSet descriptor_table_base_cbv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 0);
-				DescriptorHandleSet descriptor_table_base_srv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 1);
-				DescriptorHandleSet descriptor_table_base_uav = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 2);
-				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_frame_descriptor_sampler_table_size * 0);
+				DescriptorHandleSet descriptor_table_base_cbv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 0, resource_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_srv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 1, resource_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_uav = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 2, resource_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_frame_descriptor_sampler_table_size * 0, sampler_descriptor_step_size);
 				{
 					// FrameHeapにコピーする.
 
