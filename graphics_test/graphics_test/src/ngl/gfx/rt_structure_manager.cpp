@@ -214,7 +214,7 @@ namespace ngl
 					mapped[inst_i].InstanceID = inst_i;
 					// このInstanceのHitGroupを示すベースインデックス. Instanceのマテリアル情報に近い.
 					// TraceRay()のRayContributionToHitGroupIndexがこの値に加算されて実際のHitGroup参照になる.
-					mapped[inst_i].InstanceContributionToHitGroupIndex = inst_i % 2; // テストで2つあるHitGroupへ振り分け.
+					mapped[inst_i].InstanceContributionToHitGroupIndex = inst_i; // 現状はInstance毎に個別のShaderTableエントリ.
 					mapped[inst_i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 					mapped[inst_i].InstanceMask = ~0u;// 0xff;
 					// InstanceのBLASを設定.
@@ -1019,14 +1019,29 @@ namespace ngl
 			std::vector<Mat34> test_inst_transforms;
 			std::vector<uint32_t> test_inst_hitgroup_index;
 			{
-				test_inst_transforms.push_back(Mat34::Identity());
-				test_inst_hitgroup_index.push_back(0);
-
-				Mat34 tmp_m = Mat34::Identity();
-				tmp_m.m[0][3] = 2.0f;
-				test_inst_transforms.push_back(tmp_m);
-				test_inst_hitgroup_index.push_back(1);
-
+				{
+					test_inst_transforms.push_back(Mat34::Identity());
+					test_inst_hitgroup_index.push_back(1);
+				}
+				{
+					Mat34 tmp_m = Mat34::Identity();
+					tmp_m.m[0][3] = 2.0f;
+					test_inst_transforms.push_back(tmp_m);
+					test_inst_hitgroup_index.push_back(0);
+				}
+				{
+					Mat34 tmp_m = Mat34::Identity();
+					tmp_m.m[0][3] = -2.0f;
+					test_inst_transforms.push_back(tmp_m);
+					test_inst_hitgroup_index.push_back(1);
+				}
+				{
+					Mat34 tmp_m = Mat34::Identity();
+					tmp_m.m[0][3] = -2.0f;
+					tmp_m.m[1][3] = -1.0f;
+					test_inst_transforms.push_back(tmp_m);
+					test_inst_hitgroup_index.push_back(0);
+				}
 			}
 			if (!test_tlas_.Setup(p_device, &test_blas_, test_inst_transforms, test_inst_hitgroup_index))
 			{
