@@ -119,6 +119,8 @@ private:
 	ngl::rhi::SamplerDep						samp_;
 
 
+	ngl::rhi::BufferDep							rt_test_triangle_vb_;
+
 	ngl::gfx::RaytraceStructureManager			rt_st_;
 
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
@@ -559,40 +561,71 @@ bool AppGame::Initialize()
 		}
 	}
 
-	// Assimpテスト
 	{
-		Assimp::Importer asimporter;
+		// Assimpテスト
+		{
+			Assimp::Importer asimporter;
 
-		//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
-		const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
-		const aiScene* ai_scene = asimporter.ReadFile(model_asset_file_path, 
+			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
+			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
+			const aiScene* ai_scene = asimporter.ReadFile(model_asset_file_path,
 
-			aiProcess_CalcTangentSpace |
-			aiProcess_Triangulate |
-			aiProcess_JoinIdenticalVertices |
-			aiProcess_SortByPType
+				aiProcess_CalcTangentSpace |
+				aiProcess_Triangulate |
+				aiProcess_JoinIdenticalVertices |
+				aiProcess_SortByPType
 
 			);
 
-		if (ai_scene)
-		{
-			// 読み取り成功.
-
-			std::cout << "aiscene : " << model_asset_file_path << std::endl;
-
-			std::cout << "	num mesh " << ai_scene->mNumMeshes << std::endl;
-
-			for (auto mesh_i = 0u; mesh_i < ai_scene->mNumMeshes; ++mesh_i)
+			if (ai_scene)
 			{
-				std::cout << "		mesh[" << mesh_i << "]  " << "num vertex " << ai_scene->mMeshes[mesh_i]->mNumVertices << std::endl;
+				// 読み取り成功.
+
+				std::cout << "aiscene : " << model_asset_file_path << std::endl;
+				std::cout << "	num mesh " << ai_scene->mNumMeshes << std::endl;
+
+				for (auto mesh_i = 0u; mesh_i < ai_scene->mNumMeshes; ++mesh_i)
+				{
+					std::cout << "		mesh[" << mesh_i << "]  " << "num vertex " << ai_scene->mMeshes[mesh_i]->mNumVertices << std::endl;
+
+				}
 
 			}
-
+			// ReadFileで読み込まれたメモリ等はAssimp::Importerインスタンスの寿命でクリーンアップされる.
 		}
 
-		// ReadFileで読み込まれたメモリ等はAssimp::Importerインスタンスの寿命でクリーンアップされる.
-	}
 
+		// テスト用の直接生成頂点バッファ.
+		{
+			struct Vec3
+			{
+				float x, y, z;
+			};
+			const Vec3 vtx_array[] =
+			{
+				{0.0f, 1.0f, 0.0f},
+				{0.866f, -0.5f, 0.0f},
+				{-0.866f, -0.5f, 0.0f},
+			};
+			// テスト用GeomBuffer.
+			ngl::rhi::BufferDep::Desc vb_desc = {};
+			vb_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+			vb_desc.initial_state = ngl::rhi::ResourceState::General;
+			vb_desc.element_count = 3;
+			vb_desc.element_byte_size = sizeof(vtx_array[0]);
+			if (!rt_test_triangle_vb_.Initialize(&device_, vb_desc))
+			{
+				assert(false);
+				return false;
+			}
+			if (auto* mapped = rt_test_triangle_vb_.Map())
+			{
+				memcpy(mapped, vtx_array, sizeof(vtx_array));
+				rt_test_triangle_vb_.Unmap();
+			}
+		}
+
+	}
 
 	{
 		// ShaderLibrary.
@@ -651,9 +684,55 @@ bool AppGame::Initialize()
 		}
 
 
+		std::vector<ngl::gfx::RaytraceStructureBottomGeometryDesc> blas_desc;
+		{
+			blas_desc.push_back({});
+			blas_desc[blas_desc.size() - 1].vertex_buffer = &rt_test_triangle_vb_;
+		}
+
+		std::vector<ngl::gfx::RaytraceBlasInstanceGeometryDesc> geom_array;
+		std::vector<uint32_t> instance_geom_id_array;
+		std::vector<ngl::gfx::Mat34> instance_transform_array;
+		std::vector<uint32_t> instance_hitgroup_id_array;
+
+		{
+			geom_array.push_back({});
+			geom_array[geom_array.size() - 1].num_desc = static_cast<uint32_t>(blas_desc.size());
+			geom_array[geom_array.size() - 1].pp_desc = blas_desc.data();
+		}
+
+		{
+			{
+				instance_geom_id_array.push_back(0);
+				instance_transform_array.push_back(ngl::gfx::Mat34::Identity());
+				instance_hitgroup_id_array.push_back(1);
+			}
+			{
+				instance_geom_id_array.push_back(0);
+				ngl::gfx::Mat34 tmp_m = ngl::gfx::Mat34::Identity();
+				tmp_m.m[0][3] = 2.0f;
+				instance_transform_array.push_back(tmp_m);
+				instance_hitgroup_id_array.push_back(0);
+			}
+			{
+				instance_geom_id_array.push_back(0);
+				ngl::gfx::Mat34 tmp_m = ngl::gfx::Mat34::Identity();
+				tmp_m.m[0][3] = -2.0f;
+				instance_transform_array.push_back(tmp_m);
+				instance_hitgroup_id_array.push_back(1);
+			}
+			{
+				instance_geom_id_array.push_back(0);
+				ngl::gfx::Mat34 tmp_m = ngl::gfx::Mat34::Identity();
+				tmp_m.m[0][3] = -2.0f;
+				tmp_m.m[1][3] = -1.0f;
+				instance_transform_array.push_back(tmp_m);
+				instance_hitgroup_id_array.push_back(0);
+			}
+		}
 
 		// AS他.
-		if (!rt_st_.Initialize(&device_, &rt_state_object_))
+		if (!rt_st_.Initialize(&device_, &rt_state_object_, geom_array, instance_geom_id_array, instance_transform_array, instance_hitgroup_id_array))
 		{
 			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
 			assert(false);

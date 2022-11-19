@@ -59,6 +59,11 @@ namespace ngl
 			}
 		};
 
+		struct RaytraceStructureBottomGeometryDesc
+		{
+			rhi::BufferDep* vertex_buffer = nullptr;
+			rhi::BufferDep* index_buffer = nullptr;
+		};
 
 		// BLAS.
 		class RaytraceStructureBottom
@@ -76,7 +81,7 @@ namespace ngl
 			// BLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(rhi::DeviceDep* p_device, rhi::BufferDep* vertex_buffer, rhi::BufferDep* index_buffer = nullptr);
+			bool Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceStructureBottomGeometryDesc>& geometry_desc_array);
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
@@ -94,12 +99,10 @@ namespace ngl
 
 			// setup data.
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;
-			rhi::BufferDep* p_vertex_buffer_ = nullptr;
-			rhi::BufferDep* p_index_buffer_ = nullptr;
-
+			
 			// build info.
 			// Setupでバッファや設定を登録される. これを用いてRenderThreadでCommandListにビルドタスクを発行する.
-			D3D12_RAYTRACING_GEOMETRY_DESC geom_desc_ = {};
+			std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geom_desc_array_ = {};
 			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS build_setup_info_ = {};
 
 
@@ -124,7 +127,11 @@ namespace ngl
 			// TLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, const std::vector<Mat34>& instance_transform_array, const std::vector<uint32_t>& instance_hitgroup_id_array);
+			bool Setup(rhi::DeviceDep* p_device, std::vector<RaytraceStructureBottom*>& blas_array,
+				const std::vector<uint32_t>& instance_geom_id_array,
+				const std::vector<Mat34>& instance_transform_array,
+				const std::vector<uint32_t>& instance_hitgroup_id_array
+			);
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
@@ -150,7 +157,9 @@ namespace ngl
 
 			// setup data.
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;
-			RaytraceStructureBottom* p_blas_ = nullptr;
+
+			std::vector<RaytraceStructureBottom*> blas_array_ = {};
+			std::vector<uint32_t> instance_blas_id_array_;
 			std::vector<Mat34> transform_array_;
 			std::vector<uint32_t> hitgroup_id_array_;
 
@@ -280,6 +289,13 @@ namespace ngl
 		static bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device, const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count);
 
 
+		struct RaytraceBlasInstanceGeometryDesc
+		{
+			RaytraceStructureBottomGeometryDesc*	pp_desc = nullptr;
+			uint32_t								num_desc = 0;
+		};
+
+
 		// RaytracingのAS管理.
 		class RaytraceStructureManager
 		{
@@ -287,9 +303,15 @@ namespace ngl
 			RaytraceStructureManager();
 			~RaytraceStructureManager();
 
-			bool Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state);
-			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
+			bool Initialize(rhi::DeviceDep* p_device, 
+				RaytraceStateObject* p_state, 
+				const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
+				const std::vector<uint32_t>& instance_geom_id_array,
+				const std::vector<Mat34>& instance_transform_array,
+				const std::vector<uint32_t>& instance_hitgroup_id_array
+				);
 
+			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
 			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
 
 
@@ -300,10 +322,10 @@ namespace ngl
 
 		private:
 		private:
-			// Vtx Buffer for BLAS.
-			rhi::BufferDep test_geom_vb_;
+
 			// BLAS.
-			RaytraceStructureBottom test_blas_;
+			std::vector<RaytraceStructureBottom*>	blas_array_ = {};
+
 			// TLAS.
 			RaytraceStructureTop test_tlas_;
 

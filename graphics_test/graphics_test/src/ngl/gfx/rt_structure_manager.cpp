@@ -17,38 +17,70 @@ namespace ngl
 		RaytraceStructureBottom::~RaytraceStructureBottom()
 		{
 		}
-		bool RaytraceStructureBottom::Setup(rhi::DeviceDep* p_device, rhi::BufferDep* vertex_buffer, rhi::BufferDep* index_buffer)
+		bool RaytraceStructureBottom::Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceStructureBottomGeometryDesc>& geometry_desc_array)
 		{
+			// CommandListが不要な生成部だけを実行する.
+
 			if (is_built_)
 				return false;
 
-			if (!vertex_buffer)
+			if (0 >= geometry_desc_array.size())
 			{
 				assert(false);
 				return false;
 			}
 
 			setup_type_ = SETUP_TYPE::BLAS_TRIANGLE;
-			p_vertex_buffer_ = vertex_buffer;
-			p_index_buffer_ = index_buffer;
+			geom_desc_array_.clear();
+			geom_desc_array_.reserve(geometry_desc_array.size());// 予約.
+			for (auto& g : geometry_desc_array)
+			{
+				if (nullptr != g.vertex_buffer)
+				{
+					geom_desc_array_.push_back({});
+					auto& geom_desc = geom_desc_array_[geom_desc_array_.size() - 1];// Tail.
 
-
-			// CommandListが不要な生成部だけを実行する.
-
-			geom_desc_ = {};
-			geom_desc_.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;	// Triangle Geom.
-			geom_desc_.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;	// Opaque.
-			geom_desc_.Triangles.VertexBuffer.StartAddress = p_vertex_buffer_->GetD3D12Resource()->GetGPUVirtualAddress();
-			geom_desc_.Triangles.VertexBuffer.StrideInBytes = p_vertex_buffer_->GetElementByteSize();// 12 byte (vec3).
-			geom_desc_.Triangles.VertexCount = p_vertex_buffer_->getElementCount();
-			geom_desc_.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;// vec3.
+					geom_desc = {};
+					geom_desc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;	// Triangle Geom.
+					geom_desc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;	// Opaque.
+					geom_desc.Triangles.VertexBuffer.StartAddress = g.vertex_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+					geom_desc.Triangles.VertexBuffer.StrideInBytes = g.vertex_buffer->GetElementByteSize();// 12 byte (vec3).
+					geom_desc.Triangles.VertexCount = g.vertex_buffer->getElementCount();
+					geom_desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;// vec3.
+					if (g.index_buffer)
+					{
+						geom_desc.Triangles.IndexBuffer = g.index_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
+						geom_desc.Triangles.IndexCount = g.index_buffer->getElementCount();
+						if (g.index_buffer->GetElementByteSize() == 4)
+						{
+							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R32_UINT;
+						}
+						else if (g.index_buffer->GetElementByteSize() == 2)
+						{
+							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
+						}
+						else
+						{
+							// u16 u32 以外は未対応.
+							assert(false);
+							continue;
+						}
+					}
+				}
+				else
+				{
+					// スキップ.
+					assert(false);
+					continue;
+				}
+			}
 
 			// ここで設定した情報はそのままBuildで利用される.
 			build_setup_info_ = {};
 			build_setup_info_.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 			build_setup_info_.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-			build_setup_info_.NumDescs = 1;
-			build_setup_info_.pGeometryDescs = &geom_desc_;
+			build_setup_info_.NumDescs = static_cast<uint32_t>(geom_desc_array_.size());
+			build_setup_info_.pGeometryDescs = geom_desc_array_.data();
 			build_setup_info_.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL; // BLAS.
 
 			// Prebuildで必要なサイズ取得.
@@ -157,13 +189,16 @@ namespace ngl
 		// TLAS setup.
 		// index_buffer : optional.
 		// bufferの管理責任は外部.
-		bool RaytraceStructureTop::Setup(rhi::DeviceDep* p_device, RaytraceStructureBottom* p_blas, 
-			const std::vector<Mat34>& instance_transform_array, const std::vector<uint32_t>& instance_hitgroup_id_array)
+		bool RaytraceStructureTop::Setup(rhi::DeviceDep* p_device, std::vector<RaytraceStructureBottom*>& blas_array,
+			const std::vector<uint32_t>& instance_geom_id_array,
+			const std::vector<Mat34>& instance_transform_array,
+			const std::vector<uint32_t>& instance_hitgroup_id_array
+		)
 		{
 			if (is_built_)
 				return false;
 
-			if (!p_blas || !p_blas->IsSetuped())
+			if (0 >= blas_array.size())
 			{
 				assert(false);
 				return false;
@@ -175,23 +210,60 @@ namespace ngl
 			}
 
 			setup_type_ = SETUP_TYPE::TLAS;
-			p_blas_ = p_blas;
+
+
+
+			std::vector<int> id_remap;
+			id_remap.resize(blas_array.size());
+
+			// 有効でSetup済みのBLASのみ収集.
+			blas_array_.clear();
+			for (int i = 0; i < blas_array.size(); ++i)
 			{
-				transform_array_ = instance_transform_array;// copy.
-			
-				hitgroup_id_array_.resize(transform_array_.size());
-				const auto num_copy_hitgroup_id_count = std::min(instance_hitgroup_id_array.size(), hitgroup_id_array_.size());
-				std::copy_n(instance_hitgroup_id_array.begin(), num_copy_hitgroup_id_count, hitgroup_id_array_.begin());
-				if (num_copy_hitgroup_id_count < hitgroup_id_array_.size())
+				auto& e = blas_array[i];
+
+				if (nullptr != e && e->IsSetuped())
 				{
-					// コピーされなかった部分を0fill.
-					std::fill_n(hitgroup_id_array_.data() + num_copy_hitgroup_id_count, hitgroup_id_array_.size() - num_copy_hitgroup_id_count, 0);
+					blas_array_.push_back(e);
+					id_remap[i] = static_cast<int>(blas_array_.size() - 1);
+				}
+				else
+				{
+					id_remap[i] = -1;
 				}
 			}
 
+			{
+				instance_blas_id_array_.clear();
+				transform_array_.clear();
+				hitgroup_id_array_.clear();
+
+				// 参照BLASが有効なInstanceのみ収集.
+				for (int i = 0; i < instance_geom_id_array.size(); ++i)
+				{
+					if (id_remap.size() <= instance_geom_id_array[i])
+						continue;
+					const int blas_id =  id_remap[instance_geom_id_array[i]];
+					if (0 > blas_id)
+						continue;
+
+					
+					instance_blas_id_array_.push_back(blas_id);
+
+					if (instance_transform_array.size() > i)
+						transform_array_.push_back(instance_transform_array[i]);
+
+					if (instance_hitgroup_id_array.size() > i)
+						hitgroup_id_array_.push_back(instance_hitgroup_id_array[i]);
+				}
+			}
+
+			assert(0 < blas_array_.size());
+			assert(0 < instance_blas_id_array_.size());
+
 			// BLASはSetup済みである必要がある(Setupでバッファ確保等までは完了している必要がある. BLASのBuildはこの時点では不要.)
-			assert(p_blas_ && p_blas_->IsSetuped());
-			assert(0 < transform_array_.size());
+			//assert(p_blas_ && p_blas_->IsSetuped());
+			//assert(0 < transform_array_.size());
 
 			// Instance Desc Buffer.
 			const uint32_t num_instance_total = (uint32_t)transform_array_.size();
@@ -217,8 +289,10 @@ namespace ngl
 					mapped[inst_i].InstanceContributionToHitGroupIndex = inst_i; // 現状はInstance毎に個別のShaderTableエントリ.
 					mapped[inst_i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 					mapped[inst_i].InstanceMask = ~0u;// 0xff;
+					
 					// InstanceのBLASを設定.
-					mapped[inst_i].AccelerationStructure = p_blas_->GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress();
+					mapped[inst_i].AccelerationStructure = blas_array_[instance_blas_id_array_[inst_i]]->GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress();
+
 					// InstanceのTransform.
 					memcpy(mapped[inst_i].Transform, &transform_array_[inst_i], sizeof(mapped[inst_i].Transform));
 				}
@@ -966,19 +1040,23 @@ namespace ngl
 		}
 		RaytraceStructureManager::~RaytraceStructureManager()
 		{
+			// Delete.
+			for (auto i = 0; i < blas_array_.size(); ++i)
+			{
+				if (blas_array_[i])
+				{
+					delete blas_array_[i];
+					blas_array_[i] = nullptr;
+				}
+			}
+
 		}
-		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state)
+		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state,
+			const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
+			const std::vector<uint32_t>& instance_geom_id_array,
+			const std::vector<Mat34>& instance_transform_array,
+			const std::vector<uint32_t>& instance_hitgroup_id_array)
 		{
-			struct Vec3
-			{
-				float x, y, z;
-			};
-			const Vec3 vtx_array[] =
-			{
-				{0.0f, 1.0f, 0.0f},
-				{0.866f, -0.5f, 0.0f},
-				{-0.866f, -0.5f, 0.0f},
-			};
 
 			// StateObjectは外部から.
 			assert(p_state);
@@ -988,66 +1066,40 @@ namespace ngl
 			}
 			p_state_object_ = p_state;
 
+			// 入力ジオメトリ情報からBLAS生成.
+			blas_array_.clear();
+			blas_array_.reserve(geom_array.size());
+			for (auto& g : geom_array)
+			{
+				if (nullptr == g.pp_desc || 0 >= g.num_desc)
+					continue;
+
+				std::vector<RaytraceStructureBottomGeometryDesc> blas_geom_desc_arrray = {};
+				blas_geom_desc_arrray.reserve(g.num_desc);
+				
+				for (uint32_t gi = 0; gi < g.num_desc; ++gi)
+				{
+					blas_geom_desc_arrray.push_back({});
+					auto& geom_desc = blas_geom_desc_arrray[blas_geom_desc_arrray.size() - 1];
+
+					geom_desc.vertex_buffer = g.pp_desc[gi].vertex_buffer;
+					geom_desc.index_buffer = g.pp_desc[gi].index_buffer;
+				}
+
+				// New Blas.
+				blas_array_.push_back(new RaytraceStructureBottom());
+				auto& blas = blas_array_[blas_array_.size() - 1];
+				// Setup.
+				blas->Setup(p_device, blas_geom_desc_arrray);
+			}
 
 
-
-			// テスト用GeomBuffer.
-			rhi::BufferDep::Desc vb_desc = {};
-			vb_desc.heap_type = rhi::ResourceHeapType::Upload;
-			vb_desc.initial_state = rhi::ResourceState::General;
-			vb_desc.element_count = 3;
-			vb_desc.element_byte_size = sizeof(vtx_array[0]);
-			if (!test_geom_vb_.Initialize(p_device, vb_desc))
+			if (!test_tlas_.Setup(p_device, blas_array_, instance_geom_id_array, instance_transform_array, instance_hitgroup_id_array))
 			{
 				assert(false);
 				return false;
 			}
-			if (auto* mapped = test_geom_vb_.Map())
-			{
-				memcpy(mapped, vtx_array, sizeof(vtx_array));
-				test_geom_vb_.Unmap();
-			}
 
-			// BLAS Setup. TRASのSetupに先行する必要がある.
-			if (!test_blas_.Setup(p_device, &test_geom_vb_, nullptr))
-			{
-				assert(false);
-				return false;
-			}
-
-			// TLAS Setup.
-			std::vector<Mat34> test_inst_transforms;
-			std::vector<uint32_t> test_inst_hitgroup_index;
-			{
-				{
-					test_inst_transforms.push_back(Mat34::Identity());
-					test_inst_hitgroup_index.push_back(1);
-				}
-				{
-					Mat34 tmp_m = Mat34::Identity();
-					tmp_m.m[0][3] = 2.0f;
-					test_inst_transforms.push_back(tmp_m);
-					test_inst_hitgroup_index.push_back(0);
-				}
-				{
-					Mat34 tmp_m = Mat34::Identity();
-					tmp_m.m[0][3] = -2.0f;
-					test_inst_transforms.push_back(tmp_m);
-					test_inst_hitgroup_index.push_back(1);
-				}
-				{
-					Mat34 tmp_m = Mat34::Identity();
-					tmp_m.m[0][3] = -2.0f;
-					tmp_m.m[1][3] = -1.0f;
-					test_inst_transforms.push_back(tmp_m);
-					test_inst_hitgroup_index.push_back(0);
-				}
-			}
-			if (!test_tlas_.Setup(p_device, &test_blas_, test_inst_transforms, test_inst_hitgroup_index))
-			{
-				assert(false);
-				return false;
-			}
 
 
 			if (!CreateShaderTable(shader_table_, p_device, test_tlas_, *p_state_object_, "rayGen", "miss", 1))
@@ -1088,16 +1140,13 @@ namespace ngl
 
 		void RaytraceStructureManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
 		{
-			// BLAS.
-			if (!test_blas_.IsBuilt())
+			// 全BLASビルド.
+			for (auto& e : blas_array_)
 			{
-				if (!test_blas_.Build(p_device, p_command_list))
+				if (nullptr != e && !e->IsBuilt())
 				{
-					assert(false);
+					e->Build(p_device, p_command_list);
 				}
-
-				// ビルド後には入力VertexBuffer等のバッファは不要となる.
-				// 実際にはラスタライズパイプラインが同時に動く場合はそのままVertexBufferを使うので捨てないことのほうが多いかも.
 			}
 
 			// TLAS.
@@ -1116,7 +1165,6 @@ namespace ngl
 			auto* d3d_device = p_device->GetD3D12Device();
 
 			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
-			//auto shader_table_head = rt_shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 			auto shader_table_head = shader_table_.shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 
 
