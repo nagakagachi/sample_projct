@@ -25,6 +25,12 @@
 #include "ngl/gfx/rt_structure_manager.h"
 
 
+// assimpテスト.
+#include <assimp/Importer.hpp>      // C++ importer interface
+#include <assimp/scene.h>           // Output data structure
+#include <assimp/postprocess.h>     // Post processing flags
+
+
 struct CbSampleVs
 {
 	float cb_param_vs0[4];
@@ -155,7 +161,7 @@ bool AppGame::Initialize()
 	constexpr auto scree_h = 720;
 
 	// ウィンドウ作成
-	if(!window_.Initialize(_T("Test Window"), scree_w, scree_h))
+	if (!window_.Initialize(_T("Test Window"), scree_w, scree_h))
 	{
 		return false;
 	}
@@ -195,7 +201,7 @@ bool AppGame::Initialize()
 		swapchain_resource_state_.resize(swapchain_.NumResource());
 		for (auto i = 0u; i < swapchain_.NumResource(); ++i)
 		{
-			swapchain_rtvs_[i].Initialize( &device_, &swapchain_, i );
+			swapchain_rtvs_[i].Initialize(&device_, &swapchain_, i);
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 	}
@@ -362,7 +368,7 @@ bool AppGame::Initialize()
 
 		desc.num_render_targets = 1;
 		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
-	
+
 		desc.depth_stencil_state.depth_enable = true;
 		desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Less;
 		desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
@@ -385,7 +391,7 @@ bool AppGame::Initialize()
 		input_elem_data[1].semantic_index = 0;
 		input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
 		input_elem_data[1].stream_slot = 0;
-		input_elem_data[1].element_offset = sizeof(float)*4;
+		input_elem_data[1].element_offset = sizeof(float) * 4;
 
 		if (!sample_pso_.Initialize(&device_, desc))
 		{
@@ -551,6 +557,40 @@ bool AppGame::Initialize()
 			std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
 			assert(false);
 		}
+	}
+
+	// Assimpテスト
+	{
+		Assimp::Importer asimporter;
+
+		//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
+		const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
+		const aiScene* ai_scene = asimporter.ReadFile(model_asset_file_path, 
+
+			aiProcess_CalcTangentSpace |
+			aiProcess_Triangulate |
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_SortByPType
+
+			);
+
+		if (ai_scene)
+		{
+			// 読み取り成功.
+
+			std::cout << "aiscene : " << model_asset_file_path << std::endl;
+
+			std::cout << "	num mesh " << ai_scene->mNumMeshes << std::endl;
+
+			for (auto mesh_i = 0u; mesh_i < ai_scene->mNumMeshes; ++mesh_i)
+			{
+				std::cout << "		mesh[" << mesh_i << "]  " << "num vertex " << ai_scene->mMeshes[mesh_i]->mNumVertices << std::endl;
+
+			}
+
+		}
+
+		// ReadFileで読み込まれたメモリ等はAssimp::Importerインスタンスの寿命でクリーンアップされる.
 	}
 
 

@@ -1,0 +1,3 @@
+
+# Modelデータとしてのobjをgitignoreから除外するため.
+!*.obj

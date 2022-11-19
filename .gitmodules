@@ -1,0 +1,3 @@
+[submodule "graphics_test/third_party/assimp"]
+	path = graphics_test/third_party/assimp
+	url = https://github.com/assimp/assimp
