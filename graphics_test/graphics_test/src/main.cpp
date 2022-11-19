@@ -121,10 +121,15 @@ private:
 
 	ngl::rhi::BufferDep							rt_test_triangle_vb_;
 
+
 	ngl::gfx::RaytraceStructureManager			rt_st_;
 
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
+
+
+	std::vector<ngl::rhi::BufferDep*>			rt_model_vertex_buffer_array_;
+	std::vector<ngl::rhi::BufferDep*>			rt_model_index_buffer_array_;
 };
 
 
@@ -150,6 +155,20 @@ AppGame::AppGame()
 }
 AppGame::~AppGame()
 {
+	for (int i = 0; i < rt_model_vertex_buffer_array_.size(); ++i)
+	{
+		if (rt_model_vertex_buffer_array_[i])
+			delete rt_model_vertex_buffer_array_[i];
+	}
+	rt_model_vertex_buffer_array_.clear();
+	for (int i = 0; i < rt_model_index_buffer_array_.size(); ++i)
+	{
+		if (rt_model_index_buffer_array_[i])
+			delete rt_model_index_buffer_array_[i];
+	}
+	rt_model_index_buffer_array_.clear();
+
+
 	gfx_command_list_.Finalize();
 
 	swapchain_.Finalize();
@@ -484,15 +503,16 @@ bool AppGame::Initialize()
 			float v;
 		};
 
+		constexpr float shape_scale = 0.95f;
 		Vector4 sample_vtx_list[] =
 		{
-			{-0.5f, 0.5f, 0.0f, 1.0f,	0.0f, 0.0f },
-			{0.5f, -0.5f, 0.0f, 1.0f,	1.0f, 1.0f },
-			{-0.5f, -0.5f, 0.0f, 1.0f,	0.0f, 1.0f},
+			{-shape_scale, shape_scale, 0.0f, 1.0f,	0.0f, 0.0f },
+			{shape_scale, -shape_scale, 0.0f, 1.0f,	1.0f, 1.0f },
+			{-shape_scale, -shape_scale, 0.0f, 1.0f,	0.0f, 1.0f},
 
-			{-0.5f, 0.5f, 0.0f, 1.0f,	0.0f, 0.0f },
-			{0.5f, 0.5f, 0.0f, 1.0f,	1.0f, 0.0f },
-			{0.5f, -0.5f, 0.0f, 1.0f,	1.0f, 1.0f},
+			{-shape_scale, shape_scale, 0.0f, 1.0f,	0.0f, 0.0f },
+			{shape_scale, shape_scale, 0.0f, 1.0f,	1.0f, 0.0f },
+			{shape_scale, -shape_scale, 0.0f, 1.0f,	1.0f, 1.0f},
 		};
 
 
@@ -567,6 +587,7 @@ bool AppGame::Initialize()
 			Assimp::Importer asimporter;
 
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
+			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
 			const aiScene* ai_scene = asimporter.ReadFile(model_asset_file_path,
 
@@ -588,6 +609,56 @@ bool AppGame::Initialize()
 				{
 					std::cout << "		mesh[" << mesh_i << "]  " << "num vertex " << ai_scene->mMeshes[mesh_i]->mNumVertices << std::endl;
 
+
+
+					{
+						auto p_mesh_vtx_buffer = new ngl::rhi::BufferDep();
+
+						ngl::rhi::BufferDep::Desc buffer_desc = {};
+						buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+						buffer_desc.initial_state = ngl::rhi::ResourceState::General;
+						buffer_desc.element_count = ai_scene->mMeshes[mesh_i]->mNumVertices;
+						buffer_desc.element_byte_size = sizeof(float) * 3;
+
+						if (p_mesh_vtx_buffer->Initialize(&device_, buffer_desc))
+						{
+							if (auto* mapped = static_cast<aiVector3D*>(p_mesh_vtx_buffer->Map()))
+							{
+								memcpy(mapped, ai_scene->mMeshes[mesh_i]->mVertices, sizeof(float) * 3 * ai_scene->mMeshes[mesh_i]->mNumVertices);
+							}
+						}
+
+						rt_model_vertex_buffer_array_.push_back(p_mesh_vtx_buffer);
+					}
+
+					{
+						auto p_mesh_index_buffer = new ngl::rhi::BufferDep();
+
+						ngl::rhi::BufferDep::Desc buffer_desc = {};
+						buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+						buffer_desc.initial_state = ngl::rhi::ResourceState::General;
+						// 三角化されている前提.
+						buffer_desc.element_count = ai_scene->mMeshes[mesh_i]->mNumFaces * 3;
+						buffer_desc.element_byte_size = sizeof(uint32_t);
+
+						if (p_mesh_index_buffer->Initialize(&device_, buffer_desc))
+						{
+							if (auto* mapped = static_cast<uint32_t*>(p_mesh_index_buffer->Map()))
+							{
+								for (uint32_t face_i = 0; face_i < ai_scene->mMeshes[mesh_i]->mNumFaces; ++face_i)
+								{
+									// 三角化前提.
+									const auto p_face_index = ai_scene->mMeshes[mesh_i]->mFaces[face_i].mIndices;
+
+									mapped[face_i * 3 + 0] = p_face_index[0];
+									mapped[face_i * 3 + 1] = p_face_index[1];
+									mapped[face_i * 3 + 2] = p_face_index[2];
+								}
+							}
+						}
+
+						rt_model_index_buffer_array_.push_back(p_mesh_index_buffer);
+					}
 				}
 
 			}
@@ -685,15 +756,44 @@ bool AppGame::Initialize()
 
 
 		std::vector<ngl::gfx::RaytraceStructureBottomGeometryDesc> blas_desc;
-		{
-			blas_desc.push_back({});
-			blas_desc[blas_desc.size() - 1].vertex_buffer = &rt_test_triangle_vb_;
-		}
-
+		
 		std::vector<ngl::gfx::RaytraceBlasInstanceGeometryDesc> geom_array;
 		std::vector<uint32_t> instance_geom_id_array;
 		std::vector<ngl::gfx::Mat34> instance_transform_array;
 		std::vector<uint32_t> instance_hitgroup_id_array;
+
+#if 1
+		// モデルデータテスト.
+		for(int i = 0; i < rt_model_vertex_buffer_array_.size(); ++i)
+		{
+			blas_desc.push_back({});
+			blas_desc[blas_desc.size() - 1].vertex_buffer = rt_model_vertex_buffer_array_[i];
+			blas_desc[blas_desc.size() - 1].index_buffer = rt_model_index_buffer_array_[i];
+		}
+
+		{
+			geom_array.push_back({});
+			geom_array[geom_array.size() - 1].num_desc = static_cast<uint32_t>(blas_desc.size());
+			geom_array[geom_array.size() - 1].pp_desc = blas_desc.data();
+		}
+
+		{
+			{
+				auto mtx = ngl::gfx::Mat34::Identity();
+				mtx.m[0][0] = mtx.m[1][1] = mtx.m[2][2] = (1.0f / 1.0f);// 適当なスケール.
+
+
+				instance_geom_id_array.push_back(0);
+				instance_transform_array.push_back(mtx);
+				instance_hitgroup_id_array.push_back(1);
+			}
+		}
+#else
+		// テスト用のTriangle頂点バッファでテスト.
+		{
+			blas_desc.push_back({});
+			blas_desc[blas_desc.size() - 1].vertex_buffer = &rt_test_triangle_vb_;
+		}
 
 		{
 			geom_array.push_back({});
@@ -730,6 +830,7 @@ bool AppGame::Initialize()
 				instance_hitgroup_id_array.push_back(0);
 			}
 		}
+#endif
 
 		// AS他.
 		if (!rt_st_.Initialize(&device_, &rt_state_object_, geom_array, instance_geom_id_array, instance_transform_array, instance_hitgroup_id_array))

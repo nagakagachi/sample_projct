@@ -34,7 +34,7 @@ void rayGen()
 	float3 ray_dir = normalize(float3(ray_dir_xy.x * aspect, ray_dir_xy.y, 1.0));
 
 	RayDesc ray;
-	ray.Origin = float3(0.0, 0.0, -2.0);
+	ray.Origin = float3(0.0, 2.0, -1.0);
 	ray.Direction = ray_dir;
 	ray.TMin = 0.0;
 	ray.TMax = 1e9;
@@ -46,7 +46,7 @@ void rayGen()
 	const int ray_contribution_to_hitgroup = 0;
 	// BLAS中のSubGeometryIndexに乗算される値. 結果はHitGroupIndex計算時に加算される.
 	// BLAS中のSubGeometryIndexがそれぞれ別のHitGroupを利用する場合は1等, BLAS中のすべてが同じHitGroupなら0を指定するなどが考えられる.
-	const int multiplier_for_subgeometry_index = 1;
+	const int multiplier_for_subgeometry_index = 0;
 	const int miss_shader_index = 0;
 	TraceRay(rt_as, ray_flag, 0xff, ray_contribution_to_hitgroup, multiplier_for_subgeometry_index, miss_shader_index, ray, payload );
 
