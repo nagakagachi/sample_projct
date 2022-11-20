@@ -814,21 +814,6 @@ bool AppGame::Initialize()
 				instance_transform_array.push_back(tmp_m);
 				instance_hitgroup_id_array.push_back(0);
 			}
-			{
-				instance_geom_id_array.push_back(0);
-				ngl::gfx::Mat34 tmp_m = ngl::gfx::Mat34::Identity();
-				tmp_m.m[0][3] = -2.0f;
-				instance_transform_array.push_back(tmp_m);
-				instance_hitgroup_id_array.push_back(1);
-			}
-			{
-				instance_geom_id_array.push_back(0);
-				ngl::gfx::Mat34 tmp_m = ngl::gfx::Mat34::Identity();
-				tmp_m.m[0][3] = -2.0f;
-				tmp_m.m[1][3] = -1.0f;
-				instance_transform_array.push_back(tmp_m);
-				instance_hitgroup_id_array.push_back(0);
-			}
 		}
 #endif
 

@@ -16,6 +16,7 @@
 namespace
 {
 	// Convert a wide Unicode string to an UTF8 string
+	// DXRのShaderLibrary内エントリアクセスがwcharのためUtilityとして用意.
 	std::string wst_to_str(const std::wstring& wstr)
 	{
 		if (wstr.empty()) return std::string();
@@ -26,6 +27,7 @@ namespace
 	}
 
 	// Convert an UTF8 string to a wide Unicode String
+	// DXRのShaderLibrary内エントリアクセスがwcharのためUtilityとして用意.
 	std::wstring str_to_wstr(const std::string& str)
 	{
 		if (str.empty()) return std::wstring();
@@ -94,6 +96,12 @@ namespace ngl
 			rhi::BufferDep* GetBuffer();
 			const rhi::BufferDep* GetBuffer() const;
 
+			// 内部Geometry数.
+			uint32_t NumGeometry() const
+			{
+				return static_cast<uint32_t>(geom_desc_array_.size());
+			}
+
 		private:
 			bool is_built_ = false;
 
@@ -150,7 +158,13 @@ namespace ngl
 
 
 			uint32_t NumInstance() const;
+			const std::vector<uint32_t>& GetInstanceBlasIndexArray() const;
+			const std::vector<Mat34>& GetInstanceTransformArray() const;
 			const std::vector<uint32_t>& GetInstanceHitgroupIndexArray() const;
+
+
+			uint32_t NumBlas() const;
+			const std::vector<RaytraceStructureBottom*>& GetBlasArray() const;
 
 		private:
 			bool is_built_ = false;
@@ -161,6 +175,8 @@ namespace ngl
 			std::vector<RaytraceStructureBottom*> blas_array_ = {};
 			std::vector<uint32_t> instance_blas_id_array_;
 			std::vector<Mat34> transform_array_;
+			// Instance毎のHitgroupID.
+			// 現状はBLAS内のGeometryはすべて同じHitgroupとしているが後で異なるものを設定できるようにしたい.
 			std::vector<uint32_t> hitgroup_id_array_;
 
 			// build info.
@@ -289,12 +305,13 @@ namespace ngl
 		static bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device, const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count);
 
 
+		// RaytraceSceneに登録する1Modelを構成するGeometry情報.
 		struct RaytraceBlasInstanceGeometryDesc
 		{
+			// このModelを構成するGeometry情報. Submesh分のVertexBufferやIndexBuffer.
 			RaytraceStructureBottomGeometryDesc*	pp_desc = nullptr;
 			uint32_t								num_desc = 0;
 		};
-
 
 		// RaytracingのAS管理.
 		class RaytraceStructureManager
@@ -324,6 +341,7 @@ namespace ngl
 		private:
 
 			// BLAS.
+			// 管理責任はRaytraceStructureManager自身.
 			std::vector<RaytraceStructureBottom*>	blas_array_ = {};
 
 			// TLAS.
@@ -331,9 +349,11 @@ namespace ngl
 
 
 			// テスト用StateObject.
+			// 管理責任は外部.
 			RaytraceStateObject* p_state_object_ = {};
 
 			// テスト用ShaderTable.
+			// 管理責任はRaytraceStructureManager自身.
 			RaytraceShaderTable shader_table_;
 
 			// テスト用のRayDispatch出力先UAV.

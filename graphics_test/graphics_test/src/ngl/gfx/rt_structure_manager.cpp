@@ -417,9 +417,26 @@ namespace ngl
 			return &main_srv_;
 		}
 
+
+		uint32_t RaytraceStructureTop::NumBlas() const
+		{
+			return static_cast<uint32_t>(blas_array_.size());
+		}
+		const std::vector<RaytraceStructureBottom*>& RaytraceStructureTop::GetBlasArray() const
+		{
+			return blas_array_;
+		}
 		uint32_t RaytraceStructureTop::NumInstance() const
 		{
 			return static_cast<uint32_t>(hitgroup_id_array_.size());
+		}
+		const std::vector<uint32_t>& RaytraceStructureTop::GetInstanceBlasIndexArray() const
+		{
+			return instance_blas_id_array_;
+		}
+		const std::vector<Mat34>& RaytraceStructureTop::GetInstanceTransformArray() const
+		{
+			return transform_array_;
 		}
 		const std::vector<uint32_t>& RaytraceStructureTop::GetInstanceHitgroupIndexArray() const
 		{
@@ -941,10 +958,23 @@ namespace ngl
 
 
 		// per_entry_descriptor_param_count が0だとAlignmentエラーになるため注意.
+		// BLAS内Geometryは個別のShaderRecordを持つ(multiplier_for_subgeometry_index = 1)
 		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
 			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count)
 		{
 			out = {};
+
+
+			const auto num_instance = tlas.NumInstance();
+			uint32_t num_all_instance_geometry = 0;
+			{
+				const auto& instance_blas_index_array = tlas.GetInstanceBlasIndexArray();
+				const auto& blas_array = tlas.GetBlasArray();
+				for (auto i = 0u; i < num_instance; ++i)
+				{
+					num_all_instance_geometry += blas_array[instance_blas_index_array[i]]->NumGeometry();
+				}
+			}
 
 			// Shader Table.
 			// TODO. ASのインスタンス毎のマテリアルシェーダ情報からStateObjectのShaderIdentifierを取得してテーブルを作る.
@@ -961,7 +991,8 @@ namespace ngl
 			// RayGenとMissが一つずつとする(Missは一応複数登録可だが簡易化のため一旦1つに).
 			constexpr uint32_t num_raygen = 1;
 			const uint32_t num_miss = 1;
-			const uint32_t shader_table_byte_size = shader_record_byte_size * (num_raygen + num_miss + tlas.NumInstance());
+			// Hitgroupのrecordは全Instanceの全Geometry分としている.
+			const uint32_t shader_table_byte_size = shader_record_byte_size * (num_raygen + num_miss + num_all_instance_geometry);
 
 			// あとで書き込み位置調整に使うので保存.
 			out.table_entry_byte_size_ = shader_record_byte_size;
@@ -1010,23 +1041,43 @@ namespace ngl
 					++table_cnt;
 				}
 
+
 				// HitGroup
 				/// マテリアル分存在するHitGroupは連続領域でInstanceに指定したインデックスでアクセスされるためここ以降に順序に気をつけて書き込み.
+				// InstanceのBLASに複数のGeometryが含まれる場合はここでその分のrecordが書き込まれる.
 				out.table_hitgroup_offset_ = shader_record_byte_size * table_cnt;
-				for (uint32_t i = 0u; i < tlas.NumInstance(); ++i)
+				for (uint32_t i = 0u; i < num_instance; ++i)
 				{
+					// 現状はBLAS内Geometryはすべて同じHitgroupとしている.
+					// Geometry毎に別マテリアル等とする場合はここをGeomety毎とする.
 					const uint32_t hitgroup_id = tlas.GetInstanceHitgroupIndexArray()[i];
-
 					const char* hitgroup_name = state_object.GetHitgroupName(hitgroup_id);
 					assert(nullptr != hitgroup_name);
 
-					// hitGroup
-					{
-						memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(hitgroup_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					// Geometry毎のHitgroup分けの確認用.
+					const uint32_t debug_hitgroup_id = 0;
+					const char* debug_hitgroup_name = state_object.GetHitgroupName(debug_hitgroup_id);
 
-						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+					// 内部Geometry毎にRecord.
+					const auto& blas_index = tlas.GetInstanceBlasIndexArray()[i];
+					const auto& blas = tlas.GetBlasArray()[blas_index];
+					for (uint32_t geom_i = 0; geom_i < blas->NumGeometry(); ++geom_i)
+					{
+						auto* geom_hit_group_name = hitgroup_name;
+						if (0 == (geom_i & 0x01))
+						{
+							// デバッグ用にGeometry毎にHitgroup変更テスト.
+							geom_hit_group_name = debug_hitgroup_name;
+						}
+
+						// hitGroup
+						{
+							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(geom_hit_group_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+						}
+						++table_cnt;
 					}
-					++table_cnt;
 				}
 
 				out.shader_table_.Unmap();
