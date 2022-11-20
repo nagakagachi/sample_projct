@@ -41,7 +41,7 @@ void rayGen()
 	ray.Origin = float3(0.0, 2.0, -1.0);
 	ray.Direction = ray_dir;
 	ray.TMin = 0.0;
-	ray.TMax = 1e9;
+	ray.TMax = 1e38;
 
 	
 	Payload payload;
