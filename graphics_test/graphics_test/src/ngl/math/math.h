@@ -47,10 +47,6 @@ namespace ngl
 			{
 				return { 0.0f, 0.0f, 1.0f };
 			}
-			static constexpr Vec3 UnitW()
-			{
-				return { 0.0f, 0.0f, 0.0f };
-			}
 		};
 
 		struct Vec4
