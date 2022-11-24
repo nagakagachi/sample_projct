@@ -7,6 +7,7 @@
 #include <codecvt>
 #include <locale>
 
+#include "ngl/math/math.h"
 
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_command_list.d3d12.h"
@@ -45,21 +46,6 @@ namespace ngl
 		// shader resource t65535 に
 		static constexpr uint32_t k_system_raytracing_structure_srv_register = 65535;
 
-
-		struct Mat34
-		{
-			float m[3][4];
-
-			static constexpr Mat34 Identity()
-			{
-				constexpr Mat34 m = {
-					1.0f, 0.0f, 0.0f, 0.0f,
-					0.0f, 1.0f, 0.0f, 0.0f,
-					0.0f, 0.0f, 1.0f, 0.0f,
-				};
-				return m;
-			}
-		};
 
 		struct RaytraceStructureBottomGeometryDesc
 		{
@@ -137,7 +123,7 @@ namespace ngl
 			// bufferの管理責任は外部.
 			bool Setup(rhi::DeviceDep* p_device, std::vector<RaytraceStructureBottom*>& blas_array,
 				const std::vector<uint32_t>& instance_geom_id_array,
-				const std::vector<Mat34>& instance_transform_array,
+				const std::vector<math::Mat34>& instance_transform_array,
 				const std::vector<uint32_t>& instance_hitgroup_id_array
 			);
 
@@ -159,7 +145,7 @@ namespace ngl
 
 			uint32_t NumInstance() const;
 			const std::vector<uint32_t>& GetInstanceBlasIndexArray() const;
-			const std::vector<Mat34>& GetInstanceTransformArray() const;
+			const std::vector<math::Mat34>& GetInstanceTransformArray() const;
 			const std::vector<uint32_t>& GetInstanceHitgroupIndexArray() const;
 
 
@@ -174,7 +160,7 @@ namespace ngl
 
 			std::vector<RaytraceStructureBottom*> blas_array_ = {};
 			std::vector<uint32_t> instance_blas_id_array_;
-			std::vector<Mat34> transform_array_;
+			std::vector<math::Mat34> transform_array_;
 			// Instance毎のHitgroupID.
 			// 現状はBLAS内のGeometryはすべて同じHitgroupとしているが後で異なるものを設定できるようにしたい.
 			std::vector<uint32_t> hitgroup_id_array_;
@@ -324,7 +310,7 @@ namespace ngl
 				RaytraceStateObject* p_state, 
 				const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
 				const std::vector<uint32_t>& instance_geom_id_array,
-				const std::vector<Mat34>& instance_transform_array,
+				const std::vector<math::Mat34>& instance_transform_array,
 				const std::vector<uint32_t>& instance_hitgroup_id_array
 				);
 

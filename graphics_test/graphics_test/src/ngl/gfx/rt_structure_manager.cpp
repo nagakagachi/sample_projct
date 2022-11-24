@@ -44,9 +44,9 @@ namespace ngl
 					geom_desc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;	// Triangle Geom.
 					geom_desc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;	// Opaque.
 					geom_desc.Triangles.VertexBuffer.StartAddress = g.vertex_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-					geom_desc.Triangles.VertexBuffer.StrideInBytes = g.vertex_buffer->GetElementByteSize();// 12 byte (vec3).
+					geom_desc.Triangles.VertexBuffer.StrideInBytes = g.vertex_buffer->GetElementByteSize();
 					geom_desc.Triangles.VertexCount = g.vertex_buffer->getElementCount();
-					geom_desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;// vec3.
+					geom_desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;// vec3 データとしてはVec4のArrayでStrideでスキップしている可能性がある.
 					if (g.index_buffer)
 					{
 						geom_desc.Triangles.IndexBuffer = g.index_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
@@ -191,7 +191,7 @@ namespace ngl
 		// bufferの管理責任は外部.
 		bool RaytraceStructureTop::Setup(rhi::DeviceDep* p_device, std::vector<RaytraceStructureBottom*>& blas_array,
 			const std::vector<uint32_t>& instance_geom_id_array,
-			const std::vector<Mat34>& instance_transform_array,
+			const std::vector<math::Mat34>& instance_transform_array,
 			const std::vector<uint32_t>& instance_hitgroup_id_array
 		)
 		{
@@ -434,7 +434,7 @@ namespace ngl
 		{
 			return instance_blas_id_array_;
 		}
-		const std::vector<Mat34>& RaytraceStructureTop::GetInstanceTransformArray() const
+		const std::vector<math::Mat34>& RaytraceStructureTop::GetInstanceTransformArray() const
 		{
 			return transform_array_;
 		}
@@ -1105,7 +1105,7 @@ namespace ngl
 		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state,
 			const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
 			const std::vector<uint32_t>& instance_geom_id_array,
-			const std::vector<Mat34>& instance_transform_array,
+			const std::vector<math::Mat34>& instance_transform_array,
 			const std::vector<uint32_t>& instance_hitgroup_id_array)
 		{
 

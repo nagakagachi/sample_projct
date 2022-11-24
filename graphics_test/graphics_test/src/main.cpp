@@ -13,6 +13,7 @@
 #include "ngl/file/file.h"
 #include "ngl/util/shared_ptr.h"
 
+#include "ngl/math/math.h"
 
 // rhi
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
@@ -33,11 +34,11 @@
 
 struct CbSampleVs
 {
-	float cb_param_vs0[4];
+	ngl::math::Vec4 cb_param_vs0;
 };
 struct CbSamplePs
 {
-	float cb_param0[4];
+	ngl::math::Vec4 cb_param0;
 };
 
 
@@ -60,7 +61,8 @@ private:
 	ngl::platform::CoreWindow	window_;
 
 
-	float clear_color_[4] = {0.0f};
+	ngl::math::Vec4 clear_color_ = {0.0f};
+
 
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
@@ -316,11 +318,8 @@ bool AppGame::Initialize()
 		return false;
 	}
 
-	clear_color_[0] = 0.0f;
-	clear_color_[1] = 0.0f;
-	clear_color_[2] = 0.0f;
-	clear_color_[3] = 1.0f;
 
+	clear_color_ = ngl::math::Vec4::Zero();
 
 	{
 		// HLSLからコンパイルして初期化.
@@ -451,10 +450,7 @@ bool AppGame::Initialize()
 		{
 			if (auto* map_data = reinterpret_cast<CbSampleVs*>(cb_sample_vs_.Map()))
 			{
-				map_data->cb_param_vs0[0] = 1.0f;
-				map_data->cb_param_vs0[1] = 0.5f;
-				map_data->cb_param_vs0[2] = 0.0f;
-				map_data->cb_param_vs0[3] = 1.0f;
+				map_data->cb_param_vs0 = ngl::math::Vec4(1.0f, 0.5f, 0.0f, 1.0f);
 
 				cb_sample_vs_.Unmap();
 			}
@@ -476,10 +472,7 @@ bool AppGame::Initialize()
 		{
 			if (auto* map_data = reinterpret_cast<CbSamplePs*>(cb_sample_ps_.Map()))
 			{
-				map_data->cb_param0[0] = 1.0f;
-				map_data->cb_param0[1] = 0.5f;
-				map_data->cb_param0[2] = 0.0f;
-				map_data->cb_param0[3] = 1.0f;
+				map_data->cb_param0 = ngl::math::Vec4(1.0f, 0.5f, 0.0f, 1.0f);
 
 				cb_sample_ps_.Unmap();
 			}
@@ -492,27 +485,24 @@ bool AppGame::Initialize()
 
 	{
 		// VertexBuffer作成
-		struct Vector4
+		struct VertexPosUv
 		{
-			float x;
-			float y;
-			float z;
-			float w;
+			ngl::math::Vec4 pos;
 
 			float u;
 			float v;
 		};
 
 		constexpr float shape_scale = 0.95f;
-		Vector4 sample_vtx_list[] =
+		VertexPosUv sample_vtx_list[] =
 		{
-			{-shape_scale, shape_scale, 0.0f, 1.0f,	0.0f, 0.0f },
-			{shape_scale, -shape_scale, 0.0f, 1.0f,	1.0f, 1.0f },
-			{-shape_scale, -shape_scale, 0.0f, 1.0f,	0.0f, 1.0f},
+			{{-shape_scale, shape_scale, 0.0f, 1.0f},	0.0f, 0.0f },
+			{{shape_scale, -shape_scale, 0.0f, 1.0f},	1.0f, 1.0f },
+			{{-shape_scale, -shape_scale, 0.0f, 1.0f},	0.0f, 1.0f},
 
-			{-shape_scale, shape_scale, 0.0f, 1.0f,	0.0f, 0.0f },
-			{shape_scale, shape_scale, 0.0f, 1.0f,	1.0f, 0.0f },
-			{shape_scale, -shape_scale, 0.0f, 1.0f,	1.0f, 1.0f},
+			{{-shape_scale, shape_scale, 0.0f, 1.0f},	0.0f, 0.0f },
+			{{ shape_scale, shape_scale, 0.0f, 1.0f},	1.0f, 0.0f },
+			{{ shape_scale, -shape_scale, 0.0f, 1.0f},	1.0f, 1.0f},
 		};
 
 
@@ -524,7 +514,7 @@ bool AppGame::Initialize()
 
 		if (vb_sample_.Initialize(&device_, vtx_desc))
 		{
-			if (auto* map_data = reinterpret_cast<Vector4*>(vb_sample_.Map()))
+			if (auto* map_data = reinterpret_cast<VertexPosUv*>(vb_sample_.Map()))
 			{
 				memcpy(map_data, sample_vtx_list, sizeof(sample_vtx_list));
 
@@ -668,11 +658,7 @@ bool AppGame::Initialize()
 
 		// テスト用の直接生成頂点バッファ.
 		{
-			struct Vec3
-			{
-				float x, y, z;
-			};
-			const Vec3 vtx_array[] =
+			const ngl::math::Vec3 vtx_array[] =
 			{
 				{0.0f, 1.0f, 0.0f},
 				{0.866f, -0.5f, 0.0f},
@@ -759,7 +745,7 @@ bool AppGame::Initialize()
 		
 		std::vector<ngl::gfx::RaytraceBlasInstanceGeometryDesc> geom_array;
 		std::vector<uint32_t> instance_geom_id_array;
-		std::vector<ngl::gfx::Mat34> instance_transform_array;
+		std::vector<ngl::math::Mat34> instance_transform_array;
 		std::vector<uint32_t> instance_hitgroup_id_array;
 
 #if 1
@@ -779,7 +765,7 @@ bool AppGame::Initialize()
 
 		{
 			{
-				auto mtx = ngl::gfx::Mat34::Identity();
+				auto mtx = ngl::math::Mat34::Identity();
 				mtx.m[0][0] = mtx.m[1][1] = mtx.m[2][2] = (1.0f / 1.0f);// 適当なスケール.
 
 
@@ -804,12 +790,12 @@ bool AppGame::Initialize()
 		{
 			{
 				instance_geom_id_array.push_back(0);
-				instance_transform_array.push_back(ngl::gfx::Mat34::Identity());
+				instance_transform_array.push_back(ngl::math::Mat34::Identity());
 				instance_hitgroup_id_array.push_back(1);
 			}
 			{
 				instance_geom_id_array.push_back(0);
-				ngl::gfx::Mat34 tmp_m = ngl::gfx::Mat34::Identity();
+				ngl::math::Mat34 tmp_m = ngl::math::Mat34::Identity();
 				tmp_m.m[0][3] = 2.0f;
 				instance_transform_array.push_back(tmp_m);
 				instance_hitgroup_id_array.push_back(0);
@@ -861,9 +847,9 @@ bool AppGame::Execute()
 		auto c1 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.25f));
 		auto c2 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.5f));
 
-		clear_color_[0] = c0 * 0.5f + 0.5f;
-		clear_color_[1] = c1 * 0.5f + 0.5f;
-		clear_color_[2] = c2 * 0.5f + 0.5f;
+		clear_color_.x = c0 * 0.5f + 0.5f;
+		clear_color_.y = c1 * 0.5f + 0.5f;
+		clear_color_.z = c2 * 0.5f + 0.5f;
 	}
 
 	// Render Loop
@@ -946,7 +932,7 @@ bool AppGame::Execute()
 				}
 
 				// Rtvクリア.
-				gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_);
+				gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_.data);
 				// Dsvクリア.
 				gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 1.0f, 0, true, false);
 
