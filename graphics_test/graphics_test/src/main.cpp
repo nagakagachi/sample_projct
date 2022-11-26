@@ -61,7 +61,7 @@ private:
 	ngl::platform::CoreWindow	window_;
 
 
-	ngl::math::Vec4 clear_color_ = {0.0f};
+	ngl::math::Vec4 clear_color_ = ngl::math::Vec4(0.0f);
 
 
 	ngl::rhi::DeviceDep							device_;
@@ -153,6 +153,7 @@ int main()
 
 AppGame::AppGame()
 {
+	ngl::math::funcAA();
 
 }
 AppGame::~AppGame()
