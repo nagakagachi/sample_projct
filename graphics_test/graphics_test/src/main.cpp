@@ -155,6 +155,35 @@ AppGame::AppGame()
 {
 	ngl::math::funcAA();
 
+	const ngl::math::Mat44 k_inv_test_00 = ngl::math::Mat44::Identity();
+
+	const ngl::math::Mat44 k_rot_z = ngl::math::Mat44(std::cos(0.5f), -std::sin(0.5f), 0, 0, /**/ std::sin(0.5f), std::cos(0.5f), 0, 0, /**/ 0, 0, 1, 0, /**/ 0, 0, 0, 1);
+	const ngl::math::Mat44 k_rot_z_inv = ngl::math::Mat44::inverse(k_rot_z);
+
+
+	const ngl::math::Mat44 k_rot_x = ngl::math::Mat44(1, 0, 0, 0, /**/ 0, std::cos(0.5f), -std::sin(0.5f), 0, /**/ 0, std::sin(0.5f), std::cos(0.5f), 0, /**/ 0, 0, 0, 1);
+	const ngl::math::Mat44 k_rot_x_inv = ngl::math::Mat44::inverse(k_rot_x);
+
+	const ngl::math::Mat44 k_rot_y = ngl::math::Mat44(std::cos(0.5f), 0, -std::sin(0.5f), 0, /**/ 0, 1, 0, 0, /**/ std::sin(0.5f), 0, std::cos(0.5f), 0, /**/ 0, 0, 0, 1);
+	const ngl::math::Mat44 k_rot_y_inv = ngl::math::Mat44::inverse(k_rot_y);
+
+
+	const auto m_0 = k_rot_z * k_rot_x * ngl::math::Mat44::inverse(k_rot_z * k_rot_x);
+	const auto m_1 = k_rot_x * k_rot_x_inv;
+	const auto m_2 = k_rot_y * k_rot_y_inv;
+
+
+
+	const ngl::math::Mat33 k_rot33_z = ngl::math::Mat33(std::cos(0.5f), -std::sin(0.5f), 0, /**/ std::sin(0.5f), std::cos(0.5f), 0, /**/ 0, 0, 1);
+	const ngl::math::Mat33 k_rot33_z_inv = ngl::math::Mat33::inverse(k_rot33_z);
+	const auto k_rot33_z_mul = k_rot33_z * k_rot33_z_inv;
+
+
+	const ngl::math::Mat22 k_rot22_z = ngl::math::Mat22(std::cos(0.5f), -std::sin(0.5f),/**/ std::sin(0.5f), std::cos(0.5f));
+	const ngl::math::Mat22 k_rot22_z_inv = ngl::math::Mat22::inverse(k_rot22_z);
+	const auto k_rot22_z_mul = k_rot22_z * k_rot22_z_inv;
+
+
 }
 AppGame::~AppGame()
 {
