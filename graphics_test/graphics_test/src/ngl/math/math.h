@@ -12,6 +12,18 @@ namespace ngl
 {
 	namespace math
 	{
+		constexpr float		k_pi_f = 3.141592653589793f;
+		constexpr double	k_pi_d = 3.141592653589793;
+		static constexpr float Deg2Rad(float degree)
+		{
+			return degree * k_pi_f / 180.0f;
+		}
+		static constexpr float Rad2Deg(float radian)
+		{
+			return  radian * 180.0f / k_pi_f;
+		}
+
+
 
 		// -------------------------------------------------------------------------------------------
 		// Matrix Vector 演算系
@@ -63,12 +75,14 @@ namespace ngl
 		// Utility
 		
 		// View Matrix (LeftHand).
-		inline Mat34 CalcViewMatrixLH(const Vec3& camera_location, const Vec3& forward, const Vec3& up)
+		inline Mat34 CalcViewMatrix(const Vec3& camera_location, const Vec3& forward, const Vec3& up, bool is_right_hand = false)
 		{
 			assert(!(forward == Vec3::Zero()));
 			assert(!(up == Vec3::Zero()));
 
 			Vec3 r2 = Vec3::Normalize(forward);
+			if (is_right_hand)
+				r2 = -r2;
 
 			Vec3 r0 = Vec3::Cross(up, r2);
 			r0 = Vec3::Normalize(r0);
@@ -88,12 +102,86 @@ namespace ngl
 
 			return M;
 		}
-		// View Matrix (RightHand).
-		inline Mat34 CalcViewMatrixRH(const Vec3& camera_location, const Vec3& forward, const Vec3& up)
-		{
-			return CalcViewMatrixLH(camera_location, -forward, up);
-		}
 		
+		// Standard Perspective Projection Matrix (LeftHand).
+		//	fov_y_radian : full angle of Vertical FOV.
+		inline Mat44 CalcStandardPerspectiveMatrix
+		(
+			float fov_y_radian,
+			float aspect_ratio,
+			float near_z,
+			float far_z,
+			bool is_right_hand = false
+		)
+		{
+			const float fov_y_half = fov_y_radian * 0.5f;
+			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
+			const float h = 1.0f / fov_tan;
+			const float w = h / aspect_ratio;
+			const float range_term = far_z / (far_z - near_z);
+			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
+
+			return Mat44(
+				w,	0,	0,	0,
+				0,	h,	0,	0,
+				0,	0, z_sign * range_term, -near_z * range_term,
+				0,	0, z_sign,	0
+			);
+		}
+
+		// InfiniteFar and Reverse Z Perspective Projection Matrix (LeftHand).
+		//	fov_y_radian : full angle of Vertical FOV.
+		//	Z-> near:1, far:0
+		inline Mat44 CalcReverseInfiniteFarPerspectiveMatrix
+		(
+			float fov_y_radian,
+			float aspect_ratio,
+			float near_z
+		)
+		{
+			const float fov_y_half = fov_y_radian * 0.5f;
+			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
+			const float h = 1.0f / fov_tan;
+			const float w = h / aspect_ratio;
+			
+			return Mat44(
+				w, 0, 0, 0,
+				0, h, 0, 0,
+				0, 0, 0, near_z,
+				0, 0, 1, 0
+			);
+		}
+
+		// 標準平行投影.
+		inline Mat44 CalcStandardOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = false)
+		{
+			const float w = 2.0f / width;
+			const float h = 2.0f / height;
+			const float range_term = 1.0f / (far_z - near_z);
+			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
+
+			return Mat44(
+				w, 0, 0, 0,
+				0, h, 0, 0,
+				0, 0, z_sign * range_term, -near_z * range_term,
+				0, 0, 0, 1
+			);
+		}
+		// Reverse平行投影.
+		inline Mat44 CalcReverseOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = false)
+		{
+			const float w = 2.0f / width;
+			const float h = 2.0f / height;
+			const float range_term = 1.0f / (near_z - far_z);// Reverse.
+			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
+
+			return Mat44(
+				w, 0, 0, 0,
+				0, h, 0, 0,
+				0, 0, z_sign * range_term, -far_z * range_term,
+				0, 0, 0, 1
+			);
+		}
 
 
 		// ------------------------------------------------------------------------------------------------

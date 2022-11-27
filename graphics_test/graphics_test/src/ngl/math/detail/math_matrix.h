@@ -471,12 +471,12 @@ namespace ngl
 			{
 			}
 			// from Mat44.
-			constexpr Mat34(const Mat44& m)
+			explicit constexpr Mat34(const Mat44& m)
 				: r0(m.r0), r1(m.r1), r2(m.r2)
 			{
 			}
 			// from Mat33.
-			constexpr Mat34(const Mat33& m)
+			explicit constexpr Mat34(const Mat33& m)
 				: r0(m.r0.x, m.r0.y, m.r0.z, 0.0f), r1(m.r1.x, m.r1.y, m.r1.z, 0.0f), r2(m.r2.x, m.r2.y, m.r2.z)
 			{
 			}
@@ -491,6 +491,26 @@ namespace ngl
 					Vec4::UnitX(),
 					Vec4::UnitY(),
 					Vec4::UnitZ(),
+				};
+			}
+
+			// 逆変換.
+			//  Mat34同士の乗算は未サポートだが, 以下のように元のMat34で変換されたベクトルを戻すような逆変換を計算する.
+			//  p = Inverse(Mat34_A) * (Mat34_A * p)
+			static constexpr Mat34 Inverse(const Mat34& m)
+			{
+				const Mat33 inv33 = Mat33::Inverse(Mat33(m.r0.XYZ(), m.r1.XYZ(), m.r2.XYZ()));
+
+				const Vec3 n_trans(-m.r0.w, -m.r1.w, -m.r2.w);
+
+				const float nx = ngl::math::Vec3::Dot(inv33.r0, n_trans);
+				const float ny = ngl::math::Vec3::Dot(inv33.r1, n_trans);
+				const float nz = ngl::math::Vec3::Dot(inv33.r2, n_trans);
+
+				return {
+					Vec4(inv33.r0, nx),
+					Vec4(inv33.r1, ny),
+					Vec4(inv33.r2, nz),
 				};
 			}
 		};

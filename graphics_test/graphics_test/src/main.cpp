@@ -187,26 +187,32 @@ AppGame::AppGame()
 
 
 
+	const float fov_y = ngl::math::Deg2Rad(90.0f);
+	const float aspect = 16.0f / 9.0f;
+
+	const float vertical_view_max = std::tanf(fov_y*0.5f);
+
 	// View Matrix.
-	const auto view_dir0 = ngl::math::Vec3::Normalize(ngl::math::Vec3(0.5, 0, 0.5));
-	const auto view_location0 = ngl::math::Vec3(1, 0, 0);
-	const ngl::math::Mat34 viewmat0 = ngl::math::CalcViewMatrixLH(view_location0, view_dir0, ngl::math::Vec3(0, 1, 0));
+	const auto view_dir0 = ngl::math::Vec3::Normalize(ngl::math::Vec3(0.5, 0.0, 0.5));
+	const auto view_location0 = ngl::math::Vec3(1, 2, 3);
+	const ngl::math::Mat34 viewmat0 = ngl::math::CalcViewMatrix(view_location0, view_dir0, ngl::math::Vec3(0, 1, 0));
+	const auto viewmat0_inv = ngl::math::Mat34::Inverse(viewmat0);
 
 	const ngl::math::Vec3 vp0 = viewmat0 * ngl::math::Vec3(0, 0, 0);
 	const ngl::math::Vec3 vp1 = viewmat0 * ngl::math::Vec3(1, 0, 0);
 	const ngl::math::Vec3 vp2 = viewmat0 * ngl::math::Vec3(0, 1, 0);
 	const ngl::math::Vec3 vp3 = viewmat0 * ngl::math::Vec3(0, 0, 1);
-	const ngl::math::Vec3 vp4 = viewmat0 * (view_dir0 * 10.0f);
+	const auto pos_in_view_line = ((viewmat0.r0.XYZ() * vertical_view_max * aspect) + (viewmat0.r1.XYZ() * vertical_view_max) + (viewmat0.r2.XYZ() * 1.0f)) * 100.0f;
+	const ngl::math::Vec3 vp4 = viewmat0 * (pos_in_view_line + view_location0);
 
-	const auto view_dir1 = ngl::math::Vec3::Normalize(ngl::math::Vec3(1, 0, 0));
-	const auto view_location1 = ngl::math::Vec3(20, 10, 0);
-	const ngl::math::Mat34 viewmat1 = ngl::math::CalcViewMatrixLH(view_location1, view_dir1, ngl::math::Vec3(0, 1, 0));
+	const ngl::math::Vec3 vp4_inv = viewmat0_inv * (vp4);
 
-	const ngl::math::Vec3 vp1_0 = viewmat1 * (ngl::math::Vec3(0, 0, 0) + view_location1);
-	const ngl::math::Vec3 vp1_1 = viewmat1 * (ngl::math::Vec3(1, 0, 0) + view_location1);
-	const ngl::math::Vec3 vp1_2 = viewmat1 * (ngl::math::Vec3(0, 1, 0) + view_location1);
-	const ngl::math::Vec3 vp1_3 = viewmat1 * (ngl::math::Vec3(0, 0, 1) + view_location1);
-	const ngl::math::Vec3 vp1_4 = viewmat1 * (view_dir1 * 10.0f + view_location1);
+
+	//const ngl::math::Mat44 proj0 = ngl::math::CalcStandardPerspectiveMatrixRH(fov_y, aspect, 0.01f, 10000.0f);// 標準透視投影.
+	const ngl::math::Mat44 proj0 = ngl::math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, aspect, 0.1f);// ReverseAndInfiniteFar透視投影.
+
+	const auto pp4 = proj0 * ngl::math::Vec4(vp4, 1);
+	const auto pp4_ndc = pp4 / pp4.w;
 
 
 }

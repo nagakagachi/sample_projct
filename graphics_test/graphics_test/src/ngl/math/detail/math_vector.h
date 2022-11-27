@@ -170,6 +170,15 @@ namespace ngl
 			}
 
 
+			constexpr VecN<3> XYZ() const
+			{
+				return VecN<3>(this->x, this->y, this->z, 0);
+			}
+			constexpr VecN<2> XY() const
+			{
+				return VecN<2>(this->x, this->y, 0, 0);
+			}
+
 			bool operator ==(const VecN& v) const
 			{
 				return (0 == memcmp(this->data, v.data, sizeof(this->data)));
