@@ -170,6 +170,11 @@ namespace ngl
 			}
 
 
+			bool operator ==(const VecN& v) const
+			{
+				return (0 == memcmp(this->data, v.data, sizeof(this->data)));
+			}
+
 			// += operator Broadcast.
 			VecN& operator +=(const VecN& v)
 			{
@@ -213,12 +218,12 @@ namespace ngl
 				return *this;
 			}
 
-			float length() const
+			float Length() const
 			{
-				return length(*this);
+				return Length(*this);
 			}
 
-			static constexpr float dot(const VecN& v0, const VecN& v1)
+			static constexpr float Dot(const VecN& v0, const VecN& v1)
 			{
 				if constexpr (2 == DIMENSION)
 					return v0.x * v1.x + v0.y * v1.y;
@@ -227,7 +232,7 @@ namespace ngl
 				else if constexpr (4 == DIMENSION)
 					return v0.x * v1.x + v0.y * v1.y + v0.z * v1.z + v0.w * v1.w;
 			}
-			static constexpr VecN cross(const VecN& v0, const VecN& v1)
+			static constexpr VecN Cross(const VecN& v0, const VecN& v1)
 			{
 				if constexpr (3 == DIMENSION)
 				{
@@ -237,9 +242,14 @@ namespace ngl
 						v0.x * v1.y - v1.x * v0.y);
 				}
 			}
-			static float length(const VecN& v0)
+			static float Length(const VecN& v)
 			{
-				return std::sqrt(dot(v0, v0));
+				return std::sqrt(Dot(v, v));
+			}
+
+			static VecN Normalize(const VecN& v)
+			{
+				return v / v.Length();
 			}
 
 			static constexpr VecN Zero()

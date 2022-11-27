@@ -54,7 +54,7 @@ namespace ngl
 			}
 
 			// 転置
-			static constexpr Mat22 transpose(const Mat22& m)
+			static constexpr Mat22 Transpose(const Mat22& m)
 			{
 				return Mat22(
 					m.r0.x, m.r1.x,
@@ -62,12 +62,12 @@ namespace ngl
 				);
 			}
 			// 行列式.
-			static constexpr float determinant(const Mat22& m)
+			static constexpr float Determinant(const Mat22& m)
 			{
 				return m.r0.x * m.r1.y - m.r0.y * m.r1.x;
 			}
 			// 逆行列.
-			static constexpr Mat22 inverse(const Mat22& m)
+			static constexpr Mat22 Inverse(const Mat22& m)
 			{
 				const float c00 = m.r1.y;
 				const float c01 = -m.r1.x;
@@ -177,7 +177,7 @@ namespace ngl
 			}
 
 			// 転置
-			static constexpr Mat33 transpose(const Mat33& m)
+			static constexpr Mat33 Transpose(const Mat33& m)
 			{
 				return Mat33(
 					m.r0.x, m.r1.x, m.r2.x,
@@ -186,27 +186,27 @@ namespace ngl
 				);
 			}
 			// 行列式.
-			static constexpr float determinant(const Mat33& m)
+			static constexpr float Determinant(const Mat33& m)
 			{
-				const float c00 = Mat22::determinant(Mat22(m.r1.y, m.r1.z, m.r2.y, m.r2.z));
-				const float c01 = -Mat22::determinant(Mat22(m.r1.x, m.r1.z, m.r2.x, m.r2.z));
-				const float c02 = Mat22::determinant(Mat22(m.r1.x, m.r1.y, m.r2.x, m.r2.y));
+				const float c00 = Mat22::Determinant(Mat22(m.r1.y, m.r1.z, m.r2.y, m.r2.z));
+				const float c01 = -Mat22::Determinant(Mat22(m.r1.x, m.r1.z, m.r2.x, m.r2.z));
+				const float c02 = Mat22::Determinant(Mat22(m.r1.x, m.r1.y, m.r2.x, m.r2.y));
 				return m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
 			}
 			// 逆行列.
-			static constexpr Mat33 inverse(const Mat33& m)
+			static constexpr Mat33 Inverse(const Mat33& m)
 			{
-				const float c00 = Mat22::determinant(Mat22(m.r1.y, m.r1.z, m.r2.y, m.r2.z));
-				const float c01 = -Mat22::determinant(Mat22(m.r1.x, m.r1.z, m.r2.x, m.r2.z));
-				const float c02 = Mat22::determinant(Mat22(m.r1.x, m.r1.y, m.r2.x, m.r2.y));
+				const float c00 = Mat22::Determinant(Mat22(m.r1.y, m.r1.z, m.r2.y, m.r2.z));
+				const float c01 = -Mat22::Determinant(Mat22(m.r1.x, m.r1.z, m.r2.x, m.r2.z));
+				const float c02 = Mat22::Determinant(Mat22(m.r1.x, m.r1.y, m.r2.x, m.r2.y));
 
-				const float c10 = -Mat22::determinant(Mat22(m.r0.y, m.r0.z, m.r2.y, m.r2.z));
-				const float c11 = Mat22::determinant(Mat22(m.r0.x, m.r0.z, m.r2.x, m.r2.z));
-				const float c12 = -Mat22::determinant(Mat22(m.r0.x, m.r0.y, m.r2.x, m.r2.y));
+				const float c10 = -Mat22::Determinant(Mat22(m.r0.y, m.r0.z, m.r2.y, m.r2.z));
+				const float c11 = Mat22::Determinant(Mat22(m.r0.x, m.r0.z, m.r2.x, m.r2.z));
+				const float c12 = -Mat22::Determinant(Mat22(m.r0.x, m.r0.y, m.r2.x, m.r2.y));
 
-				const float c20 = Mat22::determinant(Mat22(m.r0.y, m.r0.z, m.r1.y, m.r1.z));
-				const float c21 = -Mat22::determinant(Mat22(m.r0.x, m.r0.z, m.r1.x, m.r1.z));
-				const float c22 = Mat22::determinant(Mat22(m.r0.x, m.r0.y, m.r1.x, m.r1.y));
+				const float c20 = Mat22::Determinant(Mat22(m.r0.y, m.r0.z, m.r1.y, m.r1.z));
+				const float c21 = -Mat22::Determinant(Mat22(m.r0.x, m.r0.z, m.r1.x, m.r1.z));
+				const float c22 = Mat22::Determinant(Mat22(m.r0.x, m.r0.y, m.r1.x, m.r1.y));
 
 				const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
 				const float inv_det = 1.0f / det;
@@ -328,7 +328,7 @@ namespace ngl
 			}
 
 			// 転置
-			static constexpr Mat44 transpose(const Mat44& m)
+			static constexpr Mat44 Transpose(const Mat44& m)
 			{
 				return Mat44(
 					m.r0.x, m.r1.x, m.r2.x, m.r3.x,
@@ -339,37 +339,37 @@ namespace ngl
 			}
 
 			// 行列式.
-			static constexpr float determinant(const Mat44& m)
+			static constexpr float Determinant(const Mat44& m)
 			{
-				const float c00 = Mat33::determinant(Mat33(m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
-				const float c01 = -Mat33::determinant(Mat33(m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
-				const float c02 = Mat33::determinant(Mat33(m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w, m.r3.x, m.r3.y, m.r3.w));
-				const float c03 = -Mat33::determinant(Mat33(m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z, m.r3.x, m.r3.y, m.r3.z));
+				const float c00 = Mat33::Determinant(Mat33(m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
+				const float c01 = -Mat33::Determinant(Mat33(m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
+				const float c02 = Mat33::Determinant(Mat33(m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w, m.r3.x, m.r3.y, m.r3.w));
+				const float c03 = -Mat33::Determinant(Mat33(m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z, m.r3.x, m.r3.y, m.r3.z));
 				const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
 				return det;
 			}
 			// 逆行列.
-			static constexpr Mat44 inverse(const Mat44& m)
+			static constexpr Mat44 Inverse(const Mat44& m)
 			{
-				const float c00 = Mat33::determinant(Mat33(m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
-				const float c01 = -Mat33::determinant(Mat33(m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
-				const float c02 = Mat33::determinant(Mat33(m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w, m.r3.x, m.r3.y, m.r3.w));
-				const float c03 = -Mat33::determinant(Mat33(m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z, m.r3.x, m.r3.y, m.r3.z));
+				const float c00 = Mat33::Determinant(Mat33(m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
+				const float c01 = -Mat33::Determinant(Mat33(m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
+				const float c02 = Mat33::Determinant(Mat33(m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w, m.r3.x, m.r3.y, m.r3.w));
+				const float c03 = -Mat33::Determinant(Mat33(m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z, m.r3.x, m.r3.y, m.r3.z));
 
-				const float c10 = -Mat33::determinant(Mat33(m.r0.y, m.r0.z, m.r0.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
-				const float c11 = Mat33::determinant(Mat33(m.r0.x, m.r0.z, m.r0.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
-				const float c12 = -Mat33::determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r2.x, m.r2.y, m.r2.w, m.r3.x, m.r3.y, m.r3.w));
-				const float c13 = Mat33::determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r2.x, m.r2.y, m.r2.z, m.r3.x, m.r3.y, m.r3.z));
+				const float c10 = -Mat33::Determinant(Mat33(m.r0.y, m.r0.z, m.r0.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
+				const float c11 = Mat33::Determinant(Mat33(m.r0.x, m.r0.z, m.r0.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
+				const float c12 = -Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r2.x, m.r2.y, m.r2.w, m.r3.x, m.r3.y, m.r3.w));
+				const float c13 = Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r2.x, m.r2.y, m.r2.z, m.r3.x, m.r3.y, m.r3.z));
 
-				const float c20 = Mat33::determinant(Mat33(m.r0.y, m.r0.z, m.r0.w, m.r1.y, m.r1.z, m.r1.w, m.r3.y, m.r3.z, m.r3.w));
-				const float c21 = -Mat33::determinant(Mat33(m.r0.x, m.r0.z, m.r0.w, m.r1.x, m.r1.z, m.r1.w, m.r3.x, m.r3.z, m.r3.w));
-				const float c22 = Mat33::determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r1.x, m.r1.y, m.r1.w, m.r3.x, m.r3.y, m.r3.w));
-				const float c23 = -Mat33::determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r1.x, m.r1.y, m.r1.z, m.r3.x, m.r3.y, m.r3.z));
+				const float c20 = Mat33::Determinant(Mat33(m.r0.y, m.r0.z, m.r0.w, m.r1.y, m.r1.z, m.r1.w, m.r3.y, m.r3.z, m.r3.w));
+				const float c21 = -Mat33::Determinant(Mat33(m.r0.x, m.r0.z, m.r0.w, m.r1.x, m.r1.z, m.r1.w, m.r3.x, m.r3.z, m.r3.w));
+				const float c22 = Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r1.x, m.r1.y, m.r1.w, m.r3.x, m.r3.y, m.r3.w));
+				const float c23 = -Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r1.x, m.r1.y, m.r1.z, m.r3.x, m.r3.y, m.r3.z));
 
-				const float c30 = -Mat33::determinant(Mat33(m.r0.y, m.r0.z, m.r0.w, m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w));
-				const float c31 = Mat33::determinant(Mat33(m.r0.x, m.r0.z, m.r0.w, m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w));
-				const float c32 = -Mat33::determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w));
-				const float c33 = Mat33::determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z));
+				const float c30 = -Mat33::Determinant(Mat33(m.r0.y, m.r0.z, m.r0.w, m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w));
+				const float c31 = Mat33::Determinant(Mat33(m.r0.x, m.r0.z, m.r0.w, m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w));
+				const float c32 = -Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w));
+				const float c33 = Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z));
 
 				const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
 				const float inv_det = 1.0f / det;
