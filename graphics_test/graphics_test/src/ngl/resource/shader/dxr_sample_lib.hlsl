@@ -3,7 +3,8 @@
 // DXRのRayTracing ShaderはStateObject生成時にShaderとRootSignatureのバインディングを完全にチェックするため
 // register指定を省略するとチェックに引っかかりStateObject生成に失敗する.
 
-
+// nglはrow-major.
+#pragma pack_matrix( row_major )
 
 // Global Srv.
 // システム供給のASはGlobalRootで衝突しないと思われるレジスタで供給.
@@ -13,6 +14,17 @@ RaytracingAccelerationStructure	rt_as : register(t65535);
 
 // Global Srv.
 RWTexture2D<float4>				out_uav : register(u0);
+
+
+
+cbuffer CbSceneView : register(b0)
+{
+	float3x4 cb_view_mtx;
+	float3x4 cb_view_inv_mtx;
+	float4x4 cb_proj_mtx;
+	float4x4 cb_proj_inv_mtx;
+};
+
 
 
 struct Payload
@@ -32,13 +44,16 @@ void rayGen()
 	float2 screen_size_f = float2(launch_dim.xy);
 
 
-	float aspect = screen_size_f.x / screen_size_f.y;
 	float2 ray_dir_xy = ((screen_pos_f / screen_size_f) * 2.0 - 1.0) * float2(1.0, -1.0);
 
-	float3 ray_dir = normalize(float3(ray_dir_xy.x * aspect, ray_dir_xy.y, 1.0));
+	float4 ray_dir_view = mul(cb_proj_inv_mtx, float4(ray_dir_xy, 1.0, 1.0));
+	ray_dir_view.xyz /= ray_dir_view.w;
+	float3 ray_dir_world = mul(cb_view_inv_mtx, float4(ray_dir_view.xyz, 1.0));
+	
+	float3 ray_dir = normalize(ray_dir_world.xyz);
 
 	RayDesc ray;
-	ray.Origin = float3(0.0, 2.0, -1.0);
+	ray.Origin = float3(cb_view_inv_mtx._m03, cb_view_inv_mtx._m13, cb_view_inv_mtx._m23);// float3(0.0, 2.0, -1.0);
 	ray.Direction = ray_dir;
 	ray.TMin = 0.0;
 	ray.TMax = 1e38;

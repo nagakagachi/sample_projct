@@ -324,7 +324,7 @@ namespace ngl
 			}
 
 		private:
-		private:
+			uint32_t frame_count_ = 0;
 
 			// BLAS.
 			// 管理責任はRaytraceStructureManager自身.
@@ -332,6 +332,10 @@ namespace ngl
 
 			// TLAS.
 			RaytraceStructureTop test_tlas_;
+
+
+			rhi::BufferDep				cb_test_scene_view[2];
+			rhi::ConstantBufferViewDep	cbv_test_scene_view[2];
 
 
 			// テスト用StateObject.

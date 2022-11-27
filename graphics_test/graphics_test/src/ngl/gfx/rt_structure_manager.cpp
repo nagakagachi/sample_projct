@@ -1085,6 +1085,16 @@ namespace ngl
 			return true;
 		}
 		// -------------------------------------------------------------------------------
+		namespace
+		{
+			struct CbSceneView
+			{
+				math::Mat34 cb_view_mtx;
+				math::Mat34 cb_view_inv_mtx;
+				math::Mat44 cb_proj_mtx;
+				math::Mat44 cb_proj_inv_mtx;
+			};
+		}
 
 		RaytraceStructureManager::RaytraceStructureManager()
 		{
@@ -1186,11 +1196,28 @@ namespace ngl
 				ray_result_state_ = rhi::ResourceState::General;
 			}
 
+			// SceneView定数バッファ.
+			{
+				rhi::BufferDep::Desc buff_desc = {};
+				buff_desc.heap_type = rhi::ResourceHeapType::Upload;
+				buff_desc.bind_flag = rhi::ResourceBindFlag::ConstantBuffer;
+				buff_desc.element_count = 1;
+				buff_desc.element_byte_size = sizeof(CbSceneView);
+				for (auto i = 0; i < std::size(cb_test_scene_view); ++i)
+				{
+					cb_test_scene_view[i].Initialize(p_device, buff_desc);
+					cbv_test_scene_view[i].Initialize(&cb_test_scene_view[i], {});
+				}
+			}
+
 			return true;
 		}
 
 		void RaytraceStructureManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
 		{
+			++frame_count_;
+			const uint32_t safe_frame_count_ = frame_count_ % 10000;
+
 			// 全BLASビルド.
 			for (auto& e : blas_array_)
 			{
@@ -1208,10 +1235,37 @@ namespace ngl
 					assert(false);
 				}
 			}
+
+			static float test_view_rot_radian = 0.0f;
+			test_view_rot_radian += 2.0f * math::k_pi_f / 600.0f;
+			if (2.0f * math::k_pi_f < test_view_rot_radian)
+			{
+				test_view_rot_radian -= 2.0f * math::k_pi_f;
+			}
+			float test_view_pos_y = 2.2f;
+			test_view_pos_y += 2.0f * std::sinf(float(safe_frame_count_) / 90.0f);
+
+			math::Mat34 view_mat = math::CalcViewMatrix(math::Vec3(0, test_view_pos_y,-1), math::Vec3(sin(test_view_rot_radian), 0, std::cosf(test_view_rot_radian)), math::Vec3(0, 1, 0));
+			math::Mat44 proj_mat = math::CalcStandardPerspectiveMatrix(math::Deg2Rad(60.0f), 16.0f / 9.0f, 0.1f, 10000.0f);
+
+			// 定数バッファ更新.
+			{
+				const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
+				if (auto* mapped = static_cast<CbSceneView*>(cb_test_scene_view[cb_index].Map()))
+				{
+					mapped->cb_view_mtx = view_mat;
+					mapped->cb_proj_mtx = proj_mat;
+					mapped->cb_view_inv_mtx = math::Mat34::Inverse(view_mat);
+					mapped->cb_proj_inv_mtx = math::Mat44::Inverse(proj_mat);
+					cb_test_scene_view[cb_index].Unmap();
+				}
+			}
 		}
 
 		void RaytraceStructureManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
 		{
+			const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
+
 			rhi::DeviceDep* p_device = p_command_list->GetDevice();
 			auto* d3d_device = p_device->GetD3D12Device();
 
@@ -1282,7 +1336,11 @@ namespace ngl
 				{
 					// FrameHeapにコピーする.
 
-					// uav 今のところこれだけだが今後ほかのSRVやその他UAV等も.
+					// Scene CBV
+					d3d_device->CopyDescriptorsSimple(1, descriptor_table_base_cbv.h_cpu, cbv_test_scene_view[cb_index].GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+
+					// uav 出力先のテストUAV.
 					d3d_device->CopyDescriptorsSimple(1, descriptor_table_base_uav.h_cpu, ray_result_uav_.GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 					// TODO.
