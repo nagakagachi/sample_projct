@@ -103,7 +103,7 @@ namespace ngl
 			return M;
 		}
 		
-		// Standard Perspective Projection Matrix (LeftHand).
+		// Standard Perspective Projection Matrix (default:LeftHand).
 		//	fov_y_radian : full angle of Vertical FOV.
 		inline Mat44 CalcStandardPerspectiveMatrix
 		(
@@ -140,7 +140,7 @@ namespace ngl
 			return coef;
 		}
 
-		// Reverse Perspective Projection Matrix (LeftHand).
+		// Reverse Perspective Projection Matrix (default:LeftHand).
 		//	fov_y_radian : full angle of Vertical FOV.
 		inline Mat44 CalcReversePerspectiveMatrix
 		(
@@ -177,26 +177,29 @@ namespace ngl
 			return coef;
 		}
 
-		// InfiniteFar and Reverse Z Perspective Projection Matrix (LeftHand).
+		// InfiniteFar and Reverse Z Perspective Projection Matrix (default:LeftHand).
 		//	fov_y_radian : full angle of Vertical FOV.
 		//	Z-> near:1, far:0
+		//	https://thxforthefish.com/posts/reverse_z/
 		inline Mat44 CalcReverseInfiniteFarPerspectiveMatrix
 		(
 			float fov_y_radian,
 			float aspect_ratio,
-			float near_z
+			float near_z,
+			bool is_right_hand = false
 		)
 		{
 			const float fov_y_half = fov_y_radian * 0.5f;
 			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
 			const float h = 1.0f / fov_tan;
 			const float w = h / aspect_ratio;
+			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
 			
 			return Mat44(
 				w, 0, 0, 0,
 				0, h, 0, 0,
 				0, 0, 0, near_z,
-				0, 0, 1, 0
+				0, 0, z_sign, 0
 			);
 		}
 		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
