@@ -1093,6 +1093,18 @@ namespace ngl
 				math::Mat34 cb_view_inv_mtx;
 				math::Mat44 cb_proj_mtx;
 				math::Mat44 cb_proj_inv_mtx;
+
+				// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
+				//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
+				//
+				//		cb_ndc_z_to_view_z_coef = 
+				//			Standard RH: (-far_z * near_z, near_z - far_z, far_z, 0.0)
+				//			Standard LH: ( far_z * near_z, near_z - far_z, far_z, 0.0)
+				//			Reverse RH: (-far_z * near_z, far_z - near_z, near_z, 0.0)
+				//			Reverse LH: ( far_z * near_z, far_z - near_z, near_z, 0.0)
+				//			Infinite Far Reverse RH: (-near_z, 1.0, 0.0, 0.0)
+				//			Infinite Far Reverse RH: ( near_z, 1.0, 0.0, 0.0)
+				math::Vec4	cb_ndc_z_to_view_z_coef;
 			};
 		}
 
@@ -1243,11 +1255,26 @@ namespace ngl
 				test_view_rot_radian -= 2.0f * math::k_pi_f;
 			}
 			float test_view_pos_y = 2.2f;
-			test_view_pos_y += 2.0f * std::sinf(float(safe_frame_count_) / 90.0f);
+			//test_view_pos_y += 2.0f * std::sinf(float(safe_frame_count_) / 90.0f);
 
-			math::Mat34 view_mat = math::CalcViewMatrix(math::Vec3(0, test_view_pos_y,-1), math::Vec3(sin(test_view_rot_radian), 0, std::cosf(test_view_rot_radian)), math::Vec3(0, 1, 0));
-			math::Mat44 proj_mat = math::CalcStandardPerspectiveMatrix(math::Deg2Rad(60.0f), 16.0f / 9.0f, 0.1f, 10000.0f);
+			math::Mat34 view_mat = math::CalcViewMatrix(math::Vec3(0, test_view_pos_y, 0.0f), math::Vec3(sin(test_view_rot_radian), 0, std::cosf(test_view_rot_radian)), math::Vec3(0, 1, 0));
 
+			const float fov_y = math::Deg2Rad(50.0f);
+			const float near_z = 0.1f;
+			const float far_z = 10000.0f;
+#if 1
+			// Infinite Far Reverse Perspective
+			math::Mat44 proj_mat = math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, 16.0f / 9.0f, 0.1f);
+			math::Vec4 ndc_z_to_view_z_coef = math::CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(near_z);
+#elif 0
+			// Reverse Perspective
+			math::Mat44 proj_mat = math::CalcReversePerspectiveMatrix(fov_y, 16.0f / 9.0f, 0.1f, far_z);
+			math::Vec4 ndc_z_to_view_z_coef = math::CalcViewDepthReconstructCoefForReversePerspective(near_z, far_z);
+#else
+			// 標準Perspective
+			math::Mat44 proj_mat = math::CalcStandardPerspectiveMatrix(fov_y, 16.0f / 9.0f, 0.1f, far_z);
+			math::Vec4 ndc_z_to_view_z_coef = math::CalcViewDepthReconstructCoefForStandardPerspective(near_z, far_z);
+#endif
 			// 定数バッファ更新.
 			{
 				const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
@@ -1257,6 +1284,9 @@ namespace ngl
 					mapped->cb_proj_mtx = proj_mat;
 					mapped->cb_view_inv_mtx = math::Mat34::Inverse(view_mat);
 					mapped->cb_proj_inv_mtx = math::Mat44::Inverse(proj_mat);
+
+					mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
+
 					cb_test_scene_view[cb_index].Unmap();
 				}
 			}

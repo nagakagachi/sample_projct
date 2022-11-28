@@ -128,6 +128,54 @@ namespace ngl
 				0,	0, z_sign,	0
 			);
 		}
+		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
+		//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
+		//		cb_ndc_z_to_view_z_coef = 
+		//			Standard LH: ( far_z * near_z, near_z - far_z, far_z, 0.0)
+		//			Standard RH: (-far_z * near_z, near_z - far_z, far_z, 0.0)
+		inline constexpr Vec4 CalcViewDepthReconstructCoefForStandardPerspective(float near_z, float far_z, bool is_right_hand = false)
+		{
+			const float sign = (!is_right_hand) ? 1.0f : -1.0f;
+			Vec4 coef(sign * far_z * near_z, near_z - far_z, far_z, 0.0);
+			return coef;
+		}
+
+		// Reverse Perspective Projection Matrix (LeftHand).
+		//	fov_y_radian : full angle of Vertical FOV.
+		inline Mat44 CalcReversePerspectiveMatrix
+		(
+			float fov_y_radian,
+			float aspect_ratio,
+			float near_z,
+			float far_z,
+			bool is_right_hand = false
+		)
+		{
+			const float fov_y_half = fov_y_radian * 0.5f;
+			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
+			const float h = 1.0f / fov_tan;
+			const float w = h / aspect_ratio;
+			const float range_term = far_z / (near_z - far_z);
+			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
+
+			return Mat44(
+				w, 0, 0, 0,
+				0, h, 0, 0,
+				0, 0, z_sign * range_term, -near_z * range_term,
+				0, 0, z_sign, 0
+			);
+		}
+		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
+		//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
+		//		cb_ndc_z_to_view_z_coef = 
+		//			Reverse LH: ( far_z * near_z, far_z - near_z, near_z, 0.0)
+		//			Reverse RH: (-far_z * near_z, far_z - near_z, near_z, 0.0)
+		inline constexpr Vec4 CalcViewDepthReconstructCoefForReversePerspective(float near_z, float far_z, bool is_right_hand = false)
+		{
+			const float sign = (!is_right_hand) ? 1.0f : -1.0f;
+			Vec4 coef(sign * far_z * near_z, far_z - near_z, near_z, 0.0);
+			return coef;
+		}
 
 		// InfiniteFar and Reverse Z Perspective Projection Matrix (LeftHand).
 		//	fov_y_radian : full angle of Vertical FOV.
@@ -151,6 +199,18 @@ namespace ngl
 				0, 0, 1, 0
 			);
 		}
+		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
+		//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
+		//		cb_ndc_z_to_view_z_coef = 
+		//			Infinite Far Reverse LH: ( near_z, 1.0, 0.0, 0.0)
+		//			Infinite Far Reverse RH: (-near_z, 1.0, 0.0, 0.0)
+		inline constexpr Vec4 CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(float near_z, bool is_right_hand = false)
+		{
+			const float sign = (!is_right_hand) ? 1.0f : -1.0f;
+			Vec4 coef(sign * near_z, 1.0f, 0.0f, 0.0);
+			return coef;
+		}
+
 
 		// 標準平行投影.
 		inline Mat44 CalcStandardOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = false)

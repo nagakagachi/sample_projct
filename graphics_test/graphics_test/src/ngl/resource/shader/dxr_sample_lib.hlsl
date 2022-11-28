@@ -3,7 +3,7 @@
 // DXRのRayTracing ShaderはStateObject生成時にShaderとRootSignatureのバインディングを完全にチェックするため
 // register指定を省略するとチェックに引っかかりStateObject生成に失敗する.
 
-// nglはrow-major.
+// nglのmatrix系ははrow-majorメモリレイアウトであるための指定.
 #pragma pack_matrix( row_major )
 
 // Global Srv.
@@ -16,13 +16,24 @@ RaytracingAccelerationStructure	rt_as : register(t65535);
 RWTexture2D<float4>				out_uav : register(u0);
 
 
-
 cbuffer CbSceneView : register(b0)
 {
 	float3x4 cb_view_mtx;
 	float3x4 cb_view_inv_mtx;
 	float4x4 cb_proj_mtx;
 	float4x4 cb_proj_inv_mtx;
+
+	// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
+	//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
+	//
+	//		cb_ndc_z_to_view_z_coef = 
+	//			Standard RH: (-far_z * near_z, near_z - far_z, far_z, 0.0)
+	//			Standard LH: ( far_z * near_z, near_z - far_z, far_z, 0.0)
+	//			Reverse RH: (-far_z * near_z, far_z - near_z, near_z, 0.0)
+	//			Reverse LH: ( far_z * near_z, far_z - near_z, near_z, 0.0)
+	//			Infinite Far Reverse RH: (-near_z, 1.0, 0.0, 0.0)
+	//			Infinite Far Reverse RH: ( near_z, 1.0, 0.0, 0.0)
+	float4	cb_ndc_z_to_view_z_coef;
 };
 
 
@@ -44,21 +55,33 @@ void rayGen()
 	float2 screen_size_f = float2(launch_dim.xy);
 
 
-	float2 ray_dir_xy = ((screen_pos_f / screen_size_f) * 2.0 - 1.0) * float2(1.0, -1.0);
+	float2 ndc_xy = ((screen_pos_f / screen_size_f) * 2.0 - 1.0) * float2(1.0, -1.0);
 
-	float4 ray_dir_view = mul(cb_proj_inv_mtx, float4(ray_dir_xy, 1.0, 1.0));
+#if 1
+	// 逆行列を使わずにProj行列の要素からレイ方向計算.
+	const float inv_tan_horizontal = cb_proj_mtx._m00; // m00 = 1/tan(fov_x*0.5)
+	const float inv_tan_vertical = cb_proj_mtx._m11; // m11 = 1/tan(fov_y*0.5)
+	const float3 ray_dir_view = float3(ndc_xy.x / inv_tan_horizontal, ndc_xy.y / inv_tan_vertical, 1.0);
+
+	// 向きのみなので w=0
+	float3 ray_dir_world = mul(cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
+#else
+	// 逆行列からレイ方向計算.
+	float4 ray_dir_view = mul(cb_proj_inv_mtx, float4(ndc_xy, 1.0, 1.0));
 	ray_dir_view.xyz /= ray_dir_view.w;
-	float3 ray_dir_world = mul(cb_view_inv_mtx, float4(ray_dir_view.xyz, 1.0));
+
+	// 向きのみなので w=0
+	float3 ray_dir_world = mul(cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
+#endif
 	
 	float3 ray_dir = normalize(ray_dir_world.xyz);
 
 	RayDesc ray;
-	ray.Origin = float3(cb_view_inv_mtx._m03, cb_view_inv_mtx._m13, cb_view_inv_mtx._m23);// float3(0.0, 2.0, -1.0);
+	ray.Origin = float3(cb_view_inv_mtx._m03, cb_view_inv_mtx._m13, cb_view_inv_mtx._m23);// View逆行列からRay始点取得.
 	ray.Direction = ray_dir;
 	ray.TMin = 0.0;
 	ray.TMax = 1e38;
 
-	
 	Payload payload;
 	const int ray_flag = 0;
 	// HItGroupIndex計算時に加算される値. ShadowやAO等のPass毎のシェーダを切り替える際のインデックスに使うなど.
