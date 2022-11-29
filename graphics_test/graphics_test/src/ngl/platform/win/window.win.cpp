@@ -177,13 +177,15 @@ namespace ngl
 
 				// フラグのリセットなどのために破棄処理呼び出し.
 				Destroy();
+				break;
 			}
-			return 0;
 
 			// デフォルトの場合
 			default:
-				return DefWindowProc(hWnd, message, wParam, lParam);
+				break;
 			}
+
+			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
 
 	}
