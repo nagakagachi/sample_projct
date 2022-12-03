@@ -1,6 +1,8 @@
 ﻿
 #include "window.win.h"
 
+//#include <windowsx.h>
+
 
 namespace ngl
 {
@@ -180,12 +182,55 @@ namespace ngl
 				break;
 			}
 
-			// デフォルトの場合
 			default:
 				break;
 			}
 
+			InputProc(message, wParam, lParam);
+
 			return DefWindowProc(hWnd, message, wParam, lParam);
+		}
+
+
+		void CoreWindowImplDep::InputProc(UINT message, WPARAM wParam, LPARAM lParam)
+		{
+			if (message == WM_KEYDOWN || message == WM_KEYUP)
+			{
+				// keyboard virtual key state. VK_LEFT, VK_0, VK_A, VK_Z, VK_OEM_PLUS.
+				int keyboard_key = -1;
+				bool keyboard_down = (message == WM_KEYDOWN);
+				if (0 < wParam && 0xff > wParam)
+				{
+					keyboard_key = (int)wParam;
+
+					virtual_key_state_[keyboard_key] = (keyboard_down) ? 1 : 0;
+				}
+			}
+			else if (message == WM_MOUSEMOVE)
+			{
+				// position.
+				mouse_pos_x_ = LOWORD(lParam);
+				mouse_pos_y_ = HIWORD(lParam);
+
+				mouse_pos_x_rate_ = static_cast<float>(mouse_pos_x_) / static_cast<float>(screen_w_);
+				mouse_pos_y_rate_ = static_cast<float>(mouse_pos_y_) / static_cast<float>(screen_h_);
+			}
+			else if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP)
+			{
+				// mouse left button.
+				mouse_left_state_ = (message == WM_LBUTTONDOWN);
+			}
+			else if (message == WM_RBUTTONDOWN || message == WM_RBUTTONUP)
+			{
+				// mouse right button.
+				mouse_right_state_ = (message == WM_RBUTTONDOWN);
+			}
+			else if (message == WM_MBUTTONDOWN || message == WM_MBUTTONUP)
+			{
+				// mouse middl button.
+				mouse_middle_state_ = (message == WM_MBUTTONDOWN);
+			}
+
 		}
 
 	}

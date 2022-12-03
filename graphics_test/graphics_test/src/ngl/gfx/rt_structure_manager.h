@@ -318,6 +318,8 @@ namespace ngl
 			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
 
 
+			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up);
+
 			const rhi::ShaderResourceViewDep* GetResultSrv() const
 			{
 				return &ray_result_srv_;
@@ -351,6 +353,11 @@ namespace ngl
 			rhi::ShaderResourceViewDep	ray_result_srv_;
 			rhi::UnorderedAccessView	ray_result_uav_;
 			rhi::ResourceState			ray_result_state_ = {};
+
+
+			math::Vec3 camera_pos_ = {};
+			math::Vec3 camera_dir_ = {};
+			math::Vec3 camera_up_ = {};
 		};
 
 	}

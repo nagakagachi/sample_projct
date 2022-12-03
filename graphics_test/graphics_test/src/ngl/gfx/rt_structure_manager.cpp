@@ -1248,6 +1248,7 @@ namespace ngl
 				}
 			}
 
+#if 0
 			static float test_view_rot_radian = 0.0f;
 			test_view_rot_radian += 2.0f * math::k_pi_f / 600.0f;
 			if (2.0f * math::k_pi_f < test_view_rot_radian)
@@ -1255,10 +1256,11 @@ namespace ngl
 				test_view_rot_radian -= 2.0f * math::k_pi_f;
 			}
 			float test_view_pos_y = 2.2f;
-			//test_view_pos_y += 2.0f * std::sinf(float(safe_frame_count_) / 90.0f);
-
+			
 			math::Mat34 view_mat = math::CalcViewMatrix(math::Vec3(0, test_view_pos_y, 0.0f), math::Vec3(sin(test_view_rot_radian), 0, std::cosf(test_view_rot_radian)), math::Vec3(0, 1, 0));
-
+#else
+			math::Mat34 view_mat = math::CalcViewMatrix(camera_pos_, camera_dir_, camera_up_);
+#endif
 			const float fov_y = math::Deg2Rad(50.0f);
 			const float near_z = 0.1f;
 			const float far_z = 10000.0f;
@@ -1424,6 +1426,12 @@ namespace ngl
 			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}
 
+		void  RaytraceStructureManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up)
+		{
+			camera_pos_ = position;
+			camera_dir_ = dir;
+			camera_up_ = up;
+		}
 
 	}
 }

@@ -64,6 +64,10 @@ private:
 	ngl::math::Vec4 clear_color_ = ngl::math::Vec4(0.0f);
 
 
+	ngl::math::Vec3		camera_pos_ = {};
+	ngl::math::Mat33	camera_pose_ = ngl::math::Mat33::Identity();
+
+
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
 	
@@ -889,19 +893,115 @@ bool AppGame::Execute()
 	{
 		return false;
 	}
-
-	ngl::u32 screen_w, screen_h;
-	window_.Impl()->GetScreenSize(screen_w, screen_h);
-
 	{
 		frame_sec_ = ngl::time::Timer::Instance().GetElapsedSec("app_frame_sec");
 		app_sec_ += frame_sec_;
 
-		//std::cout << "Frame Second: " << frame_sec_ << std::endl;
-
 		// 再スタート
 		ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	}
+	const float delta_sec = static_cast<float>(frame_sec_);
+
+	// カメラ操作.
+	{
+		const auto mouse_pos = window_.Dep().GetMousePosition();
+		const auto mouse_pos_rate = window_.Dep().GetMousePositionRate();
+		const bool mouse_l = window_.Dep().GetMouseLeft();
+		const bool mouse_r = window_.Dep().GetMouseRight();
+		const bool mouse_m = window_.Dep().GetMouseMiddle();
+
+		{
+			static ngl::math::Vec2 prev_mouse_pos = {};
+
+			const auto mx = (float)std::get<0>(mouse_pos);
+			const auto my = (float)std::get<1>(mouse_pos);
+			const ngl::math::Vec2 mouse_pos(mx, my);
+
+			static bool prev_mouse_r = false;
+			if (!prev_mouse_r && mouse_r)
+			{
+				// MouseR Start.
+				prev_mouse_pos = mouse_pos;
+			}
+			if (prev_mouse_r && !mouse_r)
+			{
+				// MouseR End.
+			}
+
+			// UEライクなマウスR押下中にカメラ向きと位置操作(WASD)
+			// TODO マウスR押下中に実際のマウス位置を動かさないようにしたい(ウィンドウから出てしまうので)
+			if (mouse_r)
+			{
+				// マウス押下中カーソル移動量(pixel)
+				const ngl::math::Vec2 mouse_diff = mouse_pos - prev_mouse_pos;
+				prev_mouse_pos = mouse_pos;
+				//std::cout << "mouse pos(pixel) " << mouse_diff.x << " , " << mouse_diff.y << std::endl;
+
+				// 適当に回転量へ.
+				const auto rot_rad = ngl::math::k_pi_f* mouse_diff * 0.001f;
+				auto rot_yaw = ngl::math::Mat33::RotAxisY(rot_rad.x);
+				auto rot_pitch = ngl::math::Mat33::RotAxisX(rot_rad.y);
+				// 回転.
+				camera_pose_ = camera_pose_ * rot_yaw * rot_pitch;
+				{
+					// sideベクトルをワールドXZ麺に制限.
+					if (0.9999 > std::fabsf(camera_pose_.GetColumn2().y))
+					{
+						// 視線がY-Axisと不一致なら視線ベクトルとY-Axisから補正.
+						const float sign_y = (0.0f < camera_pose_.GetColumn1().y) ? 1.0f : -1.0f;
+						auto lx = ngl::math::Vec3::Cross(ngl::math::Vec3::UnitY() * sign_y, camera_pose_.GetColumn2());
+						auto ly = ngl::math::Vec3::Cross(camera_pose_.GetColumn2(), lx);
+						const auto cam_pose_transpose = ngl::math::Mat33(ngl::math::Vec3::Normalize(lx), ngl::math::Vec3::Normalize(ly), camera_pose_.GetColumn2());
+						camera_pose_ = ngl::math::Mat33::Transpose(cam_pose_transpose);
+					}
+					else
+					{
+						// 視線がY-Axisと一致か近いならサイドベクトルのY成分潰して補正.
+						auto lx = camera_pose_.GetColumn1();
+						lx = ngl::math::Vec3({ lx.x, 0.0f, lx.z });
+						auto ly = ngl::math::Vec3::Cross(camera_pose_.GetColumn2(), lx);
+						const auto cam_pose_transpose = ngl::math::Mat33(ngl::math::Vec3::Normalize(lx), ngl::math::Vec3::Normalize(ly), camera_pose_.GetColumn2());
+						camera_pose_ = ngl::math::Mat33::Transpose(cam_pose_transpose);
+					}
+				}
+
+				// 移動.
+				{
+					const auto vk_a = 65;// VK_A.
+					if (window_.Dep().GetVirtualKeyState()[VK_SPACE])
+					{
+						camera_pos_ += camera_pose_.GetColumn1() * delta_sec * 5.0f;
+					}
+					if (window_.Dep().GetVirtualKeyState()[VK_CONTROL])
+					{
+						camera_pos_ += -camera_pose_.GetColumn1() * delta_sec * 5.0f;
+					}
+					if (window_.Dep().GetVirtualKeyState()[vk_a + 'w' - 'a'])
+					{
+						camera_pos_ += camera_pose_.GetColumn2() * delta_sec * 5.0f;
+					}
+					if (window_.Dep().GetVirtualKeyState()[vk_a + 's' - 'a'])
+					{
+						camera_pos_ += -camera_pose_.GetColumn2() * delta_sec * 5.0f;
+					}
+					if (window_.Dep().GetVirtualKeyState()[vk_a + 'd' - 'a'])
+					{
+						camera_pos_ += camera_pose_.GetColumn0() * delta_sec * 5.0f;
+					}
+					if (window_.Dep().GetVirtualKeyState()[vk_a + 'a' - 'a'])
+					{
+						camera_pos_ += -camera_pose_.GetColumn0() * delta_sec * 5.0f;
+					}
+				}
+			}
+			prev_mouse_r = mouse_r;
+		}
+	}
+	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1());
+
+	ngl::u32 screen_w, screen_h;
+	window_.Impl()->GetScreenSize(screen_w, screen_h);
+
 
 	{
 		auto c0 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.0f));

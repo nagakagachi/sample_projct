@@ -40,6 +40,14 @@ namespace ngl
 				, r1(row1)
 			{
 			}
+			Vec2 GetColumn0() const
+			{
+				return Vec2(r0.x, r1.x);
+			}
+			Vec2 GetColumn1() const
+			{
+				return Vec2(r0.y, r1.y);
+			}
 
 			static constexpr Mat22 Zero()
 			{
@@ -81,6 +89,14 @@ namespace ngl
 				return Mat22(
 					c00 * inv_det, c10 * inv_det,
 					c01 * inv_det, c11 * inv_det
+				);
+			}
+			// 回転行列.
+			static Mat22 Rot(float radian)
+			{
+				return Mat22(
+					std::cosf(radian), -std::sinf(radian),
+					std::sinf(radian), std::cosf(radian)
 				);
 			}
 		};
@@ -162,6 +178,18 @@ namespace ngl
 				, r2(row2)
 			{
 			}
+			Vec3 GetColumn0() const
+			{
+				return Vec3(r0.x, r1.x, r2.x);
+			}
+			Vec3 GetColumn1() const
+			{
+				return Vec3(r0.y, r1.y, r2.y);
+			}
+			Vec3 GetColumn2() const
+			{
+				return Vec3(r0.z, r1.z, r2.z);
+			}
 
 			static constexpr Mat33 Zero()
 			{
@@ -215,6 +243,34 @@ namespace ngl
 					c00 * inv_det, c10 * inv_det, c20 * inv_det,
 					c01 * inv_det, c11 * inv_det, c21 * inv_det,
 					c02 * inv_det, c12 * inv_det, c22 * inv_det
+				);
+			}
+
+			// X軸回転行列.
+			static Mat33 RotAxisX(float radian)
+			{
+				return Mat33(
+					1.0f, 0.0f, 0.0f,
+					0.0f, std::cosf(radian), -std::sinf(radian),
+					0.0f, std::sinf(radian), std::cosf(radian)
+				);
+			}
+			// Y軸回転行列.
+			static Mat33 RotAxisY(float radian)
+			{
+				return Mat33(
+					std::cosf(radian), 0.0f, std::sinf(radian),
+					0.0f, 1.0f, 0.0f,
+					-std::sinf(radian), 0.0f, std::cosf(radian)
+				);
+			}
+			// Z軸回転行列.
+			static Mat33 RotAxisZ(float radian)
+			{
+				return Mat33(
+					std::cosf(radian), -std::sinf(radian), 0.0f,
+					std::sinf(radian), std::cosf(radian), 0.0f,
+					0.0f, 0.0f, 1.0f
 				);
 			}
 		};
@@ -311,6 +367,22 @@ namespace ngl
 				, r3(row3)
 			{
 			}
+			Vec4 GetColumn0() const
+			{
+				return Vec4(r0.x, r1.x, r2.x, r3.x);
+			}
+			Vec4 GetColumn1() const
+			{
+				return Vec4(r0.y, r1.y, r2.y, r3.y);
+			}
+			Vec4 GetColumn2() const
+			{
+				return Vec4(r0.z, r1.z, r2.z, r3.z);
+			}
+			Vec4 GetColumn3() const
+			{
+				return Vec4(r0.w, r1.w, r2.w, r3.w);
+			}
 
 
 			static constexpr Mat44 Zero()
@@ -379,6 +451,37 @@ namespace ngl
 					c01 * inv_det, c11 * inv_det, c21 * inv_det, c31 * inv_det,
 					c02 * inv_det, c12 * inv_det, c22 * inv_det, c32 * inv_det,
 					c03 * inv_det, c13 * inv_det, c23 * inv_det, c33 * inv_det
+				);
+			}
+
+			// X軸回転行列.
+			static Mat44 RotAxisX(float radian)
+			{
+				return Mat44(
+					1.0f, 0.0f, 0.0f, 0.0f,
+					0.0f, std::cosf(radian), -std::sinf(radian), 0.0f,
+					0.0f, std::sinf(radian), std::cosf(radian), 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
+				);
+			}
+			// Y軸回転行列.
+			static Mat44 RotAxisY(float radian)
+			{
+				return Mat44(
+					std::cosf(radian), 0.0f, std::sinf(radian), 0.0f,
+					0.0f, 1.0f, 0.0f, 0.0f,
+					-std::sinf(radian), 0.0f, std::cosf(radian), 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
+				);
+			}
+			// Z軸回転行列.
+			static Mat44 RotAxisZ(float radian)
+			{
+				return Mat44(
+					std::cosf(radian), -std::sinf(radian), 0.0f, 0.0f,
+					std::sinf(radian), std::cosf(radian), 0.0f, 0.0f,
+					0.0f, 0.0f, 1.0f, 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
 				);
 			}
 		};
@@ -480,6 +583,22 @@ namespace ngl
 				: r0(m.r0.x, m.r0.y, m.r0.z, 0.0f), r1(m.r1.x, m.r1.y, m.r1.z, 0.0f), r2(m.r2.x, m.r2.y, m.r2.z)
 			{
 			}
+			Vec3 GetColumn0() const
+			{
+				return Vec3(r0.x, r1.x, r2.x);
+			}
+			Vec3 GetColumn1() const
+			{
+				return Vec3(r0.y, r1.y, r2.y);
+			}
+			Vec3 GetColumn2() const
+			{
+				return Vec3(r0.z, r1.z, r2.z);
+			}
+			Vec3 GetColumn3() const
+			{
+				return Vec3(r0.w, r1.w, r2.w);
+			}
 
 			static constexpr Mat34 Zero()
 			{
@@ -512,6 +631,34 @@ namespace ngl
 					Vec4(inv33.r1, ny),
 					Vec4(inv33.r2, nz),
 				};
+			}
+
+			// X軸回転行列.
+			static Mat34 RotAxisX(float radian)
+			{
+				return Mat34(
+					1.0f, 0.0f, 0.0f, 0.0f,
+					0.0f, std::cosf(radian), -std::sinf(radian), 0.0f,
+					0.0f, std::sinf(radian), std::cosf(radian), 0.0f
+				);
+			}
+			// Y軸回転行列.
+			static Mat34 RotAxisY(float radian)
+			{
+				return Mat34(
+					std::cosf(radian), 0.0f, std::sinf(radian), 0.0f,
+					0.0f, 1.0f, 0.0f, 0.0f,
+					-std::sinf(radian), 0.0f, std::cosf(radian), 0.0f
+				);
+			}
+			// Z軸回転行列.
+			static Mat34 RotAxisZ(float radian)
+			{
+				return Mat34(
+					std::cosf(radian), -std::sinf(radian), 0.0f, 0.0f,
+					std::sinf(radian), std::cosf(radian), 0.0f, 0.0f,
+					0.0f, 0.0f, 1.0f, 0.0f
+				);
 			}
 		};
 	}
