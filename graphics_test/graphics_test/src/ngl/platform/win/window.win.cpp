@@ -256,9 +256,9 @@ namespace ngl
 
 				if (req_fix_mouse_pos_)
 				{
+					// マウス位置固定リクエスト処理. Deltaについては適切な値が取れるようにしている.
 					mx = req_mouse_pos_x_;
 					my = req_mouse_pos_y_;
-
 
 					POINT lefttop;
 					lefttop.x = 0;

@@ -64,7 +64,7 @@ private:
 	ngl::math::Vec4 clear_color_ = ngl::math::Vec4(0.0f);
 
 
-	ngl::math::Vec3		camera_pos_ = {};
+	ngl::math::Vec3		camera_pos_ = {0.0f, 2.0f, -1.0f};
 	ngl::math::Mat33	camera_pose_ = ngl::math::Mat33::Identity();
 
 
@@ -902,7 +902,7 @@ bool AppGame::Execute()
 	}
 	const float delta_sec = static_cast<float>(frame_sec_);
 
-	// カメラ操作.
+	// 操作系.
 	{
 		const auto mouse_pos = window_.Dep().GetMousePosition();
 		const auto mouse_pos_delta = window_.Dep().GetMousePositionDelta();
@@ -939,7 +939,6 @@ bool AppGame::Execute()
 			{
 				// マウス押下中カーソル移動量(pixel)
 				const ngl::math::Vec2 mouse_diff((float)std::get<0>(mouse_pos_delta), (float)std::get<1>(mouse_pos_delta));
-				std::cout << "mouse pos(pixel) " << mouse_diff.x << " , " << mouse_diff.y << std::endl;
 
 				// 向き.
 				if(true)
@@ -1011,13 +1010,10 @@ bool AppGame::Execute()
 
 
 	{
-		auto c0 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.0f));
-		auto c1 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.25f));
-		auto c2 = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.5f));
-
-		clear_color_.x = c0 * 0.5f + 0.5f;
-		clear_color_.y = c1 * 0.5f + 0.5f;
-		clear_color_.z = c2 * 0.5f + 0.5f;
+		// クリアカラー操作.
+		clear_color_.x = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.0f)) * 0.5f + 0.5f;
+		clear_color_.y = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.25f)) * 0.5f + 0.5f;
+		clear_color_.z = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.5f)) * 0.5f + 0.5f;
 	}
 
 	// Render Loop
@@ -1139,8 +1135,6 @@ bool AppGame::Execute()
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSampleVs", cbv_sample_vs_.GetView().cpu_handle);
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
 
-
-						//sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", tex_rt_srv_.GetView().cpu_handle);
 						// Raytraceの出力バッファをシェーダリソースに利用するテスト.
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", rt_st_.GetResultSrv()->GetView().cpu_handle);
 

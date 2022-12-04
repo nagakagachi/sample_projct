@@ -25,6 +25,7 @@ namespace ngl
 		class CoreWindowImplDep : public CoreWindowImpl
 		{
 		public:
+
 			CoreWindowImplDep();
 			virtual ~CoreWindowImplDep();
 
@@ -33,6 +34,9 @@ namespace ngl
 			virtual bool IsValid() const override;
 
 			virtual void GetScreenSize(unsigned int& w, unsigned int& h) const override;
+
+
+		public:
 
 			// クライアントサイズからウィンドウのサイズを計算
 			void GetWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh);
@@ -53,6 +57,13 @@ namespace ngl
 			// ウィンドウプロシージャの実装
 			virtual LRESULT MainProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
+		protected:
+			// ポインタの設定
+			void SetPointer(HWND hWnd, CoreWindowImplDep* ptr);
+
+
+		public:
+			// 入力系
 
 			const unsigned char* GetVirtualKeyState() const
 			{
@@ -99,9 +110,6 @@ namespace ngl
 			//
 			void SetMousePositionClipInWindow(bool clip_enable);
 
-		protected:
-			// ポインタの設定
-			void SetPointer(HWND hWnd, CoreWindowImplDep* ptr);
 
 		private:
 			void InputProc(UINT message, WPARAM wParam, LPARAM lParam);
