@@ -192,6 +192,35 @@ namespace ngl
 		}
 
 
+		void CoreWindowImplDep::SetMousePositionClipInWindow(bool clip_enable)
+		{
+			if (clip_enable)
+			{
+				// GetWindowRect等でクライアント領域のスクリーン座標が取れないのでClientToScreenで取得. DPI対応とかがこわいかも.
+
+				POINT lefttop;
+				POINT rightbottom;
+				lefttop.x = 0;
+				lefttop.y = 0;
+				rightbottom.x = screen_w_ - 1;
+				rightbottom.y = screen_h_ - 1;
+				
+				ClientToScreen(hwnd_, &lefttop);
+				ClientToScreen(hwnd_, &rightbottom);
+
+				RECT win_rect = {};
+				win_rect.left = lefttop.x;
+				win_rect.top = lefttop.y;
+				win_rect.right = rightbottom.x;
+				win_rect.bottom = rightbottom.y;
+
+				ClipCursor(&win_rect);
+			}
+			else
+			{
+				ClipCursor(nullptr);
+			}
+		}
 		void CoreWindowImplDep::InputProc(UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			if (message == WM_KEYDOWN || message == WM_KEYUP)
@@ -209,11 +238,38 @@ namespace ngl
 			else if (message == WM_MOUSEMOVE)
 			{
 				// position.
-				mouse_pos_x_ = LOWORD(lParam);
-				mouse_pos_y_ = HIWORD(lParam);
+				auto mx = LOWORD(lParam);
+				auto my = HIWORD(lParam);
 
-				mouse_pos_x_rate_ = static_cast<float>(mouse_pos_x_) / static_cast<float>(screen_w_);
-				mouse_pos_y_rate_ = static_cast<float>(mouse_pos_y_) / static_cast<float>(screen_h_);
+				bool is_first = is_first_mouse_pos_sample_;
+				if (is_first_mouse_pos_sample_)
+				{
+					is_first_mouse_pos_sample_ = false;
+					mouse_pos_delta_x_ = 0;
+					mouse_pos_delta_y_ = 0;
+				}
+				else
+				{
+					mouse_pos_delta_x_ = mx - mouse_pos_x_;
+					mouse_pos_delta_y_ = my - mouse_pos_y_;
+				}
+
+				if (req_fix_mouse_pos_)
+				{
+					mx = req_mouse_pos_x_;
+					my = req_mouse_pos_y_;
+
+
+					POINT lefttop;
+					lefttop.x = 0;
+					lefttop.y = 0;
+					ClientToScreen(hwnd_, &lefttop);
+
+					SetCursorPos(lefttop.x + mx, lefttop.y + my);
+				}
+
+				mouse_pos_x_ = mx;
+				mouse_pos_y_ = my;
 			}
 			else if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP)
 			{

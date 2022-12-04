@@ -905,27 +905,32 @@ bool AppGame::Execute()
 	// カメラ操作.
 	{
 		const auto mouse_pos = window_.Dep().GetMousePosition();
-		const auto mouse_pos_rate = window_.Dep().GetMousePositionRate();
+		const auto mouse_pos_delta = window_.Dep().GetMousePositionDelta();
 		const bool mouse_l = window_.Dep().GetMouseLeft();
 		const bool mouse_r = window_.Dep().GetMouseRight();
 		const bool mouse_m = window_.Dep().GetMouseMiddle();
 
 		{
-			static ngl::math::Vec2 prev_mouse_pos = {};
-
-			const auto mx = (float)std::get<0>(mouse_pos);
-			const auto my = (float)std::get<1>(mouse_pos);
-			const ngl::math::Vec2 mouse_pos(mx, my);
+			const auto mx = std::get<0>(mouse_pos);
+			const auto my = std::get<1>(mouse_pos);
+			const ngl::math::Vec2 mouse_pos((float)mx, (float)my);
 
 			static bool prev_mouse_r = false;
 			if (!prev_mouse_r && mouse_r)
 			{
 				// MouseR Start.
-				prev_mouse_pos = mouse_pos;
+
+				// R押下開始でマウス位置固定開始.
+				window_.Dep().SetMousePositionRequest(mx, my);
+				window_.Dep().SetMousePositionClipInWindow(true);
 			}
 			if (prev_mouse_r && !mouse_r)
 			{
 				// MouseR End.
+
+				// R押下終了でマウス位置固定リセット.
+				window_.Dep().ResetMousePositionRequest();
+				window_.Dep().SetMousePositionClipInWindow(false);
 			}
 
 			// UEライクなマウスR押下中にカメラ向きと位置操作(WASD)
@@ -933,17 +938,19 @@ bool AppGame::Execute()
 			if (mouse_r)
 			{
 				// マウス押下中カーソル移動量(pixel)
-				const ngl::math::Vec2 mouse_diff = mouse_pos - prev_mouse_pos;
-				prev_mouse_pos = mouse_pos;
-				//std::cout << "mouse pos(pixel) " << mouse_diff.x << " , " << mouse_diff.y << std::endl;
+				const ngl::math::Vec2 mouse_diff((float)std::get<0>(mouse_pos_delta), (float)std::get<1>(mouse_pos_delta));
+				std::cout << "mouse pos(pixel) " << mouse_diff.x << " , " << mouse_diff.y << std::endl;
 
-				// 適当に回転量へ.
-				const auto rot_rad = ngl::math::k_pi_f* mouse_diff * 0.001f;
-				auto rot_yaw = ngl::math::Mat33::RotAxisY(rot_rad.x);
-				auto rot_pitch = ngl::math::Mat33::RotAxisX(rot_rad.y);
-				// 回転.
-				camera_pose_ = camera_pose_ * rot_yaw * rot_pitch;
+				// 向き.
+				if(true)
 				{
+					// 適当に回転量へ.
+					const auto rot_rad = ngl::math::k_pi_f * mouse_diff * 0.001f;
+					auto rot_yaw = ngl::math::Mat33::RotAxisY(rot_rad.x);
+					auto rot_pitch = ngl::math::Mat33::RotAxisX(rot_rad.y);
+					// 回転.
+					camera_pose_ = camera_pose_ * rot_yaw * rot_pitch;
+
 					// sideベクトルをワールドXZ麺に制限.
 					if (0.9999 > std::fabsf(camera_pose_.GetColumn2().y))
 					{

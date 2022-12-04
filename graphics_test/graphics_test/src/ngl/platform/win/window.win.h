@@ -63,11 +63,13 @@ namespace ngl
 			{
 				return std::make_tuple(mouse_pos_x_, mouse_pos_y_);
 			}
-			// Mouse Position XY rate in Screen.
-			std::tuple<float, float> GetMousePositionRate() const
+			// Mouse Screen Position Delta XY.
+			// マウス位置固定に影響されず取得可能.
+			std::tuple<int, int> GetMousePositionDelta() const
 			{
-				return std::make_tuple(mouse_pos_x_rate_, mouse_pos_y_rate_);
+				return std::make_tuple(mouse_pos_delta_x_, mouse_pos_delta_y_);
 			}
+
 			bool GetMouseLeft() const
 			{
 				return (0 != mouse_left_state_);
@@ -80,6 +82,22 @@ namespace ngl
 			{
 				return (0 != mouse_middle_state_);
 			}
+
+			// マウス位置固定リクエスト.
+			// GetMousePosition の結果が固定されるためカーソル移動差分が必要な場合は GetMousePositionDelta を利用する.
+			void SetMousePositionRequest(int mx, int my)
+			{
+				req_fix_mouse_pos_ = true;
+				req_mouse_pos_x_ = mx;
+				req_mouse_pos_y_ = my;
+			}
+			// マウス位置固定リクエスト解除.
+			void ResetMousePositionRequest()
+			{
+				req_fix_mouse_pos_ = false;
+			}
+			//
+			void SetMousePositionClipInWindow(bool clip_enable);
 
 		protected:
 			// ポインタの設定
@@ -100,10 +118,18 @@ namespace ngl
 			// 入力系
 			
 			unsigned char	virtual_key_state_[0xff + 1] = {};
-			int				mouse_pos_x_ = 0;
-			int				mouse_pos_y_ = 0;
-			float			mouse_pos_x_rate_ = 0.0f;
-			float			mouse_pos_y_rate_ = 0.0f;
+
+			bool			is_first_mouse_pos_sample_ = true;
+			int				mouse_pos_x_ = {};
+			int				mouse_pos_y_ = {};
+			int				mouse_pos_delta_x_ = {};
+			int				mouse_pos_delta_y_ = {};
+
+			bool			req_fix_mouse_pos_ = false;
+			int				req_mouse_pos_x_ = 0;
+			int				req_mouse_pos_y_ = 0;
+			bool			req_mouse_pos_clip_ = false;
+
 			unsigned char	mouse_left_state_ = 0;
 			unsigned char	mouse_right_state_ = 0;
 			unsigned char	mouse_middle_state_ = 0;
