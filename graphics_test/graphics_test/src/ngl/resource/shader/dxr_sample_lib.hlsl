@@ -3,6 +3,31 @@
 // DXRのRayTracing ShaderはStateObject生成時にShaderとRootSignatureのバインディングを完全にチェックするため
 // register指定を省略するとチェックに引っかかりStateObject生成に失敗する.
 
+
+#if 0
+// Comment
+
+	Global Root Sig のレイアウト. システム化を簡易にするために固定インデックスから固定数を固定用途. 完全に使っていなくても不正なアクセスさえしなければOK.
+		0 RootDesc t65535(AS)
+		1 DescTable b0 - b15
+		2 DescTable t0 - b15
+		3 DescTable s0 - b15
+		4 DescTable u0 - b15
+
+
+	検討中
+	Local Root Sig のレイアウト.
+	わかりやすくするために 100 以降のregister indexにする. GlobalとLocal間ではオーバラップはエラー. Local間は独立しているので同じindexを使っても構わない とおもう.
+		0 DescTable b1000 - b1015
+		1 DescTable t1000 - b1015	// tにはBLASの頂点バッファなども欲しいため48個くらいまで用意したほうがいいかも?
+		2 DescTable s1000 - b1015
+		3 DescTable u1000 - b1015
+
+
+
+#endif
+
+
 // nglのmatrix系ははrow-majorメモリレイアウトであるための指定.
 #pragma pack_matrix( row_major )
 
