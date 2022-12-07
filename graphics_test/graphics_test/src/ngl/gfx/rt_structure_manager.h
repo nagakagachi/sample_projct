@@ -43,8 +43,11 @@ namespace ngl
 {
 	namespace gfx
 	{
-		// shader resource t65535 に
+		// ASはシステムから固定のレジスタへ設定する.
 		static constexpr uint32_t k_system_raytracing_structure_srv_register = 65535;
+
+		// Local Root Signature のレジスタは 1000 スタートとする.
+		static constexpr uint32_t k_system_raytracing_local_register_start = 1000;
 
 
 		struct RaytraceStructureBottomGeometryDesc
@@ -269,6 +272,7 @@ namespace ngl
 			uint32_t						max_trace_recursion_ = 1;
 
 			CComPtr<ID3D12RootSignature>	global_root_signature_ = {};
+			CComPtr<ID3D12RootSignature>	local_root_signature_fixed_ = {};
 			CComPtr<ID3D12StateObject>		state_oject_ = {};
 		};
 

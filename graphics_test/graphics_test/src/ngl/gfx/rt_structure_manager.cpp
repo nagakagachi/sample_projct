@@ -10,6 +10,7 @@ namespace ngl
 		static constexpr uint32_t k_frame_descriptor_cbvsrvuav_table_size = 16;
 		static constexpr uint32_t k_frame_descriptor_sampler_table_size = 16;
 
+		static constexpr uint32_t k_frame_local_descriptor_cbvsrvuav_table_size = 16;
 
 		RaytraceStructureBottom::RaytraceStructureBottom()
 		{
@@ -659,7 +660,6 @@ namespace ngl
 				}
 			private:
 				D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION	exports_ = {};
-				const D3D12_STATE_SUBOBJECT* p_subobject_ = {};
 				std::vector<std::wstring>				export_name_cache_;
 				std::vector<const wchar_t*>				export_name_array_;
 			};
@@ -827,8 +827,8 @@ namespace ngl
 			// Global Root Signature. 
 			// TODO 現状はかなり固定.
 			{
-				// おそらく使わないであろうレジスタにASを設定.
-				// t65535 -> AccelerationStructure.
+				// ASは重複しないであろうレジスタにASを設定.
+				// t[k_system_raytracing_structure_srv_register] -> AccelerationStructure.
 
 				std::vector<D3D12_ROOT_PARAMETER> root_param;
 				{
@@ -837,7 +837,7 @@ namespace ngl
 					auto& parame_elem = root_param.back();
 					parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 					parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;  // SRV Descriptor直接.
-					parame_elem.Descriptor.ShaderRegister = 65535; // t65535にシステムからASを設定.
+					parame_elem.Descriptor.ShaderRegister = k_system_raytracing_structure_srv_register; // システムからASを設定.
 					parame_elem.Descriptor.RegisterSpace = 0; // space 0
 				}
 
@@ -901,8 +901,51 @@ namespace ngl
 			so_grs.Setup(global_root_signature_);
 
 			/*
-			// Local Root Signatureはとりあえず無し.
+			// Local Root Signature.
 			*/
+			{
+				// local_root_signature_fixed_
+				std::vector<D3D12_ROOT_PARAMETER> root_param;
+
+				// 現状ではLocal側はCBVとSRVのみで, SamplerやUAVはGlobalにしか登録しないことを考えている.
+				std::vector<D3D12_DESCRIPTOR_RANGE> range_array;
+				range_array.resize(2);
+
+				range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+				range_array[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // LocalRootSigだとこれが使えるかわからないのでダメだったら自前でオフセット値入れる.
+				range_array[0].BaseShaderRegister = k_system_raytracing_local_register_start;
+				range_array[0].NumDescriptors = k_frame_local_descriptor_cbvsrvuav_table_size;
+				range_array[0].RegisterSpace = 0;
+
+				range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+				range_array[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // LocalRootSigだとこれが使えるかわからないのでダメだったら自前でオフセット値入れる.
+				range_array[1].BaseShaderRegister = k_system_raytracing_local_register_start;
+				range_array[1].NumDescriptors = k_frame_local_descriptor_cbvsrvuav_table_size;
+				range_array[1].RegisterSpace = 0;
+
+				for (auto i = 0; i < range_array.size(); ++i)
+				{
+					root_param.push_back({});
+					auto& parame_elem = root_param.back();
+					parame_elem.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+					parame_elem.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+					parame_elem.DescriptorTable.NumDescriptorRanges = 1;
+					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[i];
+				}
+
+				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+				root_signature_desc.NumParameters = (uint32_t)root_param.size();
+				root_signature_desc.pParameters = root_param.data();
+				root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
+
+				if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, local_root_signature_fixed_))
+				{
+					assert(false);
+					return false;
+				}
+			}
+			subobject::SubobjectLocalRootSignature so_lgs_fixed = {};
+			so_lgs_fixed.Setup(local_root_signature_fixed_);
 
 			// Shader Config.
 			subobject::SubobjectRaytracingShaderConfig so_shader_config = {};
@@ -921,6 +964,8 @@ namespace ngl
 			num_subobject += 1; // PipelineConfig.
 			num_subobject += (int)subobject_shaderlib_array.size();
 			num_subobject += (int)subobject_hitgroup_array.size();
+			num_subobject += 1; // Local Root Signature 簡単のため全体で共有.
+			num_subobject += 1; // Local Root Signature と全HitGroupとの関連付け.
 
 			// subobject array.
 			std::vector<D3D12_STATE_SUBOBJECT> state_subobject_array;
@@ -931,6 +976,8 @@ namespace ngl
 			state_subobject_array[cnt_subobject++] = (so_grs.subobject_);
 			state_subobject_array[cnt_subobject++] = (so_shader_config.subobject_);
 			state_subobject_array[cnt_subobject++] = (so_pipeline_config.subobject_);
+			const auto lgs_fixed_index = cnt_subobject;// 共有Local Root Signature Subobjectの登録位置.
+			state_subobject_array[cnt_subobject++] = (so_lgs_fixed.subobject_);
 			for (const auto& e : subobject_shaderlib_array)
 			{
 				state_subobject_array[cnt_subobject++] = e.subobject_;
@@ -939,6 +986,21 @@ namespace ngl
 			{
 				state_subobject_array[cnt_subobject++] = e.subobject_;
 			}
+
+			// LGSの位置が確定した後にそのアドレスを使った関連付けが必要なので一旦ここで.
+			subobject::SubobjectExportsAssociation so_assosiation_lgs_hitgroup = {};
+			{
+				std::vector<const char*> hitgroup_name_ptr_array;
+				hitgroup_name_ptr_array.resize(hitgroup_database_.size());
+				for (auto i = 0; i < hitgroup_database_.size(); ++i)
+				{
+					hitgroup_name_ptr_array[i] = hitgroup_database_[i].hitgorup_name.c_str();
+				}
+
+				so_assosiation_lgs_hitgroup.Setup( &state_subobject_array[lgs_fixed_index], hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
+			}
+			state_subobject_array[cnt_subobject++] = (so_assosiation_lgs_hitgroup.subobject_);
+
 
 			D3D12_STATE_OBJECT_DESC state_object_desc = {};
 			state_object_desc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
@@ -1075,6 +1137,12 @@ namespace ngl
 							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(geom_hit_group_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 
 							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+							// 固定LocalRootSigにより
+							//	DescriptorTable0 -> b1000からCBV最大16
+							//	DescriptorTable1 -> t1000からSRV最大16
+							// というレイアウトで登録する.
+							// ここでフレームIndexで自動解放されないタイプのFrameDescriptor(と同じHeapから確保できる)のDescriptorが必要.
+
 						}
 						++table_cnt;
 					}
