@@ -394,6 +394,7 @@ namespace ngl
 			要求数が所持しているStack上から貸し出せない場合は新しいStackとして固定数の連続領域をFrameDescriptorManagerから借り受ける
 			FrameDescriptorManagerから借り受ける際にフレーム番号を指定し、描画が完了して使い終わった後にそのフレームでFrameDescriptorManagerから取得された連続領域を纏めて開放するために使う
 
+			RaytracingのLocalResource用にフレームインデックスで自動再利用ではなくユニークIDで任意解放する経路もほしい.
 
 			SamplerはHeapのサイズがAPIで制限されているため別途クラスを用意する.
 		*/
@@ -401,7 +402,7 @@ namespace ngl
 		{
 			friend class FrameDescriptorInterface;
 		public:
-			static const u32	k_invalid_frame_index = ~u32(0);
+			static const u32	k_invalid_alloc_group_id = ~u32(0);
 			struct Desc
 			{
 				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
@@ -415,7 +416,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
 
-			void ResetFrameDescriptor(u32 frame_index);
+			void ResetFrameDescriptor(u32 alloc_group_id);
 
 			u32	GetHandleIncrementSize() const 
 			{
@@ -429,8 +430,9 @@ namespace ngl
 			}
 
 		private:
-			// FrameDescriptorInterface からの呼び出し用.
-			bool AllocateFrameDescriptorArray(u32 frame_index, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+			// FrameDescriptorInterface がalloc_group_idに関連付けられた連続Descriptor範囲を確保するための関数.
+			//	alloc_group_idにフレームフリップIndexを使用することで, システムのフレーム開始処理によってフレーム毎にリサイクルされる.
+			bool AllocateDescriptorArray(u32 alloc_group_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
 
 		private:
 			std::mutex		mutex_;
@@ -448,7 +450,7 @@ namespace ngl
 			
 			struct FrameDescriptorRangeListNode
 			{
-				u32					frame_index	= k_invalid_frame_index;
+				u32					alloc_group_id	= k_invalid_alloc_group_id;
 				u32					start_index	= 0;
 				u32					end_index	= 0;
 

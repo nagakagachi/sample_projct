@@ -304,7 +304,7 @@ namespace ngl
 			for (int i = 0; i < range_node_pool_.size(); ++i)
 			{
 				range_node_pool_[i] = {};
-				range_node_pool_[i].frame_index = k_invalid_frame_index;
+				range_node_pool_[i].alloc_group_id = k_invalid_alloc_group_id;
 				range_node_pool_[i].start_index = 0;
 				range_node_pool_[i].end_index = 0;
 				if (i > 0)
@@ -326,7 +326,7 @@ namespace ngl
 			frame_descriptor_range_head_->RemoveFromList();
 
 			// 設定
-			frame_descriptor_range_head_->frame_index = k_invalid_frame_index;
+			frame_descriptor_range_head_->alloc_group_id = k_invalid_alloc_group_id;
 			frame_descriptor_range_head_->start_index = 0;
 			frame_descriptor_range_head_->end_index = frame_descriptor_range_head_->start_index + (desc_.allocate_descriptor_count_ - 1);
 
@@ -337,11 +337,13 @@ namespace ngl
 		{
 		}
 		/*
-			frame_index で確保された範囲をリセットして再利用可能にする
+			フレームに関連付けされたレンジを解放,マージして再利用可能にする
+
+			alloc_group_id : 0,1,2,0,1,2,... のようなframe_flip_index.
 		*/
-		void FrameDescriptorManager::ResetFrameDescriptor(u32 frame_index)
+		void FrameDescriptorManager::ResetFrameDescriptor(u32 alloc_group_id)
 		{
-			if (k_invalid_frame_index == frame_index)
+			if (k_invalid_alloc_group_id == alloc_group_id)
 				return;
 
 			// ロック
@@ -354,14 +356,14 @@ namespace ngl
 				range_ptr = range_ptr->next;
 
 				// 対象のフレームインデックスか, 無効インデックスの場合に処理. (無効インデックスの場合は実質マージ処理をするだけ)
-				if (frame_index == cur_node->frame_index || k_invalid_frame_index == cur_node->frame_index)
+				if (alloc_group_id == cur_node->alloc_group_id || k_invalid_alloc_group_id == cur_node->alloc_group_id)
 				{
 					// フレームインデックスを無効化して再利用可能.
-					cur_node->frame_index = k_invalid_frame_index;
+					cur_node->alloc_group_id = k_invalid_alloc_group_id;
 
 					// 一つ前のノードが未使用ノードならマージしてこのノードをフリーリストへ移動.
 					auto prev_node = cur_node->prev;
-					if (prev_node && cur_node->frame_index == prev_node->frame_index)
+					if (prev_node && cur_node->alloc_group_id == prev_node->alloc_group_id)
 					{
 						// prevへ範囲をマージ
 						prev_node->end_index = cur_node->end_index;
@@ -381,9 +383,9 @@ namespace ngl
 				}
 			}
 		}
-		bool FrameDescriptorManager::AllocateFrameDescriptorArray(u32 frame_index, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+		bool FrameDescriptorManager::AllocateDescriptorArray(u32 alloc_group_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
 		{
-			if (k_invalid_frame_index == frame_index)
+			if (k_invalid_alloc_group_id == alloc_group_id)
 				return false;
 
 			// ロック
@@ -393,7 +395,7 @@ namespace ngl
 			auto* range_ptr = frame_descriptor_range_head_;
 			for (; range_ptr != nullptr; range_ptr = range_ptr->next)
 			{
-				if (k_invalid_frame_index == range_ptr->frame_index)
+				if (k_invalid_alloc_group_id == range_ptr->alloc_group_id)
 				{
 					// 十分な空きがあるか
 					const auto empty_count = (range_ptr->end_index - range_ptr->start_index + 1);
@@ -413,7 +415,7 @@ namespace ngl
 
 			// アロケーション情報管理の更新.
 			// ターゲットのノードを分割して割当. ただし一つ前のノードが同じframe_indexの場合はフリーリストから取得せずにマージする.
-			if (range_ptr->prev && range_ptr->prev->frame_index == frame_index)
+			if (range_ptr->prev && range_ptr->prev->alloc_group_id == alloc_group_id)
 			{
 				// 一つ前のノードにマージする
 				auto* new_node = range_ptr->prev;
@@ -455,7 +457,7 @@ namespace ngl
 
 
 				*new_node = {};
-				new_node->frame_index = frame_index;
+				new_node->alloc_group_id = alloc_group_id;
 				// 開始インデックスからcount分を割り当て
 				new_node->start_index = range_ptr->start_index;
 				new_node->end_index = new_node->start_index + (count - 1);
@@ -513,6 +515,7 @@ namespace ngl
 			// 初回は無効なフレーム
 			frame_index_ = ~u32(0);
 
+			// Full扱いでリセット.
 			cur_stack_use_count_ = desc_.stack_size;
 
 			cur_stack_cpu_handle_start_ = {};
@@ -524,7 +527,6 @@ namespace ngl
 		{
 			// 念の為フレームインデックスのDescriptorを解放.
 			p_manager_->ResetFrameDescriptor(frame_index_);
-			// 初期はFull
 			cur_stack_use_count_ = desc_.stack_size;
 
 			p_manager_ = nullptr;
@@ -537,7 +539,7 @@ namespace ngl
 		{
 			assert(p_manager_);
 
-			// 初期はFull
+			// Full扱いでリセット.
 			cur_stack_use_count_ = desc_.stack_size;
 
 			// フレームインデックス更新
@@ -560,8 +562,9 @@ namespace ngl
 			{
 				// Empty
 				cur_stack_use_count_ = 0;
-				// 新規スタック取得
-				auto alloc_result = p_manager_->AllocateFrameDescriptorArray(frame_index_, desc_.stack_size, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
+				// 今回のframe用に新規スタック取得. frame_index_ に関連付けて確保することでシステムのフレーム開始処理で自動再利用される.
+				// frame_index_に関連付けて確保した場合は次のフレームで自動的に再利用リストに移動されることに注意.
+				auto alloc_result = p_manager_->AllocateDescriptorArray(frame_index_, desc_.stack_size, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
 				if (alloc_result)
 				{
 					stack_history_.push_back(std::tuple<D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE>(cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_));
