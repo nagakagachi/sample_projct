@@ -79,7 +79,7 @@ namespace ngl
 			void ResourceUavBarrier(BufferDep* p_buffer);
 
 		public:
-			FrameDescriptorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
+			FrameCommandListDescriptorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
 			FrameDescriptorHeapPageInterface* GetFrameSamplerDescriptorHeapInterface() { return &frame_desc_page_interface_for_sampler_; }
 
 			DeviceDep* GetDevice() { return parent_device_; }
@@ -89,7 +89,7 @@ namespace ngl
 			Desc		desc_ = {};
 
 			// Cvb Srv Uav用.
-			FrameDescriptorInterface			frame_desc_interface_ = {};
+			FrameCommandListDescriptorInterface			frame_desc_interface_ = {};
 			// Sampler用.
 			FrameDescriptorHeapPageInterface	frame_desc_page_interface_for_sampler_ = {};
 

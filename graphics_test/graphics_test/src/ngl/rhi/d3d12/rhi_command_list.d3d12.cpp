@@ -54,11 +54,11 @@ namespace ngl
 
 			
 			// フレームでのDescriptor確保用インターフェイス初期化
-			FrameDescriptorInterface::Desc fdi_desc = {};
+			FrameCommandListDescriptorInterface::Desc fdi_desc = {};
 			fdi_desc.stack_size = 2048;// スタックサイズは適当.
 			if (!frame_desc_interface_.Initialize(parent_device_->GetFrameDescriptorManager(), fdi_desc))
 			{
-				std::cout << "[ERROR] Create FrameDescriptorInterface" << std::endl;
+				std::cout << "[ERROR] Create FrameCommandListDescriptorInterface" << std::endl;
 				return false;
 			}
 

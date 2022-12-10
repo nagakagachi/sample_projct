@@ -299,6 +299,9 @@ namespace ngl
 
 			buffer_index_ = (buffer_index_ + 1) % desc_.swapchain_buffer_count;
 
+			// Frame用にCommandListが確保したGlobal Descriptor領域をフレームフリップインデックスで纏めて解放する.
+			// これにより各CommandListが個別に解放する必要がなくフレーム毎に確保することに専念できる.
+			// ただしこのインデックスのものはここで自動解放されるため, FrameDescriptorAllocInterfaceを使って直接IDを指定して確保した際のIDがフレームインデックスとかぶると意図せず解放されて破綻するので注意.
 			p_frame_descriptor_manager_->ResetFrameDescriptor(buffer_index_);
 		}
 

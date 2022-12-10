@@ -414,7 +414,7 @@ namespace ngl
 			u32 alloc_start_index = range_ptr->start_index;
 
 			// アロケーション情報管理の更新.
-			// ターゲットのノードを分割して割当. ただし一つ前のノードが同じframe_indexの場合はフリーリストから取得せずにマージする.
+			// ターゲットのノードを分割して割当. ただし一つ前のノードが同じalloc_group_idの場合はフリーリストから取得せずにマージする.
 			if (range_ptr->prev && range_ptr->prev->alloc_group_id == alloc_group_id)
 			{
 				// 一つ前のノードにマージする
@@ -491,15 +491,15 @@ namespace ngl
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		FrameDescriptorInterface::FrameDescriptorInterface()
+		FrameDescriptorAllocInterface::FrameDescriptorAllocInterface()
 		{
 		}
-		FrameDescriptorInterface::~FrameDescriptorInterface()
+		FrameDescriptorAllocInterface::~FrameDescriptorAllocInterface()
 		{
 			Finalize();
 		}
 
-		bool FrameDescriptorInterface::Initialize(FrameDescriptorManager* p_manager, const Desc& desc)
+		bool FrameDescriptorAllocInterface::Initialize(FrameDescriptorManager* p_manager, const Desc& desc)
 		{
 			assert(p_manager);
 			if (!p_manager)
@@ -512,9 +512,6 @@ namespace ngl
 
 			p_manager_ = p_manager;
 
-			// 初回は無効なフレーム
-			frame_index_ = ~u32(0);
-
 			// Full扱いでリセット.
 			cur_stack_use_count_ = desc_.stack_size;
 
@@ -523,32 +520,13 @@ namespace ngl
 
 			return true;
 		}
-		void FrameDescriptorInterface::Finalize()
+		void FrameDescriptorAllocInterface::Finalize()
 		{
-			// 念の為フレームインデックスのDescriptorを解放.
-			p_manager_->ResetFrameDescriptor(frame_index_);
 			cur_stack_use_count_ = desc_.stack_size;
 
 			p_manager_ = nullptr;
-
-			// ヒストリクリア
-			stack_history_.clear();
 		}
-		// 新しいフレームの準備
-		void FrameDescriptorInterface::ReadyToNewFrame(u32 frame_index)
-		{
-			assert(p_manager_);
-
-			// Full扱いでリセット.
-			cur_stack_use_count_ = desc_.stack_size;
-
-			// フレームインデックス更新
-			frame_index_ = frame_index;
-
-			// ヒストリクリア
-			stack_history_.clear();
-		}
-		bool FrameDescriptorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+		bool FrameDescriptorAllocInterface::Allocate(u32 alloc_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
 		{
 			assert(p_manager_);
 
@@ -562,12 +540,12 @@ namespace ngl
 			{
 				// Empty
 				cur_stack_use_count_ = 0;
-				// 今回のframe用に新規スタック取得. frame_index_ に関連付けて確保することでシステムのフレーム開始処理で自動再利用される.
-				// frame_index_に関連付けて確保した場合は次のフレームで自動的に再利用リストに移動されることに注意.
-				auto alloc_result = p_manager_->AllocateDescriptorArray(frame_index_, desc_.stack_size, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
+
+				// idに関連付けてStack分を新規に確保する.
+				// CommandList用のフレーム単位自動解放では 0,1,2 のIDを使い毎フレーム自動で解放されるためフレームを跨ぐDescriptorの場合はそのIDを避けて運用する.
+				auto alloc_result = p_manager_->AllocateDescriptorArray(alloc_id, desc_.stack_size, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
 				if (alloc_result)
 				{
-					stack_history_.push_back(std::tuple<D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE>(cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_));
 				}
 				else
 				{
@@ -580,7 +558,7 @@ namespace ngl
 			assert(desc_.stack_size >= cur_stack_use_count_ + count);
 			if (desc_.stack_size < cur_stack_use_count_ + count)
 				return false;
-			
+
 			const auto increment_size = p_manager_->GetHandleIncrementSize();
 			const auto increment_offset = increment_size * cur_stack_use_count_;
 
@@ -591,6 +569,85 @@ namespace ngl
 
 			// スタック消費量更新.
 			cur_stack_use_count_ += count;
+			return true;
+		}
+		void FrameDescriptorAllocInterface::Deallocate(u32 alloc_id)
+		{
+			assert(p_manager_);
+
+			// IDに関連付けられた領域を全開放.
+			p_manager_->ResetFrameDescriptor(alloc_id);
+
+			// Full扱いでリセット.
+			cur_stack_use_count_ = desc_.stack_size;
+		}
+		void FrameDescriptorAllocInterface::ResetStack()
+		{
+			// スタックをフルにしてリセット.
+			cur_stack_use_count_ = desc_.stack_size;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// 
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		FrameCommandListDescriptorInterface::FrameCommandListDescriptorInterface()
+		{
+		}
+		FrameCommandListDescriptorInterface::~FrameCommandListDescriptorInterface()
+		{
+			Finalize();
+		}
+
+		bool FrameCommandListDescriptorInterface::Initialize(FrameDescriptorManager* p_manager, const Desc& desc)
+		{
+			assert(p_manager);
+			if (!p_manager)
+				return false;
+			assert(0 < desc.stack_size);
+			if (0 >= desc.stack_size)
+				return false;
+
+			desc_ = desc;
+
+
+			FrameDescriptorAllocInterface::Desc alloc_interface_desc = {};
+			alloc_interface_desc.stack_size = desc.stack_size;
+			alloc_interface_.Initialize(p_manager, alloc_interface_desc);
+
+			// 初回は無効なフレーム
+			frame_flip_index_ = ~u32(0);
+			
+			return true;
+		}
+		void FrameCommandListDescriptorInterface::Finalize()
+		{
+			// 念の為フレームインデックスのDescriptorを解放.
+			alloc_interface_.Deallocate(frame_flip_index_);
+			
+			alloc_interface_.Finalize();
+		}
+		// 新しいフレームの準備
+		void FrameCommandListDescriptorInterface::ReadyToNewFrame(u32 frame_flip_index)
+		{
+			// Frame ID での確保領域は FrameDescriptorManager のフレーム開始処理で自動的に前回フレームが解放される.
+			// そのためここではスタックのリセットだけをする.
+			alloc_interface_.ResetStack();
+
+			// フレームインデックス更新
+			frame_flip_index_ = frame_flip_index;
+		}
+		bool FrameCommandListDescriptorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+		{
+			// フレームフリップ番号で確保.
+			if (alloc_interface_.Allocate(frame_flip_index_, count, alloc_cpu_handle_head, alloc_gpu_handle_head))
+			{
+			}
+			else
+			{
+				assert(false);
+				return false;
+			}
+
 			return true;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -648,7 +705,7 @@ namespace ngl
 					if (frame_index == retired_frame)
 						return false;
 
-					const auto max_index = ~u64(0);// std::numeric_limits<decltype(frame_index)>::max();
+					const auto max_index = ~u64(0);
 					const auto frame_diff = (frame_index > retired_frame) ? (frame_index - retired_frame) : (max_index - retired_frame + (frame_index + 1));
 					return (2 <= frame_diff);
 				};

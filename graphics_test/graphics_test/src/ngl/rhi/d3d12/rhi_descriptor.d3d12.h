@@ -25,7 +25,7 @@ namespace ngl
 		class DeviceDep;
 		class PersistentDescriptorAllocator;
 		class FrameDescriptorManager;
-		class FrameDescriptorInterface;
+		class FrameCommandListDescriptorInterface;
 
 
 		// Pipelineへ設定するDescriptor群をまとめるオブジェクト.
@@ -366,17 +366,6 @@ namespace ngl
 			// デバッグ用の端数部マスク
 			u32					tail_fraction_bit_mask_ = 0;
 
-			/*
-			// Heap本体
-			CComPtr<ID3D12DescriptorHeap>	p_heap_ = nullptr;
-			// Headの定義情報
-			D3D12_DESCRIPTOR_HEAP_DESC		heap_desc_{};
-			// Heap上の要素アドレスサイズ
-			u32								handle_increment_size_ = 0;
-			// CPU/GPUハンドル先頭
-			D3D12_CPU_DESCRIPTOR_HANDLE		cpu_handle_start_ = {};
-			D3D12_GPU_DESCRIPTOR_HANDLE		gpu_handle_start_ = {};
-			*/
 			DescriptorHeapWrapper			heap_wrapper_ = {};
 
 			// 安全のために未使用スロットへコピーするための空のデフォルトDescriptor.
@@ -390,7 +379,7 @@ namespace ngl
 			FrameDescriptorManagerは巨大なサイズを確保し, FrameDescriptorInterfaceからの要求に応じて連続領域を切り出して貸し出す役割. スレッドセーフ
 			切り出す時にフレーム番号を一緒に指定することで、特定のフレームで確保されたまとまった連続領域を纏めて解放できるようにしたい
 
-			FrameDescriptorInterface 固定サイズのスタックのリストを持ち、要求に応じてStackから連続したDescriptorを貸し出す　非スレッドセーフ
+			FrameCommandListDescriptorInterface 固定サイズのスタックのリストを持ち、要求に応じてStackから連続したDescriptorを貸し出す　非スレッドセーフ
 			要求数が所持しているStack上から貸し出せない場合は新しいStackとして固定数の連続領域をFrameDescriptorManagerから借り受ける
 			FrameDescriptorManagerから借り受ける際にフレーム番号を指定し、描画が完了して使い終わった後にそのフレームでFrameDescriptorManagerから取得された連続領域を纏めて開放するために使う
 
@@ -400,7 +389,7 @@ namespace ngl
 		*/
 		class FrameDescriptorManager
 		{
-			friend class FrameDescriptorInterface;
+			friend class FrameDescriptorAllocInterface;
 		public:
 			static const u32	k_invalid_alloc_group_id = ~u32(0);
 			struct Desc
@@ -423,15 +412,14 @@ namespace ngl
 				return handle_increment_size_;
 			}
 
-
 			ID3D12DescriptorHeap* GetD3D12DescriptorHeap()
 			{
 				return p_heap_;
 			}
 
 		private:
-			// FrameDescriptorInterface がalloc_group_idに関連付けられた連続Descriptor範囲を確保するための関数.
-			//	alloc_group_idにフレームフリップIndexを使用することで, システムのフレーム開始処理によってフレーム毎にリサイクルされる.
+			// FrameCommandListDescriptorInterface がalloc_group_idに関連付けられた連続Descriptor範囲を確保するための関数.
+			//	alloc_group_idにフレームフリップIndex[0,1,2]を使用することで, システムのフレーム開始処理によってフレーム毎にリサイクルされる.
 			bool AllocateDescriptorArray(u32 alloc_group_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
 
 		private:
@@ -476,11 +464,20 @@ namespace ngl
 			FrameDescriptorRangeListNode*					free_node_list_ = nullptr;
 		};
 
+
+
 		/*
-			各スレッドのCommandListが保持するFrameDescriptor取得用インターフェイス
-				ある程度大きな範囲で連続DescriptorをFrameDescriptorManagerから取得して使っていく. 足りなくなれば追加で FrameDescriptorManager から取得する.
+			FrameDescriptorManagerからのStackBaseでのAllocationインターフェース.
+			FrameDescriptorManagerから取得した固定範囲をスタックアロケータとして利用し. 足りなくなれば追加で FrameDescriptorManager から取得する.
+			ManagerからID付けでAllocationし, 確保した複数の領域をIDでまとめてDeallocationする.
+			FrameDescriptorManagerから取得する際にID付を行い, IDによって纏めてFrameDescriptorManagerの領域を解放する.
+
+			フレームごとのCommandList用にフレームフリップインデックスをIDとして使っているため, そのIDは毎フレーム自動で解放されるため注意.
+
+			主にRaytrace用ShaderTable内リソース用のDescriptorのために使われる.
+			(Frameで自動解放されるIDを使用しないように注意が必要.
 		*/
-		class FrameDescriptorInterface
+		class FrameDescriptorAllocInterface
 		{
 		public:
 			struct Desc
@@ -488,19 +485,19 @@ namespace ngl
 				u32						stack_size = 2000;
 			};
 
-			FrameDescriptorInterface();
-			~FrameDescriptorInterface();
+			FrameDescriptorAllocInterface();
+			~FrameDescriptorAllocInterface();
 
 			bool Initialize(FrameDescriptorManager* p_manager, const Desc& desc);
 			void Finalize();
 
-			/*
-					ReadyToNewFrame(frame_index);
-					frame_index = (frame_index + 1)%buffer_count;
-			*/
-			void ReadyToNewFrame(u32 frame_index);
+			// IDで関連付けてマネージャから領域を確保しながらスタックベースでDescriptorを返す.
+			bool Allocate(u32 alloc_id_, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+			// IDで関連付けた領域を纏めて解放する.
+			void Deallocate(u32 alloc_id_);
 
-			bool Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+			// 解放せずにStackだけリセットする. FrameCommandListDescriptorInterface用.
+			void ResetStack();
 
 			FrameDescriptorManager* GetFrameDescriptorManager()
 			{
@@ -510,16 +507,50 @@ namespace ngl
 		private:
 			Desc								desc_ = {};
 
-			FrameDescriptorManager*				p_manager_ = nullptr;
-			
-			u32									frame_index_ = ~u32(0);
+			FrameDescriptorManager* p_manager_ = nullptr;
 
 			u32									cur_stack_use_count_ = 0;
 			D3D12_CPU_DESCRIPTOR_HANDLE			cur_stack_cpu_handle_start_ = {};
 			D3D12_GPU_DESCRIPTOR_HANDLE			cur_stack_gpu_handle_start_ = {};
+		};
 
-			// 確認用にフレームで確保したStackの履歴を保存
-			std::vector<std::tuple<D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE>> stack_history_;
+
+		/*
+			FrameDescriptorAllocInterface を使用してフレーム毎のCommandListが使用するDescritpro領域を管理する.
+			確保時のIDにフレームフリップインデックスを使うことで, システム(Device)がフレーム開始処理で過去フレームの確保した領域を自動で解放するようになっている.
+		*/
+		class FrameCommandListDescriptorInterface
+		{
+		public:
+			struct Desc
+			{
+				u32						stack_size = 2000;
+			};
+
+			FrameCommandListDescriptorInterface();
+			~FrameCommandListDescriptorInterface();
+
+			bool Initialize(FrameDescriptorManager* p_manager, const Desc& desc);
+			void Finalize();
+
+			/*
+					ReadyToNewFrame(frame_index);
+					frame_index = (frame_index + 1)%buffer_count;
+			*/
+			void ReadyToNewFrame(u32 frame_flip_index);
+
+			bool Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+
+			FrameDescriptorManager* GetFrameDescriptorManager()
+			{
+				return alloc_interface_.GetFrameDescriptorManager();
+			}
+
+		private:
+			Desc								desc_ = {};
+			u32									frame_flip_index_ = ~u32(0);
+
+			FrameDescriptorAllocInterface		alloc_interface_ = {};
 		};
 
 
@@ -584,7 +615,7 @@ namespace ngl
 			CommandListがそれぞれ保持するフレーム毎のDescriptorHeap管理.
 			内部ではPoolへの参照をもち, Poolから一定サイズのHeap単位をPageとして取得して利用する.
 			
-			FrameDescriptorInterface との違いは巨大な単一のHeapではなくPage単位のHeapを利用する点.
+			FrameCommandListDescriptorInterface との違いは巨大な単一のHeapではなくPage単位のHeapを利用する点.
 			これによりHeap辺り2048のハンドルまでという制限のあるSamplerのDescriptorにも対応している.
 		*/
 		class FrameDescriptorHeapPageInterface
