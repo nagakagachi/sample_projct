@@ -235,7 +235,6 @@ AppGame::~AppGame()
 	}
 	rt_model_index_buffer_array_.clear();
 
-
 	gfx_command_list_.Finalize();
 
 	swapchain_.Finalize();
@@ -672,6 +671,7 @@ bool AppGame::Initialize()
 						ngl::rhi::BufferDep::Desc buffer_desc = {};
 						buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
 						buffer_desc.initial_state = ngl::rhi::ResourceState::General;
+						buffer_desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource;// RTのShaderResource利用.
 						buffer_desc.element_count = ai_scene->mMeshes[mesh_i]->mNumVertices;
 						buffer_desc.element_byte_size = sizeof(float) * 3;
 
@@ -682,7 +682,6 @@ bool AppGame::Initialize()
 								memcpy(mapped, ai_scene->mMeshes[mesh_i]->mVertices, sizeof(float) * 3 * ai_scene->mMeshes[mesh_i]->mNumVertices);
 							}
 						}
-
 						rt_model_vertex_buffer_array_.push_back(p_mesh_vtx_buffer);
 					}
 
@@ -692,6 +691,7 @@ bool AppGame::Initialize()
 						ngl::rhi::BufferDep::Desc buffer_desc = {};
 						buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
 						buffer_desc.initial_state = ngl::rhi::ResourceState::General;
+						buffer_desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource;// RTのShaderResource利用.
 						// 三角化されている前提.
 						buffer_desc.element_count = ai_scene->mMeshes[mesh_i]->mNumFaces * 3;
 						buffer_desc.element_byte_size = sizeof(uint32_t);
@@ -711,7 +711,6 @@ bool AppGame::Initialize()
 								}
 							}
 						}
-
 						rt_model_index_buffer_array_.push_back(p_mesh_index_buffer);
 					}
 				}

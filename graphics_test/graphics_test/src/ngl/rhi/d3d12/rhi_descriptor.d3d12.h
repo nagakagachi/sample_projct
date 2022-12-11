@@ -22,6 +22,11 @@ namespace ngl
 {
 	namespace rhi
 	{
+		static constexpr uint32_t k_fdm_frame_flip_index_bitwidth = 3;
+		// FrameDescriptorManager "Frame Flip Index" bitmask.
+		static constexpr uint32_t k_fdm_frame_flip_index_bitmask = (1 << k_fdm_frame_flip_index_bitwidth) - 1;
+
+
 		class DeviceDep;
 		class PersistentDescriptorAllocator;
 		class FrameDescriptorManager;
@@ -482,7 +487,10 @@ namespace ngl
 		public:
 			struct Desc
 			{
-				u32						stack_size = 2000;
+				u32		stack_size = 2000;
+				// このインターフェースのアロケーションIDに FrameCommandListDescriptorInterface が予約しているk_fdm_frame_flip_index_bitwidth範囲のIDを許可するか.
+				// FrameCommandListDescriptorInterface　として利用しない場合は基本的に false.
+				bool	allow_frame_flip_index = false;
 			};
 
 			FrameDescriptorAllocInterface();

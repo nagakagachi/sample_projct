@@ -143,9 +143,9 @@ void miss2(inout Payload payload)
 // Hitgroup Local Root Sig.
 
 	// Tir 頂点位置.
-	Buffer<float3>	srv_prim_vertex_pos	: t1000;
+	Buffer<float3>	srv_prim_vertex_pos	: register(t1000);
 	// Tri Index
-	Buffer<uint>	srv_prim_index		: t1001;
+	Buffer<uint>	srv_prim_index		: register(t1001);
 // ------------------------------------------------------
 
 [shader("closesthit")]
@@ -155,7 +155,7 @@ void closestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes 
 	uint instanceId = InstanceID();
 	uint geomIndex = GeometryIndex();
 
-#if 0
+#if 1
 	// ジオメトリ情報収集テスト
 	uint tri_index_head = PrimitiveIndex() * 3;
 	const uint3 tri_index = { srv_prim_index[tri_index_head + 0], srv_prim_index[tri_index_head + 1], srv_prim_index[tri_index_head + 2] };
@@ -168,7 +168,7 @@ void closestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes 
 	// 頂点データに無いのでここで法線計算.
 	float3 tri_n_ls = normalize(cross(tri_vetex_pos[1] - tri_vetex_pos[0], tri_vetex_pos[2] - tri_vetex_pos[0]));
 	// builtin ObjectToWorld3x4() でWorld変換可能. Object空間のRayDirなどもBuildinがある.
-	float3 tri_n_ws = mul(ObjectToWorld3x4(), tri_n_ls);
+	float3 tri_n_ws = mul((float3x3)ObjectToWorld3x4(), tri_n_ls);
 	
 	// ワールド法線の可視化.
 	payload.color = float4(abs(tri_n_ws), 0.0);
@@ -187,11 +187,31 @@ void closestHit2(inout Payload payload, in BuiltInTriangleIntersectionAttributes
 	float ray_t = RayTCurrent();
 	uint instanceId = InstanceID();
 	uint geomIndex = GeometryIndex();
+
+#if 0
+	// ジオメトリ情報収集テスト
 	uint tri_index_head = PrimitiveIndex() * 3;
+	const uint3 tri_index = { srv_prim_index[tri_index_head + 0], srv_prim_index[tri_index_head + 1], srv_prim_index[tri_index_head + 2] };
 
+	// Retrieve vertices for the hit triangle.
+	float3 tri_vetex_pos[3] = {
+		srv_prim_vertex_pos[tri_index[0]],
+		srv_prim_vertex_pos[tri_index[1]],
+		srv_prim_vertex_pos[tri_index[2]] };
+	// 頂点データに無いのでここで法線計算.
+	float3 tri_n_ls = normalize(cross(tri_vetex_pos[1] - tri_vetex_pos[0], tri_vetex_pos[2] - tri_vetex_pos[0]));
+	// builtin ObjectToWorld3x4() でWorld変換可能. Object空間のRayDirなどもBuildinがある.
+	float3 tri_n_ws = mul((float3x3)ObjectToWorld3x4(), tri_n_ls);
 
+	// ワールド法線の可視化.
+	payload.color = float4(abs(tri_n_ws), 0.0);
+#else
 	// デバッグ用に重心座標の可視化テスト.
-	float3 bary = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
+	//float3 bary = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
+	//payload.color = float4(bary, 0.0);
 
-	payload.color = float4(bary, 0.0);
+	// デバッグ用に距離で色変化.
+	float distance_color = frac(ray_t / 20.0);
+	payload.color = float4(distance_color, distance_color, distance_color, 0.0);
+#endif
 }

@@ -7,16 +7,28 @@ namespace ngl
 {
 	namespace gfx
 	{
-		static constexpr uint32_t k_frame_descriptor_cbvsrvuav_table_size = 16;
-		static constexpr uint32_t k_frame_descriptor_sampler_table_size = 16;
-
-		static constexpr uint32_t k_frame_local_descriptor_cbvsrvuav_table_size = 16;
 
 		RaytraceStructureBottom::RaytraceStructureBottom()
 		{
 		}
 		RaytraceStructureBottom::~RaytraceStructureBottom()
 		{
+			for (auto& e : geometry_vertex_srv_array_)
+			{
+				if (e)
+				{
+					delete e;
+				}
+			}
+			geometry_vertex_srv_array_.clear();
+			for (auto& e : geometry_index_srv_array_)
+			{
+				if (e)
+				{
+					delete e;
+				}
+			}
+			geometry_index_srv_array_.clear();
 		}
 		bool RaytraceStructureBottom::Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceStructureBottomGeometryDesc>& geometry_desc_array)
 		{
@@ -31,6 +43,9 @@ namespace ngl
 				return false;
 			}
 
+			// コピー.
+			geometry_desc_array_ = geometry_desc_array;
+
 			setup_type_ = SETUP_TYPE::BLAS_TRIANGLE;
 			geom_desc_array_.clear();
 			geom_desc_array_.reserve(geometry_desc_array.size());// 予約.
@@ -41,13 +56,17 @@ namespace ngl
 					geom_desc_array_.push_back({});
 					auto& geom_desc = geom_desc_array_[geom_desc_array_.size() - 1];// Tail.
 
+
+					const auto vertex_ngl_format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+					auto index_ngl_format = ngl::rhi::ResourceFormat::Format_R32_UINT;
+
 					geom_desc = {};
 					geom_desc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;	// Triangle Geom.
 					geom_desc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;	// Opaque.
 					geom_desc.Triangles.VertexBuffer.StartAddress = g.vertex_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
 					geom_desc.Triangles.VertexBuffer.StrideInBytes = g.vertex_buffer->GetElementByteSize();
 					geom_desc.Triangles.VertexCount = g.vertex_buffer->getElementCount();
-					geom_desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;// vec3 データとしてはVec4のArrayでStrideでスキップしている可能性がある.
+					geom_desc.Triangles.VertexFormat = rhi::ConvertResourceFormat(vertex_ngl_format);// DXGI_FORMAT_R32G32B32_FLOAT;// vec3 データとしてはVec4のArrayでStrideでスキップしている可能性がある.
 					if (g.index_buffer)
 					{
 						geom_desc.Triangles.IndexBuffer = g.index_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
@@ -55,16 +74,38 @@ namespace ngl
 						if (g.index_buffer->GetElementByteSize() == 4)
 						{
 							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R32_UINT;
+							index_ngl_format = ngl::rhi::ResourceFormat::Format_R32_UINT;
 						}
 						else if (g.index_buffer->GetElementByteSize() == 2)
 						{
 							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
+							index_ngl_format = ngl::rhi::ResourceFormat::Format_R16_UINT;
 						}
 						else
 						{
 							// u16 u32 以外は未対応.
 							assert(false);
 							continue;
+						}
+					}
+
+
+					// 内部で必要なSrvを作ってしまう.
+
+					{
+						auto p_vertex_srv = new ngl::rhi::ShaderResourceViewDep();
+						geometry_vertex_srv_array_.push_back(p_vertex_srv);
+
+						auto p_index_srv = new ngl::rhi::ShaderResourceViewDep();
+						geometry_index_srv_array_.push_back(p_index_srv);
+
+						if (!p_vertex_srv->InitializeAsTyped(p_device, g.vertex_buffer, vertex_ngl_format, 0, g.vertex_buffer->getElementCount()))
+						{
+							assert(false);
+						}
+						if (!p_index_srv->InitializeAsTyped(p_device, g.index_buffer, index_ngl_format, 0, g.index_buffer->getElementCount()))
+						{
+							assert(false);
 						}
 					}
 				}
@@ -177,9 +218,19 @@ namespace ngl
 			return &main_;
 		}
 
-
-
-
+		// 内部Geometry情報.
+		RaytraceStructureBottomGeometryResource RaytraceStructureBottom::GetGeometryData(uint32_t index)
+		{
+			RaytraceStructureBottomGeometryResource ret = {};
+			if (NumGeometry() <= index)
+			{
+				assert(false);
+				return ret;
+			}
+			ret.vertex_srv = geometry_vertex_srv_array_[index];
+			ret.index_srv = geometry_index_srv_array_[index];
+			return ret;
+		}
 
 		RaytraceStructureTop::RaytraceStructureTop()
 		{
@@ -851,25 +902,25 @@ namespace ngl
 				range_array.resize(4);
 				range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 				range_array[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-				range_array[0].NumDescriptors = k_frame_descriptor_cbvsrvuav_table_size;
+				range_array[0].NumDescriptors = k_rt_global_descriptor_cbvsrvuav_table_size;
 				range_array[0].BaseShaderRegister = 0;// バインド先開始レジスタ.
 				range_array[0].RegisterSpace = 0;
 
 				range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 				range_array[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-				range_array[1].NumDescriptors = k_frame_descriptor_cbvsrvuav_table_size;
+				range_array[1].NumDescriptors = k_rt_global_descriptor_cbvsrvuav_table_size;
 				range_array[1].BaseShaderRegister = 0;// バインド先開始レジスタ.
 				range_array[1].RegisterSpace = 0;
 
 				range_array[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
 				range_array[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-				range_array[2].NumDescriptors = k_frame_descriptor_sampler_table_size;
+				range_array[2].NumDescriptors = k_rt_global_descriptor_sampler_table_size;
 				range_array[2].BaseShaderRegister = 0;// バインド先開始レジスタ.
 				range_array[2].RegisterSpace = 0;
 
 				range_array[3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
 				range_array[3].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-				range_array[3].NumDescriptors = k_frame_descriptor_cbvsrvuav_table_size;
+				range_array[3].NumDescriptors = k_rt_global_descriptor_cbvsrvuav_table_size;
 				range_array[3].BaseShaderRegister = 0;// バインド先開始レジスタ.
 				range_array[3].RegisterSpace = 0;
 
@@ -914,13 +965,13 @@ namespace ngl
 				range_array[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 				range_array[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // LocalRootSigだとこれが使えるかわからないのでダメだったら自前でオフセット値入れる.
 				range_array[0].BaseShaderRegister = k_system_raytracing_local_register_start;
-				range_array[0].NumDescriptors = k_frame_local_descriptor_cbvsrvuav_table_size;
+				range_array[0].NumDescriptors = k_rt_local_descriptor_cbvsrvuav_table_size;
 				range_array[0].RegisterSpace = 0;
 
 				range_array[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 				range_array[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // LocalRootSigだとこれが使えるかわからないのでダメだったら自前でオフセット値入れる.
 				range_array[1].BaseShaderRegister = k_system_raytracing_local_register_start;
-				range_array[1].NumDescriptors = k_frame_local_descriptor_cbvsrvuav_table_size;
+				range_array[1].NumDescriptors = k_rt_local_descriptor_cbvsrvuav_table_size;
 				range_array[1].RegisterSpace = 0;
 
 				for (auto i = 0; i < range_array.size(); ++i)
@@ -955,8 +1006,6 @@ namespace ngl
 			so_pipeline_config.Setup(max_trace_recursion);
 
 
-
-
 			// Subobject間の参照が必要になる場合があるため改めて連続メモリにSUBOBJECTを構築. Resolveフェーズを入れるのも予定.
 			int num_subobject = 0;
 			num_subobject += 1; // Global Root Signature.
@@ -976,8 +1025,6 @@ namespace ngl
 			state_subobject_array[cnt_subobject++] = (so_grs.subobject_);
 			state_subobject_array[cnt_subobject++] = (so_shader_config.subobject_);
 			state_subobject_array[cnt_subobject++] = (so_pipeline_config.subobject_);
-			const auto lgs_fixed_index = cnt_subobject;// 共有Local Root Signature Subobjectの登録位置.
-			state_subobject_array[cnt_subobject++] = (so_lgs_fixed.subobject_);
 			for (const auto& e : subobject_shaderlib_array)
 			{
 				state_subobject_array[cnt_subobject++] = e.subobject_;
@@ -987,8 +1034,11 @@ namespace ngl
 				state_subobject_array[cnt_subobject++] = e.subobject_;
 			}
 
-			// LGSの位置が確定した後にそのアドレスを使った関連付けが必要なので一旦ここで.
+			const auto lgs_fixed_index = cnt_subobject;// 共有Local Root Signature Subobjectの登録位置.
+			state_subobject_array[cnt_subobject++] = (so_lgs_fixed.subobject_);
+
 			subobject::SubobjectExportsAssociation so_assosiation_lgs_hitgroup = {};
+			// LGSの位置が確定した後にそのアドレスを使った関連付けが必要なので一旦ここで.
 			{
 				std::vector<const char*> hitgroup_name_ptr_array;
 				hitgroup_name_ptr_array.resize(hitgroup_database_.size());
@@ -997,7 +1047,7 @@ namespace ngl
 					hitgroup_name_ptr_array[i] = hitgroup_database_[i].hitgorup_name.c_str();
 				}
 
-				so_assosiation_lgs_hitgroup.Setup( &state_subobject_array[lgs_fixed_index], hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
+				so_assosiation_lgs_hitgroup.Setup(&state_subobject_array[lgs_fixed_index], hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
 			}
 			state_subobject_array[cnt_subobject++] = (so_assosiation_lgs_hitgroup.subobject_);
 
@@ -1022,10 +1072,14 @@ namespace ngl
 		// per_entry_descriptor_param_count が0だとAlignmentエラーになるため注意.
 		// BLAS内Geometryは個別のShaderRecordを持つ(multiplier_for_subgeometry_index = 1)
 		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
-			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count)
+			rhi::FrameDescriptorAllocInterface& desc_alloc_interface, uint32_t desc_alloc_id,
+			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name)
 		{
 			out = {};
 
+
+			// NOTE. 固定のDescriptorTableで CVBとSRVの2テーブルをLocalRootSignatureのリソースとして定義している.
+			const uint32_t per_entry_descriptor_table_count = 2;
 
 			const auto num_instance = tlas.NumInstance();
 			uint32_t num_all_instance_geometry = 0;
@@ -1045,7 +1099,7 @@ namespace ngl
 
 			constexpr uint32_t k_shader_identifier_byte_size = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			// Table一つにつきベースのGPU Descriptor Handleを書き込むためのサイズ計算.
-			const uint32_t shader_record_resource_byte_size = sizeof(D3D12_GPU_DESCRIPTOR_HANDLE) * per_entry_descriptor_param_count;
+			const uint32_t shader_record_resource_byte_size = sizeof(D3D12_GPU_DESCRIPTOR_HANDLE) * per_entry_descriptor_table_count;
 
 			const uint32_t shader_record_byte_size = rhi::align_to(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, k_shader_identifier_byte_size + shader_record_resource_byte_size);
 
@@ -1093,6 +1147,7 @@ namespace ngl
 				}
 
 				out.table_miss_offset_ = (shader_record_byte_size * table_cnt);
+				out.table_miss_count_ = 1;
 				{
 					// miss
 					{
@@ -1107,7 +1162,9 @@ namespace ngl
 				// HitGroup
 				/// マテリアル分存在するHitGroupは連続領域でInstanceに指定したインデックスでアクセスされるためここ以降に順序に気をつけて書き込み.
 				// InstanceのBLASに複数のGeometryが含まれる場合はここでその分のrecordが書き込まれる.
-				out.table_hitgroup_offset_ = shader_record_byte_size * table_cnt;
+
+				const auto table_hitgroup_offset = shader_record_byte_size * table_cnt;
+				uint32_t hitgroup_count = 0;
 				for (uint32_t i = 0u; i < num_instance; ++i)
 				{
 					// 現状はBLAS内Geometryはすべて同じHitgroupとしている.
@@ -1134,19 +1191,61 @@ namespace ngl
 
 						// hitGroup
 						{
-							memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(geom_hit_group_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
 							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
 							// 固定LocalRootSigにより
 							//	DescriptorTable0 -> b1000からCBV最大16
 							//	DescriptorTable1 -> t1000からSRV最大16
 							// というレイアウトで登録する.
 							// ここでフレームIndexで自動解放されないタイプのFrameDescriptor(と同じHeapから確保できる)のDescriptorが必要.
+							
 
+							DescriptorHandleSet desc_handle_cbv;
+							DescriptorHandleSet desc_handle_srv;
+							const bool result_alloc_desc_cbv = desc_alloc_interface.Allocate(desc_alloc_id, k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_cbv.h_cpu, desc_handle_cbv.h_gpu);
+							const bool result_alloc_desc_srv = desc_alloc_interface.Allocate(desc_alloc_id, k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_srv.h_cpu, desc_handle_srv.h_gpu);
+							assert(result_alloc_desc_cbv && result_alloc_desc_srv);
+
+							// 描画用HeapにDescriptorコピー.
+							{
+								const auto desc_stride = desc_alloc_interface.GetFrameDescriptorManager()->GetHandleIncrementSize();
+								auto func_get_offseted_desc_handle = [](const D3D12_CPU_DESCRIPTOR_HANDLE& h_cpu, uint32_t offset)
+								{
+									D3D12_CPU_DESCRIPTOR_HANDLE ret = h_cpu;
+									ret.ptr += offset;
+									return ret;
+								};
+
+								const auto geom_data = blas->GetGeometryData(geom_i);
+								assert(geom_data.vertex_srv);
+								assert(geom_data.index_srv);
+
+								p_device->GetD3D12Device()->CopyDescriptorsSimple(1, desc_handle_srv.h_cpu, geom_data.vertex_srv->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+								p_device->GetD3D12Device()->CopyDescriptorsSimple(1, func_get_offseted_desc_handle(desc_handle_srv.h_cpu, desc_stride * 1), geom_data.index_srv->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+							
+
+								// まだLocalにCBVは無い.
+							}
+
+							// 書き込み
+							
+							// Shader Identifier
+							memcpy(mapped + (table_hitgroup_offset + shader_record_byte_size * hitgroup_count), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(geom_hit_group_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+							
+							auto record_res_offset = (table_hitgroup_offset + shader_record_byte_size * hitgroup_count) + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+
+							// CBV Table
+							memcpy(mapped + record_res_offset, &desc_handle_cbv.h_gpu, sizeof(D3D12_GPU_DESCRIPTOR_HANDLE));
+							record_res_offset += sizeof(D3D12_GPU_DESCRIPTOR_HANDLE);
+
+							// SRV Table
+							memcpy(mapped + record_res_offset, &desc_handle_srv.h_gpu, sizeof(D3D12_GPU_DESCRIPTOR_HANDLE));
+							record_res_offset += sizeof(D3D12_GPU_DESCRIPTOR_HANDLE);
 						}
-						++table_cnt;
+						++hitgroup_count;
 					}
 				}
+				out.table_hitgroup_offset_ = table_hitgroup_offset;
+				out.table_hitgroup_count_ = hitgroup_count;
 
 				out.shader_table_.Unmap();
 			}
@@ -1181,7 +1280,7 @@ namespace ngl
 		}
 		RaytraceStructureManager::~RaytraceStructureManager()
 		{
-			// Delete.
+			// BLASインスタンス解放.
 			for (auto i = 0; i < blas_array_.size(); ++i)
 			{
 				if (blas_array_[i])
@@ -1191,6 +1290,8 @@ namespace ngl
 				}
 			}
 
+			// Descriptor解放.
+			desc_alloc_interface_.Deallocate(desc_alloc_id_);
 		}
 		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state,
 			const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
@@ -1198,6 +1299,16 @@ namespace ngl
 			const std::vector<math::Mat34>& instance_transform_array,
 			const std::vector<uint32_t>& instance_hitgroup_id_array)
 		{
+			// Descriptor確保用Interface初期化.
+			{
+				rhi::FrameDescriptorAllocInterface::Desc descriptor_interface_desc = {};
+				descriptor_interface_desc.allow_frame_flip_index = false;	// FrameFlipと被らないようにfalse指定.
+				desc_alloc_interface_.Initialize(p_device->GetFrameDescriptorManager(), descriptor_interface_desc);
+
+				// 確保IDはFrameFlipと被らないIDに設定.
+				// とりあえず最上位bit 1 としておく.
+				desc_alloc_id_ = (1u << 31u) | (1u);
+			}
 
 			// StateObjectは外部から.
 			assert(p_state);
@@ -1241,9 +1352,9 @@ namespace ngl
 				return false;
 			}
 
-
-
-			if (!CreateShaderTable(shader_table_, p_device, test_tlas_, *p_state_object_, "rayGen", "miss", 1))
+			// 念のためDescriptor解放. 別のインスタンスで同じIDを使っている場合は問題となるため注意.
+			desc_alloc_interface_.Deallocate(desc_alloc_id_);
+			if (!CreateShaderTable(shader_table_, p_device, desc_alloc_interface_, desc_alloc_id_, test_tlas_, *p_state_object_, "rayGen", "miss"))
 			{
 				assert(false);
 				return false;
@@ -1384,24 +1495,12 @@ namespace ngl
 			// State.
 			d3d_command_list->SetPipelineState1(p_state_object_->GetStateObject());
 
-			// リソース設定.
+			// Globalリソース設定.
 			{
 				// ASとCBV,SRV,UAVの3種それぞれに固定数分でframe descriptor heap確保.
-				const int num_frame_descriptor_cbvsrvuav_count = k_frame_descriptor_cbvsrvuav_table_size * 3;
-				const int num_frame_descriptor_sampler_count = k_frame_descriptor_sampler_table_size;
+				const int num_frame_descriptor_cbvsrvuav_count = k_rt_global_descriptor_cbvsrvuav_table_size * 3;
+				const int num_frame_descriptor_sampler_count = k_rt_global_descriptor_sampler_table_size;
 
-
-				struct DescriptorHandleSet
-				{
-					DescriptorHandleSet() { }
-					DescriptorHandleSet(const D3D12_CPU_DESCRIPTOR_HANDLE& cpu_handle, const D3D12_GPU_DESCRIPTOR_HANDLE& gpu_handle)
-					{
-						h_cpu = cpu_handle;
-						h_gpu = gpu_handle;
-					}
-					D3D12_CPU_DESCRIPTOR_HANDLE h_cpu = {};
-					D3D12_GPU_DESCRIPTOR_HANDLE h_gpu = {};
-				};
 
 				const auto resource_descriptor_step_size = p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetHandleIncrementSize();
 				const auto sampler_descriptor_step_size = p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetHandleIncrementSize();
@@ -1429,10 +1528,10 @@ namespace ngl
 				}
 
 				// frame heap 上のそれぞれの配置.
-				DescriptorHandleSet descriptor_table_base_cbv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 0, resource_descriptor_step_size);
-				DescriptorHandleSet descriptor_table_base_srv = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 1, resource_descriptor_step_size);
-				DescriptorHandleSet descriptor_table_base_uav = get_descriptor_with_pos(res_heap_head, k_frame_descriptor_cbvsrvuav_table_size * 2, resource_descriptor_step_size);
-				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_frame_descriptor_sampler_table_size * 0, sampler_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_cbv = get_descriptor_with_pos(res_heap_head, k_rt_global_descriptor_cbvsrvuav_table_size * 0, resource_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_srv = get_descriptor_with_pos(res_heap_head, k_rt_global_descriptor_cbvsrvuav_table_size * 1, resource_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_uav = get_descriptor_with_pos(res_heap_head, k_rt_global_descriptor_cbvsrvuav_table_size * 2, resource_descriptor_step_size);
+				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_rt_global_descriptor_sampler_table_size * 0, sampler_descriptor_step_size);
 				{
 					// FrameHeapにコピーする.
 
@@ -1446,7 +1545,7 @@ namespace ngl
 					// TODO.
 				}
 
-				// Heap設定.
+				// Heap設定. desc_alloc_interface_ はHeapとしてはCommandListと同じ巨大なHeapから切り出して利用しているため同一Heapで良い.
 				{
 					std::vector<ID3D12DescriptorHeap*> use_heap_array = {};
 					use_heap_array.push_back(p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetD3D12DescriptorHeap());
@@ -1478,13 +1577,13 @@ namespace ngl
 			// Miss Shaderのテーブル位置.
 			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + shader_table_.table_miss_offset_;
 			raytraceDesc.MissShaderTable.StrideInBytes = shader_table_.table_entry_byte_size_;
-			raytraceDesc.MissShaderTable.SizeInBytes = shader_table_.table_entry_byte_size_;   // Only a s single miss-entry
+			raytraceDesc.MissShaderTable.SizeInBytes = shader_table_.table_entry_byte_size_ * shader_table_.table_miss_count_;// shader_table_.table_entry_byte_size_;   // Only a s single miss-entry
 
 			// HitGroup群の先頭のテーブル位置.
 			// マテリアル毎のHitGroupはここから連続領域に格納. Instanceに設定されたHitGroupIndexでアクセスされる.
 			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + shader_table_.table_hitgroup_offset_;
 			raytraceDesc.HitGroupTable.StrideInBytes = shader_table_.table_entry_byte_size_;
-			raytraceDesc.HitGroupTable.SizeInBytes = shader_table_.table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.SizeInBytes = shader_table_.table_entry_byte_size_ * shader_table_.table_hitgroup_count_;
 			
 			d3d_command_list->DispatchRays(&raytraceDesc);
 

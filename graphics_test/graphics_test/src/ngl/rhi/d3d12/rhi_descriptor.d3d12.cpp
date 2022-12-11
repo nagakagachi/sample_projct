@@ -13,7 +13,6 @@ namespace ngl
 {
 	namespace rhi
 	{
-
 		DescriptorHeapWrapper::DescriptorHeapWrapper()
 		{
 		}
@@ -530,6 +529,13 @@ namespace ngl
 		{
 			assert(p_manager_);
 
+			// 許可されていない場合は frame flip index と重複するインデックス範囲を指定することはできない.
+			if (!desc_.allow_frame_flip_index && ((k_fdm_frame_flip_index_bitmask & alloc_id) == alloc_id))
+			{
+				assert(false);
+				return false;
+			}
+
 			// そもそものスタックサイズよりも大きいサイズを要求されることは想定外.
 			assert(desc_.stack_size >= count);
 			if (desc_.stack_size < count)
@@ -575,6 +581,14 @@ namespace ngl
 		{
 			assert(p_manager_);
 
+			if (!desc_.allow_frame_flip_index)
+			{
+				// 許可されていない場合は frame flip index を指定することはできない.
+				assert((k_fdm_frame_flip_index_bitmask & alloc_id) != alloc_id);
+
+				return;
+			}
+
 			// IDに関連付けられた領域を全開放.
 			p_manager_->ResetFrameDescriptor(alloc_id);
 
@@ -612,6 +626,7 @@ namespace ngl
 
 			FrameDescriptorAllocInterface::Desc alloc_interface_desc = {};
 			alloc_interface_desc.stack_size = desc.stack_size;
+			alloc_interface_desc.allow_frame_flip_index = true;	// Frame単位自動解放の対象とするため true.
 			alloc_interface_.Initialize(p_manager, alloc_interface_desc);
 
 			// 初回は無効なフレーム
@@ -634,7 +649,11 @@ namespace ngl
 			alloc_interface_.ResetStack();
 
 			// フレームインデックス更新
-			frame_flip_index_ = frame_flip_index;
+			// Raytraceリソースなどが同じマネージャに対して固有IDでアロケートするため, Frame側は多くても3bitまでしか使わない, 使えないものとする.
+			const auto safe_frame_flip_index = (frame_flip_index & k_fdm_frame_flip_index_bitmask);
+			assert(safe_frame_flip_index == frame_flip_index);
+
+			frame_flip_index_ = safe_frame_flip_index;
 		}
 		bool FrameCommandListDescriptorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
 		{

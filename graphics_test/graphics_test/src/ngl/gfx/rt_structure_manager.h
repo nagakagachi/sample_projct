@@ -14,31 +14,6 @@
 #include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
-namespace
-{
-	// Convert a wide Unicode string to an UTF8 string
-	// DXRのShaderLibrary内エントリアクセスがwcharのためUtilityとして用意.
-	std::string wst_to_str(const std::wstring& wstr)
-	{
-		if (wstr.empty()) return std::string();
-		int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
-		std::string strTo(size_needed, 0);
-		WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
-		return strTo;
-	}
-
-	// Convert an UTF8 string to a wide Unicode String
-	// DXRのShaderLibrary内エントリアクセスがwcharのためUtilityとして用意.
-	std::wstring str_to_wstr(const std::string& str)
-	{
-		if (str.empty()) return std::wstring();
-		int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
-		std::wstring wstrTo(size_needed, 0);
-		MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
-		return wstrTo;
-	}
-}
-
 namespace ngl
 {
 	namespace gfx
@@ -48,6 +23,35 @@ namespace ngl
 
 		// Local Root Signature のレジスタは 1000 スタートとする.
 		static constexpr uint32_t k_system_raytracing_local_register_start = 1000;
+
+		// Global Root Signature の各リソース数.
+		static constexpr uint32_t k_rt_global_descriptor_cbvsrvuav_table_size = 16;
+		static constexpr uint32_t k_rt_global_descriptor_sampler_table_size = 16;
+
+		// Local Root Signature の各リソース数.
+		static constexpr uint32_t k_rt_local_descriptor_cbvsrvuav_table_size = 16;
+
+
+
+		struct DescriptorHandleSet
+		{
+			DescriptorHandleSet() { }
+			DescriptorHandleSet(const D3D12_CPU_DESCRIPTOR_HANDLE& cpu_handle, const D3D12_GPU_DESCRIPTOR_HANDLE& gpu_handle)
+			{
+				h_cpu = cpu_handle;
+				h_gpu = gpu_handle;
+			}
+			D3D12_CPU_DESCRIPTOR_HANDLE h_cpu = {};
+			D3D12_GPU_DESCRIPTOR_HANDLE h_gpu = {};
+		};
+
+
+
+		struct RaytraceStructureBottomGeometryResource
+		{
+			rhi::ShaderResourceViewDep* vertex_srv = nullptr;
+			rhi::ShaderResourceViewDep* index_srv = nullptr;
+		};
 
 
 		struct RaytraceStructureBottomGeometryDesc
@@ -82,7 +86,9 @@ namespace ngl
 			bool IsSetuped() const;
 			bool IsBuilt() const;
 
+			// BLAS Buffer.
 			rhi::BufferDep* GetBuffer();
+			// BLAS Buffer.
 			const rhi::BufferDep* GetBuffer() const;
 
 			// 内部Geometry数.
@@ -90,9 +96,21 @@ namespace ngl
 			{
 				return static_cast<uint32_t>(geom_desc_array_.size());
 			}
+			// 内部Geometry情報.
+			RaytraceStructureBottomGeometryResource GetGeometryData(uint32_t index);
+			// 内部Geometry情報.
+			RaytraceStructureBottomGeometryResource GetGeometryData(uint32_t index) const;
 
 		private:
 			bool is_built_ = false;
+
+			// リソースとして頂点バッファやインデックスバッファへアクセスをするために保持.
+			std::vector<RaytraceStructureBottomGeometryDesc> geometry_desc_array_;
+
+			// 内部で生成するSrv.
+			std::vector<rhi::ShaderResourceViewDep*> geometry_vertex_srv_array_;
+			// 内部で生成するSrv.
+			std::vector<rhi::ShaderResourceViewDep*> geometry_index_srv_array_;
 
 			// setup data.
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;
@@ -290,9 +308,15 @@ namespace ngl
 
 			uint32_t		table_raygen_offset_ = 0;
 			uint32_t		table_miss_offset_ = 0;
+			uint32_t		table_miss_count_ = 0;
 			uint32_t		table_hitgroup_offset_ = 0;
+			uint32_t		table_hitgroup_count_ = 0;
 		};
-		static bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device, const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name, uint32_t per_entry_descriptor_param_count);
+		static bool CreateShaderTable(
+			RaytraceShaderTable& out,
+			rhi::DeviceDep* p_device,
+			rhi::FrameDescriptorAllocInterface& desc_alloc_interface, uint32_t desc_alloc_id,
+			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name);
 
 
 		// RaytraceSceneに登録する1Modelを構成するGeometry情報.
@@ -352,6 +376,10 @@ namespace ngl
 			// 管理責任はRaytraceStructureManager自身.
 			RaytraceShaderTable shader_table_;
 
+			// Descriptor用. 別のRaytraceStructureManagerインスタンスのAllocIDと被ると意図しないタイミングで解放されることがあるので注意.
+			rhi::FrameDescriptorAllocInterface	desc_alloc_interface_ = {};
+			uint32_t	desc_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
+
 			// テスト用のRayDispatch出力先UAV.
 			rhi::TextureDep				ray_result_;
 			rhi::ShaderResourceViewDep	ray_result_srv_;
@@ -366,3 +394,31 @@ namespace ngl
 
 	}
 }
+
+
+namespace
+{
+	// Convert a wide Unicode string to an UTF8 string
+	// DXRのShaderLibrary内エントリアクセスがwcharのためUtilityとして用意.
+	std::string wst_to_str(const std::wstring& wstr)
+	{
+		if (wstr.empty()) return std::string();
+		int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+		std::string strTo(size_needed, 0);
+		WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+		return strTo;
+	}
+
+	// Convert an UTF8 string to a wide Unicode String
+	// DXRのShaderLibrary内エントリアクセスがwcharのためUtilityとして用意.
+	std::wstring str_to_wstr(const std::string& str)
+	{
+		if (str.empty()) return std::wstring();
+		int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+		std::wstring wstrTo(size_needed, 0);
+		MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
+		return wstrTo;
+	}
+}
+
+
