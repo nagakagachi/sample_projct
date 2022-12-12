@@ -54,6 +54,9 @@ namespace ngl
 		namespace helper
 		{
 			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, CComPtr<ID3D12RootSignature>& out_root_signature);
+
+			bool SerializeAndCreateRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_NONE);
+			bool SerializeAndCreateLocalRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_NONE);
 		}
 
 

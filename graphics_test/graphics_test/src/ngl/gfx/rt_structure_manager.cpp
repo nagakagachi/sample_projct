@@ -661,14 +661,6 @@ namespace ngl
 					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, nullptr)
 				{}
 
-				/*
-					D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-					root_signature_desc.NumParameters = 0;
-					root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;// Local設定.
-					rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, rt_local_root_signature0_);
-
-					Setup(rt_local_root_signature0_);
-				*/
 				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
 				{
 					p_root_signature_ = p_root_signature;
@@ -936,12 +928,7 @@ namespace ngl
 					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[i];
 				}
 
-				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-				root_signature_desc.NumParameters = (uint32_t)root_param.size();
-				root_signature_desc.pParameters = root_param.data();
-				root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-
-				if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, global_root_signature_))
+				if (!rhi::helper::SerializeAndCreateRootSignature(global_root_signature_, p_device, root_param.data(), (uint32_t)root_param.size()))
 				{
 					assert(false);
 					return false;
@@ -984,12 +971,7 @@ namespace ngl
 					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[i];
 				}
 
-				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-				root_signature_desc.NumParameters = (uint32_t)root_param.size();
-				root_signature_desc.pParameters = root_param.data();
-				root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
-
-				if (!rhi::helper::SerializeAndCreateRootSignature(p_device, root_signature_desc, local_root_signature_fixed_))
+				if (!rhi::helper::SerializeAndCreateLocalRootSignature(local_root_signature_fixed_, p_device, root_param.data(), (uint32_t)root_param.size()))
 				{
 					assert(false);
 					return false;

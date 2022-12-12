@@ -117,6 +117,23 @@ namespace ngl
 				}
 				return true;
 			}
+
+			bool SerializeAndCreateRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag)
+			{
+				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+				root_signature_desc.NumParameters = num_param;
+				root_signature_desc.pParameters = p_param_array;
+				root_signature_desc.Flags = flag; // Global (Not Local).
+				return SerializeAndCreateRootSignature(p_device, root_signature_desc, out_root_signature);
+			}
+			bool SerializeAndCreateLocalRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag)
+			{
+				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+				root_signature_desc.NumParameters = num_param;
+				root_signature_desc.pParameters = p_param_array;
+				root_signature_desc.Flags = flag | D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE; // Local.
+				return SerializeAndCreateRootSignature(p_device, root_signature_desc, out_root_signature);
+			}
 		}
 
 
