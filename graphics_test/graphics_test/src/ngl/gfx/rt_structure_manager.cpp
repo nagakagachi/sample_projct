@@ -90,8 +90,7 @@ namespace ngl
 					}
 
 
-					// 内部で必要なSrvを作ってしまう.
-
+					// HitGroup等でのジオメトリ情報アクセス用のLocal ResourceのためにSrvを生成.
 					{
 						auto p_vertex_srv = new ngl::rhi::ShaderResourceViewDep();
 						geometry_vertex_srv_array_.push_back(p_vertex_srv);
@@ -162,7 +161,7 @@ namespace ngl
 			return true;
 		}
 
-		// SetupAs... の情報を元に構造構築コマンドを発行する.
+		// Setup の情報を元に構造構築コマンドを発行する.
 		// Buildタイミングをコントロールするために分離している.
 		// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
 		bool RaytraceStructureBottom::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
@@ -356,7 +355,7 @@ namespace ngl
 			// ここで設定した情報はそのままBuildで利用される.
 			build_setup_info_ = {};
 			build_setup_info_.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-			build_setup_info_.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+			build_setup_info_.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;// TLASはTrace高速設定.
 			build_setup_info_.NumDescs = num_instance_total;// Instance Desc Bufferの要素数を指定.
 			build_setup_info_.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL; // TLAS.
 			// input情報にInstanceBufferセット.
@@ -407,7 +406,7 @@ namespace ngl
 			return true;
 		}
 
-		// SetupAs... の情報を元に構造構築コマンドを発行する.
+		// Setup の情報を元に構造構築コマンドを発行する.
 		// Buildタイミングをコントロールするために分離している.
 		// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
 		bool RaytraceStructureTop::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
@@ -428,7 +427,7 @@ namespace ngl
 			// TLAS Build .
 			if (SETUP_TYPE::TLAS == setup_type_)
 			{
-				// Setupで準備した情報からASをビルドするコマンドを発行.
+				// ASビルドコマンドを発行.
 				// 
 				// Builld.
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC build_desc = {};
@@ -437,7 +436,7 @@ namespace ngl
 				build_desc.ScratchAccelerationStructureData = scratch_.GetD3D12Resource()->GetGPUVirtualAddress();
 				p_command_list->GetD3D12GraphicsCommandListForDxr()->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
 
-				// UAV Barrier変更.
+				// UAV Barrier.
 				p_command_list->ResourceUavBarrier(&main_);
 			}
 
@@ -500,28 +499,73 @@ namespace ngl
 		// Raytrace用のStateObject生成のためのSubobject関連ヘルパー.
 		namespace subobject
 		{
-			// Subobjectが必ず持つ情報の管理する基底.
-			struct SubobjectBase
+			// Subobject生成簡易化.
+			
+			// SubobjectBuilderでの構築用Setting基底.
+			class SubobjectSetting
 			{
-				SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE type, void* p_desc)
+			public:
+				friend class SubobjectBuilder;
+				SubobjectSetting()
 				{
-					subobject_.Type = type;
-					subobject_.pDesc = p_desc;
+				}
+				virtual ~SubobjectSetting()
+				{
 				}
 
-				D3D12_STATE_SUBOBJECT	subobject_ = {};
+				void Assign(D3D12_STATE_SUBOBJECT* p_target)
+				{
+					assert(p_target);
+					// 割当.
+					p_target_ = p_target;
 
-			protected:
+					// 実装側のTypeを設定.
+					p_target_->Type = GetType();
+					// 実装側のSubobjectデータ部を設定.
+					p_target_->pDesc = GetData();
+				}
+				D3D12_STATE_SUBOBJECT* GetAssignedSubobject()
+				{
+					return p_target_;
+				}
+				// 派生クラスでTypeを返す.
+				virtual D3D12_STATE_SUBOBJECT_TYPE GetType() const = 0;
+				// 派生クラスでデータ部を返す.
+				virtual void* GetData() = 0;
+
+				// Stateを構成するすべてのSubobjectのメモリ配置が確定した後に解決すべき処理があれば実装.
+				virtual void Resolve()
+				{}
+
+			public:
+				const D3D12_STATE_SUBOBJECT* GetAssignedSubobject() const
+				{
+					return p_target_;
+				}
+
+			private:
+				D3D12_STATE_SUBOBJECT* p_target_ = nullptr;
 			};
 
 			// Subobject DXIL Library.
 			// 複数のシェーダを含んだオブジェクト.
-			struct SubobjectDxilLibrary : public SubobjectBase
+			class SubobjectSettingDxilLibrary : public SubobjectSetting
 			{
-				SubobjectDxilLibrary()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &library_desc_)
-				{}
+			public:
+				SubobjectSettingDxilLibrary()
+				{
+				}
 
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
+				}
+				void* GetData() override
+				{
+					return &library_desc_;
+				}
+
+			public:
 				void Setup(const rhi::ShaderDep* p_shader, const char* entry_point_array[], int num_entry_point)
 				{
 					library_desc_ = {};
@@ -559,12 +603,22 @@ namespace ngl
 
 			// HitGroup.
 			// マテリアル毎のRaytraceシェーダグループ.
-			struct SubobjectHitGroup : public SubobjectBase
+			class SubobjectSettingHitGroup : public SubobjectSetting
 			{
-				SubobjectHitGroup()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, &hit_group_desc_)
+			public:
+				SubobjectSettingHitGroup()
 				{}
 
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
+				}
+				void* GetData() override
+				{
+					return &hit_group_desc_;
+				}
+
+			public:
 				void Setup(const char* anyhit, const char* closesthit, const char* intersection, const char* hitgroup_name)
 				{
 					hit_group_desc_ = {};
@@ -602,15 +656,25 @@ namespace ngl
 
 			// Shader Config.
 			// RtPSOの全体に対する設定と思われる.
-			struct SubobjectRaytracingShaderConfig : public SubobjectBase
+			class SubobjectSettingRaytracingShaderConfig : public SubobjectSetting
 			{
+			public:
 				// デフォルト値として BuiltInTriangleIntersectionAttributes のサイズ (float2 barycentrics).
 				static constexpr uint32_t k_default_attribute_size = 2 * sizeof(float);
 
-				SubobjectRaytracingShaderConfig()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, &shader_config_)
+				SubobjectSettingRaytracingShaderConfig()
 				{}
 
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG;
+				}
+				void* GetData() override
+				{
+					return &shader_config_;
+				}
+
+			public:
 				// RaytracingのPayloadとAttributeのサイズ.
 				void Setup(uint32_t raytracing_payload_size, uint32_t raytracing_attribute_size = k_default_attribute_size)
 				{
@@ -623,12 +687,22 @@ namespace ngl
 
 			// Pipeline Config.
 			// RtPSOの全体に対する設定と思われる.
-			struct SubobjectRaytracingPipelineConfig : public SubobjectBase
+			class SubobjectSettingRaytracingPipelineConfig : public SubobjectSetting
 			{
-				SubobjectRaytracingPipelineConfig()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, &pipeline_config_)
+			public:
+				SubobjectSettingRaytracingPipelineConfig()
 				{}
 
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG;
+				}
+				void* GetData() override
+				{
+					return &pipeline_config_;
+				}
+
+			public:
 				// Rayの最大再帰回数.
 				void Setup(uint32_t max_trace_recursion_depth)
 				{
@@ -639,33 +713,52 @@ namespace ngl
 			};
 
 			// Global Root Signature.
-			struct SubobjectGlobalRootSignature : public SubobjectBase
+			class SubobjectSettingGlobalRootSignature : public SubobjectSetting
 			{
-				SubobjectGlobalRootSignature()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, nullptr)
+			public:
+				SubobjectSettingGlobalRootSignature()
 				{}
+
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE;
+				}
+				void* GetData() override
+				{
+					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
+					return &p_root_signature_.p;
+				}
+
+			public:
 				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
 				{
 					p_root_signature_ = p_root_signature;
-					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
-					this->subobject_.pDesc = &p_root_signature_.p;
 				}
 			private:
 				CComPtr<ID3D12RootSignature> p_root_signature_;
 			};
 
 			// Local Root Signature.
-			struct SubobjectLocalRootSignature : public SubobjectBase
+			class SubobjectSettingLocalRootSignature : public SubobjectSetting
 			{
-				SubobjectLocalRootSignature()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, nullptr)
+			public:
+				SubobjectSettingLocalRootSignature()
 				{}
 
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
+				}
+				void* GetData() override
+				{
+					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
+					return &p_root_signature_.p;
+				}
+
+			public:
 				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
 				{
 					p_root_signature_ = p_root_signature;
-					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
-					this->subobject_.pDesc = &p_root_signature_.p;
 				}
 			private:
 				CComPtr<ID3D12RootSignature> p_root_signature_;
@@ -674,13 +767,30 @@ namespace ngl
 			// Association
 			// 基本的には SubobjectLocalRootSignature と一対一で Local Root Signatureとシェーダレコード(shadow hitGroup等)をバインドするためのもの.
 			// NVIDIAサンプルではShaderNameとShaderConfig(Payloadサイズ等)のバインドもしているように見える.
-			struct SubobjectExportsAssociation : public SubobjectBase
+			class SubobjectSettingExportsAssociation : public SubobjectSetting
 			{
-				SubobjectExportsAssociation()
-					: SubobjectBase(D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION, &exports_)
+			public:
+				SubobjectSettingExportsAssociation()
 				{}
 
-				void Setup(const D3D12_STATE_SUBOBJECT* p_subobject, const char* export_name_array[], int num)
+				D3D12_STATE_SUBOBJECT_TYPE GetType() const override
+				{
+					return D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+				}
+				void* GetData() override
+				{
+					return &exports_;
+				}
+				void Resolve() override
+				{
+					assert(p_associate_);
+					assert(p_associate_->GetAssignedSubobject());
+					// Associateターゲットの確定したSubobjectをここで解決.
+					exports_.pSubobjectToAssociate = p_associate_->GetAssignedSubobject();
+				}
+
+			public:
+				void Setup(const SubobjectSetting* p_associate, const char* export_name_array[], int num)
 				{
 					exports_ = {};
 
@@ -696,16 +806,128 @@ namespace ngl
 						export_name_array_[i] = export_name_cache_[i].c_str();
 					}
 
-					exports_.pSubobjectToAssociate = p_subobject;
+
+					p_associate_ = p_associate;// 現時点ではAssociate対象のSettingオブジェクトポインタのみ保持.
+
+					exports_.pSubobjectToAssociate = nullptr;	// まだターゲットのメモリ上の配置が不明なのでnull. SubobjectBuilderによって解決される.
+
 					exports_.pExports = export_name_array_.data();
 					exports_.NumExports = num;
-
 				}
 			private:
 				D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION	exports_ = {};
-				std::vector<std::wstring>				export_name_cache_;
-				std::vector<const wchar_t*>				export_name_array_;
+
+				const SubobjectSetting*		p_associate_ = nullptr;
+				std::vector<std::wstring>	export_name_cache_;
+				std::vector<const wchar_t*>	export_name_array_;
 			};
+
+
+			/*
+				Subobject生成補助クラス
+					Subobjectのセットアップや関連付けを含めた依存関係解決などを隠蔽する.
+
+
+					subobject::SubobjectBuilder subobject_builder;
+
+					// ワークバッファ上にShaderConfig SubobjectSetting生成.
+					auto* p_so_shaderconfig = subobject_builder.CreateSubobject<subobject::SubobjectSettingRaytracingShaderConfig>();
+					// Payloadサイズなどを設定.
+					p_so_shaderconfig->Setup(payload_byte_size, attribute_byte_size);
+
+					// ワークバッファ上にLocal Root Signature SubobjectSetting生成.
+					auto* p_so_lrs = subobject_builder.CreateSubobject<subobject::SubobjectSettingLocalRootSignature>();
+					// Root Signature設定.
+					p_so_lrs->Setup(local_root_signature_fixed_);
+
+					// ワークバッファ上にExportsAssociation SubobjectSetting生成(Subobject間の関連付け).
+					auto* p_so_association = subobject_builder.CreateSubobject<subobject::SubobjectSettingExportsAssociation>();
+					// Local Root SignatureのSubobjectとHitgroup名の関連付けを設定.
+					p_so_association->Setup(p_so_lrs, hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
+
+
+					// ワークバッファからSubobjectをビルド.
+					subobject_builder.Build();
+
+					// ビルドしたSubobjectからStateObjectを生成.
+					D3D12_STATE_OBJECT_DESC state_object_desc = {};
+					state_object_desc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
+					state_object_desc.NumSubobjects = subobject_builder.NumSubobject();
+					state_object_desc.pSubobjects = subobject_builder.GetSubobject();
+
+					// 生成.
+					if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&state_oject_))))
+					{
+						assert(false);
+						return false;
+					}
+
+			*/
+			class SubobjectBuilder
+			{
+			public:
+				// T: SubobjectSetting派生クラス.
+				template<typename T>
+				T* CreateSubobject()
+				{
+					// 生成追加.
+					auto p = new T();
+					object_array_.push_back(p);
+					return p;
+				}
+
+				SubobjectBuilder()
+				{}
+				~SubobjectBuilder()
+				{
+					Clear();
+				}
+				void Clear()
+				{
+					for (auto* e : object_array_)
+					{
+						if (e)
+							delete e;
+					}
+					object_array_.clear();
+					built_data_.clear();
+				}
+
+				void Build()
+				{
+					built_data_.clear();
+					built_data_.resize(object_array_.size());
+
+					for (auto i = 0; i < object_array_.size(); ++i)
+					{
+						object_array_[i]->Assign(&built_data_[i]);
+					}
+
+					for (auto i = 0; i < object_array_.size(); ++i)
+					{
+						object_array_[i]->Resolve();
+					}
+				}
+
+				D3D12_STATE_SUBOBJECT* GetSubobject()
+				{
+					return built_data_.data();
+				}
+				const D3D12_STATE_SUBOBJECT* GetSubobject() const
+				{
+					return built_data_.data();
+				}
+				const uint32_t NumSubobject() const
+				{
+					return static_cast<uint32_t>(built_data_.size());
+				}
+
+			private:
+				std::vector<SubobjectSetting*> object_array_;
+
+				std::vector<D3D12_STATE_SUBOBJECT> built_data_;
+			};
+
 		}
 
 		bool RaytraceStateObject::Initialize(rhi::DeviceDep* p_device, 
@@ -816,9 +1038,10 @@ namespace ngl
 			}
 
 
-			// Subobject ShaderLib Exportセットアップ.
-			std::vector<subobject::SubobjectDxilLibrary> subobject_shaderlib_array;
-			subobject_shaderlib_array.resize(shader_database_.size());
+			// Subobject構築.
+			subobject::SubobjectBuilder subobject_builder;
+
+			// ShaderLib.
 			{
 				std::vector<std::vector<const char*>> shader_function_export_info = {};
 				shader_function_export_info.resize(shader_database_.size());
@@ -847,13 +1070,12 @@ namespace ngl
 
 				for (int si = 0; si < shader_database_.size(); ++si)
 				{
-					subobject_shaderlib_array[si].Setup(shader_database_[si], shader_function_export_info[si].data(), (int)shader_function_export_info[si].size());
+					auto* p_so = subobject_builder.CreateSubobject<subobject::SubobjectSettingDxilLibrary>();
+					p_so->Setup(shader_database_[si], shader_function_export_info[si].data(), (int)shader_function_export_info[si].size());
 				}
 			}
 
 			// Subobject Hitgroupセットアップ.
-			std::vector<subobject::SubobjectHitGroup> subobject_hitgroup_array;
-			subobject_hitgroup_array.resize(hitgroup_database_.size());
 			{
 				for (int hi = 0; hi < hitgroup_database_.size(); ++hi)
 				{
@@ -862,10 +1084,10 @@ namespace ngl
 					const auto p_closesthit		= hitgroup_database_[hi].closest_hit_name.c_str();
 					const auto p_intersection	= hitgroup_database_[hi].intersection_name.c_str();
 
-					subobject_hitgroup_array[hi].Setup(p_anyhit, p_closesthit, p_intersection, p_hitgroup);
+					auto* p_so = subobject_builder.CreateSubobject<subobject::SubobjectSettingHitGroup>();
+					p_so->Setup(p_anyhit, p_closesthit, p_intersection, p_hitgroup);
 				}
 			}
-
 
 			// Global Root Signature. 
 			// TODO 現状はかなり固定.
@@ -934,13 +1156,10 @@ namespace ngl
 					return false;
 				}
 			}
-			// Subobject Global Root Signature.
-			subobject::SubobjectGlobalRootSignature so_grs = {};
-			so_grs.Setup(global_root_signature_);
+			auto* p_so_grs = subobject_builder.CreateSubobject<subobject::SubobjectSettingGlobalRootSignature>();
+			p_so_grs->Setup(global_root_signature_);
 
-			/*
 			// Local Root Signature.
-			*/
 			{
 				// local_root_signature_fixed_
 				std::vector<D3D12_ROOT_PARAMETER> root_param;
@@ -977,50 +1196,11 @@ namespace ngl
 					return false;
 				}
 			}
-			subobject::SubobjectLocalRootSignature so_lgs_fixed = {};
-			so_lgs_fixed.Setup(local_root_signature_fixed_);
-
-			// Shader Config.
-			subobject::SubobjectRaytracingShaderConfig so_shader_config = {};
-			so_shader_config.Setup(payload_byte_size, attribute_byte_size);
-			// Pipeline Config.
-			subobject::SubobjectRaytracingPipelineConfig so_pipeline_config = {};
-			so_pipeline_config.Setup(max_trace_recursion);
+			auto* p_so_lrs = subobject_builder.CreateSubobject<subobject::SubobjectSettingLocalRootSignature>();
+			p_so_lrs->Setup(local_root_signature_fixed_);
 
 
-			// Subobject間の参照が必要になる場合があるため改めて連続メモリにSUBOBJECTを構築. Resolveフェーズを入れるのも予定.
-			int num_subobject = 0;
-			num_subobject += 1; // Global Root Signature.
-			num_subobject += 1; // ShaderConfig.
-			num_subobject += 1; // PipelineConfig.
-			num_subobject += (int)subobject_shaderlib_array.size();
-			num_subobject += (int)subobject_hitgroup_array.size();
-			num_subobject += 1; // Local Root Signature 簡単のため全体で共有.
-			num_subobject += 1; // Local Root Signature と全HitGroupとの関連付け.
-
-			// subobject array.
-			std::vector<D3D12_STATE_SUBOBJECT> state_subobject_array;
-			state_subobject_array.resize(num_subobject);
-
-			// Subobject間の参照はとりあえず無視して積み込み.
-			int cnt_subobject = 0;
-			state_subobject_array[cnt_subobject++] = (so_grs.subobject_);
-			state_subobject_array[cnt_subobject++] = (so_shader_config.subobject_);
-			state_subobject_array[cnt_subobject++] = (so_pipeline_config.subobject_);
-			for (const auto& e : subobject_shaderlib_array)
-			{
-				state_subobject_array[cnt_subobject++] = e.subobject_;
-			}
-			for (const auto& e : subobject_hitgroup_array)
-			{
-				state_subobject_array[cnt_subobject++] = e.subobject_;
-			}
-
-			const auto lgs_fixed_index = cnt_subobject;// 共有Local Root Signature Subobjectの登録位置.
-			state_subobject_array[cnt_subobject++] = (so_lgs_fixed.subobject_);
-
-			subobject::SubobjectExportsAssociation so_assosiation_lgs_hitgroup = {};
-			// LGSの位置が確定した後にそのアドレスを使った関連付けが必要なので一旦ここで.
+			// Local Root SignatureとHitGroupの関連付け.
 			{
 				std::vector<const char*> hitgroup_name_ptr_array;
 				hitgroup_name_ptr_array.resize(hitgroup_database_.size());
@@ -1029,15 +1209,28 @@ namespace ngl
 					hitgroup_name_ptr_array[i] = hitgroup_database_[i].hitgorup_name.c_str();
 				}
 
-				so_assosiation_lgs_hitgroup.Setup(&state_subobject_array[lgs_fixed_index], hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
+				auto* p_so_association = subobject_builder.CreateSubobject<subobject::SubobjectSettingExportsAssociation>();
+				// Local Root Sig との関連付け.
+				p_so_association->Setup(p_so_lrs, hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
 			}
-			state_subobject_array[cnt_subobject++] = (so_assosiation_lgs_hitgroup.subobject_);
 
+			// Shader Config.
+			auto* p_so_shaderconfig = subobject_builder.CreateSubobject<subobject::SubobjectSettingRaytracingShaderConfig>();
+			p_so_shaderconfig->Setup(payload_byte_size, attribute_byte_size);
+
+			// Pipeline Config.
+			auto* p_so_pipelineconfig = subobject_builder.CreateSubobject<subobject::SubobjectSettingRaytracingPipelineConfig>();
+			p_so_pipelineconfig->Setup(max_trace_recursion);
+
+
+
+			// ビルド. Native Subobjectとしての関連付けも確定.
+			subobject_builder.Build();
 
 			D3D12_STATE_OBJECT_DESC state_object_desc = {};
 			state_object_desc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
-			state_object_desc.NumSubobjects = (uint32_t)state_subobject_array.size();
-			state_object_desc.pSubobjects = state_subobject_array.data();
+			state_object_desc.NumSubobjects = subobject_builder.NumSubobject();
+			state_object_desc.pSubobjects = subobject_builder.GetSubobject();
 
 			// 生成.
 			if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&state_oject_))))
