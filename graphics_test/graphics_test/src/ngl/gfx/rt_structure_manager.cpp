@@ -831,17 +831,17 @@ namespace ngl
 					subobject::SubobjectBuilder subobject_builder;
 
 					// ワークバッファ上にShaderConfig SubobjectSetting生成.
-					auto* p_so_shaderconfig = subobject_builder.CreateSubobject<subobject::SubobjectSettingRaytracingShaderConfig>();
+					auto* p_so_shaderconfig = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingRaytracingShaderConfig>();
 					// Payloadサイズなどを設定.
 					p_so_shaderconfig->Setup(payload_byte_size, attribute_byte_size);
 
 					// ワークバッファ上にLocal Root Signature SubobjectSetting生成.
-					auto* p_so_lrs = subobject_builder.CreateSubobject<subobject::SubobjectSettingLocalRootSignature>();
+					auto* p_so_lrs = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingLocalRootSignature>();
 					// Root Signature設定.
 					p_so_lrs->Setup(local_root_signature_fixed_);
 
 					// ワークバッファ上にExportsAssociation SubobjectSetting生成(Subobject間の関連付け).
-					auto* p_so_association = subobject_builder.CreateSubobject<subobject::SubobjectSettingExportsAssociation>();
+					auto* p_so_association = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingExportsAssociation>();
 					// Local Root SignatureのSubobjectとHitgroup名の関連付けを設定.
 					p_so_association->Setup(p_so_lrs, hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
 
@@ -868,7 +868,7 @@ namespace ngl
 			public:
 				// T: SubobjectSetting派生クラス.
 				template<typename T>
-				T* CreateSubobject()
+				T* CreateSubobjectSetting()
 				{
 					// 生成追加.
 					auto p = new T();
@@ -1070,7 +1070,7 @@ namespace ngl
 
 				for (int si = 0; si < shader_database_.size(); ++si)
 				{
-					auto* p_so = subobject_builder.CreateSubobject<subobject::SubobjectSettingDxilLibrary>();
+					auto* p_so = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingDxilLibrary>();
 					p_so->Setup(shader_database_[si], shader_function_export_info[si].data(), (int)shader_function_export_info[si].size());
 				}
 			}
@@ -1084,7 +1084,7 @@ namespace ngl
 					const auto p_closesthit		= hitgroup_database_[hi].closest_hit_name.c_str();
 					const auto p_intersection	= hitgroup_database_[hi].intersection_name.c_str();
 
-					auto* p_so = subobject_builder.CreateSubobject<subobject::SubobjectSettingHitGroup>();
+					auto* p_so = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingHitGroup>();
 					p_so->Setup(p_anyhit, p_closesthit, p_intersection, p_hitgroup);
 				}
 			}
@@ -1156,7 +1156,7 @@ namespace ngl
 					return false;
 				}
 			}
-			auto* p_so_grs = subobject_builder.CreateSubobject<subobject::SubobjectSettingGlobalRootSignature>();
+			auto* p_so_grs = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingGlobalRootSignature>();
 			p_so_grs->Setup(global_root_signature_);
 
 			// Local Root Signature.
@@ -1196,7 +1196,7 @@ namespace ngl
 					return false;
 				}
 			}
-			auto* p_so_lrs = subobject_builder.CreateSubobject<subobject::SubobjectSettingLocalRootSignature>();
+			auto* p_so_lrs = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingLocalRootSignature>();
 			p_so_lrs->Setup(local_root_signature_fixed_);
 
 
@@ -1209,17 +1209,17 @@ namespace ngl
 					hitgroup_name_ptr_array[i] = hitgroup_database_[i].hitgorup_name.c_str();
 				}
 
-				auto* p_so_association = subobject_builder.CreateSubobject<subobject::SubobjectSettingExportsAssociation>();
+				auto* p_so_association = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingExportsAssociation>();
 				// Local Root Sig との関連付け.
 				p_so_association->Setup(p_so_lrs, hitgroup_name_ptr_array.data(), (int)hitgroup_name_ptr_array.size());
 			}
 
 			// Shader Config.
-			auto* p_so_shaderconfig = subobject_builder.CreateSubobject<subobject::SubobjectSettingRaytracingShaderConfig>();
+			auto* p_so_shaderconfig = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingRaytracingShaderConfig>();
 			p_so_shaderconfig->Setup(payload_byte_size, attribute_byte_size);
 
 			// Pipeline Config.
-			auto* p_so_pipelineconfig = subobject_builder.CreateSubobject<subobject::SubobjectSettingRaytracingPipelineConfig>();
+			auto* p_so_pipelineconfig = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingRaytracingPipelineConfig>();
 			p_so_pipelineconfig->Setup(max_trace_recursion);
 
 
