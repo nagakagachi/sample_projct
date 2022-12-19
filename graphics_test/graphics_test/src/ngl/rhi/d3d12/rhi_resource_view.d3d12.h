@@ -190,12 +190,12 @@ namespace ngl
 			CComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
-		// UnorderedAccessView
-		class UnorderedAccessView
+		// UnorderedAccessViewDep
+		class UnorderedAccessViewDep
 		{
 		public:
-			UnorderedAccessView();
-			~UnorderedAccessView();
+			UnorderedAccessViewDep();
+			~UnorderedAccessViewDep();
 
 			// TextureのView.
 			bool Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size);

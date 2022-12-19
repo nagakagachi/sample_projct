@@ -1659,31 +1659,62 @@ namespace ngl
 			auto shader_table_head = shader_table_.shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 
 
-			// to UAV.
+			// 出力先UAVバリア. これはできれば外側に移行したい.
 			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::UnorderedAccess);
 			ray_result_state_ = rhi::ResourceState::UnorderedAccess;
 
 
 
-			// Bind the empty root signature
+			// -----------------------------------------------------------------------------------------------------------------------
+			// Global Resource設定. 各ResourceType毎のレジスタ範囲への設定を代行する.
+			// Global Resourceはそれぞれ0番レジスタから固定最大数分割り当てられている. 例) cbv_slot[2]-> b0
+
+			std::array<rhi::ConstantBufferViewDep*,		k_rt_global_descriptor_cbvsrvuav_table_size>	cbv_slot		= {};
+			std::array<rhi::ShaderResourceViewDep*,		k_rt_global_descriptor_cbvsrvuav_table_size>	srv_slot		= {};
+			std::array<rhi::UnorderedAccessViewDep*,	k_rt_global_descriptor_cbvsrvuav_table_size>	uav_slot		= {};
+			std::array<rhi::SamplerDep*,				k_rt_global_descriptor_sampler_table_size>		sampler_slot	= {};
+			// Global Resouceのスロットへの設定.
+			{
+				// Cbv.
+				{
+					cbv_slot[0] = &cbv_test_scene_view[cb_index];
+				}
+				// Srv.
+				{
+				}
+				// Uav.
+				{
+					uav_slot[0] = &ray_result_uav_;
+				}
+				// Sampler.
+				{
+				}
+			}
+			// -----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+			// Bind the root signature
 			d3d_command_list->SetComputeRootSignature(p_state_object_->GetGlobalRootSignature());
 			// State.
 			d3d_command_list->SetPipelineState1(p_state_object_->GetStateObject());
 
 			// Globalリソース設定.
 			{
-				// ASとCBV,SRV,UAVの3種それぞれに固定数分でframe descriptor heap確保.
+				// CBV,SRV,UAVの3種それぞれに固定数分でframe descriptor heap確保.
 				const int num_frame_descriptor_cbvsrvuav_count = k_rt_global_descriptor_cbvsrvuav_table_size * 3;
 				const int num_frame_descriptor_sampler_count = k_rt_global_descriptor_sampler_table_size;
 
 
 				const auto resource_descriptor_step_size = p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetHandleIncrementSize();
 				const auto sampler_descriptor_step_size = p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetHandleIncrementSize();
-				auto get_descriptor_with_pos = [](const DescriptorHandleSet& base,  int i, u32 handle_step_size) -> DescriptorHandleSet
+				auto get_descriptor_with_pos = [](const DescriptorHandleSet& base,  int offset_index, u32 handle_step_size) -> DescriptorHandleSet
 				{
+					const auto offset_addr = handle_step_size * offset_index;
 					DescriptorHandleSet ret(base);
-					ret.h_cpu.ptr += handle_step_size * i;
-					ret.h_gpu.ptr += handle_step_size * i;
+					ret.h_cpu.ptr += offset_addr;
+					ret.h_gpu.ptr += offset_addr;
 					return ret;
 				};
 
@@ -1708,19 +1739,48 @@ namespace ngl
 				DescriptorHandleSet descriptor_table_base_uav = get_descriptor_with_pos(res_heap_head, k_rt_global_descriptor_cbvsrvuav_table_size * 2, resource_descriptor_step_size);
 				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_rt_global_descriptor_sampler_table_size * 0, sampler_descriptor_step_size);
 				{
-					// FrameHeapにコピーする.
-
-					// Scene CBV
-					d3d_device->CopyDescriptorsSimple(1, descriptor_table_base_cbv.h_cpu, cbv_test_scene_view[cb_index].GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-
-					// uav 出力先のテストUAV.
-					d3d_device->CopyDescriptorsSimple(1, descriptor_table_base_uav.h_cpu, ray_result_uav_.GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-					// TODO.
+					// レンダリング用にFrameHeapにコピーする.
+					
+					// Global Cbv.
+					for (auto si = 0; si < cbv_slot.size(); ++si)
+					{
+						if (cbv_slot[si])
+						{
+							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_cbv, si, resource_descriptor_step_size);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, cbv_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+						}
+					}
+					// Global Srv.
+					for (auto si = 0; si < srv_slot.size(); ++si)
+					{
+						if (srv_slot[si])
+						{
+							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_srv, si, resource_descriptor_step_size);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, srv_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+						}
+					}
+					// Global Uav.
+					for (auto si = 0; si < uav_slot.size(); ++si)
+					{
+						if (uav_slot[si])
+						{
+							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_uav, si, resource_descriptor_step_size);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, uav_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+						}
+					}
+					// Global Sampler.
+					for (auto si = 0; si < sampler_slot.size(); ++si)
+					{
+						if (sampler_slot[si])
+						{
+							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_sampler, si, sampler_descriptor_step_size);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, sampler_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+						}
+					}
 				}
 
-				// Heap設定. desc_alloc_interface_ はHeapとしてはCommandListと同じ巨大なHeapから切り出して利用しているため同一Heapで良い.
+				// Heap設定.
+				// desc_alloc_interface_ はHeapとしてはCommandListと同じ巨大なHeapから切り出して利用しているため同一Heapで良い.
 				{
 					std::vector<ID3D12DescriptorHeap*> use_heap_array = {};
 					use_heap_array.push_back(p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetD3D12DescriptorHeap());
@@ -1730,7 +1790,8 @@ namespace ngl
 					d3d_command_list->SetDescriptorHeaps((uint32_t)use_heap_array.size(), use_heap_array.data());
 				}
 
-				// Table設定.
+				// Descriptor, Tableを設定.
+				// ASはParam0番に直接設定. CBV, SRV, UAV, Samplerはその次からTableで設定.
 				d3d_command_list->SetComputeRootShaderResourceView(0, test_tlas_.GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress());
 				d3d_command_list->SetComputeRootDescriptorTable(1, descriptor_table_base_cbv.h_gpu);
 				d3d_command_list->SetComputeRootDescriptorTable(2, descriptor_table_base_srv.h_gpu);
@@ -1763,7 +1824,7 @@ namespace ngl
 			d3d_command_list->DispatchRays(&raytraceDesc);
 
 
-			// to SRV.
+			// to SRV. .
 			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::ShaderRead);
 			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}

@@ -696,10 +696,10 @@ namespace ngl
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		UnorderedAccessView::UnorderedAccessView()
+		UnorderedAccessViewDep::UnorderedAccessViewDep()
 		{
 		}
-		UnorderedAccessView::~UnorderedAccessView()
+		UnorderedAccessViewDep::~UnorderedAccessViewDep()
 		{
 			Finalize();
 		}
@@ -721,7 +721,7 @@ namespace ngl
 			return true;
 		}
 		// TextureのView.
-		bool UnorderedAccessView::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
+		bool UnorderedAccessViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
 			assert(p_device && p_texture);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_texture->GetBindFlag()))
@@ -734,7 +734,7 @@ namespace ngl
 			return _Initialize(p_device, p_texture, desc, view_);
 		}
 		// BufferのStructuredBufferView.
-		bool UnorderedAccessView::InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count)
+		bool UnorderedAccessViewDep::InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count)
 		{
 			assert(p_device && p_buffer);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
@@ -747,7 +747,7 @@ namespace ngl
 			return _Initialize(p_device, p_buffer, desc, view_);
 		}
 		// BufferのTypedBufferView.
-		bool UnorderedAccessView::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
+		bool UnorderedAccessViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
 		{
 			assert(p_device && p_buffer);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
@@ -760,7 +760,7 @@ namespace ngl
 			return _Initialize(p_device, p_buffer, desc, view_);
 		}
 		// BufferのByteAddressBufferView.
-		bool UnorderedAccessView::InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count)
+		bool UnorderedAccessViewDep::InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count)
 		{
 			assert(p_device && p_buffer);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
@@ -773,7 +773,7 @@ namespace ngl
 			return _Initialize(p_device, p_buffer, desc, view_);
 		}
 
-		void UnorderedAccessView::Finalize()
+		void UnorderedAccessViewDep::Finalize()
 		{
 			auto&& descriptor_allocator = view_.allocator;
 			if (descriptor_allocator)

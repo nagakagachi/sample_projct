@@ -383,7 +383,7 @@ namespace ngl
 			// テスト用のRayDispatch出力先UAV.
 			rhi::TextureDep				ray_result_;
 			rhi::ShaderResourceViewDep	ray_result_srv_;
-			rhi::UnorderedAccessView	ray_result_uav_;
+			rhi::UnorderedAccessViewDep	ray_result_uav_;
 			rhi::ResourceState			ray_result_state_ = {};
 
 

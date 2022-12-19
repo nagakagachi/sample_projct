@@ -98,7 +98,7 @@ private:
 	ngl::rhi::ResourceState						tex_rt_state_;
 
 	ngl::rhi::TextureDep						tex_ua_;
-	ngl::rhi::UnorderedAccessView				tex_ua_uav_;
+	ngl::rhi::UnorderedAccessViewDep				tex_ua_uav_;
 	ngl::rhi::ResourceState						tex_ua_state_;
 
 
