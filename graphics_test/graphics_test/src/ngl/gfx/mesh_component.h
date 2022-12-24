@@ -25,6 +25,13 @@ namespace ngl
 		class MeshAssetVertexData
 		{
 		public:
+			MeshAssetVertexData()
+			{
+			}
+			~MeshAssetVertexData()
+			{
+			}
+
 			// raw data ptr.
 			T* raw_ptr_ = nullptr;
 			// rhi buffer.
@@ -38,6 +45,13 @@ namespace ngl
 		class MeshAssetIndexData
 		{
 		public:
+			MeshAssetIndexData()
+			{
+			}
+			~MeshAssetIndexData()
+			{
+			}
+
 			// raw data ptr.
 			T* raw_ptr_ = nullptr;
 			// rhi buffer.
@@ -52,6 +66,13 @@ namespace ngl
 		class MeshAssetData
 		{
 		public:
+			MeshAssetData()
+			{
+			}
+			~MeshAssetData()
+			{
+			}
+
 			// MeshDataメモリ.
 			std::vector<uint8_t> raw_data_mem_;
 
