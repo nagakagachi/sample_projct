@@ -1,11 +1,12 @@
 ﻿#pragma once
 
+// -------------------
 #include <cstring>
 // for wchar convert.
 #include <stdlib.h>
-
 #include <codecvt>
 #include <locale>
+// --------------------
 
 #include "ngl/math/math.h"
 
@@ -13,6 +14,8 @@
 #include "ngl/rhi/d3d12/rhi_command_list.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
+
+#include "mesh_component.h"
 
 namespace ngl
 {
@@ -56,8 +59,7 @@ namespace ngl
 
 		struct RaytraceStructureBottomGeometryDesc
 		{
-			rhi::BufferDep* vertex_buffer = nullptr;
-			rhi::BufferDep* index_buffer = nullptr;
+			gfx::MeshAssetData* mesh_data = nullptr;
 		};
 
 		// BLAS.
@@ -106,11 +108,6 @@ namespace ngl
 
 			// リソースとして頂点バッファやインデックスバッファへアクセスをするために保持.
 			std::vector<RaytraceStructureBottomGeometryDesc> geometry_desc_array_;
-
-			// 内部で生成するSrv.
-			std::vector<rhi::ShaderResourceViewDep*> geometry_vertex_srv_array_;
-			// 内部で生成するSrv.
-			std::vector<rhi::ShaderResourceViewDep*> geometry_index_srv_array_;
 
 			// setup data.
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;

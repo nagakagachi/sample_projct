@@ -600,6 +600,32 @@ namespace ngl
 				return Vec3(r0.w, r1.w, r2.w);
 			}
 
+			void SetColumn0(const Vec3& v)
+			{
+				r0.x = v.x;
+				r1.x = v.y;
+				r2.x = v.z;
+			}
+			void SetColumn1(const Vec3& v)
+			{
+				r0.y = v.x;
+				r1.y = v.y;
+				r2.y = v.z;
+			}
+			void SetColumn2(const Vec3& v)
+			{
+				r0.z = v.x;
+				r1.z = v.y;
+				r2.z = v.z;
+			}
+			void SetColumn3(const Vec3& v)
+			{
+				r0.w = v.x;
+				r1.w = v.y;
+				r2.w = v.z;
+			}
+
+
 			static constexpr Mat34 Zero()
 			{
 				return Mat34(0.0f);

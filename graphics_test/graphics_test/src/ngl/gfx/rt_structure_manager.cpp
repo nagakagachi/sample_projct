@@ -13,22 +13,6 @@ namespace ngl
 		}
 		RaytraceStructureBottom::~RaytraceStructureBottom()
 		{
-			for (auto& e : geometry_vertex_srv_array_)
-			{
-				if (e)
-				{
-					delete e;
-				}
-			}
-			geometry_vertex_srv_array_.clear();
-			for (auto& e : geometry_index_srv_array_)
-			{
-				if (e)
-				{
-					delete e;
-				}
-			}
-			geometry_index_srv_array_.clear();
 		}
 		bool RaytraceStructureBottom::Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceStructureBottomGeometryDesc>& geometry_desc_array)
 		{
@@ -51,32 +35,37 @@ namespace ngl
 			geom_desc_array_.reserve(geometry_desc_array.size());// 予約.
 			for (auto& g : geometry_desc_array)
 			{
-				if (nullptr != g.vertex_buffer)
+				if (nullptr != g.mesh_data)
 				{
 					geom_desc_array_.push_back({});
 					auto& geom_desc = geom_desc_array_[geom_desc_array_.size() - 1];// Tail.
 
-
 					const auto vertex_ngl_format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
 					auto index_ngl_format = ngl::rhi::ResourceFormat::Format_R32_UINT;
+
+					auto& rhi_position = g.mesh_data->position_.rhi_buffer_;
+					auto& rhi_index = g.mesh_data->index_.rhi_buffer_;
 
 					geom_desc = {};
 					geom_desc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;	// Triangle Geom.
 					geom_desc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;	// Opaque.
-					geom_desc.Triangles.VertexBuffer.StartAddress = g.vertex_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-					geom_desc.Triangles.VertexBuffer.StrideInBytes = g.vertex_buffer->GetElementByteSize();
-					geom_desc.Triangles.VertexCount = g.vertex_buffer->getElementCount();
+					// Position Vertex BufferをBLAS Descに設定.
+					geom_desc.Triangles.VertexBuffer.StartAddress = rhi_position.GetD3D12Resource()->GetGPUVirtualAddress();
+					geom_desc.Triangles.VertexBuffer.StrideInBytes = rhi_position.GetElementByteSize();
+					geom_desc.Triangles.VertexCount = rhi_position.getElementCount();
 					geom_desc.Triangles.VertexFormat = rhi::ConvertResourceFormat(vertex_ngl_format);// DXGI_FORMAT_R32G32B32_FLOAT;// vec3 データとしてはVec4のArrayでStrideでスキップしている可能性がある.
-					if (g.index_buffer)
+					
+					// IndexBufferが存在すれば設定.
+					if (rhi_index.GetD3D12Resource())
 					{
-						geom_desc.Triangles.IndexBuffer = g.index_buffer->GetD3D12Resource()->GetGPUVirtualAddress();
-						geom_desc.Triangles.IndexCount = g.index_buffer->getElementCount();
-						if (g.index_buffer->GetElementByteSize() == 4)
+						geom_desc.Triangles.IndexBuffer = rhi_index.GetD3D12Resource()->GetGPUVirtualAddress();
+						geom_desc.Triangles.IndexCount = rhi_index.getElementCount();
+						if (rhi_index.GetElementByteSize() == 4)
 						{
 							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R32_UINT;
 							index_ngl_format = ngl::rhi::ResourceFormat::Format_R32_UINT;
 						}
-						else if (g.index_buffer->GetElementByteSize() == 2)
+						else if (rhi_index.GetElementByteSize() == 2)
 						{
 							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
 							index_ngl_format = ngl::rhi::ResourceFormat::Format_R16_UINT;
@@ -86,25 +75,6 @@ namespace ngl
 							// u16 u32 以外は未対応.
 							assert(false);
 							continue;
-						}
-					}
-
-
-					// HitGroup等でのジオメトリ情報アクセス用のLocal ResourceのためにSrvを生成.
-					{
-						auto p_vertex_srv = new ngl::rhi::ShaderResourceViewDep();
-						geometry_vertex_srv_array_.push_back(p_vertex_srv);
-
-						auto p_index_srv = new ngl::rhi::ShaderResourceViewDep();
-						geometry_index_srv_array_.push_back(p_index_srv);
-
-						if (!p_vertex_srv->InitializeAsTyped(p_device, g.vertex_buffer, vertex_ngl_format, 0, g.vertex_buffer->getElementCount()))
-						{
-							assert(false);
-						}
-						if (!p_index_srv->InitializeAsTyped(p_device, g.index_buffer, index_ngl_format, 0, g.index_buffer->getElementCount()))
-						{
-							assert(false);
 						}
 					}
 				}
@@ -226,8 +196,10 @@ namespace ngl
 				assert(false);
 				return ret;
 			}
-			ret.vertex_srv = geometry_vertex_srv_array_[index];
-			ret.index_srv = geometry_index_srv_array_[index];
+
+			ret.vertex_srv = &geometry_desc_array_[index].mesh_data->position_.rhi_srv;
+			ret.index_srv = &geometry_desc_array_[index].mesh_data->index_.rhi_srv;
+
 			return ret;
 		}
 
@@ -1507,10 +1479,9 @@ namespace ngl
 				for (uint32_t gi = 0; gi < g.num_desc; ++gi)
 				{
 					blas_geom_desc_arrray.push_back({});
+					// 内部用にコピー.
 					auto& geom_desc = blas_geom_desc_arrray[blas_geom_desc_arrray.size() - 1];
-
-					geom_desc.vertex_buffer = g.pp_desc[gi].vertex_buffer;
-					geom_desc.index_buffer = g.pp_desc[gi].index_buffer;
+					geom_desc = g.pp_desc[gi];
 				}
 
 				// New Blas.

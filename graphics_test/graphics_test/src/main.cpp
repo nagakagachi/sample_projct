@@ -23,13 +23,11 @@
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
 // gfx
+#include "ngl/gfx/mesh_component.h"
 #include "ngl/gfx/rt_structure_manager.h"
 
-
-// assimpテスト.
-#include <assimp/Importer.hpp>      // C++ importer interface
-#include <assimp/scene.h>           // Output data structure
-#include <assimp/postprocess.h>     // Post processing flags
+// assimp loader.
+#include "ngl/gfx/mesh_loader_assimp.h"
 
 
 struct CbSampleVs
@@ -134,8 +132,8 @@ private:
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
 
-	std::vector<ngl::rhi::BufferDep*>			rt_model_vertex_buffer_array_;
-	std::vector<ngl::rhi::BufferDep*>			rt_model_index_buffer_array_;
+	std::vector<ngl::gfx::MeshAssetData*>		mesh_asset_data_;
+
 };
 
 
@@ -222,18 +220,13 @@ AppGame::AppGame()
 }
 AppGame::~AppGame()
 {
-	for (int i = 0; i < rt_model_vertex_buffer_array_.size(); ++i)
+	for (int i = 0; i < mesh_asset_data_.size(); ++i)
 	{
-		if (rt_model_vertex_buffer_array_[i])
-			delete rt_model_vertex_buffer_array_[i];
+		if (mesh_asset_data_[i])
+			delete mesh_asset_data_[i];
 	}
-	rt_model_vertex_buffer_array_.clear();
-	for (int i = 0; i < rt_model_index_buffer_array_.size(); ++i)
-	{
-		if (rt_model_index_buffer_array_[i])
-			delete rt_model_index_buffer_array_[i];
-	}
-	rt_model_index_buffer_array_.clear();
+	mesh_asset_data_.clear();
+
 
 	gfx_command_list_.Finalize();
 
@@ -638,85 +631,11 @@ bool AppGame::Initialize()
 	{
 		// Assimpテスト
 		{
-			Assimp::Importer asimporter;
-
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
-			const aiScene* ai_scene = asimporter.ReadFile(model_asset_file_path,
 
-				aiProcess_CalcTangentSpace |
-				aiProcess_Triangulate |
-				aiProcess_JoinIdenticalVertices |
-				aiProcess_SortByPType
-
-			);
-
-			if (ai_scene)
-			{
-				// 読み取り成功.
-
-				std::cout << "aiscene : " << model_asset_file_path << std::endl;
-				std::cout << "	num mesh " << ai_scene->mNumMeshes << std::endl;
-
-				for (auto mesh_i = 0u; mesh_i < ai_scene->mNumMeshes; ++mesh_i)
-				{
-					std::cout << "		mesh[" << mesh_i << "]  " << "num vertex " << ai_scene->mMeshes[mesh_i]->mNumVertices << std::endl;
-
-
-
-					{
-						auto p_mesh_vtx_buffer = new ngl::rhi::BufferDep();
-
-						ngl::rhi::BufferDep::Desc buffer_desc = {};
-						buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-						buffer_desc.initial_state = ngl::rhi::ResourceState::General;
-						buffer_desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource;// RTのShaderResource利用.
-						buffer_desc.element_count = ai_scene->mMeshes[mesh_i]->mNumVertices;
-						buffer_desc.element_byte_size = sizeof(float) * 3;
-
-						if (p_mesh_vtx_buffer->Initialize(&device_, buffer_desc))
-						{
-							if (auto* mapped = static_cast<aiVector3D*>(p_mesh_vtx_buffer->Map()))
-							{
-								memcpy(mapped, ai_scene->mMeshes[mesh_i]->mVertices, sizeof(float) * 3 * ai_scene->mMeshes[mesh_i]->mNumVertices);
-							}
-						}
-						rt_model_vertex_buffer_array_.push_back(p_mesh_vtx_buffer);
-					}
-
-					{
-						auto p_mesh_index_buffer = new ngl::rhi::BufferDep();
-
-						ngl::rhi::BufferDep::Desc buffer_desc = {};
-						buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-						buffer_desc.initial_state = ngl::rhi::ResourceState::General;
-						buffer_desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource;// RTのShaderResource利用.
-						// 三角化されている前提.
-						buffer_desc.element_count = ai_scene->mMeshes[mesh_i]->mNumFaces * 3;
-						buffer_desc.element_byte_size = sizeof(uint32_t);
-
-						if (p_mesh_index_buffer->Initialize(&device_, buffer_desc))
-						{
-							if (auto* mapped = static_cast<uint32_t*>(p_mesh_index_buffer->Map()))
-							{
-								for (uint32_t face_i = 0; face_i < ai_scene->mMeshes[mesh_i]->mNumFaces; ++face_i)
-								{
-									// 三角化前提.
-									const auto p_face_index = ai_scene->mMeshes[mesh_i]->mFaces[face_i].mIndices;
-
-									mapped[face_i * 3 + 0] = p_face_index[0];
-									mapped[face_i * 3 + 1] = p_face_index[1];
-									mapped[face_i * 3 + 2] = p_face_index[2];
-								}
-							}
-						}
-						rt_model_index_buffer_array_.push_back(p_mesh_index_buffer);
-					}
-				}
-
-			}
-			// ReadFileで読み込まれたメモリ等はAssimp::Importerインスタンスの寿命でクリーンアップされる.
+			ngl::assimp::LoadMeshData(&device_, model_asset_file_path, mesh_asset_data_);
 		}
 
 
@@ -814,11 +733,12 @@ bool AppGame::Initialize()
 
 #if 1
 		// モデルデータテスト.
-		for(int i = 0; i < rt_model_vertex_buffer_array_.size(); ++i)
+		for (int i = 0; i < mesh_asset_data_.size(); ++i)
 		{
 			blas_desc.push_back({});
-			blas_desc[blas_desc.size() - 1].vertex_buffer = rt_model_vertex_buffer_array_[i];
-			blas_desc[blas_desc.size() - 1].index_buffer = rt_model_index_buffer_array_[i];
+			auto& elem = blas_desc.back();
+
+			elem.mesh_data = mesh_asset_data_[i];
 		}
 
 		{
