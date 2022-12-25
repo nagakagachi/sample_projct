@@ -59,7 +59,7 @@ namespace ngl
 
 		struct RaytraceStructureBottomGeometryDesc
 		{
-			gfx::MeshAssetData* mesh_data = nullptr;
+			gfx::MeshShapePart* mesh_data = nullptr;
 		};
 
 		// BLAS.

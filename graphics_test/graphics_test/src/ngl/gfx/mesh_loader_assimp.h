@@ -9,6 +9,6 @@ namespace ngl
 {
 namespace assimp
 {
-	void LoadMeshData(rhi::DeviceDep* p_device, const char* filename, std::vector<gfx::MeshAssetData*>& out_mesh);
+	void LoadMeshData(rhi::DeviceDep* p_device, const char* filename, gfx::MeshData& out_mesh);
 }
 }

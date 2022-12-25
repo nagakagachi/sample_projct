@@ -38,7 +38,7 @@ namespace ngl
 		}
 		void FileObject::Release()
 		{
-			fileData_.Reset();
+			fileData_.reset();
 			fileSize_ = 0;
 		}
 		bool FileObject::ReadFile(const char* filePath)
@@ -53,8 +53,8 @@ namespace ngl
 				return false;
 
 			fileSize_ = size;
-			fileData_.Reset(new u8[fileSize_]);
-			ifs.read(reinterpret_cast<char*>(fileData_.Get()), fileSize_);
+			fileData_.reset(new u8[fileSize_]);
+			ifs.read(reinterpret_cast<char*>(fileData_.get()), fileSize_);
 			return true;
 		}
 	}

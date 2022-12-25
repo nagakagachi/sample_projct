@@ -22,13 +22,13 @@ namespace ngl
 		};
 
 		template<typename T>
-		class MeshAssetVertexData
+		class MeshShapeVertexData
 		{
 		public:
-			MeshAssetVertexData()
+			MeshShapeVertexData()
 			{
 			}
-			~MeshAssetVertexData()
+			~MeshShapeVertexData()
 			{
 			}
 
@@ -42,13 +42,13 @@ namespace ngl
 			rhi::ShaderResourceViewDep rhi_srv = {};
 		};
 		template<typename T>
-		class MeshAssetIndexData
+		class MeshShapeIndexData
 		{
 		public:
-			MeshAssetIndexData()
+			MeshShapeIndexData()
 			{
 			}
-			~MeshAssetIndexData()
+			~MeshShapeIndexData()
 			{
 			}
 
@@ -62,33 +62,47 @@ namespace ngl
 			rhi::ShaderResourceViewDep rhi_srv = {};
 		};
 
-		// Mesh Asset.
-		class MeshAssetData
+		// Mesh Shape Data.
+		// 頂点属性の情報のメモリ実態は親のMeshDataが保持し, ロードや初期化でマッピングされる.
+		class MeshShapePart
 		{
 		public:
-			MeshAssetData()
+			MeshShapePart()
 			{
 			}
-			~MeshAssetData()
+			~MeshShapePart()
 			{
 			}
-
-			// MeshDataメモリ.
-			std::vector<uint8_t> raw_data_mem_;
 
 			int num_vertex_ = 0;
 			int num_primitive_ = 0;
 
-			MeshAssetIndexData<uint32_t> index_ = {};
-
-			MeshAssetVertexData<math::Vec3> position_ = {};
-			MeshAssetVertexData<math::Vec3> normal_ = {};
-			MeshAssetVertexData<math::Vec3> tangent_ = {};
-			MeshAssetVertexData<math::Vec3> binormal_ = {};
-			std::vector<MeshAssetVertexData<VertexColor>>	color_;
-			std::vector<MeshAssetVertexData<math::Vec2>>	texcoord_;
+			MeshShapeIndexData<uint32_t> index_ = {};
+			MeshShapeVertexData<math::Vec3> position_ = {};
+			MeshShapeVertexData<math::Vec3> normal_ = {};
+			MeshShapeVertexData<math::Vec3> tangent_ = {};
+			MeshShapeVertexData<math::Vec3> binormal_ = {};
+			std::vector<MeshShapeVertexData<VertexColor>>	color_;
+			std::vector<MeshShapeVertexData<math::Vec2>>	texcoord_;
 		};
 
+		// Mesh Shape Data.
+		class MeshData
+		{
+		public:
+			MeshData()
+			{
+			}
+			~MeshData()
+			{
+			}
+
+			// ジオメトリ情報のRawDataメモリ. 個々でメモリ確保してマッピングする場合に利用.
+			std::vector<uint8_t> raw_data_mem_;
+			// RawData以外にもRHIBufferも一纏めにする場合はここで管理してshapeのviewが参照することもできるかもしれない.
+
+			std::vector<MeshShapePart> shape_array_;
+		};
 
 		class MeshComponent
 		{
@@ -108,8 +122,6 @@ namespace ngl
 
 		private:
 			math::Mat34	mat_;
-
-
 
 		};
 

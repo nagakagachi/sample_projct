@@ -3,9 +3,9 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
+#include <memory>
 
 #include "ngl/boot/boot_application.h"
-#include "ngl/util/unique_ptr.h"
 #include "ngl/platform/window.h"
 #include "ngl/util/time/timer.h"
 #include "ngl/memory/tlsf_memory_pool.h"
@@ -131,8 +131,7 @@ private:
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
-
-	std::vector<ngl::gfx::MeshAssetData*>		mesh_asset_data_;
+	std::vector<ngl::gfx::MeshData*>	mesh_group_data_;
 
 };
 
@@ -143,7 +142,7 @@ int main()
 	ngl::time::Timer::Instance().StartTimer("AppGameTime");
 
 	{
-		ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::Create();
+		std::unique_ptr<ngl::boot::BootApplication> boot(ngl::boot::BootApplication::Create());
 		AppGame app;
 		boot->Run(&app);
 	}
@@ -220,12 +219,12 @@ AppGame::AppGame()
 }
 AppGame::~AppGame()
 {
-	for (int i = 0; i < mesh_asset_data_.size(); ++i)
+	for (int i = 0; i < mesh_group_data_.size(); ++i)
 	{
-		if (mesh_asset_data_[i])
-			delete mesh_asset_data_[i];
+		if (mesh_group_data_[i])
+			delete mesh_group_data_[i];
 	}
-	mesh_asset_data_.clear();
+	mesh_group_data_.clear();
 
 
 	gfx_command_list_.Finalize();
@@ -635,7 +634,8 @@ bool AppGame::Initialize()
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
 
-			ngl::assimp::LoadMeshData(&device_, model_asset_file_path, mesh_asset_data_);
+			mesh_group_data_.push_back(new ngl::gfx::MeshData());
+			ngl::assimp::LoadMeshData(&device_, model_asset_file_path, *mesh_group_data_.back());
 		}
 
 
@@ -732,13 +732,15 @@ bool AppGame::Initialize()
 		std::vector<uint32_t> instance_hitgroup_id_array;
 
 #if 1
-		// モデルデータテスト.
-		for (int i = 0; i < mesh_asset_data_.size(); ++i)
+		for (int i = 0; i < mesh_group_data_.size(); ++i)
 		{
-			blas_desc.push_back({});
-			auto& elem = blas_desc.back();
+			for (int mi = 0; mi < mesh_group_data_[i]->shape_array_.size(); ++mi)
+			{
+				blas_desc.push_back({});
+				auto& elem = blas_desc.back();
 
-			elem.mesh_data = mesh_asset_data_[i];
+				elem.mesh_data = &mesh_group_data_[i]->shape_array_[mi];
+			}
 		}
 
 		{

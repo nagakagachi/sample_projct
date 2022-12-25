@@ -10,9 +10,9 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+#include <memory>
 
 
-#include "ngl/util/unique_ptr.h"
 #include "ngl/platform/win/window.win.h"
 
 #include "rhi_descriptor.d3d12.h"
@@ -104,19 +104,19 @@ namespace ngl
 
 			PersistentDescriptorAllocator* GetPersistentDescriptorAllocator()
 			{
-				return p_persistent_descriptor_allocator_.Get();
+				return p_persistent_descriptor_allocator_.get();
 			}
 			PersistentDescriptorAllocator* GetPersistentSamplerDescriptorAllocator()
 			{
-				return p_persistent_sampler_descriptor_allocator_.Get();
+				return p_persistent_sampler_descriptor_allocator_.get();
 			}
 			FrameDescriptorManager* GetFrameDescriptorManager()
 			{
-				return p_frame_descriptor_manager_.Get();
+				return p_frame_descriptor_manager_.get();
 			}
 			FrameDescriptorHeapPagePool* GetFrameDescriptorHeapPagePool()
 			{
-				return p_frame_descriptor_page_pool_.Get();
+				return p_frame_descriptor_page_pool_.get();
 			}
 		private:
 			Desc	desc_ = {};
@@ -141,17 +141,17 @@ namespace ngl
 			u32	buffer_index_ = 0;
 
 			// リソース用Descriptor確保用( CBV, SRV, UAV 用)
-			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_descriptor_allocator_;
+			std::unique_ptr <PersistentDescriptorAllocator>	p_persistent_descriptor_allocator_;
 
 			// 生成したSampler用Descriptor確保用( Sampler 用)
-			ngl::UniquePtr <PersistentDescriptorAllocator>	p_persistent_sampler_descriptor_allocator_;
+			std::unique_ptr<PersistentDescriptorAllocator>	p_persistent_sampler_descriptor_allocator_;
 
 
 			// フレームでのDescriptor確保用( CBV, SRV, UAV 用). 巨大な単一Heap管理. Samplerのハンドル数制限には対応していないが通常のリソースにはこちらのほうが効率的と思われる.
-			ngl::UniquePtr<FrameDescriptorManager>			p_frame_descriptor_manager_;
+			std::unique_ptr<FrameDescriptorManager>			p_frame_descriptor_manager_;
 
 			// フレームでのDescriptor確保用. こちらはPage単位で拡張していく. CBV,SRV,UAVおよびSamplerすべてで利用可能.
-			ngl::UniquePtr<FrameDescriptorHeapPagePool>		p_frame_descriptor_page_pool_;
+			std::unique_ptr<FrameDescriptorHeapPagePool>		p_frame_descriptor_page_pool_;
 
 		};
 

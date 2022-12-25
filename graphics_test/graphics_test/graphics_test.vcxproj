@@ -215,7 +215,6 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\util\singleton.h" />
     <ClInclude Include="src\ngl\util\time\timer.h" />
     <ClInclude Include="src\ngl\util\types.h" />
-    <ClInclude Include="src\ngl\util\unique_ptr.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\ngl\text\hash_text.inl" />

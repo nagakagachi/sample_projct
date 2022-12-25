@@ -2,8 +2,9 @@
 #ifndef _NGL_FILE_H_
 #define _NGL_FILE_H_
 
+#include <memory>
+
 #include "ngl/util/types.h"
-#include "ngl/util/unique_ptr.h"
 
 namespace ngl
 {
@@ -28,12 +29,12 @@ namespace ngl
 			}
 			const u8* GetFileData() const
 			{
-				return fileData_.Get();
+				return fileData_.get();
 			}
 
 		private:
 			u32 fileSize_				= 0;
-			UniquePtr< u8[] > fileData_ = {};
+			std::unique_ptr<u8[]> fileData_ = {};
 		};
 	}
 }

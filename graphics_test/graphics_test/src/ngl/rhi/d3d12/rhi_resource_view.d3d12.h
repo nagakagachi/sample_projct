@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <iostream>
+#include <memory>
 
 #include "ngl/rhi/rhi.h"
 #include "ngl/rhi/rhi_resource.h"
@@ -11,7 +12,6 @@
 
 
 #include "ngl/util/types.h"
-#include "ngl/util/unique_ptr.h"
 #include "ngl/text/hash_text.h"
 
 

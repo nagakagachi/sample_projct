@@ -251,7 +251,7 @@ namespace ngl
 
 			// PersistentDescriptorManager初期化
 			{
-				p_persistent_descriptor_allocator_.Reset(new PersistentDescriptorAllocator());
+				p_persistent_descriptor_allocator_.reset(new PersistentDescriptorAllocator());
 				PersistentDescriptorAllocator::Desc pda_desc = {};
 				pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 				pda_desc.allocate_descriptor_count_ = desc_.persistent_descriptor_size;
@@ -265,7 +265,7 @@ namespace ngl
 
 			// Sampler用PersistentDescriptorManager初期化
 			{
-				p_persistent_sampler_descriptor_allocator_.Reset(new PersistentDescriptorAllocator());
+				p_persistent_sampler_descriptor_allocator_.reset(new PersistentDescriptorAllocator());
 				PersistentDescriptorAllocator::Desc pda_desc = {};
 				pda_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;// Sampler用Heap
 				// SamplerのDescriptorHeapは2048個分までの制限がある. Samplerはパラメータの組み合わせがほぼ決まっているので使い切ることは無いはず.
@@ -281,7 +281,7 @@ namespace ngl
 
 			// FrameDescriptorManager初期化
 			{
-				p_frame_descriptor_manager_.Reset(new FrameDescriptorManager());
+				p_frame_descriptor_manager_.reset(new FrameDescriptorManager());
 				FrameDescriptorManager::Desc fdm_desc = {};
 				fdm_desc.allocate_descriptor_count_ = desc_.frame_descriptor_size;
 				fdm_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
@@ -295,7 +295,7 @@ namespace ngl
 
 			// FrameDescriptorHeapPagePool初期化
 			{
-				p_frame_descriptor_page_pool_.Reset(new FrameDescriptorHeapPagePool());
+				p_frame_descriptor_page_pool_.reset(new FrameDescriptorHeapPagePool());
 				if (!p_frame_descriptor_page_pool_->Initialize(this))
 				{
 					std::cout << "[ERROR] Create FrameDescriptorHeapPagePool" << std::endl;

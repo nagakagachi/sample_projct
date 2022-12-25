@@ -89,9 +89,6 @@
     <ClInclude Include="src\ngl\util\types.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\util\unique_ptr.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="src\ngl\util\time\timer.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

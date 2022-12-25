@@ -12,7 +12,7 @@ namespace ngl
 			このクラスを継承して execute() で任意のゲームループを実装する
 			BootApplication実体の run() に引数として渡すことでプラットフォーム毎のメインループでコールされる
 			
-			ngl::UniquePtr<ngl::boot::BootApplication> boot = ngl::boot::BootApplication::Create();
+			ngl::unique_ptr<ngl::boot::BootApplication> boot(ngl::boot::BootApplication::Create());
 			AppGame app;
 			boot->Run(&app);
 		*/
