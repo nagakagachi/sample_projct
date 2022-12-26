@@ -23,7 +23,7 @@
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
 // gfx
-#include "ngl/gfx/mesh_component.h"
+#include "ngl/gfx/mesh_resource.h"
 #include "ngl/gfx/rt_structure_manager.h"
 
 // assimp loader.
@@ -131,7 +131,7 @@ private:
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
-	std::vector<ngl::gfx::MeshData*>	mesh_group_data_;
+	std::vector<std::shared_ptr<ngl::gfx::ResMeshData>>	res_mesh_array_;
 
 };
 
@@ -219,13 +219,7 @@ AppGame::AppGame()
 }
 AppGame::~AppGame()
 {
-	for (int i = 0; i < mesh_group_data_.size(); ++i)
-	{
-		if (mesh_group_data_[i])
-			delete mesh_group_data_[i];
-	}
-	mesh_group_data_.clear();
-
+	res_mesh_array_.clear();
 
 	gfx_command_list_.Finalize();
 
@@ -634,8 +628,7 @@ bool AppGame::Initialize()
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
 
-			mesh_group_data_.push_back(new ngl::gfx::MeshData());
-			ngl::assimp::LoadMeshData(&device_, model_asset_file_path, *mesh_group_data_.back());
+			res_mesh_array_.push_back( ngl::assimp::LoadMeshData(&device_, model_asset_file_path));
 		}
 
 
@@ -732,14 +725,14 @@ bool AppGame::Initialize()
 		std::vector<uint32_t> instance_hitgroup_id_array;
 
 #if 1
-		for (int i = 0; i < mesh_group_data_.size(); ++i)
+		for (int i = 0; i < res_mesh_array_.size(); ++i)
 		{
-			for (int mi = 0; mi < mesh_group_data_[i]->shape_array_.size(); ++mi)
+			for (int mi = 0; mi < res_mesh_array_[i]->data_.shape_array_.size(); ++mi)
 			{
 				blas_desc.push_back({});
 				auto& elem = blas_desc.back();
 
-				elem.mesh_data = &mesh_group_data_[i]->shape_array_[mi];
+				elem.mesh_data = &res_mesh_array_[i]->data_.shape_array_[mi];
 			}
 		}
 

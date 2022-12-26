@@ -28,8 +28,6 @@ namespace assimp
 			return ((size + (align - 1)) / align) * align;
 		}
 
-
-
 		// 生成用Lambda.
 		auto CreateShapeDataRhiBuffer(
 				ngl::rhi::BufferDep* p_out_buffer,
@@ -413,6 +411,15 @@ namespace assimp
 					mesh.index_.raw_ptr_);
 			}
 		}
+	}
+
+	std::shared_ptr<gfx::ResMeshData> LoadMeshData(rhi::DeviceDep* p_device, const char* filename)
+	{
+		auto h = std::make_shared<gfx::ResMeshData>();
+		
+		LoadMeshData(p_device, filename, h->data_);
+
+		return h;
 	}
 }
 }

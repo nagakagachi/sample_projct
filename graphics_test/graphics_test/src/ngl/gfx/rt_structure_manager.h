@@ -15,7 +15,7 @@
 #include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
-#include "mesh_component.h"
+#include "mesh_resource.h"
 
 namespace ngl
 {

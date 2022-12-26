@@ -187,6 +187,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\boot\win\boot_application.win.h" />
     <ClInclude Include="src\ngl\file\file.h" />
     <ClInclude Include="src\ngl\gfx\mesh_component.h" />
+    <ClInclude Include="src\ngl\gfx\mesh_resource.h" />
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h" />
     <ClInclude Include="src\ngl\gfx\rt_structure_manager.h" />
     <ClInclude Include="src\ngl\math\detail\math_matrix.h" />

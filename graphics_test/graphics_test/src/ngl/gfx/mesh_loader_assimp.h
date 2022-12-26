@@ -1,14 +1,15 @@
 ﻿#pragma once
 
+#include <memory>
 
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
 
-#include "ngl/gfx/mesh_component.h"
+#include "ngl/gfx/mesh_resource.h"
 
 namespace ngl
 {
 namespace assimp
 {
-	void LoadMeshData(rhi::DeviceDep* p_device, const char* filename, gfx::MeshData& out_mesh);
+	std::shared_ptr<gfx::ResMeshData> LoadMeshData(rhi::DeviceDep* p_device, const char* filename);
 }
 }

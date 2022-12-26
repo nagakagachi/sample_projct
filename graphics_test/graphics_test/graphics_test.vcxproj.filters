@@ -158,10 +158,13 @@
     <ClInclude Include="src\ngl\math\detail\math_matrix.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\gfx\mesh_component.h">
+    <ClInclude Include="src\ngl\gfx\mesh_resource.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\gfx\mesh_component.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
