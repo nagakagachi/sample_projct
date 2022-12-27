@@ -628,6 +628,12 @@ bool AppGame::Initialize()
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
 
 			res_mesh_array_.push_back(ngl::res::ResourceManager::Instance().LoadResMesh(&device_, model_asset_file_path));
+
+
+			auto ttet = ngl::gfx::ResMeshData::k_resource_type_name;
+			auto res_type_name = static_cast<const ngl::res::Resource*>(res_mesh_array_[0].Get())->GetResourceTypeName();
+			std::cout << res_type_name << std::endl;
+
 		}
 
 
@@ -1346,6 +1352,7 @@ void AppGame::TestCode()
 
 	// シェーダテスト
 	{
+#if 0
 		// バイナリ読み込み.
 		{
 			ngl::file::FileObject file_obj;
@@ -1372,6 +1379,7 @@ void AppGame::TestCode()
 			}
 			reflect00.Initialize(&device_, &shader01);
 		}
+#endif
 
 		// HLSLからコンパイルして初期化.
 		ngl::rhi::ShaderDep shader00;

@@ -4,6 +4,8 @@
 
 #include "ngl/util/noncopyable.h"
 
+#include "ngl/text/hash_text.h"
+
 namespace ngl
 {
 namespace res
@@ -15,7 +17,8 @@ namespace res
 		using RawResourceHandle = std::shared_ptr<const Resource>;
 	}
 
-	// Appがリソースを保持する際は必ずこのハンドルで取り扱う. 参照カウント管理でハンドル参照が無くなった場合にリソースが破棄される.
+	// Appがリソースを保持する際は必ずこのハンドルで取り扱う. 
+	//	参照カウント管理でハンドル参照が無くなった場合にリソースが破棄される.
 	template<typename ResType>
 	class ResourceHandle
 	{
@@ -62,7 +65,14 @@ namespace res
 	};
 
 
+	// Resource派生クラス用のクラススコープ内宣言用マクロ.
+#define NGL_RES_MEMBER_DECLARE(CLASS_NAME) \
+	public:\
+		static constexpr char k_resource_type_name[64] = #CLASS_NAME;\
+		const char* GetResourceTypeName() const override final { return k_resource_type_name;}
+	
 	// Resouce基底.
+	//	派生クラスはクラススコープで NGL_RES_MEMBER_DECLARE(クラス名) を記述すること.
 	class Resource : public NonCopyableTp<Resource>
 	{
 	public:
@@ -73,6 +83,8 @@ namespace res
 		{
 		}
 
+
+		virtual const char* GetResourceTypeName() const = 0;
 	};
 
 }
