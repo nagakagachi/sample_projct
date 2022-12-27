@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <memory>
 
@@ -17,8 +17,8 @@ namespace res
 		using RawResourceHandle = std::shared_ptr<const Resource>;
 	}
 
-	// App‚ªƒŠƒ\[ƒX‚ð•ÛŽ‚·‚éÛ‚Í•K‚¸‚±‚Ìƒnƒ“ƒhƒ‹‚ÅŽæ‚èˆµ‚¤. 
-	//	ŽQÆƒJƒEƒ“ƒgŠÇ—‚Åƒnƒ“ƒhƒ‹ŽQÆ‚ª–³‚­‚È‚Á‚½ê‡‚ÉƒŠƒ\[ƒX‚ª”jŠü‚³‚ê‚é.
+	// AppãŒãƒªã‚½ãƒ¼ã‚¹ã‚’ä¿æŒã™ã‚‹éš›ã¯å¿…ãšã“ã®ãƒãƒ³ãƒ‰ãƒ«ã§å–ã‚Šæ‰±ã†. 
+	//	å‚ç…§ã‚«ã‚¦ãƒ³ãƒˆç®¡ç†ã§ãƒãƒ³ãƒ‰ãƒ«å‚ç…§ãŒç„¡ããªã£ãŸå ´åˆã«ãƒªã‚½ãƒ¼ã‚¹ãŒç ´æ£„ã•ã‚Œã‚‹.
 	template<typename ResType>
 	class ResourceHandle
 	{
@@ -59,20 +59,20 @@ namespace res
 		
 
 	private:
-		// ResouceŠî’ê‚Å‚ÌŽQÆƒJƒEƒ“ƒg.
-		//	‚±‚¤‚·‚é‚±‚Æ‚ÅƒAƒvƒŠ‚ª”h¶Resourceƒnƒ“ƒhƒ‹‚ðŽ‚¿‚Â‚Âƒ}ƒl[ƒWƒƒ‚ªŠî’êƒnƒ“ƒhƒ‹‚Å“Š‡ŠÇ—‚·‚éê‡‚à‹¤’Ê‚Ì³‚µ‚¢ŽQÆƒJƒEƒ“ƒgŠÇ—‚ª‚Å‚«‚é.
+		// ResouceåŸºåº•ã§ã®å‚ç…§ã‚«ã‚¦ãƒ³ãƒˆ.
+		//	ã“ã†ã™ã‚‹ã“ã¨ã§ã‚¢ãƒ—ãƒªãŒæ´¾ç”ŸResourceãƒãƒ³ãƒ‰ãƒ«ã‚’æŒã¡ã¤ã¤ãƒžãƒãƒ¼ã‚¸ãƒ£ãŒåŸºåº•ãƒãƒ³ãƒ‰ãƒ«ã§çµ±æ‹¬ç®¡ç†ã™ã‚‹å ´åˆã‚‚å…±é€šã®æ­£ã—ã„å‚ç…§ã‚«ã‚¦ãƒ³ãƒˆç®¡ç†ãŒã§ãã‚‹.
 		detail::RawResourceHandle raw_handle_;
 	};
 
 
-	// Resource”h¶ƒNƒ‰ƒX—p‚ÌƒNƒ‰ƒXƒXƒR[ƒv“àéŒ¾—pƒ}ƒNƒ.
+	// Resourceæ´¾ç”Ÿã‚¯ãƒ©ã‚¹ç”¨ã®ã‚¯ãƒ©ã‚¹ã‚¹ã‚³ãƒ¼ãƒ—å†…å®£è¨€ç”¨ãƒžã‚¯ãƒ­.
 #define NGL_RES_MEMBER_DECLARE(CLASS_NAME) \
 	public:\
 		static constexpr char k_resource_type_name[64] = #CLASS_NAME;\
 		const char* GetResourceTypeName() const override final { return k_resource_type_name;}
 	
-	// ResouceŠî’ê.
-	//	”h¶ƒNƒ‰ƒX‚ÍƒNƒ‰ƒXƒXƒR[ƒv‚Å NGL_RES_MEMBER_DECLARE(ƒNƒ‰ƒX–¼) ‚ð‹Lq‚·‚é‚±‚Æ.
+	// ResouceåŸºåº•.
+	//	æ´¾ç”Ÿã‚¯ãƒ©ã‚¹ã¯ã‚¯ãƒ©ã‚¹ã‚¹ã‚³ãƒ¼ãƒ—ã§ NGL_RES_MEMBER_DECLARE(ã‚¯ãƒ©ã‚¹å) ã‚’è¨˜è¿°ã™ã‚‹ã“ã¨.
 	class Resource : public NonCopyableTp<Resource>
 	{
 	public:
