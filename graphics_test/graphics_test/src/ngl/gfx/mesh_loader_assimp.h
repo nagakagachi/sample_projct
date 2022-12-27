@@ -10,6 +10,6 @@ namespace ngl
 {
 namespace assimp
 {
-	std::shared_ptr<gfx::ResMeshData> LoadMeshData(rhi::DeviceDep* p_device, const char* filename);
+	bool LoadMeshData(gfx::ResMeshData& out, rhi::DeviceDep* p_device, const char* filename);
 }
 }

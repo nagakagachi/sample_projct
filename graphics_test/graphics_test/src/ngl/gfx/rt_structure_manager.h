@@ -52,14 +52,14 @@ namespace ngl
 
 		struct RaytraceStructureBottomGeometryResource
 		{
-			rhi::ShaderResourceViewDep* vertex_srv = nullptr;
-			rhi::ShaderResourceViewDep* index_srv = nullptr;
+			const rhi::ShaderResourceViewDep* vertex_srv = nullptr;
+			const rhi::ShaderResourceViewDep* index_srv = nullptr;
 		};
 
 
 		struct RaytraceStructureBottomGeometryDesc
 		{
-			gfx::MeshShapePart* mesh_data = nullptr;
+			const gfx::MeshShapePart* mesh_data = nullptr;
 		};
 
 		// BLAS.

@@ -173,6 +173,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />
     <ClCompile Include="src\ngl\platform\win\window.win.cpp" />
+    <ClCompile Include="src\ngl\resource\resource_manager.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_command_list.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_descriptor.d3d12.cpp" />
@@ -199,6 +200,8 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\memory\tlsf_memory_pool.h" />
     <ClInclude Include="src\ngl\platform\window.h" />
     <ClInclude Include="src\ngl\platform\win\window.win.h" />
+    <ClInclude Include="src\ngl\resource\resource.h" />
+    <ClInclude Include="src\ngl\resource\resource_manager.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_command_list.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_descriptor.d3d12.h" />
@@ -221,38 +224,21 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <None Include="src\ngl\text\hash_text.inl" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\ngl\resource\shader\sample_draw_procedural_ps.hlsl">
+    <None Include="src\ngl\data\shader\dxr_sample_lib.hlsl">
       <FileType>Document</FileType>
     </None>
-    <None Include="src\ngl\resource\shader\sample_fullscr_procedural_vs.hlsl">
+    <None Include="src\ngl\data\shader\sample_draw_procedural_ps.hlsl">
       <FileType>Document</FileType>
     </None>
-    <None Include="src\ngl\resource\shader\dxr_sample_lib.hlsl">
+    <None Include="src\ngl\data\shader\sample_fullscr_procedural_vs.hlsl">
       <FileType>Document</FileType>
     </None>
-    <FxCompile Include="src\ngl\resource\shader\sample_ps.hlsl">
+    <None Include="src\ngl\data\shader\sample_ps.hlsl">
       <FileType>Document</FileType>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">main_ps</EntryPointName>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.1</ShaderModel>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">main_ps</EntryPointName>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)data\%(Filename).cso</ObjectFileOutput>
-    </FxCompile>
-    <FxCompile Include="src\ngl\resource\shader\sample_vs.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">main_vs</EntryPointName>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">main_vs</EntryPointName>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.1</ShaderModel>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)data\%(Filename).cso</ObjectFileOutput>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)data\%(Filename).cso</ObjectFileOutput>
+    </None>
+    <None Include="src\ngl\data\shader\sample_vs.hlsl">
       <FileType>Document</FileType>
-    </FxCompile>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

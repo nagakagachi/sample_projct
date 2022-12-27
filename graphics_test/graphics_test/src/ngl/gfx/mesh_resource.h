@@ -4,6 +4,10 @@
 
 #include "ngl/math/math.h"
 #include "ngl/util/noncopyable.h"
+#include "ngl/util/singleton.h"
+
+
+#include "ngl/resource/resource.h"
 
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
@@ -107,21 +111,10 @@ namespace ngl
 
 
 
-		// Resouce基底で破棄時になにかしたい場合等.
-		class IResource : public NonCopyableTp<IResource>
-		{
-		public:
-			IResource()
-			{
-			}
-			virtual ~IResource()
-			{
-			}
-		};
 
 
 		// Mesh Resource.
-		class ResMeshData : public IResource
+		class ResMeshData : public res::Resource
 		{
 		public:
 			ResMeshData()
@@ -134,6 +127,5 @@ namespace ngl
 
 			MeshData data_ = {};
 		};
-
 	}
 }

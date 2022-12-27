@@ -26,8 +26,7 @@
 #include "ngl/gfx/mesh_resource.h"
 #include "ngl/gfx/rt_structure_manager.h"
 
-// assimp loader.
-#include "ngl/gfx/mesh_loader_assimp.h"
+#include "ngl/resource/resource_manager.h"
 
 
 struct CbSampleVs
@@ -131,7 +130,7 @@ private:
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
-	std::vector<std::shared_ptr<ngl::gfx::ResMeshData>>	res_mesh_array_;
+	std::vector<ngl::res::ResourceHandle<ngl::gfx::ResMeshData>>	res_mesh_array_;
 
 };
 
@@ -376,7 +375,7 @@ bool AppGame::Initialize()
 		ngl::rhi::ShaderReflectionDep reflect02;
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_vs.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
 			shader_desc.shader_model_version = "6_0";
@@ -391,7 +390,7 @@ bool AppGame::Initialize()
 		ngl::rhi::ShaderReflectionDep reflect00;
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "6_0";
@@ -405,7 +404,7 @@ bool AppGame::Initialize()
 
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_fullscr_procedural_vs.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_fullscr_procedural_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
 			shader_desc.shader_model_version = "6_0";
@@ -417,7 +416,7 @@ bool AppGame::Initialize()
 		}
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_draw_procedural_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_draw_procedural_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "6_0";
@@ -628,7 +627,7 @@ bool AppGame::Initialize()
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
 
-			res_mesh_array_.push_back( ngl::assimp::LoadMeshData(&device_, model_asset_file_path));
+			res_mesh_array_.push_back(ngl::res::ResourceManager::Instance().LoadResMesh(&device_, model_asset_file_path));
 		}
 
 
@@ -665,7 +664,7 @@ bool AppGame::Initialize()
 		ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 		shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
 		shader_desc.shader_model_version = "6_3";
-		shader_desc.shader_file_path = "./src/ngl/resource/shader/dxr_sample_lib.hlsl";
+		shader_desc.shader_file_path = "./src/ngl/data/shader/dxr_sample_lib.hlsl";
 		if (!rt_shader_lib0_.Initialize(&device_, shader_desc))
 		{
 			std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
@@ -732,6 +731,7 @@ bool AppGame::Initialize()
 				blas_desc.push_back({});
 				auto& elem = blas_desc.back();
 
+				// TODO. elemをconst ptrにするように.
 				elem.mesh_data = &res_mesh_array_[i]->data_.shape_array_[mi];
 			}
 		}
@@ -1378,7 +1378,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderReflectionDep reflect00;
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "5_0";
@@ -1406,7 +1406,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderReflectionDep reflect01;
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_ps.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
 			shader_desc.entry_point_name = "main_ps";
 			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
 			shader_desc.shader_model_version = "6_0";
@@ -1428,7 +1428,7 @@ void AppGame::TestCode()
 		ngl::rhi::ShaderReflectionDep reflect02;
 		{
 			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/resource/shader/sample_vs.hlsl";
+			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_vs.hlsl";
 			shader_desc.entry_point_name = "main_vs";
 			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
 			shader_desc.shader_model_version = "5_0";

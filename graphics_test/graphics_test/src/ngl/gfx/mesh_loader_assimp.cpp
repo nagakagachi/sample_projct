@@ -413,13 +413,11 @@ namespace assimp
 		}
 	}
 
-	std::shared_ptr<gfx::ResMeshData> LoadMeshData(rhi::DeviceDep* p_device, const char* filename)
+	bool LoadMeshData(gfx::ResMeshData& out, rhi::DeviceDep* p_device, const char* filename)
 	{
-		auto h = std::make_shared<gfx::ResMeshData>();
-		
-		LoadMeshData(p_device, filename, h->data_);
+		LoadMeshData(p_device, filename, out.data_);
 
-		return h;
+		return (0 < out.data_.raw_data_mem_.size());
 	}
 }
 }
