@@ -50,7 +50,6 @@ namespace ngl
 			return Fnv1a_append_bytes(NGL_FNV_offset_basis, reinterpret_cast<const unsigned char*>(_First), _Count * sizeof(_Kty));
 		}
 
-
 		/*
 			バッファの末尾が常に0で埋められていることを保証する固定長文字列.
 		*/

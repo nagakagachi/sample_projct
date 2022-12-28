@@ -218,10 +218,14 @@ AppGame::AppGame()
 }
 AppGame::~AppGame()
 {
+	// リソース参照クリア.
 	res_mesh_array_.clear();
 
-	gfx_command_list_.Finalize();
+	// リソースマネージャから全て破棄.
+	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
+
+	gfx_command_list_.Finalize();
 	swapchain_.Finalize();
 	graphics_queue_.Finalize();
 	device_.Finalize();
@@ -623,17 +627,20 @@ bool AppGame::Initialize()
 	{
 		// Assimpテスト
 		{
-			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
+			const char* box_model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
 			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
 			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
 
 			res_mesh_array_.push_back(ngl::res::ResourceManager::Instance().LoadResMesh(&device_, model_asset_file_path));
 
+			res_mesh_array_.push_back(ngl::res::ResourceManager::Instance().LoadResMesh(&device_, box_model_asset_file_path));
+
+			// 多重読み込みテスト.
+			auto tmp_res_handle = ngl::res::ResourceManager::Instance().LoadResMesh(&device_, model_asset_file_path);
 
 			auto ttet = ngl::gfx::ResMeshData::k_resource_type_name;
-			auto res_type_name = static_cast<const ngl::res::Resource*>(res_mesh_array_[0].Get())->GetResourceTypeName();
+			auto res_type_name = (*res_mesh_array_[0]).GetResourceTypeName();
 			std::cout << res_type_name << std::endl;
-
 		}
 
 

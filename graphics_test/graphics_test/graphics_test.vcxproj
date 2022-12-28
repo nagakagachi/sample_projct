@@ -173,6 +173,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />
     <ClCompile Include="src\ngl\platform\win\window.win.cpp" />
+    <ClCompile Include="src\ngl\resource\resource.cpp" />
     <ClCompile Include="src\ngl\resource\resource_manager.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_command_list.d3d12.cpp" />
