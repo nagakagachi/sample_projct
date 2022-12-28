@@ -11,9 +11,12 @@
 #include "ngl/memory/tlsf_memory_pool.h"
 #include "ngl/memory/tlsf_allocator.h"
 #include "ngl/file/file.h"
-#include "ngl/util/shared_ptr.h"
+//#include "ngl/util/shared_ptr.h"
 
 #include "ngl/math/math.h"
+
+// resource
+#include "ngl/resource/resource_manager.h"
 
 // rhi
 #include "ngl/rhi/d3d12/rhi.d3d12.h"
@@ -22,11 +25,11 @@
 #include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
+
 // gfx
 #include "ngl/gfx/mesh_resource.h"
 #include "ngl/gfx/rt_structure_manager.h"
-
-#include "ngl/resource/resource_manager.h"
+#include "ngl/gfx/mesh_component.h"
 
 
 struct CbSampleVs
@@ -130,7 +133,7 @@ private:
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
-	std::vector<ngl::res::ResourceHandle<ngl::gfx::ResMeshData>>	res_mesh_array_;
+	std::vector<std::shared_ptr<ngl::gfx::MeshComponent>>	mesh_comp_array_;
 
 };
 
@@ -219,7 +222,7 @@ AppGame::AppGame()
 AppGame::~AppGame()
 {
 	// リソース参照クリア.
-	res_mesh_array_.clear();
+	mesh_comp_array_.clear();
 
 	// リソースマネージャから全て破棄.
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
@@ -625,24 +628,77 @@ bool AppGame::Initialize()
 	}
 
 	{
-		// Assimpテスト
+		const char* mesh_file_box = "../third_party/assimp/test/models/FBX/box.fbx";
+		const char* mesh_file_spider = "../third_party/assimp/test/models/FBX/spider.fbx";
+		const char* mesh_file_sponza = "./data/model/sponza/sponza.obj";
+
+		auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+		// Mesh Component
 		{
-			const char* box_model_asset_file_path = "../third_party/assimp/test/models/FBX/box.fbx";
-			//const char* model_asset_file_path = "../third_party/assimp/test/models/FBX/spider.fbx";
-			const char* model_asset_file_path = "./data/model/sponza/sponza.obj";
+			{
+				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				mesh_comp_array_.push_back(mc);
 
-			res_mesh_array_.push_back(ngl::res::ResourceManager::Instance().LoadResMesh(&device_, model_asset_file_path));
+				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
+				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 0));
+			}
 
-			res_mesh_array_.push_back(ngl::res::ResourceManager::Instance().LoadResMesh(&device_, box_model_asset_file_path));
+			{
+				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				mesh_comp_array_.push_back(mc);
 
-			// 多重読み込みテスト.
-			auto tmp_res_handle = ngl::res::ResourceManager::Instance().LoadResMesh(&device_, model_asset_file_path);
+				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
+				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 20));
+			}
 
-			auto ttet = ngl::gfx::ResMeshData::k_resource_type_name;
-			auto res_type_name = (*res_mesh_array_[0]).GetResourceTypeName();
-			std::cout << res_type_name << std::endl;
+			for(int i = 0; i < 100; ++i)
+			{
+				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				mesh_comp_array_.push_back(mc);
+				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_spider));
+
+
+
+				constexpr int k_rand_f_div = 10000;
+				const float randx = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
+				const float randz = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
+				const float randroty = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
+
+				constexpr float placement_range = 600.0f;
+				
+
+				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
+				tr.SetDiagonal(ngl::math::Vec4(0.3f));
+				tr = ngl::math::Mat44::RotAxisY(randroty * ngl::math::k_pi_f * 2.0f) * tr;
+				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 0, placement_range* (randz * 2.0f - 1.0f), 1.0f));
+
+				mc->transform_ = ngl::math::Mat34(tr);
+			}
+
+
+			{
+				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				mesh_comp_array_.push_back(mc);
+
+				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
+				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(10, 30, 0));
+			}
+			{
+				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				mesh_comp_array_.push_back(mc);
+
+				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
+				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(0, 30, 0));
+			}
+			{
+				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				mesh_comp_array_.push_back(mc);
+
+				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
+				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(-10, 30, 0));
+			}
 		}
-
 
 		// テスト用の直接生成頂点バッファ.
 		{
@@ -729,14 +785,70 @@ bool AppGame::Initialize()
 		}
 
 
-		std::vector<ngl::gfx::RaytraceStructureBottomGeometryDesc> blas_desc;
-		
+		std::vector<std::vector<ngl::gfx::RaytraceStructureBottomGeometryDesc>> blas_desc;
 		std::vector<ngl::gfx::RaytraceBlasInstanceGeometryDesc> geom_array;
 		std::vector<uint32_t> instance_geom_id_array;
 		std::vector<ngl::math::Mat34> instance_transform_array;
 		std::vector<uint32_t> instance_hitgroup_id_array;
 
 #if 1
+		// Mesh Component経由.
+		{
+			std::unordered_map<const ngl::gfx::ResMeshData*, int> resmesh_to_index;
+
+			// 共通Mesh収集.
+			int mesh_kind_count = 0;
+			for (const auto& e : mesh_comp_array_)
+			{
+				if (resmesh_to_index.end() == resmesh_to_index.find(e->GetMeshData()))
+				{
+					resmesh_to_index.insert(std::make_pair(e->GetMeshData(), mesh_kind_count));
+					++mesh_kind_count;
+				}
+			}
+
+			// Blas.
+			blas_desc.resize(mesh_kind_count);
+			geom_array.resize(mesh_kind_count);
+			for (const auto& e : resmesh_to_index)
+			{
+				const auto index = e.second;
+				const auto* p_res_mesh = e.first;
+
+				auto& blas_elem = blas_desc[index];
+				for (int mi = 0; mi < p_res_mesh->data_.shape_array_.size(); ++mi)
+				{
+					blas_elem.push_back({});
+					auto& blas_sub_desc = blas_elem.back();
+
+					blas_sub_desc.mesh_data = &p_res_mesh->data_.shape_array_[mi];
+				}
+
+				geom_array[index].num_desc = (uint32_t)blas_elem.size();
+				geom_array[index].pp_desc = blas_elem.data();
+			}
+
+			// Instance.
+			for(auto i = 0; i < mesh_comp_array_.size(); ++i)
+			{
+				const auto& e = mesh_comp_array_[i];
+
+				const auto blas_id = resmesh_to_index[e->GetMeshData()];
+
+				int hitgroup_id = 0;
+				if (true)
+				{
+					// Hitgroup切り替えのテスト.
+					hitgroup_id = i % 2;
+				}
+
+				instance_geom_id_array.push_back(blas_id);
+				instance_transform_array.push_back(e->transform_);
+				instance_hitgroup_id_array.push_back(hitgroup_id);
+			}
+		}
+
+#elif 1
 		for (int i = 0; i < res_mesh_array_.size(); ++i)
 		{
 			for (int mi = 0; mi < res_mesh_array_[i]->data_.shape_array_.size(); ++mi)

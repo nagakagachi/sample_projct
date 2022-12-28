@@ -113,7 +113,7 @@ namespace ngl
 
 
 
-		// Mesh Resource.
+		// Mesh Resource 実装.
 		class ResMeshData : public res::Resource
 		{
 			NGL_RES_MEMBER_DECLARE(ResMeshData)

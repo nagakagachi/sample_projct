@@ -171,7 +171,7 @@ void closestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes 
 	float3 tri_n_ws = mul((float3x3)ObjectToWorld3x4(), tri_n_ls);
 	
 	// ワールド法線の可視化.
-	payload.color = float4(abs(tri_n_ws), 0.0);
+	payload.color = float4(abs(normalize(tri_n_ws)), 0.0);
 #else
 
 	// デバッグ用に距離で色変化.

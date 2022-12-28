@@ -49,6 +49,26 @@ namespace ngl
 				return Vec2(r0.y, r1.y);
 			}
 
+			Mat22& SetColumn0(const Vec2& v)
+			{
+				r0.x = v.x;
+				r1.x = v.y;
+				return *this;
+			}
+			Mat22& SetColumn1(const Vec2& v)
+			{
+				r0.y = v.x;
+				r1.y = v.y;
+				return *this;
+			}
+			// 対角要素を設定. 3x4行列の場合は左上3x3を対象.
+			Mat22& SetDiagonal(const Vec2& v)
+			{
+				r0.x = v.x;
+				r1.y = v.y;
+				return *this;
+			}
+
 			static constexpr Mat22 Zero()
 			{
 				return Mat22(0.0f);
@@ -189,6 +209,35 @@ namespace ngl
 			Vec3 GetColumn2() const
 			{
 				return Vec3(r0.z, r1.z, r2.z);
+			}
+			Mat33& SetColumn0(const Vec3& v)
+			{
+				r0.x = v.x;
+				r1.x = v.y;
+				r2.x = v.z;
+				return *this;
+			}
+			Mat33& SetColumn1(const Vec3& v)
+			{
+				r0.y = v.x;
+				r1.y = v.y;
+				r2.y = v.z;
+				return *this;
+			}
+			Mat33& SetColumn2(const Vec3& v)
+			{
+				r0.z = v.x;
+				r1.z = v.y;
+				r2.z = v.z;
+				return *this;
+			}
+			// 対角要素を設定. 3x4行列の場合は左上3x3を対象.
+			Mat33& SetDiagonal(const Vec3& v)
+			{
+				r0.x = v.x;
+				r1.y = v.y;
+				r2.z = v.z;
+				return *this;
 			}
 
 			static constexpr Mat33 Zero()
@@ -382,6 +431,47 @@ namespace ngl
 			Vec4 GetColumn3() const
 			{
 				return Vec4(r0.w, r1.w, r2.w, r3.w);
+			}
+			Mat44& SetColumn0(const Vec4& v)
+			{
+				r0.x = v.x;
+				r1.x = v.y;
+				r2.x = v.z;
+				r3.x = v.w;
+				return *this;
+			}
+			Mat44& SetColumn1(const Vec4& v)
+			{
+				r0.y = v.x;
+				r1.y = v.y;
+				r2.y = v.z;
+				r3.y = v.w;
+				return *this;
+			}
+			Mat44& SetColumn2(const Vec4& v)
+			{
+				r0.z = v.x;
+				r1.z = v.y;
+				r2.z = v.z;
+				r3.z = v.w;
+				return *this;
+			}
+			Mat44& SetColumn3(const Vec4& v)
+			{
+				r0.w = v.x;
+				r1.w = v.y;
+				r2.w = v.z;
+				r3.w = v.w;
+				return *this;
+			}
+			// 対角要素を設定. 3x4行列の場合は左上3x3を対象.
+			Mat44& SetDiagonal(const Vec4& v)
+			{
+				r0.x = v.x;
+				r1.y = v.y;
+				r2.z = v.z;
+				r2.w = v.w;
+				return *this;
 			}
 
 
@@ -600,31 +690,42 @@ namespace ngl
 				return Vec3(r0.w, r1.w, r2.w);
 			}
 
-			void SetColumn0(const Vec3& v)
+			Mat34& SetColumn0(const Vec3& v)
 			{
 				r0.x = v.x;
 				r1.x = v.y;
 				r2.x = v.z;
+				return *this;
 			}
-			void SetColumn1(const Vec3& v)
+			Mat34& SetColumn1(const Vec3& v)
 			{
 				r0.y = v.x;
 				r1.y = v.y;
 				r2.y = v.z;
+				return *this;
 			}
-			void SetColumn2(const Vec3& v)
+			Mat34& SetColumn2(const Vec3& v)
 			{
 				r0.z = v.x;
 				r1.z = v.y;
 				r2.z = v.z;
+				return *this;
 			}
-			void SetColumn3(const Vec3& v)
+			Mat34& SetColumn3(const Vec3& v)
 			{
 				r0.w = v.x;
 				r1.w = v.y;
 				r2.w = v.z;
+				return *this;
 			}
-
+			// 対角要素を設定. 3x4行列の場合は左上3x3を対象.
+			Mat34& SetDiagonal(const Vec3& v)
+			{
+				r0.x = v.x;
+				r1.y = v.y;
+				r2.z = v.z;
+				return *this;
+			}
 
 			static constexpr Mat34 Zero()
 			{

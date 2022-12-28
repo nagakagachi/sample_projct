@@ -303,13 +303,19 @@ namespace ngl
 			// Instance情報をBufferに書き込み.
 			if (D3D12_RAYTRACING_INSTANCE_DESC* mapped = (D3D12_RAYTRACING_INSTANCE_DESC*)instance_buffer_.Map())
 			{
+				int total_geom_index = 0;
 				for (auto inst_i = 0; inst_i < transform_array_.size(); ++inst_i)
 				{
+					// Instance毎Geom毎にShaderTableを割り当てる場合はすべて直列に並べた際のInstance毎の先頭インデックスを使用し,
+					// TraceRay()のRayContributionToHitGroupIndexでGeom毎のインデックス加算をすることでInstance毎Geom毎のTable参照を実現する.
+					const auto instance_shader_table_head_per_geom = total_geom_index;
+					total_geom_index += blas_array_[instance_blas_id_array_[inst_i]]->NumGeometry();
+
 					// 一応ID入れておく
 					mapped[inst_i].InstanceID = inst_i;
 					// このInstanceのHitGroupを示すベースインデックス. Instanceのマテリアル情報に近い.
-					// TraceRay()のRayContributionToHitGroupIndexがこの値に加算されて実際のHitGroup参照になる.
-					mapped[inst_i].InstanceContributionToHitGroupIndex = inst_i; // 現状はInstance毎に個別のShaderTableエントリ.
+					mapped[inst_i].InstanceContributionToHitGroupIndex = instance_shader_table_head_per_geom;
+
 					mapped[inst_i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 					mapped[inst_i].InstanceMask = ~0u;// 0xff;
 					
@@ -1320,9 +1326,6 @@ namespace ngl
 					const char* hitgroup_name = state_object.GetHitgroupName(hitgroup_id);
 					assert(nullptr != hitgroup_name);
 
-					// Geometry毎のHitgroup分けの確認用.
-					const uint32_t debug_hitgroup_id = 0;
-					const char* debug_hitgroup_name = state_object.GetHitgroupName(debug_hitgroup_id);
 
 					// 内部Geometry毎にRecord.
 					const auto& blas_index = tlas.GetInstanceBlasIndexArray()[i];
@@ -1330,10 +1333,12 @@ namespace ngl
 					for (uint32_t geom_i = 0; geom_i < blas->NumGeometry(); ++geom_i)
 					{
 						auto* geom_hit_group_name = hitgroup_name;
-						if (0 == (geom_i & 0x01))
+						
+
+						// Geometry毎のHitgroup分けの確認用テスト.
+						if (true)
 						{
-							// デバッグ用にGeometry毎にHitgroup変更テスト.
-							geom_hit_group_name = debug_hitgroup_name;
+							//geom_hit_group_name = state_object.GetHitgroupName(geom_i & 0x01);
 						}
 
 						// hitGroup

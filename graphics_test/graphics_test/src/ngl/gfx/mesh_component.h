@@ -19,7 +19,7 @@ namespace gfx
 		IComponent()
 		{
 		}
-		virtual ~IComponent() = 0;
+		virtual ~IComponent() {}
 	};
 
 
@@ -34,23 +34,19 @@ namespace gfx
 		{
 		}
 
-		void SetMeshData(std::shared_ptr<ResMeshData> data)
+		void SetMeshData(const res::ResourceHandle<ResMeshData>& res_mesh)
 		{
-			mesh_data_ = data;
-		}
-		ResMeshData* GetMeshData()
-		{
-			return mesh_data_.get();
+			res_mesh_ = res_mesh;
 		}
 		const ResMeshData* GetMeshData() const
 		{
-			return mesh_data_.get();
+			return res_mesh_.Get();
 		}
 
-		math::Mat34	transform_ = {};
+		math::Mat34	transform_ = math::Mat34::Identity();
 
 	private:
-		std::shared_ptr<ResMeshData> mesh_data_ = {};
+		res::ResourceHandle<ResMeshData> res_mesh_ = {};
 	};
 }
 }
