@@ -800,6 +800,9 @@ bool AppGame::Initialize()
 			int mesh_kind_count = 0;
 			for (const auto& e : mesh_comp_array_)
 			{
+				if (nullptr == e->GetMeshData())
+					continue;
+
 				if (resmesh_to_index.end() == resmesh_to_index.find(e->GetMeshData()))
 				{
 					resmesh_to_index.insert(std::make_pair(e->GetMeshData(), mesh_kind_count));
@@ -832,6 +835,8 @@ bool AppGame::Initialize()
 			for(auto i = 0; i < mesh_comp_array_.size(); ++i)
 			{
 				const auto& e = mesh_comp_array_[i];
+				if (nullptr == e->GetMeshData())
+					continue;
 
 				const auto blas_id = resmesh_to_index[e->GetMeshData()];
 
