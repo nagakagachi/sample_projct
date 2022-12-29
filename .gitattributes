@@ -1,4 +1,4 @@
-
+﻿
 ## git-lfs ##
 #Image
 *.jpg filter=lfs diff=lfs merge=lfs -text
@@ -44,6 +44,8 @@
 *.mb filter=lfs diff=lfs merge=lfs -text
 *.gltf filter=lfs diff=lfs merge=lfs -text
 *.glb filter=lfs diff=lfs merge=lfs -text
+#glTFの外部バイナリファイルの拡張子がbinであるため. ビルド中間データではなくモデルデータ側のgitignoreを調整して除外しないようにする.
+*.bin filter=lfs diff=lfs merge=lfs -text
 
 #font
 *.ttf filter=lfs diff=lfs merge=lfs -text
