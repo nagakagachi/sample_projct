@@ -629,7 +629,9 @@ bool AppGame::Initialize()
 	{
 		const char* mesh_file_box = "../third_party/assimp/test/models/FBX/box.fbx";
 		const char* mesh_file_spider = "../third_party/assimp/test/models/FBX/spider.fbx";
-		const char* mesh_file_sponza = "./data/model/sponza/sponza.obj";
+		
+		//const char* mesh_file_sponza = "./data/model/sponza/sponza.obj";
+		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
 
 		auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
@@ -640,15 +642,7 @@ bool AppGame::Initialize()
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
-				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 0));
-			}
-
-			{
-				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mesh_comp_array_.push_back(mc);
-
-				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
-				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 20));
+				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 0)).SetDiagonal(ngl::math::Vec3(0.1f));
 			}
 
 			for(int i = 0; i < 100; ++i)
@@ -664,11 +658,11 @@ bool AppGame::Initialize()
 				const float randz = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 				const float randroty = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 
-				constexpr float placement_range = 600.0f;
+				constexpr float placement_range = 200.0f;
 				
 
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(0.3f));
+				tr.SetDiagonal(ngl::math::Vec4(0.1f));
 				tr = ngl::math::Mat44::RotAxisY(randroty * ngl::math::k_pi_f * 2.0f) * tr;
 				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 0, placement_range* (randz * 2.0f - 1.0f), 1.0f));
 
@@ -798,6 +792,9 @@ bool AppGame::Execute()
 
 	// 操作系.
 	{
+		float camera_translate_speed = 60.0f;
+
+
 		const auto mouse_pos = window_.Dep().GetMousePosition();
 		const auto mouse_pos_delta = window_.Dep().GetMousePositionDelta();
 		const bool mouse_l = window_.Dep().GetMouseLeft();
@@ -870,27 +867,27 @@ bool AppGame::Execute()
 					const auto vk_a = 65;// VK_A.
 					if (window_.Dep().GetVirtualKeyState()[VK_SPACE])
 					{
-						camera_pos_ += camera_pose_.GetColumn1() * delta_sec * 5.0f;
+						camera_pos_ += camera_pose_.GetColumn1() * delta_sec * camera_translate_speed;
 					}
 					if (window_.Dep().GetVirtualKeyState()[VK_CONTROL])
 					{
-						camera_pos_ += -camera_pose_.GetColumn1() * delta_sec * 5.0f;
+						camera_pos_ += -camera_pose_.GetColumn1() * delta_sec * camera_translate_speed;
 					}
 					if (window_.Dep().GetVirtualKeyState()[vk_a + 'w' - 'a'])
 					{
-						camera_pos_ += camera_pose_.GetColumn2() * delta_sec * 5.0f;
+						camera_pos_ += camera_pose_.GetColumn2() * delta_sec * camera_translate_speed;
 					}
 					if (window_.Dep().GetVirtualKeyState()[vk_a + 's' - 'a'])
 					{
-						camera_pos_ += -camera_pose_.GetColumn2() * delta_sec * 5.0f;
+						camera_pos_ += -camera_pose_.GetColumn2() * delta_sec * camera_translate_speed;
 					}
 					if (window_.Dep().GetVirtualKeyState()[vk_a + 'd' - 'a'])
 					{
-						camera_pos_ += camera_pose_.GetColumn0() * delta_sec * 5.0f;
+						camera_pos_ += camera_pose_.GetColumn0() * delta_sec * camera_translate_speed;
 					}
 					if (window_.Dep().GetVirtualKeyState()[vk_a + 'a' - 'a'])
 					{
-						camera_pos_ += -camera_pose_.GetColumn0() * delta_sec * 5.0f;
+						camera_pos_ += -camera_pose_.GetColumn0() * delta_sec * camera_translate_speed;
 					}
 				}
 			}
