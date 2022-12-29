@@ -16,6 +16,7 @@
 #include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
 
 #include "mesh_resource.h"
+#include "mesh_component.h"
 
 namespace ngl
 {
@@ -309,6 +310,7 @@ namespace ngl
 			uint32_t		table_hitgroup_offset_ = 0;
 			uint32_t		table_hitgroup_count_ = 0;
 		};
+		// 引数のTLASはSetupでRHIリソース確保等がされていれば良い(Build不要).
 		static bool CreateShaderTable(
 			RaytraceShaderTable& out,
 			rhi::DeviceDep* p_device,
@@ -324,6 +326,18 @@ namespace ngl
 			uint32_t								num_desc = 0;
 		};
 
+
+		// 簡易シーン.
+		class SceneRepresentation
+		{
+		public:
+			SceneRepresentation() {}
+			~SceneRepresentation() {}
+
+			std::vector<gfx::StaticMeshComponent*> mesh_instance_array_ = {};
+		};
+
+
 		// RaytracingのAS管理.
 		class RaytraceStructureManager
 		{
@@ -332,16 +346,14 @@ namespace ngl
 			~RaytraceStructureManager();
 
 			bool Initialize(rhi::DeviceDep* p_device, 
-				RaytraceStateObject* p_state, 
-				const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
-				const std::vector<uint32_t>& instance_geom_id_array,
-				const std::vector<math::Mat34>& instance_transform_array,
-				const std::vector<uint32_t>& instance_hitgroup_id_array
+				RaytraceStateObject* p_state
 				);
 
-			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
+			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene);
 			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
 
+			// TLAS他のリビルド. 破棄バッファリングの関係でRenderThread実行を想定.
+			void UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene);
 
 			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up);
 
@@ -353,29 +365,33 @@ namespace ngl
 		private:
 			uint32_t frame_count_ = 0;
 
-			// BLAS.
-			// 管理責任はRaytraceStructureManager自身.
-			std::vector<RaytraceStructureBottom*>	blas_array_ = {};
-
-			// TLAS.
-			RaytraceStructureTop test_tlas_;
-
-
-			rhi::BufferDep				cb_test_scene_view[2];
-			rhi::ConstantBufferViewDep	cbv_test_scene_view[2];
-
-
 			// テスト用StateObject.
 			// 管理責任は外部.
 			RaytraceStateObject* p_state_object_ = {};
 
-			// テスト用ShaderTable.
-			// 管理責任はRaytraceStructureManager自身.
-			RaytraceShaderTable shader_table_;
+			
+			// MeshPtrからBLASへのMap.
+			std::unordered_map<const ResMeshData*, int> mesh_to_blas_id_;
+			// 動的更新でのBLAS管理.
+			std::vector<std::shared_ptr<RaytraceStructureBottom>> dynamic_scene_blas_array_;
+
+			// 動的更新TLASにまつわるオブジェクト群.
+			struct DynamicTlasSet
+			{
+				RaytraceStructureTop dynamic_scene_tlas_ = {};
+				RaytraceShaderTable dynamic_shader_table_ = {};
+				uint32_t			dynamic_scene_descriptor_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
+			};
+			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
+			std::shared_ptr<DynamicTlasSet> dynamic_tlas_destroy_ = {};
+			uint32_t						dynamic_tlas_flip_ = 0;
+
 
 			// Descriptor用. 別のRaytraceStructureManagerインスタンスのAllocIDと被ると意図しないタイミングで解放されることがあるので注意.
 			rhi::FrameDescriptorAllocInterface	desc_alloc_interface_ = {};
-			uint32_t	desc_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
+
+			rhi::BufferDep				cb_test_scene_view[2];
+			rhi::ConstantBufferViewDep	cbv_test_scene_view[2];
 
 			// テスト用のRayDispatch出力先UAV.
 			rhi::TextureDep				ray_result_;

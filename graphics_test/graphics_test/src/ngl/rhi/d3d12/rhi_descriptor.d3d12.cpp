@@ -581,11 +581,10 @@ namespace ngl
 		{
 			assert(p_manager_);
 
-			if (!desc_.allow_frame_flip_index)
+			if (!desc_.allow_frame_flip_index && ((k_fdm_frame_flip_index_bitmask & alloc_id) == alloc_id))
 			{
 				// 許可されていない場合は frame flip index を指定することはできない.
-				assert((k_fdm_frame_flip_index_bitmask & alloc_id) != alloc_id);
-
+				assert(false);
 				return;
 			}
 

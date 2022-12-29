@@ -1433,34 +1433,26 @@ namespace ngl
 		}
 		RaytraceStructureManager::~RaytraceStructureManager()
 		{
-			// BLASインスタンス解放.
-			for (auto i = 0; i < blas_array_.size(); ++i)
+			// Descriptor解放.
+			if (dynamic_tlas_destroy_.get())
 			{
-				if (blas_array_[i])
-				{
-					delete blas_array_[i];
-					blas_array_[i] = nullptr;
-				}
+				desc_alloc_interface_.Deallocate(dynamic_tlas_destroy_->dynamic_scene_descriptor_alloc_id_);
+				dynamic_tlas_destroy_.reset();
+			}
+			if (dynamic_tlas_.get())
+			{
+				desc_alloc_interface_.Deallocate(dynamic_tlas_->dynamic_scene_descriptor_alloc_id_);
+				dynamic_tlas_.reset();
 			}
 
-			// Descriptor解放.
-			desc_alloc_interface_.Deallocate(desc_alloc_id_);
 		}
-		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state,
-			const std::vector<RaytraceBlasInstanceGeometryDesc>& geom_array,
-			const std::vector<uint32_t>& instance_geom_id_array,
-			const std::vector<math::Mat34>& instance_transform_array,
-			const std::vector<uint32_t>& instance_hitgroup_id_array)
+		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state)
 		{
 			// Descriptor確保用Interface初期化.
 			{
 				rhi::FrameDescriptorAllocInterface::Desc descriptor_interface_desc = {};
 				descriptor_interface_desc.allow_frame_flip_index = false;	// FrameFlipと被らないようにfalse指定.
 				desc_alloc_interface_.Initialize(p_device->GetFrameDescriptorManager(), descriptor_interface_desc);
-
-				// 確保IDはFrameFlipと被らないIDに設定.
-				// とりあえず最上位bit 1 としておく.
-				desc_alloc_id_ = (1u << 31u) | (1u);
 			}
 
 			// StateObjectは外部から.
@@ -1471,46 +1463,6 @@ namespace ngl
 			}
 			p_state_object_ = p_state;
 
-			// 入力ジオメトリ情報からBLAS生成.
-			blas_array_.clear();
-			blas_array_.reserve(geom_array.size());
-			for (auto& g : geom_array)
-			{
-				if (nullptr == g.pp_desc || 0 >= g.num_desc)
-					continue;
-
-				std::vector<RaytraceStructureBottomGeometryDesc> blas_geom_desc_arrray = {};
-				blas_geom_desc_arrray.reserve(g.num_desc);
-				
-				for (uint32_t gi = 0; gi < g.num_desc; ++gi)
-				{
-					blas_geom_desc_arrray.push_back({});
-					// 内部用にコピー.
-					auto& geom_desc = blas_geom_desc_arrray[blas_geom_desc_arrray.size() - 1];
-					geom_desc = g.pp_desc[gi];
-				}
-
-				// New Blas.
-				blas_array_.push_back(new RaytraceStructureBottom());
-				auto& blas = blas_array_[blas_array_.size() - 1];
-				// Setup.
-				blas->Setup(p_device, blas_geom_desc_arrray);
-			}
-
-
-			if (!test_tlas_.Setup(p_device, blas_array_, instance_geom_id_array, instance_transform_array, instance_hitgroup_id_array))
-			{
-				assert(false);
-				return false;
-			}
-
-			// 念のためDescriptor解放. 別のインスタンスで同じIDを使っている場合は問題となるため注意.
-			desc_alloc_interface_.Deallocate(desc_alloc_id_);
-			if (!CreateShaderTable(shader_table_, p_device, desc_alloc_interface_, desc_alloc_id_, test_tlas_, *p_state_object_, "rayGen", "miss"))
-			{
-				assert(false);
-				return false;
-			}
 
 			// 出力テスト用のTextureとUAV.
 			{
@@ -1556,26 +1508,163 @@ namespace ngl
 			return true;
 		}
 
-		void RaytraceStructureManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
+		void RaytraceStructureManager::UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene)
+		{
+			// 現在SceneでのMesh情報収集.
+			std::unordered_map<const ResMeshData*, int> scene_mesh_to_id;
+			std::vector<const ResMeshData*> scene_mesh_array;
+			std::vector<int> scene_inst_mesh_id_array;
+			for (auto& e : scene.mesh_instance_array_)
+			{
+				auto* p_mesh = e->GetMeshData();
+				if (scene_mesh_to_id.end() == scene_mesh_to_id.find(p_mesh))
+				{
+					scene_mesh_to_id[p_mesh] = (int)scene_mesh_array.size();
+					scene_mesh_array.push_back(p_mesh);
+				}
+
+				scene_inst_mesh_id_array.push_back(scene_mesh_to_id[p_mesh]);
+			}
+
+			// BLASを必要に応じて構築.
+			std::vector<int> scene_mesh_blas_id_array;
+			for (auto& e : scene_mesh_array)
+			{
+				auto* p_mesh = e;
+
+				// BLASが存在しない場合.
+				if (mesh_to_blas_id_.end() == mesh_to_blas_id_.find(p_mesh))
+				{
+					// 空きスロット.
+					auto find_pos = std::find_if(dynamic_scene_blas_array_.begin(), dynamic_scene_blas_array_.end(), [](const auto& e) {return nullptr == e.get(); });
+					int empty_index = -1;
+					if (dynamic_scene_blas_array_.end() != find_pos)
+					{
+						empty_index = (int)std::distance(dynamic_scene_blas_array_.begin(), find_pos);
+					}
+					else
+					{
+						empty_index = (int)dynamic_scene_blas_array_.size();
+						dynamic_scene_blas_array_.push_back({});
+					}
+
+					// New Blas.
+					auto new_blas = new RaytraceStructureBottom();
+					// データベース登録.
+					dynamic_scene_blas_array_[empty_index].reset(new_blas);
+					// Map登録.
+					mesh_to_blas_id_[p_mesh] = empty_index;
+
+
+					// BLAS Setup.
+					const auto& p_data = p_mesh->data_;
+					std::vector<RaytraceStructureBottomGeometryDesc> blas_geom_desc_arrray = {};
+					blas_geom_desc_arrray.reserve(p_data.shape_array_.size());
+
+					for (uint32_t gi = 0; gi < p_data.shape_array_.size(); ++gi)
+					{
+						blas_geom_desc_arrray.push_back({});
+						auto& geom_desc = blas_geom_desc_arrray[blas_geom_desc_arrray.size() - 1];
+						geom_desc.mesh_data = &p_data.shape_array_[gi];
+					}
+
+					// Setup.
+					new_blas->Setup(p_device, blas_geom_desc_arrray);
+				}
+
+				scene_mesh_blas_id_array.push_back(mesh_to_blas_id_[p_mesh]);
+			}
+
+			// TODO. 一定期間参照されなかったBLASの破棄をする.
+
+			// 
+
+
+			// TLAS Setup.
+			std::vector<RaytraceStructureBottom*> scene_blas_array;
+			std::vector<math::Mat34> scene_inst_transform_array;
+			std::vector<uint32_t> scene_inst_blas_id_array;
+			std::vector<uint32_t> scene_inst_hitgroup_id_array;
+			for (auto e : scene_mesh_blas_id_array)
+			{
+				scene_blas_array.push_back(dynamic_scene_blas_array_[e].get());
+			}
+			for (auto i = 0; i < scene.mesh_instance_array_.size(); ++i)
+			{
+				auto& e = scene.mesh_instance_array_[i];
+
+				scene_inst_transform_array.push_back(e->transform_);
+				scene_inst_blas_id_array.push_back(scene_inst_mesh_id_array[i]);
+
+				int hitgroup_id = (0 == e->test_render_info_) ? 0 : 1;
+				scene_inst_hitgroup_id_array.push_back(hitgroup_id);
+			}
+
+
+			// 破棄待ちしていた以前のTLASをを破棄.
+			if (dynamic_tlas_destroy_.get())
+			{
+				// 使用していたDescriptorを破棄.
+				desc_alloc_interface_.Deallocate(dynamic_tlas_destroy_->dynamic_scene_descriptor_alloc_id_);
+
+				// 破棄.
+				dynamic_tlas_destroy_.reset();
+			}
+			// 破棄待ちに設定.
+			dynamic_tlas_destroy_ = dynamic_tlas_;
+
+			// 新規TLAS.
+			dynamic_tlas_.reset(new DynamicTlasSet());
+			// Descriptor確保IDは毎フレフリップでずらしながら以前の使用IDでを破棄するため, 他の用途と被ると使用中のDescriptorを破棄してしまう点に注意.
+			// CommandListがFrameFlip番号を使用しているため,　最上位ビットを立てたIDを使用する. 
+			dynamic_tlas_->dynamic_scene_descriptor_alloc_id_ = ((1u << 31u) + 16) + dynamic_tlas_flip_;
+			dynamic_tlas_flip_ = (dynamic_tlas_flip_ + 1) % 2;
+
+			// TLAS Setup.
+			if (!dynamic_tlas_->dynamic_scene_tlas_.Setup(p_device, scene_blas_array, scene_inst_blas_id_array, scene_inst_transform_array, scene_inst_hitgroup_id_array))
+			{
+				assert(false);
+			}
+
+			// ShaderTable生成.
+			if (!CreateShaderTable(dynamic_tlas_->dynamic_shader_table_,
+				p_device, 
+				desc_alloc_interface_, dynamic_tlas_->dynamic_scene_descriptor_alloc_id_, 
+				dynamic_tlas_->dynamic_scene_tlas_, *p_state_object_, "rayGen", "miss"))
+			{
+				assert(false);
+			}
+
+		}
+
+		void RaytraceStructureManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene)
 		{
 			++frame_count_;
 			const uint32_t safe_frame_count_ = frame_count_ % 10000;
 
-			// 全BLASビルド.
-			for (auto& e : blas_array_)
-			{
-				if (nullptr != e && !e->IsBuilt())
-				{
-					e->Build(p_device, p_command_list);
-				}
-			}
 
-			// TLAS.
-			if (!test_tlas_.IsBuilt())
+			// 動的Scene.
 			{
-				if (!test_tlas_.Build(p_device, p_command_list))
+				// ASのセットアップやShaderTable構築等.
+				UpdateRtScene(p_device, scene);
+
+
+				// BLASのビルドが必要なものをビルド.
+				for (auto& e : dynamic_scene_blas_array_)
 				{
-					assert(false);
+					if (e.get() && e->IsSetuped() && !e->IsBuilt())
+					{
+						e->Build(p_device, p_command_list);
+					}
+				}
+
+				// TLAS ビルド.
+				if (dynamic_tlas_.get() && 
+					dynamic_tlas_->dynamic_scene_tlas_.IsSetuped() &&
+					!dynamic_tlas_->dynamic_scene_tlas_.IsBuilt()
+					)
+				{
+					dynamic_tlas_->dynamic_scene_tlas_.Build(p_device, p_command_list);
 				}
 			}
 
@@ -1631,10 +1720,14 @@ namespace ngl
 
 			rhi::DeviceDep* p_device = p_command_list->GetDevice();
 			auto* d3d_device = p_device->GetD3D12Device();
-
 			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
-			auto shader_table_head = shader_table_.shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 
+
+
+			auto* p_target_tlas = &dynamic_tlas_->dynamic_scene_tlas_;
+			auto* p_target_shader_table = &dynamic_tlas_->dynamic_shader_table_;
+
+			auto shader_table_head = p_target_shader_table->shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
 
 			// 出力先UAVバリア. これはできれば外側に移行したい.
 			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::UnorderedAccess);
@@ -1769,7 +1862,7 @@ namespace ngl
 
 				// Descriptor, Tableを設定.
 				// ASはParam0番に直接設定. CBV, SRV, UAV, Samplerはその次からTableで設定.
-				d3d_command_list->SetComputeRootShaderResourceView(0, test_tlas_.GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress());
+				d3d_command_list->SetComputeRootShaderResourceView(0, p_target_tlas->GetBuffer()->GetD3D12Resource()->GetGPUVirtualAddress());
 				d3d_command_list->SetComputeRootDescriptorTable(1, descriptor_table_base_cbv.h_gpu);
 				d3d_command_list->SetComputeRootDescriptorTable(2, descriptor_table_base_srv.h_gpu);
 				d3d_command_list->SetComputeRootDescriptorTable(3, sampler_heap_head.h_gpu);
@@ -1784,19 +1877,19 @@ namespace ngl
 			raytraceDesc.Depth = 1;
 
 			// RayGeneration Shaderのテーブル位置.
-			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + shader_table_.table_raygen_offset_;
-			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = shader_table_.table_entry_byte_size_;
+			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + p_target_shader_table->table_raygen_offset_;
+			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = p_target_shader_table->table_entry_byte_size_;
 
 			// Miss Shaderのテーブル位置.
-			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + shader_table_.table_miss_offset_;
-			raytraceDesc.MissShaderTable.StrideInBytes = shader_table_.table_entry_byte_size_;
-			raytraceDesc.MissShaderTable.SizeInBytes = shader_table_.table_entry_byte_size_ * shader_table_.table_miss_count_;// shader_table_.table_entry_byte_size_;   // Only a s single miss-entry
+			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + p_target_shader_table->table_miss_offset_;
+			raytraceDesc.MissShaderTable.StrideInBytes = p_target_shader_table->table_entry_byte_size_;
+			raytraceDesc.MissShaderTable.SizeInBytes = p_target_shader_table->table_entry_byte_size_ * p_target_shader_table->table_miss_count_;
 
 			// HitGroup群の先頭のテーブル位置.
 			// マテリアル毎のHitGroupはここから連続領域に格納. Instanceに設定されたHitGroupIndexでアクセスされる.
-			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + shader_table_.table_hitgroup_offset_;
-			raytraceDesc.HitGroupTable.StrideInBytes = shader_table_.table_entry_byte_size_;
-			raytraceDesc.HitGroupTable.SizeInBytes = shader_table_.table_entry_byte_size_ * shader_table_.table_hitgroup_count_;
+			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + p_target_shader_table->table_hitgroup_offset_;
+			raytraceDesc.HitGroupTable.StrideInBytes = p_target_shader_table->table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.SizeInBytes = p_target_shader_table->table_entry_byte_size_ * p_target_shader_table->table_hitgroup_count_;
 			
 			d3d_command_list->DispatchRays(&raytraceDesc);
 

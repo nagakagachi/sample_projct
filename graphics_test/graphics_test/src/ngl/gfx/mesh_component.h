@@ -45,6 +45,8 @@ namespace gfx
 
 		math::Mat34	transform_ = math::Mat34::Identity();
 
+		int test_render_info_ = 0;
+
 	private:
 		res::ResourceHandle<ResMeshData> res_mesh_ = {};
 	};

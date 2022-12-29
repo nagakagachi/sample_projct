@@ -125,16 +125,15 @@ private:
 	ngl::rhi::SamplerDep						samp_;
 
 
-	ngl::rhi::BufferDep							rt_test_triangle_vb_;
-
-
 	ngl::gfx::RaytraceStructureManager			rt_st_;
 
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
-	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 
+	
+	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
+	std::vector<ngl::gfx::StaticMeshComponent*>	test_move_mesh_comp_array_;
 };
 
 
@@ -674,6 +673,12 @@ bool AppGame::Initialize()
 				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 0, placement_range* (randz * 2.0f - 1.0f), 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
+
+				mc->test_render_info_ = (std::rand()&0x01);// 適当に設定.
+
+
+				// 移動テスト用に追加.
+				test_move_mesh_comp_array_.push_back(mc.get());
 			}
 
 
@@ -699,33 +704,6 @@ bool AppGame::Initialize()
 				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(-10, 30, 0));
 			}
 		}
-
-		// テスト用の直接生成頂点バッファ.
-		{
-			const ngl::math::Vec3 vtx_array[] =
-			{
-				{0.0f, 1.0f, 0.0f},
-				{0.866f, -0.5f, 0.0f},
-				{-0.866f, -0.5f, 0.0f},
-			};
-			// テスト用GeomBuffer.
-			ngl::rhi::BufferDep::Desc vb_desc = {};
-			vb_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-			vb_desc.initial_state = ngl::rhi::ResourceState::General;
-			vb_desc.element_count = 3;
-			vb_desc.element_byte_size = sizeof(vtx_array[0]);
-			if (!rt_test_triangle_vb_.Initialize(&device_, vb_desc))
-			{
-				assert(false);
-				return false;
-			}
-			if (auto* mapped = rt_test_triangle_vb_.Map())
-			{
-				memcpy(mapped, vtx_array, sizeof(vtx_array));
-				rt_test_triangle_vb_.Unmap();
-			}
-		}
-
 	}
 
 	{
@@ -784,105 +762,8 @@ bool AppGame::Initialize()
 			}
 		}
 
-
-		std::vector<std::vector<ngl::gfx::RaytraceStructureBottomGeometryDesc>> blas_desc;
-		std::vector<ngl::gfx::RaytraceBlasInstanceGeometryDesc> geom_array;
-		std::vector<uint32_t> instance_geom_id_array;
-		std::vector<ngl::math::Mat34> instance_transform_array;
-		std::vector<uint32_t> instance_hitgroup_id_array;
-
-#if 1
-		// Mesh Component経由.
-		{
-			std::unordered_map<const ngl::gfx::ResMeshData*, int> resmesh_to_index;
-
-			// 共通Mesh収集.
-			int mesh_kind_count = 0;
-			for (const auto& e : mesh_comp_array_)
-			{
-				if (nullptr == e->GetMeshData())
-					continue;
-
-				if (resmesh_to_index.end() == resmesh_to_index.find(e->GetMeshData()))
-				{
-					resmesh_to_index.insert(std::make_pair(e->GetMeshData(), mesh_kind_count));
-					++mesh_kind_count;
-				}
-			}
-
-			// Blas.
-			blas_desc.resize(mesh_kind_count);
-			geom_array.resize(mesh_kind_count);
-			for (const auto& e : resmesh_to_index)
-			{
-				const auto index = e.second;
-				const auto* p_res_mesh = e.first;
-
-				auto& blas_elem = blas_desc[index];
-				for (int mi = 0; mi < p_res_mesh->data_.shape_array_.size(); ++mi)
-				{
-					blas_elem.push_back({});
-					auto& blas_sub_desc = blas_elem.back();
-
-					blas_sub_desc.mesh_data = &p_res_mesh->data_.shape_array_[mi];
-				}
-
-				geom_array[index].num_desc = (uint32_t)blas_elem.size();
-				geom_array[index].pp_desc = blas_elem.data();
-			}
-
-			// Instance.
-			for(auto i = 0; i < mesh_comp_array_.size(); ++i)
-			{
-				const auto& e = mesh_comp_array_[i];
-				if (nullptr == e->GetMeshData())
-					continue;
-
-				const auto blas_id = resmesh_to_index[e->GetMeshData()];
-
-				int hitgroup_id = 0;
-				if (true)
-				{
-					// Hitgroup切り替えのテスト.
-					hitgroup_id = i % 2;
-				}
-
-				instance_geom_id_array.push_back(blas_id);
-				instance_transform_array.push_back(e->transform_);
-				instance_hitgroup_id_array.push_back(hitgroup_id);
-			}
-		}
-#else
-		// テスト用のTriangle頂点バッファでテスト.
-		{
-			blas_desc.push_back({});
-			blas_desc[blas_desc.size() - 1].vertex_buffer = &rt_test_triangle_vb_;
-		}
-
-		{
-			geom_array.push_back({});
-			geom_array[geom_array.size() - 1].num_desc = static_cast<uint32_t>(blas_desc.size());
-			geom_array[geom_array.size() - 1].pp_desc = blas_desc.data();
-		}
-
-		{
-			{
-				instance_geom_id_array.push_back(0);
-				instance_transform_array.push_back(ngl::math::Mat34::Identity());
-				instance_hitgroup_id_array.push_back(1);
-			}
-			{
-				instance_geom_id_array.push_back(0);
-				ngl::math::Mat34 tmp_m = ngl::math::Mat34::Identity();
-				tmp_m.m[0][3] = 2.0f;
-				instance_transform_array.push_back(tmp_m);
-				instance_hitgroup_id_array.push_back(0);
-			}
-		}
-#endif
-
 		// AS他.
-		if (!rt_st_.Initialize(&device_, &rt_state_object_, geom_array, instance_geom_id_array, instance_transform_array, instance_hitgroup_id_array))
+		if (!rt_st_.Initialize(&device_, &rt_state_object_))
 		{
 			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
 			assert(false);
@@ -1016,11 +897,42 @@ bool AppGame::Execute()
 			prev_mouse_r = mouse_r;
 		}
 	}
+
+	// オブジェクト操作(適当).
+	{
+		for (int i = 0; i < test_move_mesh_comp_array_.size(); ++i)
+		{
+			auto* e = test_move_mesh_comp_array_[i];
+
+			float move_range = (i % 10) / 10.0f;
+
+			const float sin_curve = sinf((float)app_sec_ * 2.0f * ngl::math::k_pi_f * 0.1f * (move_range + 1.0f));
+
+			auto trans = e->transform_.GetColumn3();
+
+			trans.z += sin_curve * 1.0f;
+
+			e->transform_.SetColumn3(trans);
+
+		}
+	}
+
+	// 描画用シーン情報.
+	ngl::gfx::SceneRepresentation frame_scene = {};
+	{
+		for (auto& e : mesh_comp_array_)
+		{
+			frame_scene.mesh_instance_array_.push_back(e.get());
+		}
+	}
+
+	// カメラ設定.
 	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1());
+
+
 
 	ngl::u32 screen_w, screen_h;
 	window_.Impl()->GetScreenSize(screen_w, screen_h);
-
 
 	{
 		// クリアカラー操作.
@@ -1087,7 +999,7 @@ bool AppGame::Execute()
 
 			// Raytrace Structure ビルド.
 			{
-				rt_st_.UpdateOnRender(&device_, &gfx_command_list_);
+				rt_st_.UpdateOnRender(&device_, &gfx_command_list_, frame_scene);
 			}
 
 
