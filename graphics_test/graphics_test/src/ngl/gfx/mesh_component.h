@@ -24,13 +24,13 @@ namespace gfx
 
 
 
-	class MeshComponent : public IComponent
+	class StaticMeshComponent : public IComponent
 	{
 	public:
-		MeshComponent()
+		StaticMeshComponent()
 		{
 		}
-		~MeshComponent()
+		~StaticMeshComponent()
 		{
 		}
 

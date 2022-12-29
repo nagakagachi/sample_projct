@@ -133,7 +133,7 @@ private:
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 
-	std::vector<std::shared_ptr<ngl::gfx::MeshComponent>>	mesh_comp_array_;
+	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 
 };
 
@@ -637,7 +637,7 @@ bool AppGame::Initialize()
 		// Mesh Component
 		{
 			{
-				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
@@ -645,7 +645,7 @@ bool AppGame::Initialize()
 			}
 
 			{
-				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
@@ -654,7 +654,7 @@ bool AppGame::Initialize()
 
 			for(int i = 0; i < 100; ++i)
 			{
-				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_spider));
 
@@ -678,21 +678,21 @@ bool AppGame::Initialize()
 
 
 			{
-				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
 				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(10, 30, 0));
 			}
 			{
-				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
 				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(0, 30, 0));
 			}
 			{
-				auto mc = std::make_shared<ngl::gfx::MeshComponent>();
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
@@ -850,37 +850,6 @@ bool AppGame::Initialize()
 				instance_geom_id_array.push_back(blas_id);
 				instance_transform_array.push_back(e->transform_);
 				instance_hitgroup_id_array.push_back(hitgroup_id);
-			}
-		}
-
-#elif 1
-		for (int i = 0; i < res_mesh_array_.size(); ++i)
-		{
-			for (int mi = 0; mi < res_mesh_array_[i]->data_.shape_array_.size(); ++mi)
-			{
-				blas_desc.push_back({});
-				auto& elem = blas_desc.back();
-
-				// TODO. elemをconst ptrにするように.
-				elem.mesh_data = &res_mesh_array_[i]->data_.shape_array_[mi];
-			}
-		}
-
-		{
-			geom_array.push_back({});
-			geom_array[geom_array.size() - 1].num_desc = static_cast<uint32_t>(blas_desc.size());
-			geom_array[geom_array.size() - 1].pp_desc = blas_desc.data();
-		}
-
-		{
-			{
-				auto mtx = ngl::math::Mat34::Identity();
-				mtx.m[0][0] = mtx.m[1][1] = mtx.m[2][2] = (1.0f / 1.0f);// 適当なスケール.
-
-
-				instance_geom_id_array.push_back(0);
-				instance_transform_array.push_back(mtx);
-				instance_hitgroup_id_array.push_back(1);
 			}
 		}
 #else

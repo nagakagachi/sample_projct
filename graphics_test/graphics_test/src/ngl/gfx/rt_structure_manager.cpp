@@ -1226,7 +1226,8 @@ namespace ngl
 		// BLAS内Geometryは個別のShaderRecordを持つ(multiplier_for_subgeometry_index = 1)
 		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
 			rhi::FrameDescriptorAllocInterface& desc_alloc_interface, uint32_t desc_alloc_id,
-			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name)
+			const RaytraceStructureTop& tlas, 
+			const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name)
 		{
 			out = {};
 
