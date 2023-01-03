@@ -1434,10 +1434,13 @@ namespace ngl
 		RaytraceStructureManager::~RaytraceStructureManager()
 		{
 			// Descriptor解放.
-			if (dynamic_tlas_destroy_.get())
+			for (auto& e : dynamic_tlas_destroy_)
 			{
-				desc_alloc_interface_.Deallocate(dynamic_tlas_destroy_->dynamic_scene_descriptor_alloc_id_);
-				dynamic_tlas_destroy_.reset();
+				if (e.get())
+				{
+					desc_alloc_interface_.Deallocate(e->dynamic_scene_descriptor_alloc_id_);
+					e.reset();
+				}
 			}
 			if (dynamic_tlas_.get())
 			{
@@ -1601,24 +1604,29 @@ namespace ngl
 			}
 
 
-			// 破棄待ちしていた以前のTLASをを破棄.
-			if (dynamic_tlas_destroy_.get())
+			// 破棄待ちリスト要素を後ろにずらして最後の要素の参照をゼロにする.
+			const int dynamic_tlas_flip_max = (int)dynamic_tlas_destroy_.size() + 1;
 			{
-				// 使用していたDescriptorを破棄.
-				desc_alloc_interface_.Deallocate(dynamic_tlas_destroy_->dynamic_scene_descriptor_alloc_id_);
-
-				// 破棄.
-				dynamic_tlas_destroy_.reset();
+				if (dynamic_tlas_destroy_.back().get())
+				{
+					// 最後尾の要素のDescriptor破棄.
+					desc_alloc_interface_.Deallocate(dynamic_tlas_destroy_.back()->dynamic_scene_descriptor_alloc_id_);
+				}
+				// 参照をズラして最後尾を破棄.
+				for (int i = 0; i < dynamic_tlas_destroy_.size() - 1; ++i)
+				{
+					dynamic_tlas_destroy_[i + 1] = dynamic_tlas_destroy_[i];
+				}
+				// 先頭に現在フレームのTLASをセット.
+				dynamic_tlas_destroy_[0] = dynamic_tlas_;
 			}
-			// 破棄待ちに設定.
-			dynamic_tlas_destroy_ = dynamic_tlas_;
 
 			// 新規TLAS.
 			dynamic_tlas_.reset(new DynamicTlasSet());
 			// Descriptor確保IDは毎フレフリップでずらしながら以前の使用IDでを破棄するため, 他の用途と被ると使用中のDescriptorを破棄してしまう点に注意.
 			// CommandListがFrameFlip番号を使用しているため,　最上位ビットを立てたIDを使用する. 
 			dynamic_tlas_->dynamic_scene_descriptor_alloc_id_ = ((1u << 31u) + 16) + dynamic_tlas_flip_;
-			dynamic_tlas_flip_ = (dynamic_tlas_flip_ + 1) % 2;
+			dynamic_tlas_flip_ = (dynamic_tlas_flip_ + 1) % dynamic_tlas_flip_max;
 
 			// TLAS Setup.
 			if (!dynamic_tlas_->dynamic_scene_tlas_.Setup(p_device, scene_blas_array, scene_inst_blas_id_array, scene_inst_transform_array, scene_inst_hitgroup_id_array))

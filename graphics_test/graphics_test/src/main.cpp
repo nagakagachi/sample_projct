@@ -947,6 +947,8 @@ bool AppGame::Execute()
 		{
 			gfx_command_list_.Begin();
 
+			// CommandList に最初にResourceManagerの処理を積み込み.
+			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, &gfx_command_list_);
 
 
 			// RenderTargetとして描画したTextureをSrvとして利用するテスト.

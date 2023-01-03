@@ -4,8 +4,12 @@
 #include <atomic>
 
 #include "ngl/util/noncopyable.h"
-
 #include "ngl/text/hash_text.h"
+
+
+#include "ngl/rhi/d3d12/rhi.d3d12.h"
+#include "ngl/rhi/d3d12/rhi_command_list.d3d12.h"
+
 
 namespace ngl
 {
@@ -152,6 +156,16 @@ namespace res
 		std::string filename_ = {};
 	};
 
+
+
+	class IResourceRenderUpdater
+	{
+	public:
+		IResourceRenderUpdater() {}
+		virtual ~IResourceRenderUpdater() {}
+
+		virtual void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) {}
+	};
 
 
 

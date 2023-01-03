@@ -1,6 +1,10 @@
 ﻿
 #include "resource_manager.h"
 
+// resource derived.
+#include "ngl/gfx/mesh_resource.h"
+// other.
+
 #include "ngl/gfx/mesh_loader_assimp.h"
 
 namespace ngl
@@ -30,7 +34,22 @@ namespace res
 
 	ResourceManager::~ResourceManager()
 	{
+		{
+			// Lock.
+			auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
+			for (auto& e : frame_render_update_list_)
+			{
+				if (e)
+				{
+					// 解放.
+					delete e;
+				}
+			}
+			frame_render_update_list_.clear();
+		}
+
 		ReleaseCacheAll();
+
 	}
 
 	// 全て破棄.
@@ -77,6 +96,31 @@ namespace res
 		delete p_res;
 	}
 
+
+
+	// システムによりRenderThreadで呼び出される. CommandListに必要な描画コマンドを発行する.
+	void ResourceManager::UpdateResourceOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
+	{
+		// Lock.
+		auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
+
+		for (auto& e : frame_render_update_list_)
+		{
+			if (e)
+			{
+				// RenderCommand.
+				(*e)(p_device, p_commandlist);
+
+				// 解放.
+				delete e;
+			}
+		}
+
+		// 次フレーム用に空に.
+		frame_render_update_list_.clear();
+	}
+
+
 	// Load Mesh.
 	ResourceHandle<gfx::ResMeshData> ResourceManager::LoadResMesh(rhi::DeviceDep* p_device, const char* filename)
 	{
@@ -104,11 +148,22 @@ namespace res
 		// 実際にリソースロード.
 		assimp::LoadMeshData(*p_res, p_device, filename);
 
+		// RenderUpdater発行.
+		{
+			auto* renderupdater = new gfx::ResMeshDataRenderUpdater();
+			renderupdater->handle_ = handle;
+			renderupdater->p_res_ = p_res;
+
+			{
+				auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
+
+				frame_render_update_list_.push_back(renderupdater);
+			}
+		}
 
 		// 新規ハンドルを生成して返す.
 		return handle;
 	}
-
 
 	detail::ResourceHolderHandle ResourceManager::FindHandle(const char* res_typename, const char* filename)
 	{

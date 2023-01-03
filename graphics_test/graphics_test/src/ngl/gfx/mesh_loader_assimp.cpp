@@ -34,18 +34,41 @@ namespace assimp
 				ngl::rhi::ShaderResourceViewDep* p_out_view,
 				ngl::rhi::VertexBufferViewDep* p_out_vbv,
 				ngl::rhi::IndexBufferViewDep* p_out_ibv,
+				ngl::rhi::BufferDep* p_out_upload_buffer,
+
 				ngl::rhi::DeviceDep* p_device,
 				uint32_t bind_flag, rhi::ResourceFormat view_format, int element_size_in_byte, int element_count, void* initial_data = nullptr)
 			-> bool
 		{
 			ngl::rhi::BufferDep::Desc buffer_desc = {};
+#if NGL_GFX_USE_MESH_DEFAULT_HEAP
+			// 高速化のため描画用のバッファをDefaultHeapにしてUploadBufferからコピーする対応.
+			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Default;
+#else
 			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+#endif
 			buffer_desc.initial_state = ngl::rhi::ResourceState::General;
 			// RT用のShaderResource.
 			buffer_desc.bind_flag = bind_flag | ngl::rhi::ResourceBindFlag::ShaderResource;
 			buffer_desc.element_count = element_count;
 			buffer_desc.element_byte_size = element_size_in_byte;
 
+
+#if NGL_GFX_USE_MESH_DEFAULT_HEAP
+			// Upload用Bufferが必要な場合は生成.
+			if(p_out_upload_buffer)
+			{
+				auto upload_desc = buffer_desc;
+				upload_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+				upload_desc.initial_state = ngl::rhi::ResourceState::General;
+
+				if (!p_out_upload_buffer->Initialize(p_device, upload_desc))
+				{
+					assert(false);
+					return false;
+				}
+			}
+#endif
 
 			if (!p_out_buffer->Initialize(p_device, buffer_desc))
 			{
@@ -54,11 +77,19 @@ namespace assimp
 			}
 			if (initial_data)
 			{
+#if NGL_GFX_USE_MESH_DEFAULT_HEAP
+				if (void* mapped = p_out_upload_buffer->Map())
+				{
+					memcpy(mapped, initial_data, element_size_in_byte * element_count);
+					p_out_upload_buffer->Unmap();
+				}
+#else
 				if (void* mapped = p_out_buffer->Map())
 				{
 					memcpy(mapped, initial_data, element_size_in_byte * element_count);
 					p_out_buffer->Unmap();
 				}
+#endif
 			}
 
 			bool result = true;
@@ -329,6 +360,7 @@ namespace assimp
 					&mesh.position_.rhi_srv,
 					&mesh.position_.rhi_vbv_,
 					nullptr,
+					&mesh.position_.rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.position_.raw_ptr_);
 			}
@@ -340,6 +372,7 @@ namespace assimp
 					&mesh.normal_.rhi_srv,
 					&mesh.normal_.rhi_vbv_,
 					nullptr,
+					&mesh.normal_.rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.normal_.raw_ptr_);
 
@@ -353,6 +386,7 @@ namespace assimp
 					&mesh.tangent_.rhi_srv,
 					&mesh.tangent_.rhi_vbv_,
 					nullptr,
+					&mesh.tangent_.rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.tangent_.raw_ptr_);
 
@@ -366,6 +400,7 @@ namespace assimp
 					&mesh.binormal_.rhi_srv,
 					&mesh.binormal_.rhi_vbv_,
 					nullptr,
+					&mesh.binormal_.rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.binormal_.raw_ptr_);
 
@@ -380,6 +415,7 @@ namespace assimp
 					&mesh.color_[ci].rhi_srv,
 					&mesh.color_[ci].rhi_vbv_,
 					nullptr,
+					&mesh.color_[ci].rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R8G8B8A8_UNORM, sizeof(ngl::gfx::VertexColor), mesh.num_vertex_,
 					mesh.color_[ci].raw_ptr_);
 
@@ -393,6 +429,7 @@ namespace assimp
 					&mesh.texcoord_[ci].rhi_srv,
 					&mesh.texcoord_[ci].rhi_vbv_,
 					nullptr,
+					&mesh.texcoord_[ci].rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32_FLOAT, sizeof(ngl::math::Vec2), mesh.num_vertex_,
 					mesh.texcoord_[ci].raw_ptr_);
 
@@ -407,6 +444,7 @@ namespace assimp
 					&mesh.index_.rhi_srv,
 					nullptr,
 					&mesh.index_.rhi_vbv_,
+					&mesh.index_.rhi_init_upload_buffer_,
 					p_device, ngl::rhi::ResourceBindFlag::IndexBuffer, rhi::ResourceFormat::Format_R32_UINT, sizeof(uint32_t), mesh.num_primitive_ * 3,
 					mesh.index_.raw_ptr_);
 			}

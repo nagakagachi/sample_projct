@@ -168,6 +168,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\boot\win\boot_application.win.cpp" />
     <ClCompile Include="src\ngl\file\file.cpp" />
     <ClCompile Include="src\ngl\gfx\mesh_loader_assimp.cpp" />
+    <ClCompile Include="src\ngl\gfx\mesh_resource.cpp" />
     <ClCompile Include="src\ngl\gfx\rt_structure_manager.cpp" />
     <ClCompile Include="src\ngl\memory\boundary_tag_block.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />

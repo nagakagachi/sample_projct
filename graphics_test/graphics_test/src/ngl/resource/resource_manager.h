@@ -19,13 +19,14 @@
 // resource base.
 #include "resource.h"
 
-// resource derived.
-#include "ngl/gfx/mesh_resource.h"
-// other.
-
 
 namespace ngl
 {
+namespace gfx
+{
+	class ResMeshData;
+}
+
 namespace res
 {
 
@@ -40,7 +41,6 @@ namespace res
 
 		std::mutex	mutex_;
 	};
-
 
 	// Resource管理.
 	//	読み込み等.
@@ -61,6 +61,10 @@ namespace res
 		// Cacheされたリソースをすべて解放. ただし外部で参照が残っている場合はその参照が消えるまでは実体は破棄されない.
 		void ReleaseCacheAll();
 
+	public:
+		// システムによりRenderThreadで呼び出される. CommandListに必要な描画コマンドを発行する.
+		void UpdateResourceOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist);
+
 	private:
 		void OnDestroyResource(Resource* p_res);
 
@@ -76,6 +80,12 @@ namespace res
 
 		// タイプ別Map自体へのアクセスMutex. 全体破棄と個別破棄で部分的に再帰するためrecursive_mutexを使用.
 		std::recursive_mutex	res_map_mutex_;
+
+
+		// ResourceのRenderUpdateリスト.
+		std::vector<IResourceRenderUpdater*> frame_render_update_list_;
+		// ResourceのRenderUpdateリストのMutex.
+		std::mutex	res_render_update_mutex_;
 
 	private:
 		class ResourceDeleter : public res::IResourceDeleter

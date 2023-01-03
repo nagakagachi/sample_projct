@@ -72,6 +72,9 @@
     <ClCompile Include="src\ngl\resource\resource.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="src\ngl\gfx\mesh_resource.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\util\bit_operation.h">

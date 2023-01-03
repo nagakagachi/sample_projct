@@ -383,7 +383,7 @@ namespace ngl
 				uint32_t			dynamic_scene_descriptor_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
 			};
 			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
-			std::shared_ptr<DynamicTlasSet> dynamic_tlas_destroy_ = {};
+			std::array<std::shared_ptr<DynamicTlasSet>, 1> dynamic_tlas_destroy_ = {};// 破棄待ちリスト.
 			uint32_t						dynamic_tlas_flip_ = 0;
 
 
