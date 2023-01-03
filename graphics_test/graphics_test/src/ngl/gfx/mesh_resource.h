@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#define NGL_GFX_USE_MESH_DEFAULT_HEAP 1
-
 #include <vector>
 
 #include "ngl/math/math.h"

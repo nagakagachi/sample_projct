@@ -1615,7 +1615,7 @@ namespace ngl
 				// 参照をズラして最後尾を破棄.
 				for (int i = 0; i < dynamic_tlas_destroy_.size() - 1; ++i)
 				{
-					dynamic_tlas_destroy_[i + 1] = dynamic_tlas_destroy_[i];
+					dynamic_tlas_destroy_.at(i + 1) = dynamic_tlas_destroy_.at(i);
 				}
 				// 先頭に現在フレームのTLASをセット.
 				dynamic_tlas_destroy_[0] = dynamic_tlas_;

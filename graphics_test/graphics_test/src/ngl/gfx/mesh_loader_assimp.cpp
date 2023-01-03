@@ -41,20 +41,14 @@ namespace assimp
 			-> bool
 		{
 			ngl::rhi::BufferDep::Desc buffer_desc = {};
-#if NGL_GFX_USE_MESH_DEFAULT_HEAP
 			// 高速化のため描画用のバッファをDefaultHeapにしてUploadBufferからコピーする対応.
 			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Default;
-#else
-			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-#endif
 			buffer_desc.initial_state = ngl::rhi::ResourceState::General;
 			// RT用のShaderResource.
 			buffer_desc.bind_flag = bind_flag | ngl::rhi::ResourceBindFlag::ShaderResource;
 			buffer_desc.element_count = element_count;
 			buffer_desc.element_byte_size = element_size_in_byte;
 
-
-#if NGL_GFX_USE_MESH_DEFAULT_HEAP
 			// Upload用Bufferが必要な場合は生成.
 			if(p_out_upload_buffer)
 			{
@@ -68,7 +62,6 @@ namespace assimp
 					return false;
 				}
 			}
-#endif
 
 			if (!p_out_buffer->Initialize(p_device, buffer_desc))
 			{
@@ -77,19 +70,11 @@ namespace assimp
 			}
 			if (initial_data)
 			{
-#if NGL_GFX_USE_MESH_DEFAULT_HEAP
 				if (void* mapped = p_out_upload_buffer->Map())
 				{
 					memcpy(mapped, initial_data, element_size_in_byte * element_count);
 					p_out_upload_buffer->Unmap();
 				}
-#else
-				if (void* mapped = p_out_buffer->Map())
-				{
-					memcpy(mapped, initial_data, element_size_in_byte * element_count);
-					p_out_buffer->Unmap();
-				}
-#endif
 			}
 
 			bool result = true;
