@@ -85,7 +85,7 @@ namespace test
 				//Sleep(1);
 
 				// Popした要素を別のStackへPush.
-				n->Get().deq_id = id_;
+				n->deq_id = id_;
 				dst_->Push(n);
 			}
 		}
@@ -137,7 +137,7 @@ namespace test
 		while (auto* n = stack1.Pop())
 		{
 			// 内容チェック.
-			validation_array.push_back(std::make_tuple(n->Get().data, n->Get().enq_id, n->Get().deq_id));
+			validation_array.push_back(std::make_tuple(n->data, n->enq_id, n->deq_id));
 
 			delete n;
 

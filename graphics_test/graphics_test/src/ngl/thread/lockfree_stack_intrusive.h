@@ -32,7 +32,7 @@ namespace thread
 		private:
 			friend class LockFreeStackIntrusive;
 
-			std::atomic<Node*> next;
+			std::atomic<T*> next;
 		};
 
 
@@ -41,11 +41,11 @@ namespace thread
 		{
 		}
 
-		void Push(Node* node)
+		void Push(T* node)
 		{
 			while (true)
 			{
-				Node* old = top_;
+				T* old = top_;
 				node->next = old;
 				if (top_.compare_exchange_weak(old, node))
 				{
@@ -54,16 +54,16 @@ namespace thread
 			}
 		}
 		// ABA問題への対策はしていないため, PopしたポインタをそのままPushし直すようなタスクでは問題が発生する可能性がある.
-		Node* Pop()
+		T* Pop()
 		{
-			Node* old = nullptr;
+			T* old = nullptr;
 			while (true)
 			{
 				old = top_;
 				if (nullptr == old)
 					break;
 
-				Node* next = old->next;
+				T* next = old->next;
 				if (top_.compare_exchange_weak(old, next))
 				{
 					break;
@@ -74,7 +74,7 @@ namespace thread
 		}
 
 	private:
-		std::atomic<Node*> top_ = nullptr;
+		std::atomic<T*> top_ = nullptr;
 	};
 }
 }
