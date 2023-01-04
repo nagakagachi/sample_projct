@@ -5,13 +5,15 @@
 #include <unordered_map>
 #include <memory>
 
+#include <thread>
+
+
 #include "ngl/boot/boot_application.h"
 #include "ngl/platform/window.h"
 #include "ngl/util/time/timer.h"
 #include "ngl/memory/tlsf_memory_pool.h"
 #include "ngl/memory/tlsf_allocator.h"
 #include "ngl/file/file.h"
-//#include "ngl/util/shared_ptr.h"
 
 #include "ngl/math/math.h"
 
@@ -30,6 +32,9 @@
 #include "ngl/gfx/mesh_resource.h"
 #include "ngl/gfx/rt_structure_manager.h"
 #include "ngl/gfx/mesh_component.h"
+
+#include "ngl/thread/lockfree_stack_intrusive.h"
+#include "ngl/thread/lockfree_stack_intrusive_test.h"
 
 
 struct CbSampleVs
@@ -1562,5 +1567,11 @@ void AppGame::TestCode()
 				}
 			}
 		}
+	}
+
+
+	if (false)
+	{
+		ngl::thread::test::LockfreeStackIntrusiveTest();
 	}
 }
