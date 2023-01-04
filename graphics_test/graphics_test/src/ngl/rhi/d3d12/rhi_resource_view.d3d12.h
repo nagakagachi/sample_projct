@@ -4,9 +4,10 @@
 #include <memory>
 
 #include "ngl/rhi/rhi.h"
-#include "ngl/rhi/rhi_resource.h"
+#include "ngl/rhi/rhi_ref.h"
 
 #include "rhi_util.d3d12.h"
+#include "rhi.d3d12.h"
 #include "rhi_resource.d3d12.h"
 #include "rhi_descriptor.d3d12.h"
 
@@ -25,7 +26,7 @@ namespace ngl
 
 
 		// VertexBufferView
-		class VertexBufferViewDep
+		class VertexBufferViewDep : public RhiObjectImpl
 		{
 		public:
 			struct Desc
@@ -49,7 +50,7 @@ namespace ngl
 		};
 
 		// IndexBufferView
-		class IndexBufferViewDep
+		class IndexBufferViewDep : public RhiObjectImpl
 		{
 		public:
 			struct Desc
@@ -73,7 +74,7 @@ namespace ngl
 		};
 
 		// ConstantBufferView
-		class ConstantBufferViewDep
+		class ConstantBufferViewDep : public RhiObjectImpl
 		{
 		public:
 			struct Desc
@@ -97,7 +98,7 @@ namespace ngl
 		};
 
 		// SamplerState
-		class SamplerDep
+		class SamplerDep : public RhiObjectImpl
 		{
 		public:
 			struct Desc
@@ -146,7 +147,7 @@ namespace ngl
 
 
 		// RenderTargetView
-		class RenderTargetViewDep
+		class RenderTargetViewDep : public RhiObjectImpl
 		{
 		public:
 			RenderTargetViewDep();
@@ -170,7 +171,7 @@ namespace ngl
 		};
 
 		// DepthStencilView
-		class DepthStencilViewDep
+		class DepthStencilViewDep : public RhiObjectImpl
 		{
 		public:
 			DepthStencilViewDep();
@@ -191,7 +192,7 @@ namespace ngl
 		};
 
 		// UnorderedAccessViewDep
-		class UnorderedAccessViewDep
+		class UnorderedAccessViewDep : public RhiObjectImpl
 		{
 		public:
 			UnorderedAccessViewDep();
@@ -217,7 +218,7 @@ namespace ngl
 		};
 
 		// ShaderResourceView
-		class ShaderResourceViewDep
+		class ShaderResourceViewDep : public RhiObjectImpl
 		{
 		public:
 			ShaderResourceViewDep();

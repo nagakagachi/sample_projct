@@ -106,24 +106,15 @@ namespace ngl
 
 		bool BufferDep::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
+			InitializeRhiObject(p_device);
+
 			if (!p_device)
 				return false;
 			
-			// Raytrace BLASのGeomBufferはBindFlag=Noneなので許容.
-			/*
-			if (0 == desc.bind_flag)
-			{
-				assert(false);
-				return false;
-			}
-			*/
-
 			if (0 >= desc.element_byte_size || 0 >= desc.element_count)
 				return false;
 
 			desc_ = desc;
-			p_parent_device_ = p_device;
-
 
 			// 用途によるアライメント.
 			u32 need_alignment = 16;
@@ -273,6 +264,8 @@ namespace ngl
 
 		bool TextureDep::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
+			InitializeRhiObject(p_device);
+
 			if (!p_device)
 				return false;
 			if (0 == desc.bind_flag)
@@ -286,7 +279,6 @@ namespace ngl
 				return false;
 
 			desc_ = desc;
-			p_parent_device_ = p_device;
 
 			if (ResourceHeapType::Upload == desc_.heap_type || ResourceHeapType::Readback == desc_.heap_type)
 			{

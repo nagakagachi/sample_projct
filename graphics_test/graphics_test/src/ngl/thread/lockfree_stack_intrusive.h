@@ -13,10 +13,7 @@ namespace thread
 	public:
 		struct Node
 		{
-			Node()
-			{
-				next.store(nullptr);
-			}
+			Node() {}
 
 			virtual ~Node() {};
 
@@ -29,10 +26,20 @@ namespace thread
 				return *static_cast<T*>(this);
 			}
 
+			Node(const Node& o)
+			{
+				// Nothing. atomicはコピー禁止のためコピーコンストラクタ/代入演算子を明示定義しないと定義自体がdeleteされる.
+			}
+			Node& operator=(const Node & o)
+			{
+				// Nothing. atomicはコピー禁止のためコピーコンストラクタ/代入演算子を明示定義しないと定義自体がdeleteされる.
+				return *this;
+			}
+
 		private:
 			friend class LockFreeStackIntrusive;
 
-			std::atomic<T*> next;
+			std::atomic<T*> next = nullptr;
 		};
 
 
@@ -40,7 +47,7 @@ namespace thread
 		LockFreeStackIntrusive()
 		{
 		}
-
+#if 1
 		void Push(T* node)
 		{
 			while (true)
@@ -72,7 +79,18 @@ namespace thread
 
 			return old;
 		}
+#else
+		void Push(T* node)
+		{
+		}
+		// ABA問題への対策はしていないため, PopしたポインタをそのままPushし直すようなタスクでは問題が発生する可能性がある.
+		T* Pop()
+		{
+			T* old = nullptr;
 
+			return old;
+		}
+#endif
 	private:
 		std::atomic<T*> top_ = nullptr;
 	};

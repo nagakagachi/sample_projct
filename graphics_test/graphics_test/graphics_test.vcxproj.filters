@@ -78,6 +78,12 @@
     <ClCompile Include="src\ngl\thread\lockfree_stack_intrusive_test.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="src\ngl\rhi\rhi_ref.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ngl\rhi\rhi_object_garbage_collect.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\util\bit_operation.h">
@@ -152,7 +158,7 @@
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource.d3d12.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\rhi\rhi_resource.h">
+    <ClInclude Include="src\ngl\rhi\rhi_ref.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource_view.d3d12.h">
@@ -189,6 +195,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\thread\lockfree_stack_intrusive_test.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\rhi\rhi_object_garbage_collect.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

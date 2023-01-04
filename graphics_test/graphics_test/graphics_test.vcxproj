@@ -182,6 +182,8 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_resource.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_resource_view.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\rhi_util.d3d12.cpp" />
+    <ClCompile Include="src\ngl\rhi\rhi_object_garbage_collect.cpp" />
+    <ClCompile Include="src\ngl\rhi\rhi_ref.cpp" />
     <ClCompile Include="src\ngl\thread\lockfree_stack_intrusive_test.cpp" />
     <ClCompile Include="src\ngl\util\bit_operation.cpp" />
     <ClCompile Include="src\ngl\util\time\timer.cpp" />
@@ -208,11 +210,12 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\rhi\d3d12\rhi.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_command_list.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_descriptor.d3d12.h" />
+    <ClInclude Include="src\ngl\rhi\rhi_object_garbage_collect.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_resource_view.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\rhi_util.d3d12.h" />
     <ClInclude Include="src\ngl\rhi\rhi.h" />
-    <ClInclude Include="src\ngl\rhi\rhi_resource.h" />
+    <ClInclude Include="src\ngl\rhi\rhi_ref.h" />
     <ClInclude Include="src\ngl\text\hash_text.h" />
     <ClInclude Include="src\ngl\thread\lockfree_stack_intrusive.h" />
     <ClInclude Include="src\ngl\thread\lockfree_stack_intrusive_test.h" />

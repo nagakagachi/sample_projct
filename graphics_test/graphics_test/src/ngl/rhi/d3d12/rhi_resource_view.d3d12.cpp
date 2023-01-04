@@ -77,6 +77,8 @@ namespace ngl
 		}
 		bool VertexBufferViewDep::Initialize(BufferDep* p_buffer, const Desc& desc)
 		{
+			InitializeRhiObject(p_buffer->GetParentDevice());
+
 			if (!p_buffer || !p_buffer->GetParentDevice())
 			{
 				assert(false);
@@ -89,8 +91,6 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-
-			auto&& p_device = p_buffer->GetParentDevice();
 
 			view_ = {};
 			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
@@ -117,6 +117,8 @@ namespace ngl
 		}
 		bool IndexBufferViewDep::Initialize(BufferDep* p_buffer, const Desc& desc)
 		{
+			InitializeRhiObject(p_buffer->GetParentDevice());
+
 			if (!p_buffer || !p_buffer->GetParentDevice())
 			{
 				assert(false);
@@ -129,8 +131,6 @@ namespace ngl
 				assert(false);
 				return false;
 			}
-
-			auto&& p_device = p_buffer->GetParentDevice();
 
 			view_ = {};
 			view_.SizeInBytes = buffer_desc.element_count * buffer_desc.element_byte_size;
@@ -157,6 +157,8 @@ namespace ngl
 		}
 		bool SamplerDep::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
+			InitializeRhiObject(p_device);
+
 			if (!p_device)
 				return false;
 
@@ -585,6 +587,8 @@ namespace ngl
 		}
 		bool DepthStencilViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device);
 			assert(p_texture);
 
@@ -628,6 +632,8 @@ namespace ngl
 		}
 		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device);
 			assert(p_texture);
 
@@ -660,6 +666,8 @@ namespace ngl
 		// SwapChainからRTV作成.
 		bool RenderTargetViewDep::Initialize(DeviceDep* p_device, SwapChainDep* p_swapchain, unsigned int buffer_index)
 		{
+			InitializeRhiObject(p_device);
+
 			if (!p_device || !p_swapchain)
 				return false;
 
@@ -723,6 +731,8 @@ namespace ngl
 		// TextureのView.
 		bool UnorderedAccessViewDep::Initialize(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 first_array_slice, u32 array_size)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_texture);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_texture->GetBindFlag()))
 			{
@@ -736,6 +746,8 @@ namespace ngl
 		// BufferのStructuredBufferView.
 		bool UnorderedAccessViewDep::InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
 			{
@@ -749,6 +761,8 @@ namespace ngl
 		// BufferのTypedBufferView.
 		bool UnorderedAccessViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
 			{
@@ -762,6 +776,8 @@ namespace ngl
 		// BufferのByteAddressBufferView.
 		bool UnorderedAccessViewDep::InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!check_bits(ResourceBindFlag::UnorderedAccess, p_buffer->GetDesc().bind_flag))
 			{
@@ -820,6 +836,8 @@ namespace ngl
 		// TextureのView.
 		bool ShaderResourceViewDep::InitializeAsTexture(DeviceDep* p_device, const TextureDep* p_texture, u32 mip_slice, u32 mip_count, u32 first_array_slice, u32 array_size)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_texture);
 			if (!p_device || !p_texture)
 				return false;
@@ -858,6 +876,8 @@ namespace ngl
 		// BufferのStructuredBufferView.
 		bool ShaderResourceViewDep::InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!p_device || !p_buffer)
 				return false;
@@ -873,6 +893,8 @@ namespace ngl
 		// BufferのTypedBufferView.
 		bool ShaderResourceViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!p_device || !p_buffer)
 				return false;
@@ -888,6 +910,8 @@ namespace ngl
 		// BufferのByteAddressBufferView.
 		bool ShaderResourceViewDep::InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!p_device || !p_buffer)
 				return false;
@@ -903,6 +927,8 @@ namespace ngl
 		// BufferのRaytracingAccelerationStructureView.
 		bool ShaderResourceViewDep::InitializeAsRaytracingAccelerationStructure(DeviceDep* p_device, const BufferDep* p_buffer)
 		{
+			InitializeRhiObject(p_device);
+
 			assert(p_device && p_buffer);
 			if (!p_device || !p_buffer)
 				return false;

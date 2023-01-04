@@ -3,14 +3,17 @@
 // for mbstowcs, wcstombs
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "ngl/rhi/rhi.h"
-#include "rhi_util.d3d12.h"
-
-
 #include <iostream>
 #include <vector>
 #include <unordered_map>
 #include <memory>
+
+
+#include "ngl/rhi/rhi.h"
+#include "ngl/rhi/rhi_ref.h"
+#include "ngl/rhi/rhi_object_garbage_collect.h"
+
+#include "rhi_util.d3d12.h"
 
 
 #include "ngl/platform/win/window.win.h"
@@ -60,8 +63,29 @@ namespace ngl
 		}
 
 
+
+		// Dep側のRhiObject用基底.
+		class RhiObjectImpl : public RhiObjectBase
+		{
+		public:
+			RhiObjectImpl() {}
+			virtual ~RhiObjectImpl() {}
+		
+			IDevice* GetParentDeviceInreface() override;
+			DeviceDep* GetParentDevice();
+
+			void InitializeRhiObject(DeviceDep* p_device);
+
+		protected:
+			DeviceDep* p_parent_device_ = nullptr;
+		};
+
+
+
+
+
 		// Device
-		class DeviceDep
+		class DeviceDep : public IDevice
 		{
 		public:
 			using DXGI_FACTORY_TYPE = IDXGIFactory6;
@@ -84,12 +108,7 @@ namespace ngl
 			bool Initialize(ngl::platform::CoreWindow* window, const Desc& desc);
 			void Finalize();
 
-			void ReadyToNewFrame();
-			// Deviceが管理するグローバルなフレームインデックスを取得.
-			u64	 GetDeviceFrameIndex() const { return frame_index_; }
-
 			const Desc& GetDesc() const { return desc_; }
-			const u32 GetFrameBufferIndex() const { return buffer_index_; }
 
 			ngl::platform::CoreWindow* GetWindow();
 
@@ -118,6 +137,25 @@ namespace ngl
 			{
 				return p_frame_descriptor_page_pool_.get();
 			}
+		public:
+			// フレーム関連.
+			
+			// Appによってフレームの開始同期タイミングで呼び出す関数.
+			void ReadyToNewFrame();
+			
+			// Deviceが管理するグローバルなフレームインデックスを取得.
+			u64	 GetDeviceFrameIndex() const { return frame_index_; }
+
+			const u32 GetFrameBufferIndex() const { return buffer_index_; }
+		public:
+			// RHIオブジェクトガベージコレクト関連.
+
+			// RHIオブジェクトの参照ハンドルの破棄で呼び出されるオブジェクト破棄依頼関数.
+			void DestroyRhiObject(RhiObjectBase* p) override;
+
+			// 破棄待ちオブジェクトの処理.
+			void ExecuteFrameGabageCollect();
+
 		private:
 			Desc	desc_ = {};
 
@@ -153,6 +191,8 @@ namespace ngl
 			// フレームでのDescriptor確保用. こちらはPage単位で拡張していく. CBV,SRV,UAVおよびSamplerすべてで利用可能.
 			std::unique_ptr<FrameDescriptorHeapPagePool>		p_frame_descriptor_page_pool_;
 
+
+			GabageCollector			gb_;
 		};
 
 

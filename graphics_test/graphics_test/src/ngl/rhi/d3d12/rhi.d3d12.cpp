@@ -137,6 +137,24 @@ namespace ngl
 		}
 
 
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		IDevice* RhiObjectImpl::GetParentDeviceInreface()
+		{
+			return p_parent_device_;
+		}
+		DeviceDep* RhiObjectImpl::GetParentDevice()
+		{
+			return p_parent_device_;
+		}
+		void RhiObjectImpl::InitializeRhiObject(DeviceDep* p_device)
+		{
+			p_parent_device_ = p_device;
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		DeviceDep::DeviceDep()
@@ -303,13 +321,25 @@ namespace ngl
 				}
 			}
 
+			// Gabage Collector.
+			{
+				if (!gb_.Initialize())
+				{
+					std::cout << "[ERROR] Initialize RHI GabageCollector" << std::endl;
+					return false;
+				}
+			}
+
 			return true;
 		}
 		void DeviceDep::Finalize()
 		{
+			gb_.Finalize();
+
 			p_device_ = nullptr;
 			p_factory_ = nullptr;
 		}
+
 		void DeviceDep::ReadyToNewFrame()
 		{
 			++frame_index_;
@@ -320,7 +350,24 @@ namespace ngl
 			// これにより各CommandListが個別に解放する必要がなくフレーム毎に確保することに専念できる.
 			// ただしこのインデックスのものはここで自動解放されるため, FrameDescriptorAllocInterfaceを使って直接IDを指定して確保した際のIDがフレームインデックスとかぶると意図せず解放されて破綻するので注意.
 			p_frame_descriptor_manager_->ResetFrameDescriptor(buffer_index_);
+
+
+			gb_.ReadyToNewFrame();
 		}
+
+		// 破棄待ちオブジェクトの処理.
+		void DeviceDep::ExecuteFrameGabageCollect()
+		{
+			// ガベコレ. 実際にはここを別スレッドに逃がすことも考えられる.
+			gb_.Execute();
+		}
+
+		// 派生Deviceクラスで実装.
+		void DeviceDep::DestroyRhiObject(RhiObjectBase* p)
+		{
+			gb_.Enqueue(p);
+		}
+
 
 		ngl::platform::CoreWindow* DeviceDep::GetWindow()
 		{

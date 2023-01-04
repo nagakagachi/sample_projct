@@ -6,8 +6,8 @@
 #include <memory>
 
 #include "ngl/rhi/rhi.h"
-#include "ngl/rhi/rhi_resource.h"
 #include "rhi_util.d3d12.h"
+#include "rhi.d3d12.h"
 
 
 #include "ngl/util/types.h"
@@ -20,7 +20,7 @@ namespace ngl
 		class DeviceDep;
 
 		// Buffer
-		class BufferDep
+		class BufferDep : public RhiObjectImpl
 		{
 		public:
 			struct Desc
@@ -42,7 +42,6 @@ namespace ngl
 			void Unmap();
 
 			const Desc& GetDesc() const { return desc_; }
-			DeviceDep* GetParentDevice() { return p_parent_device_; }
 
 			ID3D12Resource* GetD3D12Resource() const;
 
@@ -52,8 +51,6 @@ namespace ngl
 			u32 getElementCount() const { return desc_.element_count; }
 
 		private:
-			DeviceDep* p_parent_device_ = nullptr;
-
 			Desc	desc_ = {};
 			u32		allocated_byte_size_ = 0;
 
@@ -65,7 +62,7 @@ namespace ngl
 
 		// Texture
 		// TODO. Array対応, Cubemap対応.
-		class TextureDep
+		class TextureDep : public RhiObjectImpl
 		{
 		public:
 			struct Desc
@@ -95,7 +92,6 @@ namespace ngl
 			void Unmap();
 
 			const Desc& GetDesc() const { return desc_; }
-			DeviceDep* GetParentDevice() { return p_parent_device_; }
 
 			ID3D12Resource* GetD3D12Resource() const;
 		public:
@@ -140,8 +136,6 @@ namespace ngl
 			TextureType GetType() const { return desc_.type; }
 
 		private:
-			DeviceDep* p_parent_device_ = nullptr;
-
 			Desc	desc_ = {};
 			u32		allocated_byte_size_ = 0;
 
