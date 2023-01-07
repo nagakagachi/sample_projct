@@ -47,7 +47,6 @@ namespace thread
 		LockFreeStackIntrusive()
 		{
 		}
-#if 1
 		void Push(T* node)
 		{
 			while (true)
@@ -79,18 +78,6 @@ namespace thread
 
 			return old;
 		}
-#else
-		void Push(T* node)
-		{
-		}
-		// ABA問題への対策はしていないため, PopしたポインタをそのままPushし直すようなタスクでは問題が発生する可能性がある.
-		T* Pop()
-		{
-			T* old = nullptr;
-
-			return old;
-		}
-#endif
 	private:
 		std::atomic<T*> top_ = nullptr;
 	};

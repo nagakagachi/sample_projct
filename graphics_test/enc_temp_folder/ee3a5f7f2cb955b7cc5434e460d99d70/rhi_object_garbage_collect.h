@@ -13,9 +13,6 @@ namespace ngl
 {
 namespace rhi
 {
-	// RHIオブジェクトを安全なタイミングまで遅延してから破棄をするためのクラス.
-	// 参照管理オブジェクトの破棄からDevice経由でPushされ, フレーム同期を挟んで2フレーム後に実際の破棄をする
-	//	(2フレームは GameThread->RenderThread->GPU という構成での最大を考慮)
 	class GabageCollector
 	{
 	public:

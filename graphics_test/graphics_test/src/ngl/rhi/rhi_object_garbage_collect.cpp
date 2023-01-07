@@ -18,14 +18,12 @@ namespace rhi
 	}
 	void GabageCollector::Finalize()
 	{
-#if NGL_RHI_GabageCollector_Enable
 		const int max_frame = (int)frame_stack_.size();
 		for (int i = 0; i < max_frame; ++i)
 		{
 			ReadyToNewFrame();
 			Execute();
 		}
-#endif
 	}
 
 	// フレーム開始同期処理.
@@ -39,7 +37,6 @@ namespace rhi
 	// 破棄の実行.
 	void GabageCollector::Execute()
 	{
-#if NGL_RHI_GabageCollector_Enable
 		const int max_frame = (int)frame_stack_.size();
 
 		const int oldest_index = (flip_index_.load() + 1) % max_frame;
@@ -48,15 +45,12 @@ namespace rhi
 		{
 			delete e;
 		}
-#endif
 	}
 
 	// 新規破棄オブジェクトのPush.
 	void GabageCollector::Enqueue(RhiObjectBase* p_obj)
 	{
-#if NGL_RHI_GabageCollector_Enable
 		frame_stack_[flip_index_.load()].Push(p_obj);
-#endif
 	}
 }
 }
