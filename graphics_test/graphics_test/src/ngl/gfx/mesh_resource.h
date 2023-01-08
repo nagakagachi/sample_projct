@@ -46,31 +46,31 @@ namespace ngl
 
 			void InitRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
 			{
-				if (is_init_render_)
-					return;
-				is_init_render_ = true;
-
 				// バッファ自体が生成されていなければ終了.
-				if (!rhi_buffer_.GetD3D12Resource() || !rhi_init_upload_buffer_.GetD3D12Resource())
+				if (!ref_upload_rhibuffer_.IsValid() || !rhi_buffer_.GetD3D12Resource())
 					return;
 
 				auto* p_d3d_commandlist = p_commandlist->GetD3D12GraphicsCommandList();
 				// Init Upload Buffer から DefaultHeapのBufferへコピー. StateはGeneral想定.
 				p_commandlist->ResourceBarrier(&rhi_buffer_, rhi::ResourceState::General, rhi::ResourceState::CopyDst);
-				p_d3d_commandlist->CopyResource(rhi_buffer_.GetD3D12Resource(), rhi_init_upload_buffer_.GetD3D12Resource());
+				p_d3d_commandlist->CopyResource(rhi_buffer_.GetD3D12Resource(), ref_upload_rhibuffer_->GetD3D12Resource());
 				p_commandlist->ResourceBarrier(&rhi_buffer_, rhi::ResourceState::CopyDst, rhi::ResourceState::General);
-			}
 
-			// raw data ptr.
-			T* raw_ptr_ = nullptr;
-			// 初期データ upload rhi buffer. 現在はRenderThreadでrhi_buffer_へのコピーコマンドを発行した後も生存している. RHIリソース遅延破棄の仕組みを実装して破棄したい.
-			rhi::BufferDep	rhi_init_upload_buffer_ = {};
-			bool is_init_render_ = false;
+				// upload bufferを解放.
+				ref_upload_rhibuffer_.Reset();
+			}
 
 			// rhi buffer for gpu.
 			rhi::BufferDep	rhi_buffer_ = {};
 			// rhi srv.
 			rhi::ShaderResourceViewDep rhi_srv = {};
+
+
+			// raw data ptr.
+			T* raw_ptr_ = nullptr;
+			// 初期データバッファ. InitRenderでrhi_buffer_へコピー命令を発行した後に破棄される.
+			rhi::RhiRef<rhi::BufferDep>	ref_upload_rhibuffer_ = {};
+
 		};
 
 		template<typename T>

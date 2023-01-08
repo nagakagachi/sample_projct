@@ -340,24 +340,28 @@ namespace assimp
 
 			// Vertex Attribute.
 			{
+				mesh.position_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.position_.rhi_buffer_,
 					&mesh.position_.rhi_srv,
 					&mesh.position_.rhi_vbv_,
 					nullptr,
-					&mesh.position_.rhi_init_upload_buffer_,
+					mesh.position_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.position_.raw_ptr_);
 			}
 
 			if (mesh.normal_.raw_ptr_)
 			{
+				mesh.normal_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.normal_.rhi_buffer_,
 					&mesh.normal_.rhi_srv,
 					&mesh.normal_.rhi_vbv_,
 					nullptr,
-					&mesh.normal_.rhi_init_upload_buffer_,
+					mesh.normal_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.normal_.raw_ptr_);
 
@@ -366,12 +370,14 @@ namespace assimp
 			}
 			if (mesh.tangent_.raw_ptr_)
 			{
+				mesh.tangent_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.tangent_.rhi_buffer_,
 					&mesh.tangent_.rhi_srv,
 					&mesh.tangent_.rhi_vbv_,
 					nullptr,
-					&mesh.tangent_.rhi_init_upload_buffer_,
+					mesh.tangent_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.tangent_.raw_ptr_);
 
@@ -380,12 +386,14 @@ namespace assimp
 			}
 			if (mesh.binormal_.raw_ptr_)
 			{
+				mesh.binormal_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.binormal_.rhi_buffer_,
 					&mesh.binormal_.rhi_srv,
 					&mesh.binormal_.rhi_vbv_,
 					nullptr,
-					&mesh.binormal_.rhi_init_upload_buffer_,
+					mesh.binormal_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.binormal_.raw_ptr_);
 
@@ -395,12 +403,14 @@ namespace assimp
 			// SRGBかLinearで問題になるかもしれない. 現状はとりあえずLinear扱い.
 			for (int ci = 0; ci < mesh.color_.size(); ++ci)
 			{
+				mesh.color_[ci].ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.color_[ci].rhi_buffer_,
 					&mesh.color_[ci].rhi_srv,
 					&mesh.color_[ci].rhi_vbv_,
 					nullptr,
-					&mesh.color_[ci].rhi_init_upload_buffer_,
+					mesh.color_[ci].ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R8G8B8A8_UNORM, sizeof(ngl::gfx::VertexColor), mesh.num_vertex_,
 					mesh.color_[ci].raw_ptr_);
 
@@ -409,12 +419,14 @@ namespace assimp
 			}
 			for (int ci = 0; ci < mesh.texcoord_.size(); ++ci)
 			{
+				mesh.texcoord_[ci].ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.texcoord_[ci].rhi_buffer_,
 					&mesh.texcoord_[ci].rhi_srv,
 					&mesh.texcoord_[ci].rhi_vbv_,
 					nullptr,
-					&mesh.texcoord_[ci].rhi_init_upload_buffer_,
+					mesh.texcoord_[ci].ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32_FLOAT, sizeof(ngl::math::Vec2), mesh.num_vertex_,
 					mesh.texcoord_[ci].raw_ptr_);
 
@@ -424,12 +436,14 @@ namespace assimp
 
 			// Index.
 			{
+				mesh.index_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
+
 				CreateShapeDataRhiBuffer(
 					&mesh.index_.rhi_buffer_,
 					&mesh.index_.rhi_srv,
 					nullptr,
 					&mesh.index_.rhi_vbv_,
-					&mesh.index_.rhi_init_upload_buffer_,
+					mesh.index_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::IndexBuffer, rhi::ResourceFormat::Format_R32_UINT, sizeof(uint32_t), mesh.num_primitive_ * 3,
 					mesh.index_.raw_ptr_);
 			}

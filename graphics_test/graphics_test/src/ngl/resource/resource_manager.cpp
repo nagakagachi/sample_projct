@@ -122,6 +122,7 @@ namespace res
 
 
 	// Load Mesh.
+	// Thread Safe.
 	ResourceHandle<gfx::ResMeshData> ResourceManager::LoadResMesh(rhi::DeviceDep* p_device, const char* filename)
 	{
 		// 登録済みか検索.
@@ -131,11 +132,11 @@ namespace res
 			// あれば返却.
 			return ResourceHandle<gfx::ResMeshData>(exist_handle);
 		}
+
 		// 存在しない場合は読み込み.
 
 		// 新規生成.
 		auto p_res = new gfx::ResMeshData();
-		// 情報設定.
 		res::ResoucePrivateAccess::SetResourceInfo(p_res, filename);
 		// Handle生成.
 		auto handle = ResourceHandle<gfx::ResMeshData>(p_res, &deleter_instance_);
@@ -148,13 +149,13 @@ namespace res
 		// 実際にリソースロード.
 		assimp::LoadMeshData(*p_res, p_device, filename);
 
-		// RenderUpdater発行.
+		// リソースのRenderUpdater発行.
 		{
 			auto* renderupdater = new gfx::ResMeshDataRenderUpdater();
 			renderupdater->handle_ = handle;
 			renderupdater->p_res_ = p_res;
-
 			{
+				// 排他でRnderUpdateリストに登録.
 				auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
 
 				frame_render_update_list_.push_back(renderupdater);
@@ -165,6 +166,7 @@ namespace res
 		return handle;
 	}
 
+	// Thread Safe.
 	detail::ResourceHolderHandle ResourceManager::FindHandle(const char* res_typename, const char* filename)
 	{
 		ResourceHandleCacheMap* res_map = GetOrCreateTypedCacheMap(res_typename);
@@ -180,6 +182,7 @@ namespace res
 	}
 
 
+	// Thread Safe.
 	void ResourceManager::Register(detail::ResourceHolderHandle& raw_handle)
 	{
 		ResourceHandleCacheMap* res_map = GetOrCreateTypedCacheMap(raw_handle->p_res_->GetResourceTypeName());
@@ -194,6 +197,7 @@ namespace res
 		}
 #endif	
 	}
+	// Thread Safe.
 	void ResourceManager::Unregister(Resource* p_res)
 	{
 		ResourceHandleCacheMap* res_map = GetOrCreateTypedCacheMap(p_res->GetResourceTypeName());

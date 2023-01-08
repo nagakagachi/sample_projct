@@ -86,10 +86,17 @@ namespace ngl
 			~RhiRef() {}
 
 
-			void Reset(RHI_CLASS* p)
+			void Reset(RHI_CLASS* p = nullptr)
 			{
-				// 新規リソース実体のハンドルとなるため, 取り扱い注意.
-				raw_handle_.reset(new detail::RhiObjectHolder(p));
+				if (p)
+				{
+					// 新規リソース実体のハンドルとなるため, 取り扱い注意.
+					raw_handle_.reset(new detail::RhiObjectHolder(p));
+				}
+				else
+				{
+					raw_handle_.reset();
+				}
 			}
 
 			bool IsValid() const

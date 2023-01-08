@@ -42,7 +42,6 @@ namespace rhi
 			if (p_res_)
 			{
 				assert(false); // 本来はRhiオブジェクト破棄を安全なタイミングで遅延実行する.
-
 				delete p_res_;
 			}
 #endif
