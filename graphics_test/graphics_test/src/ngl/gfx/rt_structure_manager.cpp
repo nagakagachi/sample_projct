@@ -196,10 +196,8 @@ namespace ngl
 				assert(false);
 				return ret;
 			}
-
 			ret.vertex_srv = &geometry_desc_array_[index].mesh_data->position_.rhi_srv;
 			ret.index_srv = &geometry_desc_array_[index].mesh_data->index_.rhi_srv;
-
 			return ret;
 		}
 

@@ -101,8 +101,6 @@ namespace ngl
 			}
 			// 内部Geometry情報.
 			RaytraceStructureBottomGeometryResource GetGeometryData(uint32_t index);
-			// 内部Geometry情報.
-			RaytraceStructureBottomGeometryResource GetGeometryData(uint32_t index) const;
 
 		private:
 			bool is_built_ = false;
