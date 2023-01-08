@@ -23,7 +23,7 @@ namespace ngl
 		class DepthStencilViewDep;
 
 		// CommandList
-		class GraphicsCommandListDep
+		class GraphicsCommandListDep : public RhiObjectBase
 		{
 		public:
 			struct Desc

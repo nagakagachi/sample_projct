@@ -20,7 +20,7 @@ namespace ngl
 		class DeviceDep;
 
 		// Buffer
-		class BufferDep : public RhiObjectImpl
+		class BufferDep : public RhiObjectBase
 		{
 		public:
 			struct Desc
@@ -62,7 +62,7 @@ namespace ngl
 
 		// Texture
 		// TODO. Array対応, Cubemap対応.
-		class TextureDep : public RhiObjectImpl
+		class TextureDep : public RhiObjectBase
 		{
 		public:
 			struct Desc

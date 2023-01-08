@@ -36,22 +36,20 @@ namespace ngl
 {
 	namespace rhi
 	{
-		class SwapChainDep;
-		class RenderTargetViewDep;
-
-		class GraphicsCommandQueueDep;
-
-		class FenceDep;
-
-		class DeviceDep;
-
-		class GraphicsCommandListDep;
-
 		class PersistentDescriptorAllocator;
 		struct PersistentDescriptorInfo;
 		class FrameDescriptorManager;
 		class FrameDescriptorHeapPagePool;
 		class DescriptorSetDep;
+
+		class SwapChainDep;
+		class RenderTargetViewDep;
+		class FenceDep;
+
+		class GraphicsCommandListDep;
+		class GraphicsCommandQueueDep;
+
+		class DeviceDep;
 
 
 		namespace helper
@@ -65,21 +63,23 @@ namespace ngl
 
 
 		// Dep側のRhiObject用基底.
-		class RhiObjectImpl : public RhiObjectBase
+		//  RhiRef<>で保持して参照カウント遅延破棄するRhiObjectはこのクラスを継承する.
+		class RhiObjectBase : public IRhiObject
 		{
 		public:
-			RhiObjectImpl() {}
-			virtual ~RhiObjectImpl() {}
+			RhiObjectBase() {}
+			virtual ~RhiObjectBase() {}
 		
 			IDevice* GetParentDeviceInreface() override;
-			DeviceDep* GetParentDevice();
+			const IDevice* GetParentDeviceInreface() const override;
 
+			DeviceDep* GetParentDevice();
+			const DeviceDep* GetParentDevice() const;
 			void InitializeRhiObject(DeviceDep* p_device);
 
 		protected:
 			DeviceDep* p_parent_device_ = nullptr;
 		};
-
 
 
 
@@ -151,7 +151,7 @@ namespace ngl
 			// RHIオブジェクトガベージコレクト関連.
 
 			// RHIオブジェクトの参照ハンドルの破棄で呼び出されるオブジェクト破棄依頼関数.
-			void DestroyRhiObject(RhiObjectBase* p) override;
+			void DestroyRhiObject(IRhiObject* p) override;
 
 			// 破棄待ちオブジェクトの処理.
 			void ExecuteFrameGabageCollect();
@@ -197,7 +197,7 @@ namespace ngl
 
 
 		// Graphics Command Queue
-		class GraphicsCommandQueueDep
+		class GraphicsCommandQueueDep : public RhiObjectBase
 		{
 		public:
 			GraphicsCommandQueueDep();
@@ -218,7 +218,7 @@ namespace ngl
 		};
 
 		// フェンス
-		class FenceDep
+		class FenceDep : public RhiObjectBase
 		{
 		public:
 			FenceDep();
@@ -249,7 +249,7 @@ namespace ngl
 
 
 		// スワップチェイン
-		class SwapChainDep
+		class SwapChainDep : public RhiObjectBase
 		{
 		public:
 			using DXGI_SWAPCHAIN_TYPE = IDXGISwapChain4;
@@ -526,7 +526,7 @@ namespace ngl
 		};
 
 		// パイプラインステート.
-		class GraphicsPipelineStateDep
+		class GraphicsPipelineStateDep : public RhiObjectBase
 		{
 		public:
 			struct Desc

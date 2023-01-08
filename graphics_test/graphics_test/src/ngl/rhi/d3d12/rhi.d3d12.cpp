@@ -139,15 +139,23 @@ namespace ngl
 
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		IDevice* RhiObjectImpl::GetParentDeviceInreface()
+		IDevice* RhiObjectBase::GetParentDeviceInreface()
 		{
 			return p_parent_device_;
 		}
-		DeviceDep* RhiObjectImpl::GetParentDevice()
+		const IDevice* RhiObjectBase::GetParentDeviceInreface() const
 		{
 			return p_parent_device_;
 		}
-		void RhiObjectImpl::InitializeRhiObject(DeviceDep* p_device)
+		DeviceDep* RhiObjectBase::GetParentDevice()
+		{
+			return p_parent_device_;
+		}
+		const DeviceDep* RhiObjectBase::GetParentDevice() const
+		{
+			return p_parent_device_;
+		}
+		void RhiObjectBase::InitializeRhiObject(DeviceDep* p_device)
 		{
 			p_parent_device_ = p_device;
 		}
@@ -363,7 +371,7 @@ namespace ngl
 		}
 
 		// 派生Deviceクラスで実装.
-		void DeviceDep::DestroyRhiObject(RhiObjectBase* p)
+		void DeviceDep::DestroyRhiObject(IRhiObject* p)
 		{
 			gb_.Enqueue(p);
 		}

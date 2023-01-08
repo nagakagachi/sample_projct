@@ -8,7 +8,7 @@ namespace ngl
 {
 	namespace rhi
 	{
-		class RhiObjectBase;
+		class IRhiObject;
 
 		class IDevice
 		{
@@ -17,24 +17,25 @@ namespace ngl
 			virtual ~IDevice() {}
 
 			// 派生Deviceクラスで実装.
-			virtual void DestroyRhiObject(RhiObjectBase* p) = 0;
+			virtual void DestroyRhiObject(IRhiObject* p) = 0;
 		};
 
 
 
 		// BufferやTexture等はこのクラスを継承することで, RhiRefによる参照管理と破棄時の安全な遅延破棄がサポートされる.
-		using RhiObjectBaseGabageCollectStack = ngl::thread::LockFreeStackIntrusive<class RhiObjectBase>;
-		class RhiObjectBase : public RhiObjectBaseGabageCollectStack::Node
+		using RhiObjectGabageCollectStack = ngl::thread::LockFreeStackIntrusive<class IRhiObject>;
+		class IRhiObject : public RhiObjectGabageCollectStack::Node
 		{
 		public:
 			static constexpr bool k_is_RhiObjectBase = true;
 
-			RhiObjectBase() {}
-			virtual ~RhiObjectBase() {}
+			IRhiObject() {}
+			virtual ~IRhiObject() {}
 
 
 			// 派生クラスで親Deviceを返す実装.
 			virtual IDevice* GetParentDeviceInreface() = 0;
+			virtual const IDevice* GetParentDeviceInreface() const = 0;
 
 		};
 
@@ -44,23 +45,26 @@ namespace ngl
 			{
 			public:
 				RhiObjectHolder();
-				RhiObjectHolder(RhiObjectBase* p);
+				RhiObjectHolder(IRhiObject* p);
 
-				// RhiObjectBase実体の破棄.
+				// IRhiObject実体の破棄.
 				~RhiObjectHolder();
 
 
-				RhiObjectBase* p_obj_ = nullptr;
+				IRhiObject* p_obj_ = nullptr;
 			};
 
 			using RhiObjectHolderHandle = std::shared_ptr<const RhiObjectHolder>;
 		}
 
-		// RhiObjectBase継承クラスオブジェクトの安全な遅延破棄を提供するSharedPtr.
+		// IRhiObject継承クラスオブジェクトの安全な遅延破棄を提供するSharedPtr.
 		template<typename RHI_CLASS>
 		class RhiRef
 		{
 		public:
+			// IRhiObject継承チェック.
+			static_assert(RHI_CLASS::k_is_RhiObjectBase, "RhiRefで保持するクラスはIRhiObjectを継承する必要があります");
+
 			RhiRef()
 			{}
 			RhiRef(RhiRef& ref)
@@ -84,9 +88,6 @@ namespace ngl
 
 			void Reset(RHI_CLASS* p)
 			{
-				// RhiObjectBase継承チェック.
-				static_assert(RHI_CLASS::k_is_RhiObjectBase, "RhiRefで保持するクラスはRhiObjectBaseを継承する必要があります");
-
 				// 新規リソース実体のハンドルとなるため, 取り扱い注意.
 				raw_handle_.reset(new detail::RhiObjectHolder(p));
 			}

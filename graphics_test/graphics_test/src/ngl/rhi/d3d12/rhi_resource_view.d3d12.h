@@ -26,7 +26,7 @@ namespace ngl
 
 
 		// VertexBufferView
-		class VertexBufferViewDep : public RhiObjectImpl
+		class VertexBufferViewDep : public RhiObjectBase
 		{
 		public:
 			struct Desc
@@ -50,7 +50,7 @@ namespace ngl
 		};
 
 		// IndexBufferView
-		class IndexBufferViewDep : public RhiObjectImpl
+		class IndexBufferViewDep : public RhiObjectBase
 		{
 		public:
 			struct Desc
@@ -74,7 +74,7 @@ namespace ngl
 		};
 
 		// ConstantBufferView
-		class ConstantBufferViewDep : public RhiObjectImpl
+		class ConstantBufferViewDep : public RhiObjectBase
 		{
 		public:
 			struct Desc
@@ -98,7 +98,7 @@ namespace ngl
 		};
 
 		// SamplerState
-		class SamplerDep : public RhiObjectImpl
+		class SamplerDep : public RhiObjectBase
 		{
 		public:
 			struct Desc
@@ -147,7 +147,7 @@ namespace ngl
 
 
 		// RenderTargetView
-		class RenderTargetViewDep : public RhiObjectImpl
+		class RenderTargetViewDep : public RhiObjectBase
 		{
 		public:
 			RenderTargetViewDep();
@@ -171,7 +171,7 @@ namespace ngl
 		};
 
 		// DepthStencilView
-		class DepthStencilViewDep : public RhiObjectImpl
+		class DepthStencilViewDep : public RhiObjectBase
 		{
 		public:
 			DepthStencilViewDep();
@@ -192,7 +192,7 @@ namespace ngl
 		};
 
 		// UnorderedAccessViewDep
-		class UnorderedAccessViewDep : public RhiObjectImpl
+		class UnorderedAccessViewDep : public RhiObjectBase
 		{
 		public:
 			UnorderedAccessViewDep();
@@ -218,7 +218,7 @@ namespace ngl
 		};
 
 		// ShaderResourceView
-		class ShaderResourceViewDep : public RhiObjectImpl
+		class ShaderResourceViewDep : public RhiObjectBase
 		{
 		public:
 			ShaderResourceViewDep();

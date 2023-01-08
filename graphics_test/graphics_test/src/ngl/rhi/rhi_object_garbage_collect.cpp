@@ -48,7 +48,7 @@ namespace rhi
 	}
 
 	// 新規破棄オブジェクトのPush.
-	void GabageCollector::Enqueue(RhiObjectBase* p_obj)
+	void GabageCollector::Enqueue(IRhiObject* p_obj)
 	{
 		frame_stack_[flip_index_.load()].Push(p_obj);
 	}

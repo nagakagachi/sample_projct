@@ -934,17 +934,20 @@ bool AppGame::Execute()
 
 	// RhiRefによるガベコレテスト.
 	{
-		// RhiRefで保持してそのまま破棄することで安全に遅延破棄される(はず).
-		ngl::rhi::RhiRef<ngl::rhi::BufferDep> buffer_ref(new ngl::rhi::BufferDep());
+		for (int i = 0; i < 10; ++i)
+		{
+			// RhiRefで保持してそのまま破棄することで安全に遅延破棄される(はず).
+			ngl::rhi::RhiRef<ngl::rhi::BufferDep> buffer_ref(new ngl::rhi::BufferDep());
 
-		// ConstantBuffer作成
-		ngl::rhi::BufferDep::Desc buffer_desc = {};
-		buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-		buffer_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
-		buffer_desc.element_byte_size = 1024;// テスト用に大きめで確保.
-		buffer_desc.element_count = 1;
+			// ConstantBuffer作成
+			ngl::rhi::BufferDep::Desc buffer_desc = {};
+			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+			buffer_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
+			buffer_desc.element_byte_size = 1024;// テスト用に大きめで確保.
+			buffer_desc.element_count = 1;
 
-		buffer_ref->Initialize(&device_, buffer_desc);
+			buffer_ref->Initialize(&device_, buffer_desc);
+		}
 	}
 
 	ngl::u32 screen_w, screen_h;
