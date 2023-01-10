@@ -10,6 +10,7 @@ namespace rhi
 	}
 	GabageCollector::~GabageCollector()
 	{
+		Finalize();
 	}
 
 	bool GabageCollector::Initialize()

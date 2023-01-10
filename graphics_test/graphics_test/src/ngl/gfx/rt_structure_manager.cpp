@@ -106,7 +106,8 @@ namespace ngl
 			scratch_desc.heap_type = rhi::ResourceHeapType::Default;
 			scratch_desc.element_count = 1;
 			scratch_desc.element_byte_size = (u32)build_info.ScratchDataSizeInBytes;
-			if (!scratch_.Initialize(p_device, scratch_desc))
+			scratch_.Reset(new rhi::BufferDep());
+			if (!scratch_->Initialize(p_device, scratch_desc))
 			{
 				std::cout << "[ERROR] Initialize Rt Scratch Buffer." << std::endl;
 				assert(false);
@@ -119,7 +120,8 @@ namespace ngl
 			main_desc.heap_type = rhi::ResourceHeapType::Default;
 			main_desc.element_count = 1;
 			main_desc.element_byte_size = (u32)build_info.ResultDataMaxSizeInBytes;
-			if (!main_.Initialize(p_device, main_desc))
+			main_.Reset(new rhi::BufferDep());
+			if (!main_->Initialize(p_device, main_desc))
 			{
 				std::cout << "[ERROR] Initialize Rt Main Buffer." << std::endl;
 				assert(false);
@@ -158,12 +160,12 @@ namespace ngl
 				// Builld.
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC build_desc = {};
 				build_desc.Inputs = build_setup_info_;
-				build_desc.DestAccelerationStructureData = main_.GetD3D12Resource()->GetGPUVirtualAddress();
-				build_desc.ScratchAccelerationStructureData = scratch_.GetD3D12Resource()->GetGPUVirtualAddress();
+				build_desc.DestAccelerationStructureData = main_->GetD3D12Resource()->GetGPUVirtualAddress();
+				build_desc.ScratchAccelerationStructureData = scratch_->GetD3D12Resource()->GetGPUVirtualAddress();
 				p_command_list->GetD3D12GraphicsCommandListForDxr()->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
 
 				// UAV Barrier変更.
-				p_command_list->ResourceUavBarrier(&main_);
+				p_command_list->ResourceUavBarrier(main_.Get());
 			}
 
 			is_built_ = true;
@@ -180,11 +182,11 @@ namespace ngl
 
 		rhi::BufferDep* RaytraceStructureBottom::GetBuffer()
 		{
-			return &main_;
+			return main_.Get();
 		}
 		const rhi::BufferDep* RaytraceStructureBottom::GetBuffer() const
 		{
-			return &main_;
+			return main_.Get();
 		}
 
 		// 内部Geometry情報.
@@ -292,14 +294,15 @@ namespace ngl
 			instance_buffer_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUからアップロードするInstanceDataのため.
 			instance_buffer_desc.element_count = num_instance_total;// Instance数を確保.
 			instance_buffer_desc.element_byte_size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-			if (!instance_buffer_.Initialize(p_device, instance_buffer_desc))
+			instance_buffer_.Reset(new rhi::BufferDep());
+			if (!instance_buffer_->Initialize(p_device, instance_buffer_desc))
 			{
 				std::cout << "[ERROR] Initialize Rt Instance Buffer." << std::endl;
 				assert(false);
 				return false;
 			}
 			// Instance情報をBufferに書き込み.
-			if (D3D12_RAYTRACING_INSTANCE_DESC* mapped = (D3D12_RAYTRACING_INSTANCE_DESC*)instance_buffer_.Map())
+			if (D3D12_RAYTRACING_INSTANCE_DESC* mapped = (D3D12_RAYTRACING_INSTANCE_DESC*)instance_buffer_->Map())
 			{
 				int total_geom_index = 0;
 				for (auto inst_i = 0; inst_i < transform_array_.size(); ++inst_i)
@@ -323,7 +326,7 @@ namespace ngl
 					// InstanceのTransform.
 					memcpy(mapped[inst_i].Transform, &transform_array_[inst_i], sizeof(mapped[inst_i].Transform));
 				}
-				instance_buffer_.Unmap();
+				instance_buffer_->Unmap();
 			}
 
 
@@ -335,7 +338,7 @@ namespace ngl
 			build_setup_info_.NumDescs = num_instance_total;// Instance Desc Bufferの要素数を指定.
 			build_setup_info_.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL; // TLAS.
 			// input情報にInstanceBufferセット.
-			build_setup_info_.InstanceDescs = instance_buffer_.GetD3D12Resource()->GetGPUVirtualAddress();
+			build_setup_info_.InstanceDescs = instance_buffer_->GetD3D12Resource()->GetGPUVirtualAddress();
 
 			// Prebuildで必要なサイズ取得.
 			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO build_info = {};
@@ -350,7 +353,8 @@ namespace ngl
 			scratch_desc.heap_type = rhi::ResourceHeapType::Default;
 			scratch_desc.element_count = 1;
 			scratch_desc.element_byte_size = (u32)build_info.ScratchDataSizeInBytes;
-			if (!scratch_.Initialize(p_device, scratch_desc))
+			scratch_.Reset(new rhi::BufferDep());
+			if (!scratch_->Initialize(p_device, scratch_desc))
 			{
 				std::cout << "[ERROR] Initialize Rt Scratch Buffer." << std::endl;
 				assert(false);
@@ -363,14 +367,16 @@ namespace ngl
 			main_desc.heap_type = rhi::ResourceHeapType::Default;
 			main_desc.element_count = 1;
 			main_desc.element_byte_size = (u32)build_info.ResultDataMaxSizeInBytes;
-			if (!main_.Initialize(p_device, main_desc))
+			main_.Reset(new rhi::BufferDep());
+			if (!main_->Initialize(p_device, main_desc))
 			{
 				std::cout << "[ERROR] Initialize Rt Main Buffer." << std::endl;
 				assert(false);
 				return false;
 			}
 			// Main Srv.
-			if (!main_srv_.InitializeAsRaytracingAccelerationStructure(p_device, &main_))
+			main_srv_.Reset(new rhi::ShaderResourceViewDep());
+			if (!main_srv_->InitializeAsRaytracingAccelerationStructure(p_device, main_.Get()))
 			{
 				std::cout << "[ERROR] Initialize Rt TLAS View." << std::endl;
 				assert(false);
@@ -408,12 +414,12 @@ namespace ngl
 				// Builld.
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC build_desc = {};
 				build_desc.Inputs = build_setup_info_;
-				build_desc.DestAccelerationStructureData = main_.GetD3D12Resource()->GetGPUVirtualAddress();
-				build_desc.ScratchAccelerationStructureData = scratch_.GetD3D12Resource()->GetGPUVirtualAddress();
+				build_desc.DestAccelerationStructureData = main_->GetD3D12Resource()->GetGPUVirtualAddress();
+				build_desc.ScratchAccelerationStructureData = scratch_->GetD3D12Resource()->GetGPUVirtualAddress();
 				p_command_list->GetD3D12GraphicsCommandListForDxr()->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
 
 				// UAV Barrier.
-				p_command_list->ResourceUavBarrier(&main_);
+				p_command_list->ResourceUavBarrier(main_.Get());
 			}
 
 			is_built_ = true;
@@ -429,19 +435,19 @@ namespace ngl
 		}
 		rhi::BufferDep* RaytraceStructureTop::GetBuffer()
 		{
-			return &main_;
+			return main_.Get();
 		}
 		const rhi::BufferDep* RaytraceStructureTop::GetBuffer() const
 		{
-			return &main_;
+			return main_.Get();
 		}
 		rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv()
 		{
-			return &main_srv_;
+			return main_srv_.Get();
 		}
 		const rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv() const
 		{
-			return &main_srv_;
+			return main_srv_.Get();
 		}
 
 
@@ -1270,14 +1276,15 @@ namespace ngl
 			rt_shader_table_desc.element_count = 1;
 			rt_shader_table_desc.element_byte_size = shader_table_byte_size;
 			rt_shader_table_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUから直接書き込むため.
-			if (!out.shader_table_.Initialize(p_device, rt_shader_table_desc))
+			out.shader_table_.Reset(new rhi::BufferDep());
+			if (!out.shader_table_->Initialize(p_device, rt_shader_table_desc))
 			{
 				assert(false);
 				return false;
 			}
 
 			// レコード書き込み.
-			if (auto* mapped = static_cast<uint8_t*>(out.shader_table_.Map()))
+			if (auto* mapped = static_cast<uint8_t*>(out.shader_table_->Map()))
 			{
 				CComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
 				if (FAILED(state_object.GetStateObject()->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
@@ -1398,7 +1405,7 @@ namespace ngl
 				out.table_hitgroup_offset_ = table_hitgroup_offset;
 				out.table_hitgroup_count_ = hitgroup_count;
 
-				out.shader_table_.Unmap();
+				out.shader_table_->Unmap();
 			}
 			return true;
 		}
@@ -1426,26 +1433,29 @@ namespace ngl
 			};
 		}
 
+
+		// ---------------------------------------------------------------------------------------------------------------------------------
+			RaytraceStructureManager::DynamicTlasSet::DynamicTlasSet(rhi::FrameDescriptorAllocInterface* p_desc_alloc_interface)
+			{
+				p_desc_alloc_interface_ = p_desc_alloc_interface;
+			}
+			RaytraceStructureManager::DynamicTlasSet::~DynamicTlasSet()
+			{
+				if (p_desc_alloc_interface_)
+				{
+					p_desc_alloc_interface_->Deallocate(dynamic_scene_descriptor_alloc_id_);
+				}
+			}
+		// ---------------------------------------------------------------------------------------------------------------------------------
+
+
 		RaytraceStructureManager::RaytraceStructureManager()
 		{
 		}
 		RaytraceStructureManager::~RaytraceStructureManager()
 		{
-			// Descriptor解放.
-			for (auto& e : dynamic_tlas_destroy_)
-			{
-				if (e.get())
-				{
-					desc_alloc_interface_.Deallocate(e->dynamic_scene_descriptor_alloc_id_);
-					e.reset();
-				}
-			}
-			if (dynamic_tlas_.get())
-			{
-				desc_alloc_interface_.Deallocate(dynamic_tlas_->dynamic_scene_descriptor_alloc_id_);
-				dynamic_tlas_.reset();
-			}
-
+			// 内部で使用しているDescriptorのDeallocをDescriptorAllocatorInterfaceの解放より先に明示的に実行.
+			dynamic_tlas_.reset();
 		}
 		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state)
 		{
@@ -1601,26 +1611,10 @@ namespace ngl
 				scene_inst_hitgroup_id_array.push_back(hitgroup_id);
 			}
 
-
-			// 破棄待ちリスト要素を後ろにずらして最後の要素の参照をゼロにする.
-			const int dynamic_tlas_flip_max = (int)dynamic_tlas_destroy_.size() + 1;
-			{
-				if (dynamic_tlas_destroy_.back().get())
-				{
-					// 最後尾の要素のDescriptor破棄.
-					desc_alloc_interface_.Deallocate(dynamic_tlas_destroy_.back()->dynamic_scene_descriptor_alloc_id_);
-				}
-				// 参照をズラして最後尾を破棄.
-				for (int i = 0; i < dynamic_tlas_destroy_.size() - 1; ++i)
-				{
-					dynamic_tlas_destroy_.at(i + 1) = dynamic_tlas_destroy_.at(i);
-				}
-				// 先頭に現在フレームのTLASをセット.
-				dynamic_tlas_destroy_[0] = dynamic_tlas_;
-			}
-
-			// 新規TLAS.
-			dynamic_tlas_.reset(new DynamicTlasSet());
+			// フレーム毎に作り直すShaderTable用のDescriptorアロケーションIDの個数. RenderThreadで生成,GPU処理の2フレ分あれば十分なはず.
+			const int dynamic_tlas_flip_max = 2;
+			// 新規TLAS. DynamicTlasSet内部のRHIオブジェクトは全てRhiRef管理で安全に遅延破棄されるはず.
+			dynamic_tlas_.reset(new DynamicTlasSet(&desc_alloc_interface_));
 			// Descriptor確保IDは毎フレフリップでずらしながら以前の使用IDでを破棄するため, 他の用途と被ると使用中のDescriptorを破棄してしまう点に注意.
 			// CommandListがFrameFlip番号を使用しているため,　最上位ビットを立てたIDを使用する. 
 			dynamic_tlas_->dynamic_scene_descriptor_alloc_id_ = ((1u << 31u) + 16) + dynamic_tlas_flip_;
@@ -1733,7 +1727,7 @@ namespace ngl
 			auto* p_target_tlas = &dynamic_tlas_->dynamic_scene_tlas_;
 			auto* p_target_shader_table = &dynamic_tlas_->dynamic_shader_table_;
 
-			auto shader_table_head = p_target_shader_table->shader_table_.GetD3D12Resource()->GetGPUVirtualAddress();
+			auto shader_table_head = p_target_shader_table->shader_table_->GetD3D12Resource()->GetGPUVirtualAddress();
 
 			// 出力先UAVバリア. これはできれば外側に移行したい.
 			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::UnorderedAccess);

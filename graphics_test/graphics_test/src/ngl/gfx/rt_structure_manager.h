@@ -118,8 +118,8 @@ namespace ngl
 
 
 			// built data.
-			rhi::BufferDep scratch_;
-			rhi::BufferDep main_;
+			rhi::RhiRef<rhi::BufferDep> scratch_;
+			rhi::RhiRef<rhi::BufferDep> main_;
 		};
 
 		// TLAS.
@@ -187,10 +187,10 @@ namespace ngl
 			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS build_setup_info_ = {};
 
 			// built data.
-			rhi::BufferDep instance_buffer_;
-			rhi::BufferDep scratch_;
-			rhi::BufferDep main_;
-			rhi::ShaderResourceViewDep main_srv_;
+			rhi::RhiRef<rhi::BufferDep> instance_buffer_;
+			rhi::RhiRef<rhi::BufferDep> scratch_;
+			rhi::RhiRef<rhi::BufferDep> main_;
+			rhi::RhiRef<rhi::ShaderResourceViewDep> main_srv_;
 			int tlas_byte_size_ = 0;
 		};
 
@@ -298,7 +298,7 @@ namespace ngl
 			~RaytraceShaderTable() {}
 
 
-			rhi::BufferDep	shader_table_;
+			rhi::RhiRef<rhi::BufferDep>	shader_table_;
 
 			uint32_t		table_entry_byte_size_ = 0;
 
@@ -373,17 +373,21 @@ namespace ngl
 			// 動的更新でのBLAS管理.
 			std::vector<std::shared_ptr<RaytraceStructureBottom>> dynamic_scene_blas_array_;
 
+
 			// 動的更新TLASにまつわるオブジェクト群.
 			struct DynamicTlasSet
 			{
+				DynamicTlasSet(rhi::FrameDescriptorAllocInterface* p_desc_alloc_interface);
+				~DynamicTlasSet();
+
+				rhi::FrameDescriptorAllocInterface* p_desc_alloc_interface_ = nullptr;
+
 				RaytraceStructureTop dynamic_scene_tlas_ = {};
 				RaytraceShaderTable dynamic_shader_table_ = {};
 				uint32_t			dynamic_scene_descriptor_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
 			};
 			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
-			std::array<std::shared_ptr<DynamicTlasSet>, 1> dynamic_tlas_destroy_ = {};// 破棄待ちリスト.
 			uint32_t						dynamic_tlas_flip_ = 0;
-
 
 			// Descriptor用. 別のRaytraceStructureManagerインスタンスのAllocIDと被ると意図しないタイミングで解放されることがあるので注意.
 			rhi::FrameDescriptorAllocInterface	desc_alloc_interface_ = {};
