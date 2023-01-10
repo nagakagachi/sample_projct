@@ -91,26 +91,11 @@ namespace ngl
 			// 新しいフレームのためのFrameDescriptorの準備.
 			// インデックスはDeviceから取得するようにした.
 			frame_desc_interface_.ReadyToNewFrame(parent_device_->GetFrameBufferIndex());
-
-
-			// テスト
-#ifdef _DEBUG
-		//	D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-		//	D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-		//	frame_desc_interface_.Allocate(16, cpu_handle, gpu_handle);
-#endif
 		}
 		void GraphicsCommandListDep::End()
 		{
 			p_command_list_->Close();
 		}
-#if 0
-		void GraphicsCommandListDep::SetRenderTargetSingle(RenderTargetViewDep* p_rtv)
-		{
-			auto rtv = p_rtv->GetD3D12DescriptorHandle();
-			p_command_list_->OMSetRenderTargets(1, &rtv, true, nullptr);
-		}
-#endif
 		void GraphicsCommandListDep::SetRenderTargets(const RenderTargetViewDep** pp_rtv, int num_rtv, const DepthStencilViewDep* p_dsv)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[16];

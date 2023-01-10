@@ -521,6 +521,9 @@ namespace ngl
 		}
 		void FrameDescriptorAllocInterface::Finalize()
 		{
+			// Note.
+			//	alloc_idがFrameFlipIndex外のものは適切に破棄をする必要がある点に注意.
+
 			cur_stack_use_count_ = desc_.stack_size;
 
 			p_manager_ = nullptr;

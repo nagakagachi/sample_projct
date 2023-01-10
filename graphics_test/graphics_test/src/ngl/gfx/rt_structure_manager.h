@@ -357,7 +357,7 @@ namespace ngl
 
 			const rhi::ShaderResourceViewDep* GetResultSrv() const
 			{
-				return &ray_result_srv_;
+				return ray_result_srv_.Get();
 			}
 
 		private:
@@ -384,6 +384,7 @@ namespace ngl
 
 				RaytraceStructureTop dynamic_scene_tlas_ = {};
 				RaytraceShaderTable dynamic_shader_table_ = {};
+				// TODO. 実際はDescriptorAlloIDもRhiRef管理と同様にGPUアクセスに対する遅延破棄が必要だが, 現状は前フレのオブジェクトを破棄するタイミングになっているため問題が起きていない.
 				uint32_t			dynamic_scene_descriptor_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
 			};
 			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
@@ -392,14 +393,14 @@ namespace ngl
 			// Descriptor用. 別のRaytraceStructureManagerインスタンスのAllocIDと被ると意図しないタイミングで解放されることがあるので注意.
 			rhi::FrameDescriptorAllocInterface	desc_alloc_interface_ = {};
 
-			rhi::BufferDep				cb_test_scene_view[2];
-			rhi::ConstantBufferViewDep	cbv_test_scene_view[2];
+			rhi::RhiRef<rhi::BufferDep>				cb_test_scene_view[2];
+			rhi::RhiRef<rhi::ConstantBufferViewDep>	cbv_test_scene_view[2];
 
 			// テスト用のRayDispatch出力先UAV.
-			rhi::TextureDep				ray_result_;
-			rhi::ShaderResourceViewDep	ray_result_srv_;
-			rhi::UnorderedAccessViewDep	ray_result_uav_;
-			rhi::ResourceState			ray_result_state_ = {};
+			rhi::RhiRef<rhi::TextureDep>				ray_result_;
+			rhi::RhiRef<rhi::ShaderResourceViewDep>		ray_result_srv_;
+			rhi::RhiRef<rhi::UnorderedAccessViewDep>	ray_result_uav_;
+			rhi::ResourceState							ray_result_state_ = {};
 
 
 			math::Vec3 camera_pos_ = {};

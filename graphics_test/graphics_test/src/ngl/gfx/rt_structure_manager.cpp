@@ -1484,17 +1484,20 @@ namespace ngl
 				tex_desc.width = 1920;
 				tex_desc.height = 1080;
 
-				if (!ray_result_.Initialize(p_device, tex_desc))
+				ray_result_.Reset(new rhi::TextureDep());
+				if (!ray_result_->Initialize(p_device, tex_desc))
 				{
 					assert(false);
 				}
 				// この生成はDeviceの持つシェーダから不可視のPersistentHeap上に作られる. 実際にはDispatch時のHeap上に CopyDescriptors をする.
-				if (!ray_result_uav_.Initialize(p_device, &ray_result_, 0, 0, 1))
+				ray_result_uav_.Reset(new rhi::UnorderedAccessViewDep());
+				if (!ray_result_uav_->Initialize(p_device, ray_result_.Get(), 0, 0, 1))
 				{
 					assert(false);
 				}
 				// 同様にPersistent
-				if (!ray_result_srv_.InitializeAsTexture(p_device, &ray_result_, 0, 1, 0, 1))
+				ray_result_srv_.Reset(new rhi::ShaderResourceViewDep());
+				if (!ray_result_srv_->InitializeAsTexture(p_device, ray_result_.Get(), 0, 1, 0, 1))
 				{
 					assert(false);
 				}
@@ -1511,8 +1514,11 @@ namespace ngl
 				buff_desc.element_byte_size = sizeof(CbSceneView);
 				for (auto i = 0; i < std::size(cb_test_scene_view); ++i)
 				{
-					cb_test_scene_view[i].Initialize(p_device, buff_desc);
-					cbv_test_scene_view[i].Initialize(&cb_test_scene_view[i], {});
+					cb_test_scene_view[i].Reset(new rhi::BufferDep());
+					cb_test_scene_view[i]->Initialize(p_device, buff_desc);
+
+					cbv_test_scene_view[i].Reset(new rhi::ConstantBufferViewDep());
+					cbv_test_scene_view[i]->Initialize(cb_test_scene_view[i].Get(), {});
 				}
 			}
 
@@ -1700,7 +1706,7 @@ namespace ngl
 			// 定数バッファ更新.
 			{
 				const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
-				if (auto* mapped = static_cast<CbSceneView*>(cb_test_scene_view[cb_index].Map()))
+				if (auto* mapped = static_cast<CbSceneView*>(cb_test_scene_view[cb_index]->Map()))
 				{
 					mapped->cb_view_mtx = view_mat;
 					mapped->cb_proj_mtx = proj_mat;
@@ -1709,7 +1715,7 @@ namespace ngl
 
 					mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
 
-					cb_test_scene_view[cb_index].Unmap();
+					cb_test_scene_view[cb_index]->Unmap();
 				}
 			}
 		}
@@ -1730,7 +1736,7 @@ namespace ngl
 			auto shader_table_head = p_target_shader_table->shader_table_->GetD3D12Resource()->GetGPUVirtualAddress();
 
 			// 出力先UAVバリア. これはできれば外側に移行したい.
-			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::UnorderedAccess);
+			p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::UnorderedAccess);
 			ray_result_state_ = rhi::ResourceState::UnorderedAccess;
 
 
@@ -1747,14 +1753,14 @@ namespace ngl
 			{
 				// Cbv.
 				{
-					cbv_slot[0] = &cbv_test_scene_view[cb_index];
+					cbv_slot[0] = cbv_test_scene_view[cb_index].Get();
 				}
 				// Srv.
 				{
 				}
 				// Uav.
 				{
-					uav_slot[0] = &ray_result_uav_;
+					uav_slot[0] = ray_result_uav_.Get();
 				}
 				// Sampler.
 				{
@@ -1872,8 +1878,8 @@ namespace ngl
 
 			// Dispatch.
 			D3D12_DISPATCH_RAYS_DESC raytraceDesc = {};
-			raytraceDesc.Width = ray_result_.GetDesc().width;
-			raytraceDesc.Height = ray_result_.GetDesc().height;
+			raytraceDesc.Width = ray_result_->GetDesc().width;
+			raytraceDesc.Height = ray_result_->GetDesc().height;
 			raytraceDesc.Depth = 1;
 
 			// RayGeneration Shaderのテーブル位置.
@@ -1895,7 +1901,7 @@ namespace ngl
 
 
 			// to SRV. .
-			p_command_list->ResourceBarrier(&ray_result_, ray_result_state_, rhi::ResourceState::ShaderRead);
+			p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::ShaderRead);
 			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}
 
