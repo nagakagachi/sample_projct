@@ -330,6 +330,7 @@ namespace ngl
 
 			mutexによって Allocate と Deallocate はスレッドセーフ.
 
+			非常に単純な線形探索アロケーション方式.
 		*/
 		class PersistentDescriptorAllocator
 		{
@@ -468,6 +469,55 @@ namespace ngl
 			FrameDescriptorRangeListNode*					frame_descriptor_range_head_;
 			FrameDescriptorRangeListNode*					free_node_list_ = nullptr;
 		};
+
+
+
+
+		namespace dynamic_descriptor_allocator
+		{
+			// アロケーションハンドル.
+			struct RangeHandle
+			{
+				RangeHandle()
+					: data(0)
+				{
+				}
+
+				bool IsValid() const
+				{
+					// size 0 で有効無効チェック.
+					return detail.size != 0;
+				}
+				union
+				{
+					uint64_t data;
+					struct
+					{
+						uint32_t head;
+						uint32_t size;
+					} detail;
+				};
+			};
+			// アロケータ
+			class RangeAllocator
+			{
+			public:
+
+			public:
+				RangeAllocator();
+				~RangeAllocator();
+
+				bool Initialize(uint32_t max_size);
+				void Finalize();
+
+				// 確保.
+				RangeHandle Alloc(uint32_t size);
+				// 解放.
+				void Dealloc(const RangeHandle& handle);
+			private:
+				class RangeAllocatorImpl* impl_ = nullptr;
+			};
+		}
 
 
 

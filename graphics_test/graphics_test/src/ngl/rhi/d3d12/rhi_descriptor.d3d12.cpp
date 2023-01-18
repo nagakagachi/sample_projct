@@ -13,6 +13,92 @@ namespace ngl
 {
 	namespace rhi
 	{
+		namespace dynamic_descriptor_allocator
+		{
+			// 実装部.
+			class RangeAllocatorImpl
+			{
+			public:
+				RangeAllocatorImpl();
+				~RangeAllocatorImpl();
+
+				bool Initialize(uint32_t max_size);
+				void Finalize();
+
+				// 確保.
+				RangeHandle Alloc(uint32_t size);
+				// 解放.
+				void Dealloc(const RangeHandle& handle);
+			private:
+
+			};
+
+			RangeAllocator::RangeAllocator()
+			{
+				impl_ = new RangeAllocatorImpl();
+			}
+			RangeAllocator::~RangeAllocator()
+			{
+				delete impl_;
+				impl_ = nullptr;
+			}
+
+			bool RangeAllocator::Initialize(uint32_t max_size)
+			{
+				return impl_->Initialize(max_size);
+			}
+			void RangeAllocator::Finalize()
+			{
+				impl_->Finalize();
+			}
+
+			// 確保.
+			RangeHandle RangeAllocator::Alloc(uint32_t size)
+			{
+				return impl_->Alloc(size);
+			}
+			// 解放.
+			void RangeAllocator::Dealloc(const RangeHandle& handle)
+			{
+				impl_->Dealloc(handle);
+			}
+
+
+
+
+			RangeAllocatorImpl::RangeAllocatorImpl()
+			{
+			}
+			RangeAllocatorImpl::~RangeAllocatorImpl()
+			{
+			}
+			bool RangeAllocatorImpl::Initialize(uint32_t max_size)
+			{
+				// TODO;
+				return false;
+			}
+			void RangeAllocatorImpl::Finalize()
+			{
+			}
+			RangeHandle RangeAllocatorImpl::Alloc(uint32_t size)
+			{
+				// TODO.
+				return {};
+			}
+			void RangeAllocatorImpl::Dealloc(const RangeHandle& handle)
+			{
+			}
+		}
+
+
+
+
+
+
+
+
+
+
 		DescriptorHeapWrapper::DescriptorHeapWrapper()
 		{
 		}
