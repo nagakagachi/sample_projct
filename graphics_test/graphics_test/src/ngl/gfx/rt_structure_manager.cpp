@@ -1229,7 +1229,11 @@ namespace ngl
 		// per_entry_descriptor_param_count が0だとAlignmentエラーになるため注意.
 		// BLAS内Geometryは個別のShaderRecordを持つ(multiplier_for_subgeometry_index = 1)
 		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
+#else
 			rhi::FrameDescriptorAllocInterface& desc_alloc_interface, uint32_t desc_alloc_id,
+#endif
 			const RaytraceStructureTop& tlas, 
 			const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name)
 		{
@@ -1359,13 +1363,22 @@ namespace ngl
 
 							DescriptorHandleSet desc_handle_cbv;
 							DescriptorHandleSet desc_handle_srv;
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+							const bool result_alloc_desc_cbv = desc_alloc_interface.Allocate(k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_cbv.h_cpu, desc_handle_cbv.h_gpu);
+							const bool result_alloc_desc_srv = desc_alloc_interface.Allocate(k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_srv.h_cpu, desc_handle_srv.h_gpu);
+#else
 							const bool result_alloc_desc_cbv = desc_alloc_interface.Allocate(desc_alloc_id, k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_cbv.h_cpu, desc_handle_cbv.h_gpu);
 							const bool result_alloc_desc_srv = desc_alloc_interface.Allocate(desc_alloc_id, k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_srv.h_cpu, desc_handle_srv.h_gpu);
+#endif
 							assert(result_alloc_desc_cbv && result_alloc_desc_srv);
 
 							// 描画用HeapにDescriptorコピー.
 							{
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+								const auto desc_stride = desc_alloc_interface.GetManager()->GetHandleIncrementSize();
+#else
 								const auto desc_stride = desc_alloc_interface.GetFrameDescriptorManager()->GetHandleIncrementSize();
+#endif
 								auto func_get_offseted_desc_handle = [](const D3D12_CPU_DESCRIPTOR_HANDLE& h_cpu, uint32_t offset)
 								{
 									D3D12_CPU_DESCRIPTOR_HANDLE ret = h_cpu;
@@ -1435,7 +1448,11 @@ namespace ngl
 
 
 		// ---------------------------------------------------------------------------------------------------------------------------------
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+		RaytraceStructureManager::DynamicTlasSet::DynamicTlasSet(rhi::DynamicDescriptorStackAllocatorInterface* p_desc_alloc_interface)
+#else
 			RaytraceStructureManager::DynamicTlasSet::DynamicTlasSet(rhi::FrameDescriptorAllocInterface* p_desc_alloc_interface)
+#endif
 			{
 				p_desc_alloc_interface_ = p_desc_alloc_interface;
 			}
@@ -1443,7 +1460,11 @@ namespace ngl
 			{
 				if (p_desc_alloc_interface_)
 				{
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+					p_desc_alloc_interface_->DeallocateDeferred((u32)p_desc_alloc_interface_->GetManager()->GetDevice()->GetDeviceFrameIndex());
+#else
 					p_desc_alloc_interface_->Deallocate(dynamic_scene_descriptor_alloc_id_);
+#endif
 				}
 			}
 		// ---------------------------------------------------------------------------------------------------------------------------------
@@ -1461,9 +1482,14 @@ namespace ngl
 		{
 			// Descriptor確保用Interface初期化.
 			{
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+				rhi::DynamicDescriptorStackAllocatorInterface::Desc descriptor_interface_desc = {};
+				desc_alloc_interface_.Initialize(p_device->GeDynamicDescriptorManager(), descriptor_interface_desc);
+#else
 				rhi::FrameDescriptorAllocInterface::Desc descriptor_interface_desc = {};
 				descriptor_interface_desc.allow_frame_flip_index = false;	// FrameFlipと被らないようにfalse指定.
 				desc_alloc_interface_.Initialize(p_device->GetFrameDescriptorManager(), descriptor_interface_desc);
+#endif
 			}
 
 			// StateObjectは外部から.
@@ -1621,9 +1647,13 @@ namespace ngl
 			const int dynamic_tlas_flip_max = 2;
 			// 新規TLAS. DynamicTlasSet内部のRHIオブジェクトは全てRhiRef管理で安全に遅延破棄されるはず.
 			dynamic_tlas_.reset(new DynamicTlasSet(&desc_alloc_interface_));
+
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+#else
 			// Descriptor確保IDは毎フレフリップでずらしながら以前の使用IDでを破棄するため, 他の用途と被ると使用中のDescriptorを破棄してしまう点に注意.
 			// CommandListがFrameFlip番号を使用しているため,　最上位ビットを立てたIDを使用する. 
 			dynamic_tlas_->dynamic_scene_descriptor_alloc_id_ = ((1u << 31u) + 16) + dynamic_tlas_flip_;
+#endif
 			dynamic_tlas_flip_ = (dynamic_tlas_flip_ + 1) % dynamic_tlas_flip_max;
 
 			// TLAS Setup.
@@ -1634,8 +1664,12 @@ namespace ngl
 
 			// ShaderTable生成.
 			if (!CreateShaderTable(dynamic_tlas_->dynamic_shader_table_,
-				p_device, 
+				p_device,
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+				desc_alloc_interface_,
+#else
 				desc_alloc_interface_, dynamic_tlas_->dynamic_scene_descriptor_alloc_id_, 
+#endif
 				dynamic_tlas_->dynamic_scene_tlas_, *p_state_object_, "rayGen", "miss"))
 			{
 				assert(false);
@@ -1783,7 +1817,11 @@ namespace ngl
 				const int num_frame_descriptor_sampler_count = k_rt_global_descriptor_sampler_table_size;
 
 
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+				const auto resource_descriptor_step_size = p_command_list->GetFrameDescriptorInterface()->GetManager()->GetHandleIncrementSize();
+#else
 				const auto resource_descriptor_step_size = p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetHandleIncrementSize();
+#endif
 				const auto sampler_descriptor_step_size = p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetHandleIncrementSize();
 				auto get_descriptor_with_pos = [](const DescriptorHandleSet& base,  int offset_index, u32 handle_step_size) -> DescriptorHandleSet
 				{
@@ -1859,7 +1897,11 @@ namespace ngl
 				// desc_alloc_interface_ はHeapとしてはCommandListと同じ巨大なHeapから切り出して利用しているため同一Heapで良い.
 				{
 					std::vector<ID3D12DescriptorHeap*> use_heap_array = {};
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+					use_heap_array.push_back(p_command_list->GetFrameDescriptorInterface()->GetManager()->GetD3D12DescriptorHeap());
+#else
 					use_heap_array.push_back(p_command_list->GetFrameDescriptorInterface()->GetFrameDescriptorManager()->GetD3D12DescriptorHeap());
+#endif
 					use_heap_array.push_back(p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetD3D12DescriptorHeap());
 
 					// 使用しているHeapをセット.

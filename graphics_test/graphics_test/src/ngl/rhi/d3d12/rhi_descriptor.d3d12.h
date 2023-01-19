@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#define NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE 1
 
 #include <iostream>
 #include <vector>
@@ -381,96 +382,6 @@ namespace ngl
 			static constexpr u32 k_num_flag_elem_bit_ = sizeof(decltype(*use_flag_bit_array_.data())) * 8;
 		};
 
-		/*
-			FrameDescriptorManagerは巨大なサイズを確保し, FrameDescriptorInterfaceからの要求に応じて連続領域を切り出して貸し出す役割. スレッドセーフ
-			切り出す時にフレーム番号を一緒に指定することで、特定のフレームで確保されたまとまった連続領域を纏めて解放できるようにしたい
-
-			FrameCommandListDescriptorInterface 固定サイズのスタックのリストを持ち、要求に応じてStackから連続したDescriptorを貸し出す　非スレッドセーフ
-			要求数が所持しているStack上から貸し出せない場合は新しいStackとして固定数の連続領域をFrameDescriptorManagerから借り受ける
-			FrameDescriptorManagerから借り受ける際にフレーム番号を指定し、描画が完了して使い終わった後にそのフレームでFrameDescriptorManagerから取得された連続領域を纏めて開放するために使う
-
-			RaytracingのLocalResource用にフレームインデックスで自動再利用ではなくユニークIDで任意解放する経路もほしい.
-
-			SamplerはHeapのサイズがAPIで制限されているため別途クラスを用意する.
-		*/
-		class FrameDescriptorManager
-		{
-			friend class FrameDescriptorAllocInterface;
-		public:
-			static const u32	k_invalid_alloc_group_id = ~u32(0);
-			struct Desc
-			{
-				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-				// 一括確保するDescriptor数
-				u32							allocate_descriptor_count_ = 500000;
-			};
-
-			FrameDescriptorManager();
-			~FrameDescriptorManager();
-
-			bool Initialize(DeviceDep* p_device, const Desc& desc);
-			void Finalize();
-
-			void ResetFrameDescriptor(u32 alloc_group_id);
-
-			u32	GetHandleIncrementSize() const 
-			{
-				return handle_increment_size_;
-			}
-
-			ID3D12DescriptorHeap* GetD3D12DescriptorHeap()
-			{
-				return p_heap_;
-			}
-
-		private:
-			// FrameCommandListDescriptorInterface がalloc_group_idに関連付けられた連続Descriptor範囲を確保するための関数.
-			//	alloc_group_idにフレームフリップIndex[0,1,2]を使用することで, システムのフレーム開始処理によってフレーム毎にリサイクルされる.
-			bool AllocateDescriptorArray(u32 alloc_group_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
-
-		private:
-			std::mutex		mutex_;
-
-			Desc								desc_;
-
-			// Heap本体
-			CComPtr<ID3D12DescriptorHeap>		p_heap_ = nullptr;
-			D3D12_DESCRIPTOR_HEAP_DESC			heap_desc_{};
-			// Heap上の要素アドレスサイズ
-			u32									handle_increment_size_ = 0;
-			// CPU/GPUハンドル先頭
-			D3D12_CPU_DESCRIPTOR_HANDLE			cpu_handle_start_ = {};
-			D3D12_GPU_DESCRIPTOR_HANDLE			gpu_handle_start_ = {};
-			
-			struct FrameDescriptorRangeListNode
-			{
-				u32					alloc_group_id	= k_invalid_alloc_group_id;
-				u32					start_index	= 0;
-				u32					end_index	= 0;
-
-				struct FrameDescriptorRangeListNode* prev		 = nullptr;
-				struct FrameDescriptorRangeListNode* next		= nullptr;
-
-
-				void RemoveFromList()
-				{
-					if (prev)
-						prev->next = next;
-					if (next)
-						next->prev = prev;
-
-					prev = nullptr;
-					next = nullptr;
-				}
-			};
-
-			// SwapChainのバッファリング数と同じだけのフレーム数でリセットされるレンジ情報なので1024以上も断片化することは無いはず.
-			std::array<FrameDescriptorRangeListNode, 1024>	range_node_pool_;
-			FrameDescriptorRangeListNode*					frame_descriptor_range_head_;
-			FrameDescriptorRangeListNode*					free_node_list_ = nullptr;
-		};
-
-
 
 
 		namespace dynamic_descriptor_allocator
@@ -521,6 +432,247 @@ namespace ngl
 			};
 		}
 
+		using DynamicDescriptorAllocHandle = dynamic_descriptor_allocator::RangeHandle;
+
+		/*
+			DynamicDescriptorManagerは巨大なHeapを確保し, 要求に応じて連続領域を切り出して貸し出す役割. スレッドセーフ.
+			基本的に細かいサイズでのアロケーションには使わず, 2000等の大きな単位でアロケーションしてページのように利用する.
+
+			SamplerはHeapのサイズがAPIで制限されているため別途クラスを用意する.
+		*/
+		class DynamicDescriptorManager
+		{
+		public:
+			struct Desc
+			{
+				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+				// 一括確保するDescriptor数
+				u32							allocate_descriptor_count_ = 500000;
+			};
+
+			DynamicDescriptorManager();
+			~DynamicDescriptorManager();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			// frame_index はグローバルに加算され続けるインデックスであり, Deviceから供給される.
+			void ReadyToNewFrame(u32 frame_index);
+
+			// 確保.
+			DynamicDescriptorAllocHandle AllocateDescriptorArray(u32 count);
+			// 解放.
+			void Deallocate(const DynamicDescriptorAllocHandle& handle);
+			// 遅延解放リクエスト. frame_indexは現在のDeviceのフレームインデックスを指定する.
+			void DeallocateDeferred(const DynamicDescriptorAllocHandle& handle, u32 frame_index);
+			// ハンドルからDescriptor情報取得.
+			void GetDescriptor(const DynamicDescriptorAllocHandle& handle, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head) const;
+
+			u32	GetHandleIncrementSize() const
+			{
+				return handle_increment_size_;
+			}
+			ID3D12DescriptorHeap* GetD3D12DescriptorHeap()
+			{
+				return p_heap_;
+			}
+
+			DeviceDep* GetDevice() { return parent_device_; }
+
+		private:
+			std::mutex							mutex_;
+
+			Desc								desc_;
+
+			DeviceDep*							parent_device_ = nullptr;
+
+			// Heap本体
+			CComPtr<ID3D12DescriptorHeap>		p_heap_ = nullptr;
+			D3D12_DESCRIPTOR_HEAP_DESC			heap_desc_{};
+			// Heap上の要素アドレスサイズ
+			u32									handle_increment_size_ = 0;
+			// CPU/GPUハンドル先頭
+			D3D12_CPU_DESCRIPTOR_HANDLE			cpu_handle_start_ = {};
+			D3D12_GPU_DESCRIPTOR_HANDLE			gpu_handle_start_ = {};
+
+			dynamic_descriptor_allocator::RangeAllocator	range_allocator_ = {};
+
+			struct DeferredDeallocateInfo
+			{
+				std::vector<DynamicDescriptorAllocHandle>	handles ;
+				uint32_t									frame = 0;
+				bool										used = false;
+			};
+			std::vector<DeferredDeallocateInfo*> deferred_deallocate_list_ = {};
+		};
+
+		/*
+			DynamicDescriptorManagerから固定ページで確保したDescriptorをStackベースで貸し出すインターフェース.
+			DynamicDescriptorManagerから取得した固定範囲をStackAllocatorとして利用し. 足りなくなれば追加で DynamicDescriptorManager から取得する.
+
+			解放は一括でそれまでに確保したページ全てを解放する.
+		*/
+		class DynamicDescriptorStackAllocatorInterface
+		{
+		public:
+			struct Desc
+			{
+				u32		stack_size = 2000;
+			};
+
+			DynamicDescriptorStackAllocatorInterface();
+			~DynamicDescriptorStackAllocatorInterface();
+
+			bool Initialize(DynamicDescriptorManager* p_manager, const Desc& desc);
+			void Finalize();
+
+			// スタックベースでDescriptorを確保.
+			bool Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+			// 確保した領域全てを解放してスタックをリセット.
+			void Deallocate();
+			// 確保した領域全てを遅延破棄リクエストしてスタックをリセット. frame_indexは現在のDeviceのフレームインデックスを指定する.
+			void DeallocateDeferred(u32 frame_index);
+
+			DynamicDescriptorManager* GetManager()
+			{
+				return p_manager_;
+			}
+
+		private:
+			Desc								desc_ = {};
+
+			DynamicDescriptorManager*					p_manager_ = nullptr;
+			std::vector<DynamicDescriptorAllocHandle>	alloc_pages_;
+
+			u32									cur_stack_use_count_ = 0;
+			D3D12_CPU_DESCRIPTOR_HANDLE			cur_stack_cpu_handle_start_ = {};
+			D3D12_GPU_DESCRIPTOR_HANDLE			cur_stack_gpu_handle_start_ = {};
+		};
+		
+		/*
+			DynamicDescriptorStackAllocatorInterface を使用してフレーム毎のCommandListが使用するDescritpro領域を管理する.
+			確保時のIDにフレームフリップインデックスを使うことで, システム(Device)がフレーム開始処理で過去フレームの確保した領域を自動で解放するようになっている.
+		*/
+		class FrameCommandListDynamicDescriptorAllocatorInterface
+		{
+		public:
+			struct Desc
+			{
+				u32						stack_size = 2000;
+			};
+
+			FrameCommandListDynamicDescriptorAllocatorInterface();
+			~FrameCommandListDynamicDescriptorAllocatorInterface();
+
+			bool Initialize(DynamicDescriptorManager* p_manager, const Desc& desc);
+			void Finalize();
+
+			// frame_index はグローバルに加算され続けるインデックスであり, Deviceから供給される.
+			void ReadyToNewFrame(u32 frame_index);
+
+			bool Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+
+			DynamicDescriptorManager* GetManager()
+			{
+				return alloc_interface_.GetManager();
+			}
+
+		private:
+			Desc								desc_ = {};
+			uint32_t									alloc_frame_index_ = 0;
+			DynamicDescriptorStackAllocatorInterface	alloc_interface_ = {};
+		};
+
+
+
+		/*
+			FrameDescriptorManagerは巨大なサイズを確保し, FrameDescriptorInterfaceからの要求に応じて連続領域を切り出して貸し出す役割. スレッドセーフ
+			切り出す時にフレーム番号を一緒に指定することで、特定のフレームで確保されたまとまった連続領域を纏めて解放できるようにしたい
+
+			FrameCommandListDescriptorInterface 固定サイズのスタックのリストを持ち、要求に応じてStackから連続したDescriptorを貸し出す　非スレッドセーフ
+			要求数が所持しているStack上から貸し出せない場合は新しいStackとして固定数の連続領域をFrameDescriptorManagerから借り受ける
+			FrameDescriptorManagerから借り受ける際にフレーム番号を指定し、描画が完了して使い終わった後にそのフレームでFrameDescriptorManagerから取得された連続領域を纏めて開放するために使う
+
+			RaytracingのLocalResource用にフレームインデックスで自動再利用ではなくユニークIDで任意解放する経路もほしい.
+
+			SamplerはHeapのサイズがAPIで制限されているため別途クラスを用意する.
+		*/
+		class FrameDescriptorManager
+		{
+			friend class FrameDescriptorAllocInterface;
+		public:
+			static const u32	k_invalid_alloc_group_id = ~u32(0);
+			struct Desc
+			{
+				D3D12_DESCRIPTOR_HEAP_TYPE	type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+				// 一括確保するDescriptor数
+				u32							allocate_descriptor_count_ = 500000;
+			};
+
+			FrameDescriptorManager();
+			~FrameDescriptorManager();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			void ResetFrameDescriptor(u32 alloc_group_id);
+
+			u32	GetHandleIncrementSize() const 
+			{
+				return handle_increment_size_;
+			}
+
+			ID3D12DescriptorHeap* GetD3D12DescriptorHeap()
+			{
+				return p_heap_;
+			}
+
+		private:
+			// FrameCommandListDescriptorInterface がalloc_group_idに関連付けられた連続Descriptor範囲を確保するための関数.
+			//	alloc_group_idにフレームフリップIndex[0,1,2]を使用することで, システムのフレーム開始処理によってフレーム毎にリサイクルされる.
+			bool AllocateDescriptorArray(u32 alloc_group_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head);
+
+		private:
+			std::mutex							mutex_;
+
+			Desc								desc_;
+
+			// Heap本体
+			CComPtr<ID3D12DescriptorHeap>		p_heap_ = nullptr;
+			D3D12_DESCRIPTOR_HEAP_DESC			heap_desc_{};
+			// Heap上の要素アドレスサイズ
+			u32									handle_increment_size_ = 0;
+			// CPU/GPUハンドル先頭
+			D3D12_CPU_DESCRIPTOR_HANDLE			cpu_handle_start_ = {};
+			D3D12_GPU_DESCRIPTOR_HANDLE			gpu_handle_start_ = {};
+			
+			struct FrameDescriptorRangeListNode
+			{
+				u32					alloc_group_id	= k_invalid_alloc_group_id;
+				u32					start_index	= 0;
+				u32					end_index	= 0;
+
+				struct FrameDescriptorRangeListNode* prev		 = nullptr;
+				struct FrameDescriptorRangeListNode* next		= nullptr;
+
+
+				void RemoveFromList()
+				{
+					if (prev)
+						prev->next = next;
+					if (next)
+						next->prev = prev;
+
+					prev = nullptr;
+					next = nullptr;
+				}
+			};
+
+			// SwapChainのバッファリング数と同じだけのフレーム数でリセットされるレンジ情報なので1024以上も断片化することは無いはず.
+			std::array<FrameDescriptorRangeListNode, 1024>	range_node_pool_;
+			FrameDescriptorRangeListNode*					frame_descriptor_range_head_;
+			FrameDescriptorRangeListNode*					free_node_list_ = nullptr;
+		};
 
 
 		/*

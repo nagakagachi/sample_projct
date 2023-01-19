@@ -1521,11 +1521,45 @@ void AppGame::TestCode()
 		std::cout << "PersistentDescriptorAllocatorTest time -> " << ngl::time::Timer::Instance().GetElapsedSec("PersistentDescriptorAllocatorTest") << std::endl;
 	}
 
-	if(true)
+	if(false)
 	{
 		// フレームでのDescriptorマネージャ初期化
-		ngl::rhi::FrameDescriptorManager*	frame_desc_man = device_.GetFrameDescriptorManager();
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+		ngl::rhi::DynamicDescriptorManager* frame_desc_man = device_.GeDynamicDescriptorManager();
+		// バッファリング数分のフレームDescriptorインターフェース初期化
+		const ngl::u32 buffer_count = 3;
+		std::vector<ngl::rhi::FrameCommandListDynamicDescriptorAllocatorInterface> frame_desc_interface;
+		frame_desc_interface.resize(buffer_count);
+		for (auto&& e : frame_desc_interface)
+		{
+			ngl::rhi::FrameCommandListDynamicDescriptorAllocatorInterface::Desc frame_desc_interface_desc = {};
+			frame_desc_interface_desc.stack_size = 2000;
+			e.Initialize(frame_desc_man, frame_desc_interface_desc);
+		}
 
+		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
+		ngl::u32 frame_flip_index = 0;
+		for (auto f_i = 0u; f_i < 1000; ++f_i)
+		{
+			// マネージャのフレーム開始処理で過去フレーム確保分の解放(実際にはDeviceのフレーム開始処理で実行される).
+			frame_desc_man->ReadyToNewFrame(f_i);
+
+			// インターフェイスのフレーム開始処理.
+			frame_desc_interface[frame_flip_index].ReadyToNewFrame(f_i);
+
+			// 確保テスト.
+			for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
+				D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
+				frame_desc_interface[frame_flip_index].Allocate(16, cpu_handle, gpu_handle);
+			}
+			
+			frame_flip_index = (frame_flip_index + 1) % buffer_count;
+
+		}
+#else
+		ngl::rhi::FrameDescriptorManager*	frame_desc_man = device_.GetFrameDescriptorManager();
 		// バッファリング数分のフレームDescriptorインターフェース初期化
 		const ngl::u32 buffer_count = 3;
 		std::vector<ngl::rhi::FrameCommandListDescriptorInterface> frame_desc_interface;
@@ -1538,27 +1572,28 @@ void AppGame::TestCode()
 		}
 
 		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
-		ngl::u32 frame_index = 0;
+		ngl::u32 frame_flip_index = 0;
 		for (auto f_i = 0u; f_i < 1000; ++f_i)
 		{
 			// マネージャのフレーム開始処理で過去フレーム確保分の解放(実際にはDeviceのフレーム開始処理で実行される).
-			frame_desc_man->ResetFrameDescriptor(frame_index);
+			frame_desc_man->ResetFrameDescriptor(frame_flip_index);
 
 			// インターフェイスのフレーム開始処理.
-			frame_desc_interface[frame_index].ReadyToNewFrame(frame_index);
+			frame_desc_interface[frame_flip_index].ReadyToNewFrame(frame_flip_index);
 
 			// 確保テスト.
 			for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
 			{
 				D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
 				D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-				frame_desc_interface[frame_index].Allocate(16, cpu_handle, gpu_handle);
+				frame_desc_interface[frame_flip_index].Allocate(16, cpu_handle, gpu_handle);
 			}
-			frame_index = (frame_index + 1) % buffer_count;
+			frame_flip_index = (frame_flip_index + 1) % buffer_count;
 		}
+#endif
 	}
 
-	if(true)
+	if(false)
 	{
 		ngl::rhi::FrameDescriptorHeapPagePool* frame_desc_page_pool = device_.GetFrameDescriptorHeapPagePool();
 

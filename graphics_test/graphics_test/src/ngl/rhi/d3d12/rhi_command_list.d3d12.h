@@ -79,7 +79,11 @@ namespace ngl
 			void ResourceUavBarrier(BufferDep* p_buffer);
 
 		public:
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+			FrameCommandListDynamicDescriptorAllocatorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
+#else
 			FrameCommandListDescriptorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
+#endif
 			FrameDescriptorHeapPageInterface* GetFrameSamplerDescriptorHeapInterface() { return &frame_desc_page_interface_for_sampler_; }
 
 			DeviceDep* GetDevice() { return parent_device_; }
@@ -89,7 +93,11 @@ namespace ngl
 			Desc		desc_ = {};
 
 			// Cvb Srv Uav用.
+#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
+			FrameCommandListDynamicDescriptorAllocatorInterface	frame_desc_interface_ = {};
+#else
 			FrameCommandListDescriptorInterface			frame_desc_interface_ = {};
+#endif
 			// Sampler用.
 			FrameDescriptorHeapPageInterface	frame_desc_page_interface_for_sampler_ = {};
 
