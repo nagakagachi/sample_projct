@@ -22,17 +22,248 @@ namespace ngl
 				RangeAllocatorImpl();
 				~RangeAllocatorImpl();
 
-				bool Initialize(uint32_t max_size);
+				bool Initialize(int max_size);
 				void Finalize();
 
 				// 確保.
-				RangeHandle Alloc(uint32_t size);
+				RangeHandle Alloc(int size);
 				// 解放.
 				void Dealloc(const RangeHandle& handle);
-			private:
 
+				struct FreeRangeNode
+				{
+					FreeRangeNode* prev = nullptr;
+					FreeRangeNode* next = nullptr;
+					int pos = 0;
+					int size = 0;
+
+					void ResetLink()
+					{
+						prev = nullptr;
+						next = nullptr;
+					}
+
+					void RemoveFromList()
+					{
+						if (nullptr != prev)
+						{
+							prev->next = next;
+						}
+						if (nullptr != next)
+						{
+							next->prev = prev;
+						}
+						ResetLink();
+					}
+				};
+
+				void PushFrontToList(FreeRangeNode*& list_head, FreeRangeNode* node)
+				{
+					// ノードプールの先頭に挿入.
+					if (nullptr == list_head)
+					{
+						list_head = node;
+					}
+					else
+					{
+						list_head->prev = node;
+						node->next = list_head;
+						list_head = node;
+					}
+				}
+
+				int max_size_ = 0;
+				FreeRangeNode* free_head_ = nullptr;
+				FreeRangeNode* node_pool_head_ = nullptr;
 			};
 
+
+			RangeAllocatorImpl::RangeAllocatorImpl()
+			{
+			}
+			RangeAllocatorImpl::~RangeAllocatorImpl()
+			{
+				Finalize();
+			}
+			bool RangeAllocatorImpl::Initialize(int max_size)
+			{
+				max_size_ = max_size;
+
+				auto* node = new FreeRangeNode();
+				node->pos = 0;
+				node->size = max_size;
+				node->prev = nullptr;
+				node->next = nullptr;
+				free_head_ = node;
+
+				return true;
+			}
+			void RangeAllocatorImpl::Finalize()
+			{
+				{
+					auto* p = node_pool_head_;
+					node_pool_head_ = nullptr;
+					for (; p != nullptr;)
+					{
+						auto p_del = p;
+						p = p->next;
+						delete p_del;
+					}
+				}
+				{
+					auto* p = free_head_;
+					free_head_ = nullptr;
+					for (; p != nullptr;)
+					{
+						auto p_del = p;
+						p = p->next;
+						delete p_del;
+					}
+				}
+			}
+			// Thread Unsafe.
+			RangeHandle RangeAllocatorImpl::Alloc(int size)
+			{
+				// 線形探索.
+				// TLSF的に対応しても良いかも.
+				auto* node = free_head_;
+				for (; node != nullptr && size > node->size; node = node->next)
+				{
+				}
+
+				// 枯渇.
+				if (nullptr == node)
+				{
+					// TODO.
+					// ここで断片化が原因の可能性があるため矯正マージをして再検索も検討する.
+
+					return {};
+				}
+
+				int pos = node->pos;
+				// レンジの切り出しでnodeの情報を修正.
+				node->pos += size;
+				node->size -= size;
+
+				// 空になったら除去.
+				if (0 >= node->size)
+				{
+					if (nullptr != free_head_ && free_head_ == node)
+						free_head_ = node->next;
+					node->RemoveFromList();
+
+					PushFrontToList(node_pool_head_, node);
+				}
+
+				// ハンドル返却.
+				RangeHandle handle = {};
+				handle.detail.head = pos;
+				handle.detail.size = size;
+				return handle;
+			}
+			// Thread Unsafe.
+			// 解放時に線形探索.
+			void RangeAllocatorImpl::Dealloc(const RangeHandle& handle)
+			{
+				assert(handle.IsValid());
+
+				// 登録用のnode.
+				if (nullptr == node_pool_head_)
+				{
+					// なければ追加.
+					node_pool_head_ = new FreeRangeNode();
+				}
+
+				auto free_node = node_pool_head_;
+				// poolから取得.
+				node_pool_head_ = node_pool_head_->next;
+				free_node->ResetLink();
+
+				// 情報.
+				free_node->pos = handle.detail.head;
+				free_node->size = handle.detail.size;
+
+
+				// 線形探索でposによる挿入位置決定.
+				auto* node = free_head_;
+				auto* prev = (nullptr != node) ? node->prev : nullptr;
+
+
+				// フリーリストへの挿入位置を線形探索.
+				for (; nullptr != node;)
+				{
+					// 解放要素
+					if (node->pos > free_node->pos)
+						break;
+
+					prev = node;
+					node = node->next;
+				}
+				if (nullptr == prev)
+				{
+					// 先頭に挿入.
+					PushFrontToList(free_head_, free_node);
+				}
+				else
+				{
+					// 発見した位置に挿入.
+					free_node->next = prev->next;
+					free_node->prev = prev;
+					if (prev->next)
+					{
+						prev->next->prev = free_node;
+					}
+					prev->next = free_node;
+				}
+
+				// マージ.
+				{
+					// 一つ後とのマージ.
+					if (nullptr != free_node->next)
+					{
+						if (free_node->pos + free_node->size == free_node->next->pos)
+						{
+							// サイズマージ.
+							free_node->size += free_node->next->size;
+
+							// 次要素をリストから除去.
+							auto next = free_node->next;
+
+							if (nullptr != free_head_ && free_head_ == next)
+								free_head_ = next->next;
+							next->RemoveFromList();
+
+							// プールに返却.
+							PushFrontToList(node_pool_head_, next);
+						}
+					}
+					// 一つ前とのマージ. free_nodeの指すポインタは上で後ろとマージされても変わらないため問題なし.
+					if (nullptr != free_node->prev)
+					{
+						if (free_node->prev->pos + free_node->prev->size == free_node->pos)
+						{
+							// サイズマージ.
+							free_node->prev->size += free_node->size;
+
+							// 自身をリストから除去.
+							if (nullptr != free_head_ && free_head_ == free_node)
+								free_head_ = free_node->next;
+							free_node->RemoveFromList();
+
+							// プールに返却.
+							PushFrontToList(node_pool_head_, free_node);
+						}
+					}
+				}
+
+			}
+
+
+
+			// -----------------------------------------------------------------------
+			// DynamicDescriptorの管理用.
+			//	基本用途としては大きなサイズを切り出して利用するためアロケーション頻度は低くサイズ粒度も大きい前提.
+			// -----------------------------------------------------------------------
 			RangeAllocator::RangeAllocator()
 			{
 				impl_ = new RangeAllocatorImpl();
@@ -42,7 +273,6 @@ namespace ngl
 				delete impl_;
 				impl_ = nullptr;
 			}
-
 			bool RangeAllocator::Initialize(uint32_t max_size)
 			{
 				return impl_->Initialize(max_size);
@@ -51,7 +281,6 @@ namespace ngl
 			{
 				impl_->Finalize();
 			}
-
 			// 確保.
 			RangeHandle RangeAllocator::Alloc(uint32_t size)
 			{
@@ -62,32 +291,12 @@ namespace ngl
 			{
 				impl_->Dealloc(handle);
 			}
-
-
-
-
-			RangeAllocatorImpl::RangeAllocatorImpl()
+			uint32_t RangeAllocator::MaxSize() const
 			{
+				return impl_->max_size_;
 			}
-			RangeAllocatorImpl::~RangeAllocatorImpl()
-			{
-			}
-			bool RangeAllocatorImpl::Initialize(uint32_t max_size)
-			{
-				// TODO;
-				return false;
-			}
-			void RangeAllocatorImpl::Finalize()
-			{
-			}
-			RangeHandle RangeAllocatorImpl::Alloc(uint32_t size)
-			{
-				// TODO.
-				return {};
-			}
-			void RangeAllocatorImpl::Dealloc(const RangeHandle& handle)
-			{
-			}
+			// -----------------------------------------------------------------------
+			// -----------------------------------------------------------------------
 		}
 
 

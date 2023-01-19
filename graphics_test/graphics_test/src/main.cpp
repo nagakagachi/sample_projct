@@ -162,66 +162,73 @@ AppGame::AppGame()
 {
 	ngl::math::funcAA();
 
-	const ngl::math::Mat44 k_inv_test_00 = ngl::math::Mat44::Identity();
-
-	const ngl::math::Mat44 k_rot_z = ngl::math::Mat44(std::cos(0.5f), -std::sin(0.5f), 0, 0, /**/ std::sin(0.5f), std::cos(0.5f), 0, 0, /**/ 0, 0, 1, 0, /**/ 0, 0, 0, 1);
-	const ngl::math::Mat44 k_rot_z_inv = ngl::math::Mat44::Inverse(k_rot_z);
 
 
-	const ngl::math::Mat44 k_rot_x = ngl::math::Mat44(1, 0, 0, 0, /**/ 0, std::cos(0.5f), -std::sin(0.5f), 0, /**/ 0, std::sin(0.5f), std::cos(0.5f), 0, /**/ 0, 0, 0, 1);
-	const ngl::math::Mat44 k_rot_x_inv = ngl::math::Mat44::Inverse(k_rot_x);
+	// RangeAllocテスト.
+	constexpr int k_debug_handle_count = 100000;
 
-	const ngl::math::Mat44 k_rot_y = ngl::math::Mat44(std::cos(0.5f), 0, -std::sin(0.5f), 0, /**/ 0, 1, 0, 0, /**/ std::sin(0.5f), 0, std::cos(0.5f), 0, /**/ 0, 0, 0, 1);
-	const ngl::math::Mat44 k_rot_y_inv = ngl::math::Mat44::Inverse(k_rot_y);
+	ngl::rhi::dynamic_descriptor_allocator::RangeAllocator range_alloc1 = {};
+	range_alloc1.Initialize(5000*1024);
+	
+	std::vector<bool> handle_valid_array;
+	std::vector<ngl::rhi::dynamic_descriptor_allocator::RangeHandle> handle_array;
+	for (int i = 0; i < k_debug_handle_count; ++i)
+	{
+		if (0 != (std::rand() & 0x01))
+		{
+			auto alloc_size = std::rand() % 1025 + 1024;
 
+			// 確保.
+			auto h = range_alloc1.Alloc(alloc_size);
+			if (h.IsValid())
+			{
+				int fi = 0;
+				for (; fi < handle_valid_array.size() && handle_valid_array[fi]; ++fi)
+				{
+				}
+				if (handle_valid_array.size() <= fi)
+				{
+					fi = (int)handle_valid_array.size();
+					handle_valid_array.push_back(false);
+					handle_array.push_back({});
+				}
 
-	const auto m_0 = k_rot_z * k_rot_x * ngl::math::Mat44::Inverse(k_rot_z * k_rot_x);
-	const auto m_1 = k_rot_x * k_rot_x_inv;
-	const auto m_2 = k_rot_y * k_rot_y_inv;
+				handle_valid_array[fi] = true;
+				handle_array[fi] = h;
+			}
+		}
+		else
+		{
+			int fi = 0;
+			for (; fi < handle_valid_array.size() && !handle_valid_array[fi]; ++fi)
+			{}
 
+			// 解放.
+			if (handle_valid_array.size() > fi && handle_valid_array[fi])
+			{
+				range_alloc1.Dealloc(handle_array[fi]);
+				
+				handle_array[fi] = {};
+				handle_valid_array[fi] = false;
+			}
+		}
+	}
 
+	// 全て解放.
+	for (int i = 0; i < handle_valid_array.size(); ++i)
+	{
+		int remove_index = (int)handle_valid_array.size() - 1 - i;
 
-	const ngl::math::Mat33 k_rot33_z = ngl::math::Mat33(std::cos(0.5f), -std::sin(0.5f), 0, /**/ std::sin(0.5f), std::cos(0.5f), 0, /**/ 0, 0, 1);
-	const ngl::math::Mat33 k_rot33_z_inv = ngl::math::Mat33::Inverse(k_rot33_z);
-	const auto k_rot33_z_mul = k_rot33_z * k_rot33_z_inv;
+		if (handle_valid_array[remove_index])
+		{
+			range_alloc1.Dealloc(handle_array[remove_index]);
+		}
+	}
+	// 全て解放した後に最大サイズアロケーション. 成功するはず.
+	auto h_max_alloc = range_alloc1.Alloc(range_alloc1.MaxSize());
+	assert(h_max_alloc.IsValid());
 
-
-	const ngl::math::Mat22 k_rot22_z = ngl::math::Mat22(std::cos(0.5f), -std::sin(0.5f),/**/ std::sin(0.5f), std::cos(0.5f));
-	const ngl::math::Mat22 k_rot22_z_inv = ngl::math::Mat22::Inverse(k_rot22_z);
-	const auto k_rot22_z_mul = k_rot22_z * k_rot22_z_inv;
-
-	ngl::math::Vec3 nv0 = ngl::math::Vec3::Normalize(ngl::math::Vec3(1.0));
-
-
-
-	const float fov_y = ngl::math::Deg2Rad(90.0f);
-	const float aspect = 16.0f / 9.0f;
-
-	const float vertical_view_max = std::tanf(fov_y*0.5f);
-
-	// View Matrix.
-	const auto view_dir0 = ngl::math::Vec3::Normalize(ngl::math::Vec3(0.5, 0.0, 0.5));
-	const auto view_location0 = ngl::math::Vec3(1, 2, 3);
-	const ngl::math::Mat34 viewmat0 = ngl::math::CalcViewMatrix(view_location0, view_dir0, ngl::math::Vec3(0, 1, 0));
-	const auto viewmat0_inv = ngl::math::Mat34::Inverse(viewmat0);
-
-	const ngl::math::Vec3 vp0 = viewmat0 * ngl::math::Vec3(0, 0, 0);
-	const ngl::math::Vec3 vp1 = viewmat0 * ngl::math::Vec3(1, 0, 0);
-	const ngl::math::Vec3 vp2 = viewmat0 * ngl::math::Vec3(0, 1, 0);
-	const ngl::math::Vec3 vp3 = viewmat0 * ngl::math::Vec3(0, 0, 1);
-	const auto pos_in_view_line = ((viewmat0.r0.XYZ() * vertical_view_max * aspect) + (viewmat0.r1.XYZ() * vertical_view_max) + (viewmat0.r2.XYZ() * 1.0f)) * 100.0f;
-	const ngl::math::Vec3 vp4 = viewmat0 * (pos_in_view_line + view_location0);
-
-	const ngl::math::Vec3 vp4_inv = viewmat0_inv * (vp4);
-
-
-	//const ngl::math::Mat44 proj0 = ngl::math::CalcStandardPerspectiveMatrixRH(fov_y, aspect, 0.01f, 10000.0f);// 標準透視投影.
-	const ngl::math::Mat44 proj0 = ngl::math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, aspect, 0.1f);// ReverseAndInfiniteFar透視投影.
-
-	const auto pp4 = proj0 * ngl::math::Vec4(vp4, 1);
-	const auto pp4_ndc = pp4 / pp4.w;
-
-
+	range_alloc1.Finalize();
 }
 AppGame::~AppGame()
 {

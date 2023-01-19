@@ -514,6 +514,8 @@ namespace ngl
 				RangeHandle Alloc(uint32_t size);
 				// 解放.
 				void Dealloc(const RangeHandle& handle);
+
+				uint32_t MaxSize() const;
 			private:
 				class RangeAllocatorImpl* impl_ = nullptr;
 			};
