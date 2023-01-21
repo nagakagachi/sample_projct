@@ -556,370 +556,17 @@ namespace ngl
 
 
 
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			DynamicDescriptorManager::DynamicDescriptorManager()
-			{
-			}
-			DynamicDescriptorManager::~DynamicDescriptorManager()
-			{
-				Finalize();
-			}
-
-			bool DynamicDescriptorManager::Initialize(DeviceDep* p_device, const Desc& desc)
-			{
-				assert(nullptr != p_device);
-				if (!p_device)
-					return false;
-				assert(0 < desc.allocate_descriptor_count_);
-				if (0 >= desc.allocate_descriptor_count_)
-					return false;
-
-				parent_device_ = p_device;
-
-				desc_ = desc;
-
-				// Heap作成
-				{
-					heap_desc_ = {};
-					heap_desc_.Type = desc_.type;
-					heap_desc_.NumDescriptors = desc_.allocate_descriptor_count_;
-					heap_desc_.NodeMask = 0;
-					// このHeap上のDescriptorは描画に利用するためVISIBLE設定. シェーダから可視.
-					heap_desc_.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-					if (FAILED(p_device->GetD3D12Device()->CreateDescriptorHeap(&heap_desc_, IID_PPV_ARGS(&p_heap_))))
-					{
-						std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
-						return false;
-					}
-
-					handle_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
-					cpu_handle_start_ = p_heap_->GetCPUDescriptorHandleForHeapStart();
-					gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
-				}
-
-				range_allocator_.Initialize(desc_.allocate_descriptor_count_);
-
-				return true;
-			}
-			void DynamicDescriptorManager::Finalize()
-			{
-			}
-
-			// frame_index はグローバルに加算され続けるインデックスであり, Deviceから供給される.
-			void DynamicDescriptorManager::ReadyToNewFrame(u32 frame_index)
-			{
-				// ロック
-				std::lock_guard<std::mutex> lock(mutex_);
-
-				for (int i = 0; i < deferred_deallocate_list_.size(); ++i)
-				{
-					if (!deferred_deallocate_list_[i]->used)
-						continue;
-
-					const auto elem_frame_index = deferred_deallocate_list_[i]->frame;
-					u32 frame_diff = (frame_index > elem_frame_index) ? frame_index - elem_frame_index : elem_frame_index - frame_index;
-					// フレーム差分が十分以上なら破棄.
-					if (1 <= frame_diff)
-					{
-						// ロック中なので自身のDeallocateメソッドではなく, range_allocatorの関数を直接呼んでいる.
-						for (auto h : deferred_deallocate_list_[i]->handles)
-						{
-							// 破棄.
-							range_allocator_.Dealloc(h);
-						}
-
-						// クリアと未使用設定.
-						deferred_deallocate_list_[i]->handles.clear();
-						deferred_deallocate_list_[i]->used = false;
-						deferred_deallocate_list_[i]->frame = 0;// 念のため
-					}
-				}
-			}
-
-			DynamicDescriptorAllocHandle DynamicDescriptorManager::AllocateDescriptorArray(u32 count)
-			{
-				assert(0 < count && desc_.allocate_descriptor_count_ > count);
-
-				// ロック
-				std::lock_guard<std::mutex> lock(mutex_);
-
-				const auto range_handle = range_allocator_.Alloc(count);
-
-				assert(range_handle.IsValid());
-				// 空きが無かったため失敗
-				if (!range_handle.IsValid())
-				{
-					return {};
-				}
-
-				return range_handle;
-			}
-			void DynamicDescriptorManager::Deallocate(const DynamicDescriptorAllocHandle& handle)
-			{
-				// ロック
-				std::lock_guard<std::mutex> lock(mutex_);
-
-				range_allocator_.Dealloc(handle);
-			}
-			void DynamicDescriptorManager::DeallocateDeferred(const DynamicDescriptorAllocHandle& handle, u32 frame_index)
-			{
-				// ロック
-				std::lock_guard<std::mutex> lock(mutex_);
-
-				// 登録先リスト検索.
-				int frame_list_index = -1;
-				int unused_list_index = -1;
-				for (int i = 0; i < deferred_deallocate_list_.size(); ++i)
-				{
-					if (deferred_deallocate_list_[i]->used)
-					{
-						if (deferred_deallocate_list_[i]->frame == frame_index)
-						{
-							frame_list_index = i;
-							// 対応する有効なリストが見つかれば終了.
-							break;
-						}
-					}
-					else
-					{
-						unused_list_index = i;
-					}
-				}
-				
-				if (0 > frame_list_index)
-				{
-					if (0 > unused_list_index)
-					{
-						unused_list_index = (int)deferred_deallocate_list_.size();
-						// 新規.
-						deferred_deallocate_list_.push_back(new DeferredDeallocateInfo());
-					}
-					frame_list_index = unused_list_index;
-
-
-					deferred_deallocate_list_[frame_list_index]->used = true;
-					deferred_deallocate_list_[frame_list_index]->frame = frame_index;
-					deferred_deallocate_list_[frame_list_index]->handles.clear();
-				}
-				assert(0 <= frame_list_index);
-				// 登録.
-				deferred_deallocate_list_[frame_list_index]->handles.push_back(handle);
-
-			}
-			// ハンドルからDescriptor情報取得.
-			void DynamicDescriptorManager::GetDescriptor(const DynamicDescriptorAllocHandle& handle, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head) const
-			{
-				assert(handle.IsValid());
-				if (!handle.IsValid())
-					return;
-
-				// アロケーション位置の先頭を取得して返す.
-				alloc_cpu_handle_head = cpu_handle_start_;
-				alloc_cpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(handle.detail.head));
-				alloc_gpu_handle_head = gpu_handle_start_;
-				alloc_gpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(handle.detail.head));
-			}
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			DynamicDescriptorStackAllocatorInterface::DynamicDescriptorStackAllocatorInterface()
-			{
-			}
-			DynamicDescriptorStackAllocatorInterface::~DynamicDescriptorStackAllocatorInterface()
-			{
-				Finalize();
-			}
-
-			bool DynamicDescriptorStackAllocatorInterface::Initialize(DynamicDescriptorManager* p_manager, const Desc& desc)
-			{
-				assert(p_manager);
-				if (!p_manager)
-					return false;
-				assert(0 < desc.stack_size);
-				if (0 >= desc.stack_size)
-					return false;
-
-				desc_ = desc;
-
-				p_manager_ = p_manager;
-
-				// Full扱いでリセット.
-				cur_stack_use_count_ = desc_.stack_size;
-
-				cur_stack_cpu_handle_start_ = {};
-				cur_stack_gpu_handle_start_ = {};
-
-				alloc_pages_ = {};
-
-				return true;
-			}
-			void DynamicDescriptorStackAllocatorInterface::Finalize()
-			{
-				for (auto e : alloc_pages_)
-				{
-					p_manager_->Deallocate(e);
-				}
-
-				cur_stack_use_count_ = desc_.stack_size;
-				p_manager_ = nullptr;
-			}
-			bool DynamicDescriptorStackAllocatorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
-			{
-				assert(p_manager_);
-
-				// そもそものスタックサイズよりも大きいサイズを要求されることは想定外.
-				assert(desc_.stack_size >= count);
-				if (desc_.stack_size < count)
-					return false;
-
-				// 現在のスタックが足りない場合はManagerから新規に取得. 連続要素が必要なので.
-				if (desc_.stack_size < cur_stack_use_count_ + count)
-				{
-					// Empty
-					cur_stack_use_count_ = 0;
-
-					// idに関連付けてStack分を新規に確保する.
-					// CommandList用のフレーム単位自動解放では 0,1,2 のIDを使い毎フレーム自動で解放されるためフレームを跨ぐDescriptorの場合はそのIDを避けて運用する.
-					auto alloc_result = p_manager_->AllocateDescriptorArray(desc_.stack_size);
-					if (alloc_result.IsValid())
-					{
-						// 確保ハンドル保持.
-						alloc_pages_.push_back(alloc_result);
-						// Descriptor取得.
-						p_manager_->GetDescriptor(alloc_result, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
-					}
-					else
-					{
-						assert(false);
-						return false;
-					}
-				}
-
-				// 改めてチェック
-				assert(desc_.stack_size >= cur_stack_use_count_ + count);
-				if (desc_.stack_size < cur_stack_use_count_ + count)
-					return false;
-
-				const auto increment_size = p_manager_->GetHandleIncrementSize();
-				const auto increment_offset = increment_size * cur_stack_use_count_;
-
-				alloc_cpu_handle_head = cur_stack_cpu_handle_start_;
-				alloc_cpu_handle_head.ptr += (increment_offset);
-				alloc_gpu_handle_head = cur_stack_gpu_handle_start_;
-				alloc_gpu_handle_head.ptr += (increment_offset);
-
-				// スタック消費量更新.
-				cur_stack_use_count_ += count;
-				return true;
-			}
-			void DynamicDescriptorStackAllocatorInterface::Deallocate()
-			{
-				assert(p_manager_);
-
-				for (auto e : alloc_pages_)
-				{
-					p_manager_->Deallocate(e);
-				}
-				alloc_pages_.clear();
-
-				// スタックをフルにしてリセット.
-				cur_stack_use_count_ = desc_.stack_size;
-			}
-			// 確保した領域全てを遅延破棄リクエストしてスタックをリセット. frame_indexは現在のDeviceのフレームインデックスを指定する.
-			void DynamicDescriptorStackAllocatorInterface::DeallocateDeferred(u32 frame_index)
-			{
-				assert(p_manager_);
-
-				for (auto e : alloc_pages_)
-				{
-					p_manager_->DeallocateDeferred(e, frame_index);
-				}
-				alloc_pages_.clear();
-
-				// スタックをフルにしてリセット.
-				cur_stack_use_count_ = desc_.stack_size;
-			}
-
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			// 
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-			FrameCommandListDynamicDescriptorAllocatorInterface::FrameCommandListDynamicDescriptorAllocatorInterface()
-			{
-			}
-			FrameCommandListDynamicDescriptorAllocatorInterface::~FrameCommandListDynamicDescriptorAllocatorInterface()
-			{
-				Finalize();
-			}
-
-			bool FrameCommandListDynamicDescriptorAllocatorInterface::Initialize(DynamicDescriptorManager* p_manager, const Desc& desc)
-			{
-				assert(p_manager);
-				if (!p_manager)
-					return false;
-				assert(0 < desc.stack_size);
-				if (0 >= desc.stack_size)
-					return false;
-
-				desc_ = desc;
-
-				DynamicDescriptorStackAllocatorInterface::Desc alloc_interface_desc = {};
-				alloc_interface_desc.stack_size = desc.stack_size;
-				alloc_interface_.Initialize(p_manager, alloc_interface_desc);
-
-				alloc_frame_index_ = 0;
-
-				return true;
-			}
-			void FrameCommandListDynamicDescriptorAllocatorInterface::Finalize()
-			{
-				// 念の為フレームインデックスのDescriptorを解放.
-				alloc_interface_.Deallocate();
-
-				alloc_interface_.Finalize();
-			}
-			// 新しいフレームの準備
-			void FrameCommandListDynamicDescriptorAllocatorInterface::ReadyToNewFrame(u32 frame_index)
-			{
-				alloc_frame_index_ = frame_index;
-				alloc_interface_.DeallocateDeferred(frame_index);
-			}
-			bool FrameCommandListDynamicDescriptorAllocatorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
-			{
-				// フレームフリップ番号で確保.
-				if (alloc_interface_.Allocate(count, alloc_cpu_handle_head, alloc_gpu_handle_head))
-				{
-				}
-				else
-				{
-					assert(false);
-					return false;
-				}
-
-				return true;
-			}
-			// -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		FrameDescriptorManager::FrameDescriptorManager()
+		DynamicDescriptorManager::DynamicDescriptorManager()
 		{
 		}
-		FrameDescriptorManager::~FrameDescriptorManager()
+		DynamicDescriptorManager::~DynamicDescriptorManager()
 		{
 			Finalize();
 		}
 
-		bool FrameDescriptorManager::Initialize(DeviceDep* p_device, const Desc& desc)
+		bool DynamicDescriptorManager::Initialize(DeviceDep* p_device, const Desc& desc)
 		{
 			assert(nullptr != p_device);
 			if (!p_device)
@@ -927,6 +574,8 @@ namespace ngl
 			assert(0 < desc.allocate_descriptor_count_);
 			if (0 >= desc.allocate_descriptor_count_)
 				return false;
+
+			parent_device_ = p_device;
 
 			desc_ = desc;
 
@@ -950,206 +599,142 @@ namespace ngl
 				gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
 			}
 
-			// フリーレンジセットアップ
-			for (int i = 0; i < range_node_pool_.size(); ++i)
-			{
-				range_node_pool_[i] = {};
-				range_node_pool_[i].alloc_group_id = k_invalid_alloc_group_id;
-				range_node_pool_[i].start_index = 0;
-				range_node_pool_[i].end_index = 0;
-				if (i > 0)
-				{
-					range_node_pool_[i].prev = &range_node_pool_[static_cast<s64>(i) - 1];
-				}
-				if (i < range_node_pool_.size() - 1)
-				{
-					range_node_pool_[i].next = &range_node_pool_[static_cast<s64>(i) + 1];
-				}
-			}
-			// フリーノードリスト登録.
-			free_node_list_ = &range_node_pool_[0];
-
-
-			// 初期レンジ全域未使用のためにフリーリストから一つ取得.
-			frame_descriptor_range_head_ = free_node_list_;
-			free_node_list_ = free_node_list_->next;
-			frame_descriptor_range_head_->RemoveFromList();
-
-			// 設定
-			frame_descriptor_range_head_->alloc_group_id = k_invalid_alloc_group_id;
-			frame_descriptor_range_head_->start_index = 0;
-			frame_descriptor_range_head_->end_index = frame_descriptor_range_head_->start_index + (desc_.allocate_descriptor_count_ - 1);
-
+			range_allocator_.Initialize(desc_.allocate_descriptor_count_);
 
 			return true;
 		}
-		void FrameDescriptorManager::Finalize()
+		void DynamicDescriptorManager::Finalize()
 		{
 		}
-		/*
-			フレームに関連付けされたレンジを解放,マージして再利用可能にする
 
-			alloc_group_id : 0,1,2,0,1,2,... のようなframe_flip_index.
-		*/
-		void FrameDescriptorManager::ResetFrameDescriptor(u32 alloc_group_id)
+		// frame_index はグローバルに加算され続けるインデックスであり, Deviceから供給される.
+		void DynamicDescriptorManager::ReadyToNewFrame(u32 frame_index)
 		{
-			if (k_invalid_alloc_group_id == alloc_group_id)
-				return;
-
 			// ロック
 			std::lock_guard<std::mutex> lock(mutex_);
 
-			auto* range_ptr = frame_descriptor_range_head_;
-			for (; range_ptr != nullptr;)
+			for (int i = 0; i < deferred_deallocate_list_.size(); ++i)
 			{
-				auto* cur_node = range_ptr;
-				range_ptr = range_ptr->next;
+				if (!deferred_deallocate_list_[i]->used)
+					continue;
 
-				// 対象のフレームインデックスか, 無効インデックスの場合に処理. (無効インデックスの場合は実質マージ処理をするだけ)
-				if (alloc_group_id == cur_node->alloc_group_id || k_invalid_alloc_group_id == cur_node->alloc_group_id)
+				const auto elem_frame_index = deferred_deallocate_list_[i]->frame;
+				u32 frame_diff = (frame_index > elem_frame_index) ? frame_index - elem_frame_index : elem_frame_index - frame_index;
+				// フレーム差分が十分以上なら破棄.
+				if (1 <= frame_diff)
 				{
-					// フレームインデックスを無効化して再利用可能.
-					cur_node->alloc_group_id = k_invalid_alloc_group_id;
-
-					// 一つ前のノードが未使用ノードならマージしてこのノードをフリーリストへ移動.
-					auto prev_node = cur_node->prev;
-					if (prev_node && cur_node->alloc_group_id == prev_node->alloc_group_id)
+					// ロック中なので自身のDeallocateメソッドではなく, range_allocatorの関数を直接呼んでいる.
+					for (auto h : deferred_deallocate_list_[i]->handles)
 					{
-						// prevへ範囲をマージ
-						prev_node->end_index = cur_node->end_index;
-
-
-						// cur_nodeを除外
-						cur_node->RemoveFromList();
-
-						// cur_nodeをフリーリストへ移動
-						{
-							free_node_list_->prev = cur_node;
-							cur_node->next = free_node_list_;
-							cur_node->prev = nullptr;
-							free_node_list_ = cur_node;
-						}
+						// 破棄.
+						range_allocator_.Dealloc(h);
 					}
+
+					// クリアと未使用設定.
+					deferred_deallocate_list_[i]->handles.clear();
+					deferred_deallocate_list_[i]->used = false;
+					deferred_deallocate_list_[i]->frame = 0;// 念のため
 				}
 			}
 		}
-		bool FrameDescriptorManager::AllocateDescriptorArray(u32 alloc_group_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+
+		DynamicDescriptorAllocHandle DynamicDescriptorManager::AllocateDescriptorArray(u32 count)
 		{
-			if (k_invalid_alloc_group_id == alloc_group_id)
-				return false;
+			assert(0 < count && desc_.allocate_descriptor_count_ > count);
 
 			// ロック
 			std::lock_guard<std::mutex> lock(mutex_);
 
-			// 空きのある未使用ノードを探す
-			auto* range_ptr = frame_descriptor_range_head_;
-			for (; range_ptr != nullptr; range_ptr = range_ptr->next)
-			{
-				if (k_invalid_alloc_group_id == range_ptr->alloc_group_id)
-				{
-					// 十分な空きがあるか
-					const auto empty_count = (range_ptr->end_index - range_ptr->start_index + 1);
-					if (count <= empty_count)
-						break;
-				}
-			}
-			assert(range_ptr);
+			const auto range_handle = range_allocator_.Alloc(count);
+
+			assert(range_handle.IsValid());
 			// 空きが無かったため失敗
-			if (!range_ptr)
+			if (!range_handle.IsValid())
 			{
-				return false;
+				return {};
 			}
 
-			// 割当開始インデックス設定
-			u32 alloc_start_index = range_ptr->start_index;
+			return range_handle;
+		}
+		void DynamicDescriptorManager::Deallocate(const DynamicDescriptorAllocHandle& handle)
+		{
+			// ロック
+			std::lock_guard<std::mutex> lock(mutex_);
 
-			// アロケーション情報管理の更新.
-			// ターゲットのノードを分割して割当. ただし一つ前のノードが同じalloc_group_idの場合はフリーリストから取得せずにマージする.
-			if (range_ptr->prev && range_ptr->prev->alloc_group_id == alloc_group_id)
+			range_allocator_.Dealloc(handle);
+		}
+		void DynamicDescriptorManager::DeallocateDeferred(const DynamicDescriptorAllocHandle& handle, u32 frame_index)
+		{
+			// ロック
+			std::lock_guard<std::mutex> lock(mutex_);
+
+			// 登録先リスト検索.
+			int frame_list_index = -1;
+			int unused_list_index = -1;
+			for (int i = 0; i < deferred_deallocate_list_.size(); ++i)
 			{
-				// 一つ前のノードにマージする
-				auto* new_node = range_ptr->prev;
-
-				// prevノードの終端インデックスを更新
-				new_node->end_index = range_ptr->start_index + (count - 1);
-
-				// 分割ノードの開始インデックスを更新
-				range_ptr->start_index = new_node->end_index + 1;
-				// 範囲を使い切ったノードは除去してフリーリストへ
-				if (range_ptr->start_index >= range_ptr->end_index)
+				if (deferred_deallocate_list_[i]->used)
 				{
-					range_ptr->RemoveFromList();
-
-					// range_ptrをフリーリストへ移動
+					if (deferred_deallocate_list_[i]->frame == frame_index)
 					{
-						free_node_list_->prev = range_ptr;
-						range_ptr->next = free_node_list_;
-						range_ptr->prev = nullptr;
-						free_node_list_ = range_ptr;
+						frame_list_index = i;
+						// 対応する有効なリストが見つかれば終了.
+						break;
 					}
 				}
-			}
-			else
-			{
-				// フリーリストからノードを確保して接続する
-				assert(free_node_list_);
-				if (!free_node_list_)
+				else
 				{
-					// フリーリストが空
-					return false;
+					unused_list_index = i;
 				}
-				// フリーリスト先頭取得
-				auto* new_node = free_node_list_;
-				// フリーリスト先頭更新
-				free_node_list_ = free_node_list_->next;
-				// フリーリストから取り外し
-				new_node->RemoveFromList();
-
-
-				*new_node = {};
-				new_node->alloc_group_id = alloc_group_id;
-				// 開始インデックスからcount分を割り当て
-				new_node->start_index = range_ptr->start_index;
-				new_node->end_index = new_node->start_index + (count - 1);
-			
-				// 分割後の開始インデックスを更新
-				range_ptr->start_index = new_node->end_index + 1;
-
-				// 接続更新
-				new_node->prev = range_ptr->prev;
-				if (new_node->prev)
-					new_node->prev->next = new_node;
-				new_node->next = range_ptr;
-				if (new_node->next)
-					new_node->next->prev = new_node;
-
-				// 先頭アドレス更新
-				if (frame_descriptor_range_head_ == range_ptr)
-					frame_descriptor_range_head_ = range_ptr->prev;
 			}
+				
+			if (0 > frame_list_index)
+			{
+				if (0 > unused_list_index)
+				{
+					unused_list_index = (int)deferred_deallocate_list_.size();
+					// 新規.
+					deferred_deallocate_list_.push_back(new DeferredDeallocateInfo());
+				}
+				frame_list_index = unused_list_index;
+
+
+				deferred_deallocate_list_[frame_list_index]->used = true;
+				deferred_deallocate_list_[frame_list_index]->frame = frame_index;
+				deferred_deallocate_list_[frame_list_index]->handles.clear();
+			}
+			assert(0 <= frame_list_index);
+			// 登録.
+			deferred_deallocate_list_[frame_list_index]->handles.push_back(handle);
+
+		}
+		// ハンドルからDescriptor情報取得.
+		void DynamicDescriptorManager::GetDescriptor(const DynamicDescriptorAllocHandle& handle, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head) const
+		{
+			assert(handle.IsValid());
+			if (!handle.IsValid())
+				return;
 
 			// アロケーション位置の先頭を取得して返す.
 			alloc_cpu_handle_head = cpu_handle_start_;
-			alloc_cpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(alloc_start_index));
+			alloc_cpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(handle.detail.head));
 			alloc_gpu_handle_head = gpu_handle_start_;
-			alloc_gpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(alloc_start_index));
-
-			return true;
+			alloc_gpu_handle_head.ptr += (static_cast<UINT64>(handle_increment_size_) * static_cast<UINT64>(handle.detail.head));
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		FrameDescriptorAllocInterface::FrameDescriptorAllocInterface()
+		DynamicDescriptorStackAllocatorInterface::DynamicDescriptorStackAllocatorInterface()
 		{
 		}
-		FrameDescriptorAllocInterface::~FrameDescriptorAllocInterface()
+		DynamicDescriptorStackAllocatorInterface::~DynamicDescriptorStackAllocatorInterface()
 		{
 			Finalize();
 		}
 
-		bool FrameDescriptorAllocInterface::Initialize(FrameDescriptorManager* p_manager, const Desc& desc)
+		bool DynamicDescriptorStackAllocatorInterface::Initialize(DynamicDescriptorManager* p_manager, const Desc& desc)
 		{
 			assert(p_manager);
 			if (!p_manager)
@@ -1168,27 +753,23 @@ namespace ngl
 			cur_stack_cpu_handle_start_ = {};
 			cur_stack_gpu_handle_start_ = {};
 
+			alloc_pages_ = {};
+
 			return true;
 		}
-		void FrameDescriptorAllocInterface::Finalize()
+		void DynamicDescriptorStackAllocatorInterface::Finalize()
 		{
-			// Note.
-			//	alloc_idがFrameFlipIndex外のものは適切に破棄をする必要がある点に注意.
+			for (auto e : alloc_pages_)
+			{
+				p_manager_->Deallocate(e);
+			}
 
 			cur_stack_use_count_ = desc_.stack_size;
-
 			p_manager_ = nullptr;
 		}
-		bool FrameDescriptorAllocInterface::Allocate(u32 alloc_id, u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+		bool DynamicDescriptorStackAllocatorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
 		{
 			assert(p_manager_);
-
-			// 許可されていない場合は frame flip index と重複するインデックス範囲を指定することはできない.
-			if (!desc_.allow_frame_flip_index && ((k_fdm_frame_flip_index_bitmask & alloc_id) == alloc_id))
-			{
-				assert(false);
-				return false;
-			}
 
 			// そもそものスタックサイズよりも大きいサイズを要求されることは想定外.
 			assert(desc_.stack_size >= count);
@@ -1203,9 +784,13 @@ namespace ngl
 
 				// idに関連付けてStack分を新規に確保する.
 				// CommandList用のフレーム単位自動解放では 0,1,2 のIDを使い毎フレーム自動で解放されるためフレームを跨ぐDescriptorの場合はそのIDを避けて運用する.
-				auto alloc_result = p_manager_->AllocateDescriptorArray(alloc_id, desc_.stack_size, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
-				if (alloc_result)
+				auto alloc_result = p_manager_->AllocateDescriptorArray(desc_.stack_size);
+				if (alloc_result.IsValid())
 				{
+					// 確保ハンドル保持.
+					alloc_pages_.push_back(alloc_result);
+					// Descriptor取得.
+					p_manager_->GetDescriptor(alloc_result, cur_stack_cpu_handle_start_, cur_stack_gpu_handle_start_);
 				}
 				else
 				{
@@ -1231,41 +816,47 @@ namespace ngl
 			cur_stack_use_count_ += count;
 			return true;
 		}
-		void FrameDescriptorAllocInterface::Deallocate(u32 alloc_id)
+		void DynamicDescriptorStackAllocatorInterface::Deallocate()
 		{
 			assert(p_manager_);
 
-			if (!desc_.allow_frame_flip_index && ((k_fdm_frame_flip_index_bitmask & alloc_id) == alloc_id))
+			for (auto e : alloc_pages_)
 			{
-				// 許可されていない場合は frame flip index を指定することはできない.
-				assert(false);
-				return;
+				p_manager_->Deallocate(e);
 			}
+			alloc_pages_.clear();
 
-			// IDに関連付けられた領域を全開放.
-			p_manager_->ResetFrameDescriptor(alloc_id);
-
-			// Full扱いでリセット.
-			cur_stack_use_count_ = desc_.stack_size;
-		}
-		void FrameDescriptorAllocInterface::ResetStack()
-		{
 			// スタックをフルにしてリセット.
 			cur_stack_use_count_ = desc_.stack_size;
 		}
+		// 確保した領域全てを遅延破棄リクエストしてスタックをリセット. frame_indexは現在のDeviceのフレームインデックスを指定する.
+		void DynamicDescriptorStackAllocatorInterface::DeallocateDeferred(u32 frame_index)
+		{
+			assert(p_manager_);
+
+			for (auto e : alloc_pages_)
+			{
+				p_manager_->DeallocateDeferred(e, frame_index);
+			}
+			alloc_pages_.clear();
+
+			// スタックをフルにしてリセット.
+			cur_stack_use_count_ = desc_.stack_size;
+		}
+
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// 
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		FrameCommandListDescriptorInterface::FrameCommandListDescriptorInterface()
+		FrameCommandListDynamicDescriptorAllocatorInterface::FrameCommandListDynamicDescriptorAllocatorInterface()
 		{
 		}
-		FrameCommandListDescriptorInterface::~FrameCommandListDescriptorInterface()
+		FrameCommandListDynamicDescriptorAllocatorInterface::~FrameCommandListDynamicDescriptorAllocatorInterface()
 		{
 			Finalize();
 		}
 
-		bool FrameCommandListDescriptorInterface::Initialize(FrameDescriptorManager* p_manager, const Desc& desc)
+		bool FrameCommandListDynamicDescriptorAllocatorInterface::Initialize(DynamicDescriptorManager* p_manager, const Desc& desc)
 		{
 			assert(p_manager);
 			if (!p_manager)
@@ -1276,42 +867,31 @@ namespace ngl
 
 			desc_ = desc;
 
-
-			FrameDescriptorAllocInterface::Desc alloc_interface_desc = {};
+			DynamicDescriptorStackAllocatorInterface::Desc alloc_interface_desc = {};
 			alloc_interface_desc.stack_size = desc.stack_size;
-			alloc_interface_desc.allow_frame_flip_index = true;	// Frame単位自動解放の対象とするため true.
 			alloc_interface_.Initialize(p_manager, alloc_interface_desc);
 
-			// 初回は無効なフレーム
-			frame_flip_index_ = ~u32(0);
-			
+			alloc_frame_index_ = 0;
+
 			return true;
 		}
-		void FrameCommandListDescriptorInterface::Finalize()
+		void FrameCommandListDynamicDescriptorAllocatorInterface::Finalize()
 		{
 			// 念の為フレームインデックスのDescriptorを解放.
-			alloc_interface_.Deallocate(frame_flip_index_);
-			
+			alloc_interface_.Deallocate();
+
 			alloc_interface_.Finalize();
 		}
 		// 新しいフレームの準備
-		void FrameCommandListDescriptorInterface::ReadyToNewFrame(u32 frame_flip_index)
+		void FrameCommandListDynamicDescriptorAllocatorInterface::ReadyToNewFrame(u32 frame_index)
 		{
-			// Frame ID での確保領域は FrameDescriptorManager のフレーム開始処理で自動的に前回フレームが解放される.
-			// そのためここではスタックのリセットだけをする.
-			alloc_interface_.ResetStack();
-
-			// フレームインデックス更新
-			// Raytraceリソースなどが同じマネージャに対して固有IDでアロケートするため, Frame側は多くても3bitまでしか使わない, 使えないものとする.
-			const auto safe_frame_flip_index = (frame_flip_index & k_fdm_frame_flip_index_bitmask);
-			assert(safe_frame_flip_index == frame_flip_index);
-
-			frame_flip_index_ = safe_frame_flip_index;
+			alloc_frame_index_ = frame_index;
+			alloc_interface_.DeallocateDeferred(frame_index);
 		}
-		bool FrameCommandListDescriptorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
+		bool FrameCommandListDynamicDescriptorAllocatorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)
 		{
 			// フレームフリップ番号で確保.
-			if (alloc_interface_.Allocate(frame_flip_index_, count, alloc_cpu_handle_head, alloc_gpu_handle_head))
+			if (alloc_interface_.Allocate(count, alloc_cpu_handle_head, alloc_gpu_handle_head))
 			{
 			}
 			else

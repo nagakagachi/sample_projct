@@ -305,7 +305,6 @@ namespace ngl
 				}
 			}
 
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			// DynamicDescriptorManager初期化
 			{
 				p_dynamic_descriptor_manager_.reset(new DynamicDescriptorManager());
@@ -319,21 +318,6 @@ namespace ngl
 					return false;
 				}
 			}
-#else
-			// FrameDescriptorManager初期化
-			{
-				p_frame_descriptor_manager_.reset(new FrameDescriptorManager());
-				FrameDescriptorManager::Desc fdm_desc = {};
-				fdm_desc.allocate_descriptor_count_ = desc_.frame_descriptor_size;
-				fdm_desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-
-				if (!p_frame_descriptor_manager_->Initialize(this, fdm_desc))
-				{
-					std::cout << "[ERROR] Create FrameDescriptorManager" << std::endl;
-					return false;
-				}
-			}
-#endif
 
 			// FrameDescriptorHeapPagePool初期化
 			{
@@ -370,14 +354,7 @@ namespace ngl
 
 			buffer_index_ = (buffer_index_ + 1) % desc_.swapchain_buffer_count;
 
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			p_dynamic_descriptor_manager_->ReadyToNewFrame((u32)frame_index_);
-#else
-			// Frame用にCommandListが確保したGlobal Descriptor領域をフレームフリップインデックスで纏めて解放する.
-			// これにより各CommandListが個別に解放する必要がなくフレーム毎に確保することに専念できる.
-			// ただしこのインデックスのものはここで自動解放されるため, FrameDescriptorAllocInterfaceを使って直接IDを指定して確保した際のIDがフレームインデックスとかぶると意図せず解放されて破綻するので注意.
-			p_frame_descriptor_manager_->ResetFrameDescriptor(buffer_index_);
-#endif
 
 			gb_.ReadyToNewFrame();
 		}

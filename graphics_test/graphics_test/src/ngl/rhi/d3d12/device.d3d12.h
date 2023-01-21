@@ -39,11 +39,7 @@ namespace ngl
 		class PersistentDescriptorAllocator;
 		struct PersistentDescriptorInfo;
 
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 		class DynamicDescriptorManager;
-#else
-		class FrameDescriptorManager;
-#endif	
 		class FrameDescriptorHeapPagePool;
 		
 		class DescriptorSetDep;
@@ -135,17 +131,10 @@ namespace ngl
 			{
 				return p_persistent_sampler_descriptor_allocator_.get();
 			}
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			DynamicDescriptorManager* GeDynamicDescriptorManager()
 			{
 				return p_dynamic_descriptor_manager_.get();
 			}
-#else
-			FrameDescriptorManager* GetFrameDescriptorManager()
-			{
-				return p_frame_descriptor_manager_.get();
-			}
-#endif
 			FrameDescriptorHeapPagePool* GetFrameDescriptorHeapPagePool()
 			{
 				return p_frame_descriptor_page_pool_.get();
@@ -197,14 +186,9 @@ namespace ngl
 			// 生成したSampler用Descriptor確保用( Sampler 用)
 			std::unique_ptr<PersistentDescriptorAllocator>	p_persistent_sampler_descriptor_allocator_;
 
-
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			// フレームでのDescriptor確保用( CBV, SRV, UAV 用). 巨大な単一Heap管理..
 			std::unique_ptr<DynamicDescriptorManager>		p_dynamic_descriptor_manager_;
-#else
-			// フレームでのDescriptor確保用( CBV, SRV, UAV 用). 巨大な単一Heap管理. Samplerのハンドル数制限には対応していないが通常のリソースにはこちらのほうが効率的と思われる.
-			std::unique_ptr<FrameDescriptorManager>			p_frame_descriptor_manager_;
-#endif
+
 			// フレームでのDescriptor確保用. こちらはPage単位で拡張していく. CBV,SRV,UAVおよびSamplerすべてで利用可能.
 			std::unique_ptr<FrameDescriptorHeapPagePool>		p_frame_descriptor_page_pool_;
 

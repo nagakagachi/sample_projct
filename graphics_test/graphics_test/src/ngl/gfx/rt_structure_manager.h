@@ -312,11 +312,7 @@ namespace ngl
 		static bool CreateShaderTable(
 			RaytraceShaderTable& out,
 			rhi::DeviceDep* p_device,
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
-#else
-			rhi::FrameDescriptorAllocInterface& desc_alloc_interface, uint32_t desc_alloc_id,
-#endif
 			const RaytraceStructureTop& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name);
 
 
@@ -381,36 +377,18 @@ namespace ngl
 			// 動的更新TLASにまつわるオブジェクト群.
 			struct DynamicTlasSet
 			{
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 				DynamicTlasSet(rhi::DynamicDescriptorStackAllocatorInterface* p_desc_alloc_interface);
-#else
-				DynamicTlasSet(rhi::FrameDescriptorAllocInterface* p_desc_alloc_interface);
-#endif
 				~DynamicTlasSet();
 
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 				rhi::DynamicDescriptorStackAllocatorInterface*	p_desc_alloc_interface_ = nullptr;
-#else
-				rhi::FrameDescriptorAllocInterface* p_desc_alloc_interface_ = nullptr;
-#endif
-
 				RaytraceStructureTop dynamic_scene_tlas_ = {};
 				RaytraceShaderTable dynamic_shader_table_ = {};
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
-#else
-				// TODO. 実際はDescriptorAlloIDもRhiRef管理と同様にGPUアクセスに対する遅延破棄が必要だが, 現状は前フレのオブジェクトを破棄するタイミングになっているため問題が起きていない.
-				uint32_t			dynamic_scene_descriptor_alloc_id_ = rhi::FrameDescriptorManager::k_invalid_alloc_group_id;
-#endif
 			};
 			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
 			uint32_t						dynamic_tlas_flip_ = 0;
 
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			rhi::DynamicDescriptorStackAllocatorInterface	desc_alloc_interface_ = {};
-#else
-			// Descriptor用. 別のRaytraceStructureManagerインスタンスのAllocIDと被ると意図しないタイミングで解放されることがあるので注意.
-			rhi::FrameDescriptorAllocInterface	desc_alloc_interface_ = {};
-#endif
+
 			rhi::RhiRef<rhi::BufferDep>				cb_test_scene_view[2];
 			rhi::RhiRef<rhi::ConstantBufferViewDep>	cbv_test_scene_view[2];
 

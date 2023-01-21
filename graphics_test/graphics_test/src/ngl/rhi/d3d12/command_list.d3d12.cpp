@@ -52,8 +52,6 @@ namespace ngl
 			// 初回クローズ. これがないと初回フレームの開始時ResetでComError発生.
 			p_command_list_->Close();
 
-
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			// フレームでのDescriptor確保用インターフェイス初期化
 			FrameCommandListDynamicDescriptorAllocatorInterface::Desc fdi_desc = {};
 			fdi_desc.stack_size = 2048;// スタックサイズは適当.
@@ -62,16 +60,6 @@ namespace ngl
 				std::cout << "[ERROR] Create FrameCommandListDynamicDescriptorAllocatorInterface" << std::endl;
 				return false;
 			}
-#else
-			// フレームでのDescriptor確保用インターフェイス初期化
-			FrameCommandListDescriptorInterface::Desc fdi_desc = {};
-			fdi_desc.stack_size = 2048;// スタックサイズは適当.
-			if (!frame_desc_interface_.Initialize(parent_device_->GetFrameDescriptorManager(), fdi_desc))
-			{
-				std::cout << "[ERROR] Create FrameCommandListDescriptorInterface" << std::endl;
-				return false;
-			}
-#endif
 
 			// フレームでのSampler Descriptor確保用インターフェイス初期化.
 			// SamplerはD3D12ではHeap毎に2048という制限があるため, それを考慮してHeapをPageとして確保して拡張する.
@@ -100,13 +88,8 @@ namespace ngl
 			p_command_list_->Reset(p_command_allocator_, nullptr);
 
 			// 新しいフレームのためのFrameDescriptorの準備.
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 			// インデックスはDeviceから取得するグローバルなフレームインデックス.
 			frame_desc_interface_.ReadyToNewFrame((u32)parent_device_->GetDeviceFrameIndex());
-#else
-			// インデックスはDeviceから取得するようにした.
-			frame_desc_interface_.ReadyToNewFrame(parent_device_->GetFrameBufferIndex());
-#endif
 		}
 		void GraphicsCommandListDep::End()
 		{
@@ -285,11 +268,7 @@ namespace ngl
 			// CbvSrvUavのHeapは巨大な単一Heap上で確保するためアプリケーション実行中に変化しないのでSamplerとは異なりいつ設定しても良い.
 			ID3D12DescriptorHeap* heaps[] =
 			{
-#if NGL_DYNAMIC_DESCRIPTOR_MANAGER_REPLACE
 				frame_desc_interface_.GetManager()->GetD3D12DescriptorHeap(),
-#else
-				frame_desc_interface_.GetFrameDescriptorManager()->GetD3D12DescriptorHeap(),
-#endif
 				frame_desc_page_interface_for_sampler_.GetD3D12DescriptorHeap()
 			};
 			p_command_list_->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
