@@ -1235,6 +1235,9 @@ namespace ngl
 		{
 			out = {};
 
+			// ダミー用のcbv, srv, uav用デフォルトDescriptor取得.
+			auto def_descriptor = p_device->GetPersistentDescriptorAllocator()->GetDefaultPersistentDescriptor();
+
 
 			// NOTE. 固定のDescriptorTableで CVBとSRVの2テーブルをLocalRootSignatureのリソースとして定義している.
 			const uint32_t per_entry_descriptor_table_count = 2;
@@ -1324,45 +1327,52 @@ namespace ngl
 
 				const auto table_hitgroup_offset = shader_record_byte_size * table_cnt;
 				uint32_t hitgroup_count = 0;
-				for (uint32_t i = 0u; i < num_instance; ++i)
+				for (uint32_t inst_i = 0u; inst_i < num_instance; ++inst_i)
 				{
 					// 現状はBLAS内Geometryはすべて同じHitgroupとしている.
 					// Geometry毎に別マテリアル等とする場合はここをGeomety毎とする.
-					const uint32_t hitgroup_id = tlas.GetInstanceHitgroupIndexArray()[i];
+					const uint32_t hitgroup_id = tlas.GetInstanceHitgroupIndexArray()[inst_i];
 					const char* hitgroup_name = state_object.GetHitgroupName(hitgroup_id);
 					assert(nullptr != hitgroup_name);
 
 
 					// 内部Geometry毎にRecord.
-					const auto& blas_index = tlas.GetInstanceBlasIndexArray()[i];
+					const auto& blas_index = tlas.GetInstanceBlasIndexArray()[inst_i];
 					const auto& blas = tlas.GetBlasArray()[blas_index];
 					for (uint32_t geom_i = 0; geom_i < blas->NumGeometry(); ++geom_i)
 					{
 						auto* geom_hit_group_name = hitgroup_name;
 						
 
-						// Geometry毎のHitgroup分けの確認用テスト.
-						if (true)
-						{
-							//geom_hit_group_name = state_object.GetHitgroupName(geom_i & 0x01);
-						}
-
 						// hitGroup
 						{
-							// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
 							// 固定LocalRootSigにより
 							//	DescriptorTable0 -> b1000からCBV最大16
 							//	DescriptorTable1 -> t1000からSRV最大16
 							// というレイアウトで登録する.
-							
 
-							DescriptorHandleSet desc_handle_cbv;
+							// Entry毎のSrvセットアップ.
+							int l_srv_count = 0;
+							std::array<D3D12_CPU_DESCRIPTOR_HANDLE, k_rt_local_descriptor_cbvsrvuav_table_size> l_srv_handles;
+							{
+								const auto geom_data = blas->GetGeometryData(geom_i);
+								assert(geom_data.vertex_srv);
+								assert(geom_data.index_srv);
+
+								l_srv_handles[l_srv_count++] = geom_data.vertex_srv->GetView().cpu_handle;
+								l_srv_handles[l_srv_count++] = geom_data.index_srv->GetView().cpu_handle;
+							}
+
+							// Entry毎のCbvセットアップ.
+							int l_cbv_count = 0;
+							std::array<D3D12_CPU_DESCRIPTOR_HANDLE, k_rt_local_descriptor_cbvsrvuav_table_size> l_cbv_handles;
+							{
+								// TODO.
+							}
+
+
 							DescriptorHandleSet desc_handle_srv;
-							const bool result_alloc_desc_cbv = desc_alloc_interface.Allocate(k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_cbv.h_cpu, desc_handle_cbv.h_gpu);
-							const bool result_alloc_desc_srv = desc_alloc_interface.Allocate(k_rt_local_descriptor_cbvsrvuav_table_size, desc_handle_srv.h_cpu, desc_handle_srv.h_gpu);
-
-							assert(result_alloc_desc_cbv && result_alloc_desc_srv);
-
+							DescriptorHandleSet desc_handle_cbv;
 							// 描画用HeapにDescriptorコピー.
 							{
 								const auto desc_stride = desc_alloc_interface.GetManager()->GetHandleIncrementSize();
@@ -1373,15 +1383,23 @@ namespace ngl
 									return ret;
 								};
 
-								const auto geom_data = blas->GetGeometryData(geom_i);
-								assert(geom_data.vertex_srv);
-								assert(geom_data.index_srv);
+								// 少なくとも1つは確保する.
+								const bool result_alloc_desc_srv = desc_alloc_interface.Allocate(std::max(l_srv_count, 1), desc_handle_srv.h_cpu, desc_handle_srv.h_gpu);
+								assert(result_alloc_desc_srv);
+								// 有効なViewをコピー.
+								for (int l_srv_i = 0; l_srv_i < l_srv_count; ++l_srv_i)
+								{
+									p_device->GetD3D12Device()->CopyDescriptorsSimple(1, func_get_offseted_desc_handle(desc_handle_srv.h_cpu, desc_stride * l_srv_i), l_srv_handles[l_srv_i], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+								}
 
-								p_device->GetD3D12Device()->CopyDescriptorsSimple(1, desc_handle_srv.h_cpu, geom_data.vertex_srv->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-								p_device->GetD3D12Device()->CopyDescriptorsSimple(1, func_get_offseted_desc_handle(desc_handle_srv.h_cpu, desc_stride * 1), geom_data.index_srv->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-							
-
-								// まだLocalにCBVは無い.
+								// 少なくとも1つは確保する.
+								const bool result_alloc_desc_cbv = desc_alloc_interface.Allocate(std::max(l_cbv_count, 1), desc_handle_cbv.h_cpu, desc_handle_cbv.h_gpu);
+								assert(result_alloc_desc_cbv);
+								// 有効なViewをコピー.
+								for (int l_cbv_i = 0; l_cbv_i < l_cbv_count; ++l_cbv_i)
+								{
+									p_device->GetD3D12Device()->CopyDescriptorsSimple(1, func_get_offseted_desc_handle(desc_handle_cbv.h_cpu, desc_stride * l_cbv_i), l_cbv_handles[l_cbv_i], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+								}
 							}
 
 							// 書き込み
