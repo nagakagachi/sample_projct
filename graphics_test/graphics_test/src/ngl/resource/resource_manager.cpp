@@ -37,15 +37,8 @@ namespace res
 		{
 			// Lock.
 			auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
-			for (auto& e : frame_render_update_list_)
-			{
-				if (e)
-				{
-					// 解放.
-					delete e;
-				}
-			}
-			frame_render_update_list_.clear();
+
+			frame_render_update_list_with_handle_.clear();
 		}
 
 		ReleaseCacheAll();
@@ -103,21 +96,20 @@ namespace res
 	{
 		// Lock.
 		auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
-
-		for (auto& e : frame_render_update_list_)
 		{
-			if (e)
+			for (auto& e : frame_render_update_list_with_handle_)
 			{
-				// RenderCommand.
-				(*e)(p_device, p_commandlist);
+				if (e)
+				{
+					// RenderCommand.
+					(*(e->p_res_))(p_device, p_commandlist);
 
-				// 解放.
-				delete e;
+					e.reset();// 参照リセット.
+				}
 			}
+			// 次フレーム用に空に.
+			frame_render_update_list_with_handle_.clear();
 		}
-
-		// 次フレーム用に空に.
-		frame_render_update_list_.clear();
 	}
 
 
@@ -125,21 +117,25 @@ namespace res
 	// Thread Safe.
 	ResourceHandle<gfx::ResMeshData> ResourceManager::LoadResMesh(rhi::DeviceDep* p_device, const char* filename)
 	{
+		// 返すResクラスの型を取得(e.g. ResMeshData).
+		using ResType = std::remove_const < std::remove_reference< decltype(*LoadResMesh({}, {})) > ::type > ::type;
+
+
 		// 登録済みか検索.
-		auto exist_handle = FindHandle(gfx::ResMeshData::k_resource_type_name, filename);
+		auto exist_handle = FindHandle(ResType::k_resource_type_name, filename);
 		if (exist_handle.get())
 		{
 			// あれば返却.
-			return ResourceHandle<gfx::ResMeshData>(exist_handle);
+			return ResourceHandle<ResType>(exist_handle);
 		}
 
 		// 存在しない場合は読み込み.
 
 		// 新規生成.
-		auto p_res = new gfx::ResMeshData();
+		auto p_res = new ResType();
 		res::ResoucePrivateAccess::SetResourceInfo(p_res, filename);
 		// Handle生成.
-		auto handle = ResourceHandle<gfx::ResMeshData>(p_res, &deleter_instance_);
+		auto handle = ResourceHandle(p_res, &deleter_instance_);
 		// 内部管理用RawHandle取得. handleの内部参照カウンタ共有.
 		auto raw_handle = ResoucePrivateAccess::GetRawHandle(handle);
 		// データベースに登録.
@@ -149,17 +145,11 @@ namespace res
 		// 実際にリソースロード.
 		assimp::LoadMeshData(*p_res, p_device, filename);
 
-		// リソースのRenderUpdater発行.
-		{
-			auto* renderupdater = new gfx::ResMeshDataRenderUpdater();
-			renderupdater->handle_ = handle;
-			renderupdater->p_res_ = p_res;
-			{
-				// 排他でRnderUpdateリストに登録.
-				auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
 
-				frame_render_update_list_.push_back(renderupdater);
-			}
+		// 新規リソースをRenderThread初期化リストへ登録.
+		{
+			auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
+			frame_render_update_list_with_handle_.push_back(raw_handle);
 		}
 
 		// 新規ハンドルを生成して返す.

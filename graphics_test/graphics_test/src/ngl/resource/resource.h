@@ -124,6 +124,17 @@ namespace res
 	};
 
 
+	// Resource派生クラスのRenderThread初期化処理インターフェース.
+	// 派生クラスは operator(rhi::DeviceDep*, rhi::GraphicsCommandListDep*) を実装する(MeshであればジオメトリバッファのCPUメモリからGPUメモリへのコピーコマンド発行等).
+	class IResourceRenderUpdater
+	{
+	public:
+		IResourceRenderUpdater() {}
+		virtual ~IResourceRenderUpdater() {}
+
+		virtual void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) = 0;
+	};
+
 
 	// Resource派生クラス用のクラススコープ内宣言用マクロ.
 #define NGL_RES_MEMBER_DECLARE(CLASS_NAME) \
@@ -133,7 +144,7 @@ namespace res
 	
 	// Resouce基底.
 	//	派生クラスはクラススコープで NGL_RES_MEMBER_DECLARE(クラス名) を記述すること.
-	class Resource : public NonCopyableTp<Resource>
+	class Resource : public NonCopyableTp<Resource>, public IResourceRenderUpdater
 	{
 	public:
 		static constexpr int k_resource_type_name_len = 64;
@@ -157,15 +168,6 @@ namespace res
 	};
 
 
-
-	class IResourceRenderUpdater
-	{
-	public:
-		IResourceRenderUpdater() {}
-		virtual ~IResourceRenderUpdater() {}
-
-		virtual void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) {}
-	};
 
 
 

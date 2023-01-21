@@ -163,23 +163,9 @@ namespace ngl
 				std::cout << "[ResMeshData] Destruct " << this << std::endl;
 			}
 
-			MeshData data_ = {};
-		};
-
-		class ResMeshDataRenderUpdater : public res::IResourceRenderUpdater
-		{
-		public:
-			ResMeshDataRenderUpdater()
-			{
-			}
-			~ResMeshDataRenderUpdater()
-			{
-			}
 			void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override;
 
-			ResMeshData* p_res_ = nullptr;
-			// 参照カウント用.
-			res::ResourceHandle<ResMeshData> handle_;
+			MeshData data_ = {};
 		};
 	}
 }

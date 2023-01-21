@@ -688,6 +688,7 @@ bool AppGame::Initialize()
 			}
 
 
+#if 0
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
@@ -695,20 +696,13 @@ bool AppGame::Initialize()
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
 				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(10, 30, 0));
 			}
+#else
 			{
-				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mesh_comp_array_.push_back(mc);
-
-				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
-				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(0, 30, 0));
+				// 即時破棄をしても内部でのRenderThread初期化処理リストでの参照保持等が正常に動作するか確認するため.
+				auto immediate_destroy_resmesh = ResourceMan.LoadResMesh(&device_, mesh_file_box);
+				immediate_destroy_resmesh = {};
 			}
-			{
-				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mesh_comp_array_.push_back(mc);
-
-				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
-				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(-10, 30, 0));
-			}
+#endif
 		}
 	}
 

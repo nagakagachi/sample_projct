@@ -82,8 +82,8 @@ namespace res
 		std::recursive_mutex	res_map_mutex_;
 
 
-		// ResourceのRenderUpdateリスト.
-		std::vector<IResourceRenderUpdater*> frame_render_update_list_;
+		// ResourceのRenderUpdateリスト(参照保持のためハンドル).
+		std::vector<detail::ResourceHolderHandle> frame_render_update_list_with_handle_;
 		// ResourceのRenderUpdateリストのMutex.
 		std::mutex	res_render_update_mutex_;
 

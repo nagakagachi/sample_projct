@@ -7,15 +7,11 @@ namespace ngl
 {
 namespace gfx
 {
-	
-	void ResMeshDataRenderUpdater::operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
+	void ResMeshData::operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
 	{
-		if (!p_res_)
-			return;
-
 		auto* p_d3d_commandlist = p_commandlist->GetD3D12GraphicsCommandList();
 
-		for (auto& e : p_res_->data_.shape_array_)
+		for (auto& e : this->data_.shape_array_)
 		{
 			e.index_.InitRender(p_device, p_commandlist);
 			e.position_.InitRender(p_device, p_commandlist);
@@ -31,6 +27,5 @@ namespace gfx
 				ve.InitRender(p_device, p_commandlist);
 		}
 	}
-
 }
 }
