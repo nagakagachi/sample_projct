@@ -8,9 +8,9 @@
 
 #include "ngl/rhi/rhi.h"
 
-#include "rhi.d3d12.h"
+#include "device.d3d12.h"
 #include "rhi_util.d3d12.h"
-#include "rhi_descriptor.d3d12.h"
+#include "descriptor.d3d12.h"
 
 
 namespace ngl

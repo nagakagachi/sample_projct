@@ -3,7 +3,7 @@
 
 
 // とりあえずD3D12用
-#include "ngl/rhi/d3d12/rhi.d3d12.h"
+#include "ngl/rhi/d3d12/device.d3d12.h"
 
 
 namespace ngl

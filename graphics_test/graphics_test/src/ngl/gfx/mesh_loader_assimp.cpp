@@ -6,8 +6,8 @@
 #include "ngl/math/math.h"
 
 // rhi
-#include "ngl/rhi/d3d12/rhi_resource.d3d12.h"
-#include "ngl/rhi/d3d12/rhi_resource_view.d3d12.h"
+#include "ngl/rhi/d3d12/resource.d3d12.h"
+#include "ngl/rhi/d3d12/resource_view.d3d12.h"
 
 
 // assimpテスト.

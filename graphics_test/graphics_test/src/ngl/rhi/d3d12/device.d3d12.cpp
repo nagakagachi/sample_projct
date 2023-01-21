@@ -1,6 +1,6 @@
 ﻿
-#include "rhi.d3d12.h"
-#include "rhi_command_list.d3d12.h"
+#include "device.d3d12.h"
+#include "command_list.d3d12.h"
 
 #include <array>
 #include <algorithm>

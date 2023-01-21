@@ -18,7 +18,7 @@
 
 #include "ngl/platform/win/window.win.h"
 
-#include "rhi_descriptor.d3d12.h"
+#include "descriptor.d3d12.h"
 
 /*
 	実装メモ

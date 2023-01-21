@@ -7,7 +7,7 @@
 
 #include "ngl/rhi/rhi.h"
 #include "rhi_util.d3d12.h"
-#include "rhi.d3d12.h"
+#include "device.d3d12.h"
 
 
 #include "ngl/util/types.h"

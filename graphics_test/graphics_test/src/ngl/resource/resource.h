@@ -7,8 +7,8 @@
 #include "ngl/text/hash_text.h"
 
 
-#include "ngl/rhi/d3d12/rhi.d3d12.h"
-#include "ngl/rhi/d3d12/rhi_command_list.d3d12.h"
+#include "ngl/rhi/d3d12/device.d3d12.h"
+#include "ngl/rhi/d3d12/command_list.d3d12.h"
 
 
 namespace ngl

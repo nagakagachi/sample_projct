@@ -1,7 +1,7 @@
 ﻿
-#include "rhi_resource.d3d12.h"
+#include "resource.d3d12.h"
 
-#include "rhi.d3d12.h"
+#include "device.d3d12.h"
 
 #include <array>
 #include <algorithm>

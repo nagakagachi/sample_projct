@@ -1,6 +1,6 @@
 ﻿
 
-#include "rhi_descriptor.d3d12.h"
+#include "descriptor.d3d12.h"
 
 #include <array>
 #include <algorithm>
