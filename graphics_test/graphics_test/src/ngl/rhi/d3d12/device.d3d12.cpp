@@ -1881,7 +1881,6 @@ namespace ngl
 			view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
 		}
 
-
 		ID3D12PipelineState* GraphicsPipelineStateDep::GetD3D12PipelineState()
 		{
 			return pso_;
@@ -1895,6 +1894,84 @@ namespace ngl
 			return pso_;
 		}
 		const ID3D12RootSignature* GraphicsPipelineStateDep::GetD3D12RootSignature() const
+		{
+			return view_layout_.GetD3D12RootSignature();
+		}
+
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		ComputePipelineStateDep::ComputePipelineStateDep()
+		{
+		}
+		ComputePipelineStateDep::~ComputePipelineStateDep()
+		{
+			Finalize();
+		}
+
+		bool ComputePipelineStateDep::Initialize(DeviceDep* p_device, const Desc& desc)
+		{
+			if (!p_device)
+				return false;
+
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
+			if (desc.cs)
+			{
+				pso_desc.CS.BytecodeLength = desc.cs->GetShaderBinarySize();
+				pso_desc.CS.pShaderBytecode = desc.cs->GetShaderBinaryPtr();
+			}
+
+			pso_desc.NodeMask = desc.node_mask;
+
+			pso_desc.CachedPSO.CachedBlobSizeInBytes = 0;
+			pso_desc.CachedPSO.pCachedBlob = nullptr;
+
+			pso_desc.Flags = D3D12_PIPELINE_STATE_FLAGS::D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			// RootSignature
+			{
+				PipelineResourceViewLayoutDep::Desc root_signature_desc = {};
+				root_signature_desc.cs = desc.cs;
+				view_layout_.Initialize(p_device, root_signature_desc);
+
+				// RootSignature設定
+				pso_desc.pRootSignature = view_layout_.GetD3D12RootSignature();
+			}
+
+			if (FAILED(p_device->GetD3D12Device()->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))
+			{
+				std::cout << "[ERROR] CreateComputePipelineState" << std::endl;
+				return false;
+			}
+
+			return true;
+		}
+		void ComputePipelineStateDep::Finalize()
+		{
+			pso_ = nullptr;
+			view_layout_.Finalize();
+		}
+
+		// 名前でDescriptorSetへハンドル設定
+		void ComputePipelineStateDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
+		{
+			view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
+		}
+
+		ID3D12PipelineState* ComputePipelineStateDep::GetD3D12PipelineState()
+		{
+			return pso_;
+		}
+		ID3D12RootSignature* ComputePipelineStateDep::GetD3D12RootSignature()
+		{
+			return view_layout_.GetD3D12RootSignature();
+		}
+		const ID3D12PipelineState* ComputePipelineStateDep::GetD3D12PipelineState() const
+		{
+			return pso_;
+		}
+		const ID3D12RootSignature* ComputePipelineStateDep::GetD3D12RootSignature() const
 		{
 			return view_layout_.GetD3D12RootSignature();
 		}

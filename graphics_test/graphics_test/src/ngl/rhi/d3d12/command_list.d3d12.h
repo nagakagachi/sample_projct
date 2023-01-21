@@ -59,6 +59,9 @@ namespace ngl
 			void SetPipelineState(GraphicsPipelineStateDep* p_pso);
 			void SetDescriptorSet(const GraphicsPipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set);
 
+			void SetPipelineState(ComputePipelineStateDep* p_pso);
+			void SetDescriptorSet(const ComputePipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set);
+
 			void SetPrimitiveTopology(PrimitiveTopology topology);
 			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views);
 			void SetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW* p_view);
@@ -66,7 +69,7 @@ namespace ngl
 			void DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance);
 			void DrawIndexedInstanced(u32 index_count_per_instance, u32 instance_count, u32 start_index_location, s32  base_vertex_location, u32 start_instance_location);
 
-
+			void Dispatch(u32 x, u32 y, u32 z);
 
 			void ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4]);
 			void ClearDepthTarget(const DepthStencilViewDep* p_dsv, float depth, uint8_t stencil, bool clearDepth, bool clearStencil);
@@ -77,6 +80,7 @@ namespace ngl
 			void ResourceBarrier(BufferDep* p_buffer, ResourceState prev, ResourceState next);
 			// UAV同期Barrier.
 			void ResourceUavBarrier(BufferDep* p_buffer);
+
 
 		public:
 			FrameCommandListDynamicDescriptorAllocatorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }

@@ -96,15 +96,9 @@ private:
 	ngl::rhi::ResourceState						tex_depth_state_;
 
 
-	bool										tex_rt_rendered_ = false;
-	ngl::rhi::TextureDep						tex_rt_;
-	ngl::rhi::RenderTargetViewDep				tex_rt_rtv_;
-	ngl::rhi::ShaderResourceViewDep				tex_rt_srv_;
-	ngl::rhi::ResourceState						tex_rt_state_;
-
-	ngl::rhi::TextureDep						tex_ua_;
-	ngl::rhi::UnorderedAccessViewDep				tex_ua_uav_;
-	ngl::rhi::ResourceState						tex_ua_state_;
+	ngl::rhi::TextureDep						tex_rw_;
+	ngl::rhi::ShaderResourceViewDep				tex_rw_srv_;
+	ngl::rhi::UnorderedAccessViewDep			tex_rw_uav_;
 
 
 	ngl::rhi::ShaderDep							sample_vs_;
@@ -128,6 +122,10 @@ private:
 	ngl::rhi::GraphicsPipelineStateDep			sample_fullscr_proc_pso_;
 
 	ngl::rhi::SamplerDep						samp_;
+
+
+	ngl::rhi::ShaderDep							sample_cs_;
+	ngl::rhi::ComputePipelineStateDep			sample_cs_pso_;
 
 
 	ngl::gfx::RaytraceStructureManager			rt_st_;
@@ -320,56 +318,31 @@ bool AppGame::Initialize()
 		tex_depth_state_ = desc.initial_state;
 	}
 
-	// RenderTarget Texture.
-	{
-		ngl::rhi::TextureDep::Desc desc = {};
-		desc.bind_flag = ngl::rhi::ResourceBindFlag::RenderTarget | ngl::rhi::ResourceBindFlag::ShaderResource;
-		desc.format = ngl::rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
-		desc.type = ngl::rhi::TextureType::Texture2D;
-		desc.width = 256;
-		desc.height = 256;
-
-		if (!tex_rt_.Initialize(&device_, desc))
-		{
-			std::cout << "[ERROR] Create RenderTarget Texture Initialize" << std::endl;
-			assert(false);
-		}
-		if (!tex_rt_srv_.InitializeAsTexture(&device_, &tex_rt_, 0, 1, 0, 1))
-		{
-			std::cout << "[ERROR] Create Srv Initialize" << std::endl;
-			assert(false);
-		}
-		if (!tex_rt_rtv_.Initialize(&device_, &tex_rt_, 0, 0, 1))
-		{
-			std::cout << "[ERROR] Create Rtv Initialize" << std::endl;
-			assert(false);
-		}
-
-		tex_rt_state_ = desc.initial_state;
-	}
-
 	// UnorderedAccess Texture.
 	{
 		ngl::rhi::TextureDep::Desc desc = {};
 		desc.bind_flag = ngl::rhi::ResourceBindFlag::UnorderedAccess | ngl::rhi::ResourceBindFlag::ShaderResource;
 		desc.format = ngl::rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
 		desc.type = ngl::rhi::TextureType::Texture2D;
-		desc.width = 256;
-		desc.height = 256;
+		desc.width = scree_w;
+		desc.height = scree_h;
+		desc.initial_state = ngl::rhi::ResourceState::ShaderRead;
 
-		if (!tex_ua_.Initialize(&device_, desc))
+		if (!tex_rw_.Initialize(&device_, desc))
 		{
-			std::cout << "[ERROR] Create RenderTarget Texture Initialize" << std::endl;
+			std::cout << "[ERROR] Create RW Texture Initialize" << std::endl;
 			assert(false);
 		}
-
-		if (!tex_ua_uav_.Initialize(&device_, &tex_ua_, 0, 0, 1))
+		if (!tex_rw_srv_.InitializeAsTexture(&device_, &tex_rw_, 0, 1, 0, 1))
 		{
-			std::cout << "[ERROR] Create Rtv Initialize" << std::endl;
+			std::cout << "[ERROR] Create RW SRV" << std::endl;
 			assert(false);
 		}
-
-		tex_ua_state_ = desc.initial_state;
+		if (!tex_rw_uav_.Initialize(&device_, &tex_rw_, 0, 0, 1))
+		{
+			std::cout << "[ERROR] Create RW UAV" << std::endl;
+			assert(false);
+		}
 	}
 
 	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};
@@ -503,6 +476,30 @@ bool AppGame::Initialize()
 		{
 			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
 		}
+	}
+
+	{
+		// HLSLからコンパイルして初期化.
+		
+		ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
+		shader_desc.shader_file_path = "./src/ngl/data/shader/sample_cs.hlsl";
+		shader_desc.entry_point_name = "main_cs";
+		shader_desc.stage = ngl::rhi::ShaderStage::Compute;
+		shader_desc.shader_model_version = "6_0";
+
+		if (!sample_cs_.Initialize(&device_, shader_desc))
+		{
+			std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
+		}
+
+		ngl::rhi::ShaderReflectionDep reflect00;
+		reflect00.Initialize(&device_, &sample_cs_);
+
+
+		ngl::rhi::ComputePipelineStateDep::Desc cs_pso_desc = {};
+		cs_pso_desc.cs = &sample_cs_;
+		sample_cs_pso_.Initialize(&device_, cs_pso_desc);
+
 	}
 
 	{
@@ -976,52 +973,6 @@ bool AppGame::Execute()
 			// CommandList に最初にResourceManagerの処理を積み込み.
 			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, &gfx_command_list_);
 
-
-			// RenderTargetとして描画したTextureをSrvとして利用するテスト.
-			// 初回に一度だけ描画する.
-			if(!tex_rt_rendered_)
-			{
-				tex_rt_rendered_ = true;
-
-				// Rtvへ遷移.
-				gfx_command_list_.ResourceBarrier(&tex_rt_, tex_rt_state_, ngl::rhi::ResourceState::RenderTarget);
-				tex_rt_state_ = ngl::rhi::ResourceState::RenderTarget;
-
-				{
-					// ターゲットテクスチャへフルスクリーン描画.
-					D3D12_VIEWPORT viewport;
-					viewport.MinDepth = 0.0f;
-					viewport.MaxDepth = 1.0f;
-					viewport.TopLeftX = 0.0f;
-					viewport.TopLeftY = 0.0f;
-					viewport.Width = static_cast<float>(tex_rt_.GetWidth());
-					viewport.Height = static_cast<float>(tex_rt_.GetHeight());
-					gfx_command_list_.SetViewports(1, &viewport);
-
-					D3D12_RECT scissor_rect;
-					scissor_rect.left = 0;
-					scissor_rect.top = 0;
-					scissor_rect.right = tex_rt_.GetWidth();
-					scissor_rect.bottom = tex_rt_.GetHeight();
-					gfx_command_list_.SetScissor(1, &scissor_rect);
-
-
-					const auto* p_rt = &tex_rt_rtv_;
-					gfx_command_list_.SetRenderTargets(&p_rt, 1, nullptr);
-
-					gfx_command_list_.SetPipelineState(&sample_fullscr_proc_pso_);
-
-					gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
-					// 計算でTriangleを生成するVSでDraw.
-					gfx_command_list_.DrawInstanced(3, 1, 0, 0);
-				}
-
-				// Srvへ遷移.
-				gfx_command_list_.ResourceBarrier(&tex_rt_, tex_rt_state_, ngl::rhi::ResourceState::ShaderRead);
-				tex_rt_state_ = ngl::rhi::ResourceState::ShaderRead;
-			}
-
-
 			// Raytrace Structure ビルド.
 			{
 				rt_st_.UpdateOnRender(&device_, &gfx_command_list_, frame_scene);
@@ -1031,6 +982,52 @@ bool AppGame::Execute()
 			// Raytrace Dispatch.
 			{
 				rt_st_.DispatchRay(&gfx_command_list_);
+			}
+
+			// Compute.
+			{
+				struct CbSampleCs
+				{
+					float cb_time;
+				};
+
+
+				auto cb_cs = ngl::rhi::RhiRef(new ngl::rhi::BufferDep);
+				auto cbv_cs = ngl::rhi::RhiRef(new ngl::rhi::ConstantBufferViewDep);
+				{
+					ngl::rhi::BufferDep::Desc cb_cs_desc = {};
+					cb_cs_desc.SetupAsConstantBuffer(sizeof(CbSampleCs));
+					cb_cs->Initialize(&device_, cb_cs_desc);
+
+					if (auto* mapped = cb_cs->MapAs<CbSampleCs>())
+					{
+						mapped->cb_time = app_sec_;
+						cb_cs->Unmap();
+					}
+
+					ngl::rhi::ConstantBufferViewDep::Desc cbv_cs_desc = {};
+					cbv_cs->Initialize(cb_cs.Get(), cbv_cs_desc);
+				}
+
+
+				// to SRV.
+				gfx_command_list_.ResourceBarrier(&tex_rw_, ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::UnorderedAccess);
+
+
+				ngl::rhi::DescriptorSetDep desc_set = {};
+				sample_cs_pso_.SetDescriptorHandle(&desc_set, "out_uav", tex_rw_uav_.GetView().cpu_handle);
+				sample_cs_pso_.SetDescriptorHandle(&desc_set, "CbSampleCs", cbv_cs->GetView().cpu_handle);
+
+
+				gfx_command_list_.SetPipelineState(&sample_cs_pso_);
+				gfx_command_list_.SetDescriptorSet(&sample_cs_pso_, &desc_set);
+
+				constexpr ngl::u32 k_num_thread = 8;
+				gfx_command_list_.Dispatch((tex_rw_.GetWidth() + (k_num_thread -1))/ k_num_thread, (tex_rw_.GetHeight() + (k_num_thread - 1)) / k_num_thread, 1);
+
+
+				// to UAV.
+				gfx_command_list_.ResourceBarrier(&tex_rw_, ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
 			}
 
 			{
@@ -1086,7 +1083,8 @@ bool AppGame::Execute()
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
 
 						// Raytraceの出力バッファをシェーダリソースに利用するテスト.
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs", rt_st_.GetResultSrv()->GetView().cpu_handle);
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs0", rt_st_.GetResultSrv()->GetView().cpu_handle);
+						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs1", tex_rw_srv_.GetView().cpu_handle);
 
 
 						sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);

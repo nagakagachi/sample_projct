@@ -201,6 +201,7 @@ namespace ngl
 		{
 			p_command_list_->IASetIndexBuffer(p_view);
 		}
+		
 		void GraphicsCommandListDep::DrawInstanced(u32 num_vtx, u32 num_instance, u32 offset_vtx, u32 offset_instance)
 		{
 			p_command_list_->DrawInstanced(num_vtx, num_instance, offset_vtx, offset_instance);
@@ -209,6 +210,11 @@ namespace ngl
 		{
 			p_command_list_->DrawIndexedInstanced(index_count_per_instance, instance_count, start_index_location, base_vertex_location, start_instance_location);
 		}
+		void GraphicsCommandListDep::Dispatch(u32 x, u32 y, u32 z)
+		{
+			p_command_list_->Dispatch(x, y, z);
+		}
+
 		void GraphicsCommandListDep::SetPipelineState(GraphicsPipelineStateDep* pso)
 		{
 			p_command_list_->SetPipelineState(pso->GetD3D12PipelineState());
@@ -221,10 +227,7 @@ namespace ngl
 
 			// cbv, srv, uav用デフォルトDescriptor取得.
 			auto def_descriptor = parent_device_->GetPersistentDescriptorAllocator()->GetDefaultPersistentDescriptor();
-			
-			auto resource_layout = p_pso->GetPipelineResourceViewLayout();
-			auto&& resource_table =  resource_layout->GetResourceTable();
-
+			auto&& resource_table = p_pso->GetPipelineResourceViewLayout()->GetResourceTable();
 
 			struct DescriptorSetInfo
 			{
@@ -316,7 +319,6 @@ namespace ngl
 				}
 			}
 
-
 			// CBV, SRV, UAVのコミット.
 			{
 				const auto cvbsrvuav_desc_heap_type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
@@ -348,6 +350,7 @@ namespace ngl
 				SetViewDescriptor(p_desc_set->GetVsCbv().max_use_register_index + 1, p_desc_set->GetVsCbv().cpu_handles, resource_table.vs_cbv_table);
 				SetViewDescriptor(p_desc_set->GetVsSrv().max_use_register_index + 1, p_desc_set->GetVsSrv().cpu_handles, resource_table.vs_srv_table);
 
+				// 現状はUAVはPSのみ.(CSは別関数)
 				SetViewDescriptor(p_desc_set->GetPsCbv().max_use_register_index + 1, p_desc_set->GetPsCbv().cpu_handles, resource_table.ps_cbv_table);
 				SetViewDescriptor(p_desc_set->GetPsSrv().max_use_register_index + 1, p_desc_set->GetPsSrv().cpu_handles, resource_table.ps_srv_table);
 				SetViewDescriptor(p_desc_set->GetPsUav().max_use_register_index + 1, p_desc_set->GetPsUav().cpu_handles, resource_table.ps_uav_table);
@@ -360,6 +363,139 @@ namespace ngl
 
 				SetViewDescriptor(p_desc_set->GetDsCbv().max_use_register_index + 1, p_desc_set->GetDsCbv().cpu_handles, resource_table.ds_cbv_table);
 				SetViewDescriptor(p_desc_set->GetDsSrv().max_use_register_index + 1, p_desc_set->GetDsSrv().cpu_handles, resource_table.ds_srv_table);
+			}
+		}
+		void GraphicsCommandListDep::SetPipelineState(ComputePipelineStateDep* pso)
+		{
+			p_command_list_->SetPipelineState(pso->GetD3D12PipelineState());
+			p_command_list_->SetComputeRootSignature(pso->GetD3D12RootSignature());
+		}
+		void GraphicsCommandListDep::SetDescriptorSet(const ComputePipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set)
+		{
+			assert(p_pso);
+			assert(p_desc_set);
+
+			// cbv, srv, uav用デフォルトDescriptor取得.
+			auto def_descriptor = parent_device_->GetPersistentDescriptorAllocator()->GetDefaultPersistentDescriptor();
+			auto&& resource_table = p_pso->GetPipelineResourceViewLayout()->GetResourceTable();
+
+			struct DescriptorSetInfo
+			{
+				DescriptorSetInfo(int max_register, const D3D12_CPU_DESCRIPTOR_HANDLE* p_handle, s8 table_index)
+					: max_register_(max_register)
+					, p_src_handle_(p_handle)
+					, table_index_(table_index)
+				{
+				}
+				int max_register_;
+				const D3D12_CPU_DESCRIPTOR_HANDLE* p_src_handle_;
+				int table_index_;
+			};
+			const DescriptorSetInfo sampler_set_info[] =
+			{
+				DescriptorSetInfo(p_desc_set->GetCsSampler().max_use_register_index, p_desc_set->GetCsSampler().cpu_handles, resource_table.cs_sampler_table),
+			};
+
+			// Sampler用のFrameDescriptorHeapに必要分確保するため総数計算.
+			auto total_samp_count = 0;
+			for (const auto& e : sampler_set_info)
+				total_samp_count += e.max_register_ + 1;
+
+			// Sampler用のFrameDescriptor確保. ここでPageが足りなければ新規Pageが確保されてHeapが切り替わるので, SetDescriptorHeaps() の前に実行する必要がある.
+			const auto sampler_desc_heap_type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+			D3D12_CPU_DESCRIPTOR_HANDLE cpu_sampler_handle_start;
+			D3D12_GPU_DESCRIPTOR_HANDLE gpu_sampler_handle_start;
+			// Heap確保. 現在のPageで必要分確保できなければ新規Page(Heap)に自動で切り替わる.
+			frame_desc_page_interface_for_sampler_.Allocate(total_samp_count, cpu_sampler_handle_start, gpu_sampler_handle_start);
+			const u64 sampler_handle_increment_size = frame_desc_page_interface_for_sampler_.GetPool()->GetHandleIncrementSize(sampler_desc_heap_type);
+
+
+			// DescriptorHeapの設定.
+			// Cbv Srv Uav用とSampler用.
+			// これ以前にFrameDescriptorから確保して必要ならばHeap切り替えが完了した後にCommandListにHeapを設定する.
+			// CommandListにHeapを設定した後にそのHeap上のDescriptorをDescriptorTableに設定する必要がある(設定されているHeapと異なるHeap上のDescriptorをセットするとD3Dエラーとなる.)
+			// CbvSrvUavのHeapは巨大な単一Heap上で確保するためアプリケーション実行中に変化しないのでSamplerとは異なりいつ設定しても良い.
+			ID3D12DescriptorHeap* heaps[] =
+			{
+				frame_desc_interface_.GetManager()->GetD3D12DescriptorHeap(),
+				frame_desc_page_interface_for_sampler_.GetD3D12DescriptorHeap()
+			};
+			p_command_list_->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
+
+
+			// Samplerのコミット.
+			{
+				// 各ステージのSamplerを設定.
+				D3D12_CPU_DESCRIPTOR_HANDLE tmp[k_sampler_table_size];
+				auto SetSamplerDescriptor = [&](
+					D3D12_DESCRIPTOR_HEAP_TYPE heap_type,
+					D3D12_CPU_DESCRIPTOR_HANDLE dst_cpu_handle_start,
+					D3D12_GPU_DESCRIPTOR_HANDLE dst_gpu_handle_start,
+					u32 src_count, const D3D12_CPU_DESCRIPTOR_HANDLE* src_handle,
+					u8 table_index)
+				{
+					if (0 > table_index || 0 >= src_count)
+						return;
+
+					for (u32 i = 0; i < src_count; i++)
+					{
+						tmp[i] = (src_handle[i].ptr > 0) ? src_handle[i] : def_descriptor.cpu_handle;
+					}
+
+					// FrameDescriptorHeapから連続したDescriptorを確保してコピー,CommandListへセットする.
+					parent_device_->GetD3D12Device()->CopyDescriptors(
+						1, &dst_cpu_handle_start, &src_count,
+						src_count, tmp, nullptr,
+						heap_type);
+					p_command_list_->SetComputeRootDescriptorTable(table_index, dst_gpu_handle_start);
+				};
+
+				{
+					for (const auto& e : sampler_set_info)
+					{
+						const auto copy_count = e.max_register_ + 1;
+						// 指定のFrameDescriptor開始位置から始まる範囲にDescriptorをコピーしてCommandListに設定.
+						SetSamplerDescriptor(sampler_desc_heap_type, cpu_sampler_handle_start, gpu_sampler_handle_start, copy_count, e.p_src_handle_, e.table_index_);
+
+						// FrameDescriptor上のポインタを進行.
+						const auto offset_size = sampler_handle_increment_size * static_cast<u64>(copy_count);
+						cpu_sampler_handle_start.ptr += offset_size;
+						gpu_sampler_handle_start.ptr += offset_size;
+					}
+				}
+			}
+
+			// CBV, SRV, UAVのコミット.
+			{
+				const auto cvbsrvuav_desc_heap_type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+				D3D12_CPU_DESCRIPTOR_HANDLE tmp[k_srv_table_size];
+				auto SetViewDescriptor = [&](u32 count, const D3D12_CPU_DESCRIPTOR_HANDLE* handles, u8 table_index)
+				{
+					if (0 > table_index || 0 >= count)
+						return;
+
+					for (u32 i = 0; i < count; i++)
+					{
+						tmp[i] = (handles[i].ptr > 0) ? handles[i] : def_descriptor.cpu_handle;
+					}
+
+					D3D12_CPU_DESCRIPTOR_HANDLE dst_cpu;
+					D3D12_GPU_DESCRIPTOR_HANDLE dst_gpu;
+					frame_desc_interface_.Allocate(count, dst_cpu, dst_gpu);
+
+					// FrameDescriptorHeapから連続したDescriptorを確保してコピー,CommandListへセットする.
+					parent_device_->GetD3D12Device()->CopyDescriptors(
+						1, &dst_cpu, &count,
+						count, tmp, nullptr,
+						cvbsrvuav_desc_heap_type);
+					p_command_list_->SetComputeRootDescriptorTable(table_index, dst_gpu);
+				};
+				// 各ステージの各リソースタイプ別に連続Descriptorを確保,コピーしてテーブルにをセットしていく
+				// 各ステージ毎各リソースタイプ毎に0番から設定された最大レジスタ番号までの範囲でFrameDescriptorから確保してコピー,CommandListへ設定する.
+				SetViewDescriptor(p_desc_set->GetCsCbv().max_use_register_index + 1, p_desc_set->GetCsCbv().cpu_handles, resource_table.cs_cbv_table);
+				SetViewDescriptor(p_desc_set->GetCsSrv().max_use_register_index + 1, p_desc_set->GetCsSrv().cpu_handles, resource_table.cs_srv_table);
+				SetViewDescriptor(p_desc_set->GetCsUav().max_use_register_index + 1, p_desc_set->GetCsUav().cpu_handles, resource_table.cs_uav_table);
 			}
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------

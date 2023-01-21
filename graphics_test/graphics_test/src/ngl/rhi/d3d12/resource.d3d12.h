@@ -30,6 +30,14 @@ namespace ngl
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
 				ResourceHeapType	heap_type = ResourceHeapType::Default;
 				ResourceState		initial_state = ResourceState::General;
+
+				void SetupAsConstantBuffer(ngl::u32 size) 
+				{
+					heap_type = ngl::rhi::ResourceHeapType::Upload;
+					bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
+					element_byte_size = size;
+					element_count = 1;
+				}
 			};
 
 			BufferDep();
@@ -39,6 +47,12 @@ namespace ngl
 			void Finalize();
 
 			void* Map();
+
+			template<typename T>
+			T* MapAs() {
+				return (T*)Map();
+			}
+
 			void Unmap();
 
 			const Desc& GetDesc() const { return desc_; }

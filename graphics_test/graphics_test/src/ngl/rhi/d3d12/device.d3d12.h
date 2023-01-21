@@ -77,6 +77,8 @@ namespace ngl
 
 			DeviceDep* GetParentDevice();
 			const DeviceDep* GetParentDevice() const;
+
+		protected:
 			void InitializeRhiObject(DeviceDep* p_device);
 
 		protected:
@@ -526,7 +528,7 @@ namespace ngl
 			ResourceTable					resource_table_;
 		};
 
-		// パイプラインステート.
+		// パイプラインステート Graphics.
 		class GraphicsPipelineStateDep : public RhiObjectBase
 		{
 		public:
@@ -556,6 +558,41 @@ namespace ngl
 
 			GraphicsPipelineStateDep();
 			~GraphicsPipelineStateDep();
+
+			bool Initialize(DeviceDep* p_device, const Desc& desc);
+			void Finalize();
+
+			const PipelineResourceViewLayoutDep* GetPipelineResourceViewLayout() const
+			{
+				return &view_layout_;
+			}
+
+			// 名前でDescriptorSetへハンドル設定
+			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
+
+			ID3D12PipelineState* GetD3D12PipelineState();
+			ID3D12RootSignature* GetD3D12RootSignature();
+			const ID3D12PipelineState* GetD3D12PipelineState() const;
+			const ID3D12RootSignature* GetD3D12RootSignature() const;
+		private:
+			CComPtr<ID3D12PipelineState>			pso_;
+			PipelineResourceViewLayoutDep			view_layout_;
+		};
+
+
+		// パイプラインステート Compute.
+		class ComputePipelineStateDep : public RhiObjectBase
+		{
+		public:
+			struct Desc
+			{
+				ShaderDep*	cs = nullptr;
+				u32			node_mask = 0;
+			};
+
+
+			ComputePipelineStateDep();
+			~ComputePipelineStateDep();
 
 			bool Initialize(DeviceDep* p_device, const Desc& desc);
 			void Finalize();
