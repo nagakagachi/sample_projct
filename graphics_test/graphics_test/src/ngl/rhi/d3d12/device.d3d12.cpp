@@ -366,6 +366,10 @@ namespace ngl
 				}
 			}
 
+			desc_ = desc;
+			width_ = obj_desc.Width;
+			height_ = obj_desc.Height;
+
 			return true;
 		}
 		void SwapChainDep::Finalize()

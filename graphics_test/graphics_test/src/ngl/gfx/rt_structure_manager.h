@@ -354,7 +354,7 @@ namespace ngl
 			// TLAS他のリビルド. 破棄バッファリングの関係でRenderThread実行を想定.
 			void UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene);
 
-			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up);
+			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio);
 
 			const rhi::ShaderResourceViewDep* GetResultSrv() const
 			{
@@ -403,6 +403,9 @@ namespace ngl
 			math::Vec3 camera_pos_ = {};
 			math::Vec3 camera_dir_ = {};
 			math::Vec3 camera_up_ = {};
+
+			float fov_y_radian_ = math::Deg2Rad(60.0f);
+			float aspect_ratio_ = 16.0f / 9.0f;
 		};
 
 	}

@@ -14,23 +14,10 @@
 #include "ngl/rhi/rhi_object_garbage_collect.h"
 
 #include "rhi_util.d3d12.h"
-
+#include "descriptor.d3d12.h"
 
 #include "ngl/platform/win/window.win.h"
 
-#include "descriptor.d3d12.h"
-
-/*
-	実装メモ
-
-		DeviceDep
-			各種リソース用Viewを作成するDescriptorHeapを保持(スレッドセーフに注意)
-				CBV SRV UAV共用のHeap
-				RTV用のHeap
-				DSV用のHeap
-				Sampler用のHeap(SamplerはD3D的に上限が低いのでキャッシュして使い回す対応が必要)
-
-*/
 
 namespace ngl
 {
@@ -245,11 +232,20 @@ namespace ngl
 
 			unsigned int GetCurrentBufferIndex() const;
 
+			const Desc& GetDesc() const { return desc_; }
+			uint32_t GetWidth() const { return width_; }
+			uint32_t GetHeight() const { return height_; }
+
+		public:
 			DXGI_SWAPCHAIN_TYPE* GetDxgiSwapChain();
 			unsigned int NumResource() const;
 			ID3D12Resource* GetD3D12Resource(unsigned int index);
 
 		private:
+			Desc	desc_ = {};
+			uint32_t width_ = 0;
+			uint32_t height_ = 0;
+
 			CComPtr<DXGI_SWAPCHAIN_TYPE> p_swapchain_;
 
 			CComPtr<ID3D12Resource>* p_resources_ = nullptr;

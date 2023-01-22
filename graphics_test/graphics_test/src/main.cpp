@@ -71,6 +71,7 @@ private:
 
 	ngl::math::Vec3		camera_pos_ = {0.0f, 2.0f, -1.0f};
 	ngl::math::Mat33	camera_pose_ = ngl::math::Mat33::Identity();
+	float				camera_fov_y = ngl::math::Deg2Rad(60.0f);
 
 
 	ngl::rhi::DeviceDep							device_;
@@ -677,9 +678,6 @@ bool AppGame::Initialize()
 
 				mc->transform_ = ngl::math::Mat34(tr);
 
-				mc->test_render_info_ = (std::rand()&0x01);// 適当に設定.
-
-
 				// 移動テスト用に追加.
 				test_move_mesh_comp_array_.push_back(mc.get());
 			}
@@ -927,7 +925,7 @@ bool AppGame::Execute()
 	}
 
 	// カメラ設定.
-	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1());
+	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, (float)swapchain_.GetWidth()/swapchain_.GetHeight());
 
 
 	// RhiRefによるガベコレテスト.

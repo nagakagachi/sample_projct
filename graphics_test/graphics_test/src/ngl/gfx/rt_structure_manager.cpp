@@ -1630,7 +1630,7 @@ namespace ngl
 				scene_inst_transform_array.push_back(e->transform_);
 				scene_inst_blas_id_array.push_back(scene_inst_mesh_id_array[i]);
 
-				int hitgroup_id = (0 == e->test_render_info_) ? 0 : 1;
+				int hitgroup_id = 0;
 				scene_inst_hitgroup_id_array.push_back(hitgroup_id);
 			}
 
@@ -1689,33 +1689,23 @@ namespace ngl
 				}
 			}
 
-#if 0
-			static float test_view_rot_radian = 0.0f;
-			test_view_rot_radian += 2.0f * math::k_pi_f / 600.0f;
-			if (2.0f * math::k_pi_f < test_view_rot_radian)
-			{
-				test_view_rot_radian -= 2.0f * math::k_pi_f;
-			}
-			float test_view_pos_y = 2.2f;
-			
-			math::Mat34 view_mat = math::CalcViewMatrix(math::Vec3(0, test_view_pos_y, 0.0f), math::Vec3(sin(test_view_rot_radian), 0, std::cosf(test_view_rot_radian)), math::Vec3(0, 1, 0));
-#else
 			math::Mat34 view_mat = math::CalcViewMatrix(camera_pos_, camera_dir_, camera_up_);
-#endif
-			const float fov_y = math::Deg2Rad(50.0f);
+
+			const float fov_y = fov_y_radian_;;
+			const float aspect_ratio = aspect_ratio_;
 			const float near_z = 0.1f;
 			const float far_z = 10000.0f;
 #if 1
 			// Infinite Far Reverse Perspective
-			math::Mat44 proj_mat = math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, 16.0f / 9.0f, 0.1f);
+			math::Mat44 proj_mat = math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, aspect_ratio, 0.1f);
 			math::Vec4 ndc_z_to_view_z_coef = math::CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(near_z);
 #elif 0
 			// Reverse Perspective
-			math::Mat44 proj_mat = math::CalcReversePerspectiveMatrix(fov_y, 16.0f / 9.0f, 0.1f, far_z);
+			math::Mat44 proj_mat = math::CalcReversePerspectiveMatrix(fov_y, aspect_ratio, 0.1f, far_z);
 			math::Vec4 ndc_z_to_view_z_coef = math::CalcViewDepthReconstructCoefForReversePerspective(near_z, far_z);
 #else
 			// 標準Perspective
-			math::Mat44 proj_mat = math::CalcStandardPerspectiveMatrix(fov_y, 16.0f / 9.0f, 0.1f, far_z);
+			math::Mat44 proj_mat = math::CalcStandardPerspectiveMatrix(fov_y, aspect_ratio, 0.1f, far_z);
 			math::Vec4 ndc_z_to_view_z_coef = math::CalcViewDepthReconstructCoefForStandardPerspective(near_z, far_z);
 #endif
 			// 定数バッファ更新.
@@ -1919,11 +1909,14 @@ namespace ngl
 			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}
 
-		void  RaytraceStructureManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up)
+		void  RaytraceStructureManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio)
 		{
 			camera_pos_ = position;
 			camera_dir_ = dir;
 			camera_up_ = up;
+
+			fov_y_radian_ = fov_y_radian;
+			aspect_ratio_ = aspect_ratio;
 		}
 
 	}
