@@ -1,10 +1,38 @@
 ﻿
 #include "rhi_object_garbage_collect.h"
 
+#include "d3d12/device.d3d12.h"
+
 namespace ngl
 {
 namespace rhi
 {
+
+
+	// -------------------------------------------------------------------------------------------------------------------------------------------------
+	IDevice* RhiObjectBase::GetParentDeviceInreface()
+	{
+		return p_parent_device_;
+	}
+	const IDevice* RhiObjectBase::GetParentDeviceInreface() const
+	{
+		return p_parent_device_;
+	}
+	DeviceDep* RhiObjectBase::GetParentDevice()
+	{
+		return p_parent_device_;
+	}
+	const DeviceDep* RhiObjectBase::GetParentDevice() const
+	{
+		return p_parent_device_;
+	}
+	void RhiObjectBase::InitializeRhiObject(DeviceDep* p_device)
+	{
+		p_parent_device_ = p_device;
+	}
+	// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 	GabageCollector::GabageCollector()
 	{
 	}

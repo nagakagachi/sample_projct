@@ -9,6 +9,7 @@
 #include "ngl/rhi/rhi.h"
 
 #include "device.d3d12.h"
+#include "shader.d3d12.h"
 #include "rhi_util.d3d12.h"
 #include "descriptor.d3d12.h"
 

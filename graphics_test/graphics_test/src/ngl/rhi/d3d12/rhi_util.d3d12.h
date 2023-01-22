@@ -24,39 +24,6 @@ namespace ngl
 {
 	namespace rhi
 	{
-		using ResourceViewName = ngl::text::FixedString<32>;
-
-		enum class RootParameterType : u16
-		{
-			ConstantBuffer,
-			ShaderResource,
-			UnorderedAccess,
-			Sampler,
-
-			_Max
-		};
-
-		// このシステムではRootSignature固定のため各リソースタイプはシェーダステージ毎にレジスタ0から固定数でバインドする.
-		// 以下は各リソースタイプの固定数.
-		static const u32 k_cbv_table_size = 16;
-		static const u32 k_srv_table_size = 48;
-		static const u32 k_uav_table_size = 16;
-		static const u32 k_sampler_table_size = 16;
-
-		static constexpr u32 RootParameterTableSize(RootParameterType type)
-		{
-			const u32 type_size[] =
-			{
-				k_cbv_table_size,
-				k_srv_table_size,
-				k_uav_table_size,
-				k_sampler_table_size,
-
-				0,
-			};
-			static_assert(std::size(type_size) - 1 == static_cast<size_t>(RootParameterType::_Max), "");
-			return type_size[static_cast<u32>(type)];
-		}
 
 
 		DXGI_FORMAT ConvertResourceFormat(ResourceFormat v);
