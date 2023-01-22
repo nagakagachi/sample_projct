@@ -1018,13 +1018,9 @@ bool AppGame::Execute()
 				sample_cs_pso_.SetDescriptorHandle(&desc_set, "out_uav", tex_rw_uav_.GetView().cpu_handle);
 				sample_cs_pso_.SetDescriptorHandle(&desc_set, "CbSampleCs", cbv_cs->GetView().cpu_handle);
 
-
 				gfx_command_list_.SetPipelineState(&sample_cs_pso_);
 				gfx_command_list_.SetDescriptorSet(&sample_cs_pso_, &desc_set);
-
-				constexpr ngl::u32 k_num_thread = 8;
-				gfx_command_list_.Dispatch((tex_rw_.GetWidth() + (k_num_thread -1))/ k_num_thread, (tex_rw_.GetHeight() + (k_num_thread - 1)) / k_num_thread, 1);
-
+				sample_cs_pso_.DispatchHelper(&gfx_command_list_, tex_rw_.GetWidth(), tex_rw_.GetHeight(), 1);
 
 				// to UAV.
 				gfx_command_list_.ResourceBarrier(&tex_rw_, ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);

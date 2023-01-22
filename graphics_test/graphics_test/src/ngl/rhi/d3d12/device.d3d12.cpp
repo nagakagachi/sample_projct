@@ -1054,7 +1054,7 @@ namespace ngl
 											if (SUCCEEDED(cb_member->GetDesc(&var_desc)))
 											{
 												// ConstantBuffer内変数のオフセット
-												cb_variable_[variable_index].offset = var_desc.StartOffset;
+												cb_variable_[variable_index].offset_in_cb = var_desc.StartOffset;
 												cb_variable_[variable_index].size = var_desc.Size;
 												size_t copy_name_len = std::min<>(std::strlen(var_desc.Name), sizeof(cb_variable_[variable_index].name));
 												std::copy_n(var_desc.Name, copy_name_len, cb_variable_[variable_index].name);
@@ -1161,6 +1161,19 @@ namespace ngl
 						// 取得できなかったリソースがあった場合に切り詰める.
 						resource_slot_.resize(valid_slot_count);
 					}
+
+					// Computeの場合の情報.
+					if (D3D12_SHADER_VERSION_TYPE::D3D12_SHVER_COMPUTE_SHADER == D3D12_SHVER_GET_TYPE(shader_desc.Version))
+					{
+						UINT thread_group_size_x = 0;
+						UINT thread_group_size_y = 0;
+						UINT thread_group_size_z = 0;
+						shader_reflect->GetThreadGroupSize(&thread_group_size_x, &thread_group_size_y, &thread_group_size_z);
+						
+						threadgroup_size_x = thread_group_size_x;
+						threadgroup_size_y = thread_group_size_y;
+						threadgroup_size_z = thread_group_size_z;
+					}
 				}
 			}
 
@@ -1207,6 +1220,13 @@ namespace ngl
 			if (resource_slot_.size() <= index)
 				return nullptr;
 			return &resource_slot_[index];
+		}
+		// Computeの numthreads 情報.
+		void ShaderReflectionDep::GetComputeThreadGroupSize(u32& out_threadgroup_size_x, u32& out_threadgroup_size_y, u32& out_threadgroup_size_z) const
+		{
+			out_threadgroup_size_x = threadgroup_size_x;
+			out_threadgroup_size_y = threadgroup_size_y;
+			out_threadgroup_size_z = threadgroup_size_z;
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1945,6 +1965,21 @@ namespace ngl
 				return false;
 			}
 
+			// ComputeのThreadGroupSize情報.
+			{
+				ShaderReflectionDep shader_ref;
+				if (shader_ref.Initialize(p_device, desc.cs))
+				{
+					shader_ref.GetComputeThreadGroupSize(threadgroup_size_x_, threadgroup_size_y_, threadgroup_size_z_);
+				}
+				else
+				{
+					std::cout << "[ERROR] Failed to Initialize ShaderReflection" << std::endl;
+					assert(false);
+					return false;
+				}
+			}
+
 			return true;
 		}
 		void ComputePipelineStateDep::Finalize()
@@ -1957,6 +1992,14 @@ namespace ngl
 		void ComputePipelineStateDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
 		{
 			view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
+		}
+		// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
+		void ComputePipelineStateDep::DispatchHelper(GraphicsCommandListDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z)
+		{
+			const u32 nx = (thread_count_x + (threadgroup_size_x_ - 1)) / threadgroup_size_x_;
+			const u32 ny = (thread_count_y + (threadgroup_size_y_ - 1)) / threadgroup_size_y_;
+			const u32 nz = (thread_count_z + (threadgroup_size_z_ - 1)) / threadgroup_size_z_;
+			p_command_list->Dispatch(nx, ny, nz);
 		}
 
 		ID3D12PipelineState* ComputePipelineStateDep::GetD3D12PipelineState()

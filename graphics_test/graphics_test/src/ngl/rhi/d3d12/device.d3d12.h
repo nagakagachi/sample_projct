@@ -346,11 +346,11 @@ namespace ngl
 			{
 				// CbVariable名
 				char	name[64];
-				// Constant Buffer内のByte Size
-				u16		offset;
 				// Constant Buffer内のByte Offset
+				u16		offset_in_cb;
+				// Constant Buffer内のByte Size
 				u16		size;
-				// 外部のデフォルト値バッファ内の対応する位置へのオフセット.
+				// デフォルト値ブロック内でのこのVarのデフォルト値オフセット.
 				u16		default_value_offset;
 			};
 
@@ -402,7 +402,8 @@ namespace ngl
 			u32 NumResourceSlotInfo() const;
 			const ResourceSlotInfo* GetResourceSlotInfo(u32 index) const;
 
-
+			// Computeの numthreads 情報.
+			void GetComputeThreadGroupSize(u32& out_threadgroup_size_x, u32& out_threadgroup_size_y, u32& out_threadgroup_size_z) const;
 		private:
 			// Constant Buffer
 			// cb
@@ -418,6 +419,11 @@ namespace ngl
 			std::vector<InputParamInfo>	input_param_;
 
 			std::vector<ResourceSlotInfo>	resource_slot_;
+
+			// For Compute
+			u32	threadgroup_size_x = 0;
+			u32	threadgroup_size_y = 0;
+			u32	threadgroup_size_z = 0;
 		};
 
 		/*
@@ -570,6 +576,7 @@ namespace ngl
 			// 名前でDescriptorSetへハンドル設定
 			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
+		public:
 			ID3D12PipelineState* GetD3D12PipelineState();
 			ID3D12RootSignature* GetD3D12RootSignature();
 			const ID3D12PipelineState* GetD3D12PipelineState() const;
@@ -605,6 +612,13 @@ namespace ngl
 			// 名前でDescriptorSetへハンドル設定
 			void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
+			// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
+			void DispatchHelper(GraphicsCommandListDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z);
+
+			u32 GetThreadGroupSizeX() const { return threadgroup_size_x_; }
+			u32 GetThreadGroupSizeY() const { return threadgroup_size_y_; }
+			u32 GetThreadGroupSizeZ() const { return threadgroup_size_z_; }
+		public:
 			ID3D12PipelineState* GetD3D12PipelineState();
 			ID3D12RootSignature* GetD3D12RootSignature();
 			const ID3D12PipelineState* GetD3D12PipelineState() const;
@@ -612,6 +626,10 @@ namespace ngl
 		private:
 			CComPtr<ID3D12PipelineState>			pso_;
 			PipelineResourceViewLayoutDep			view_layout_;
+
+			u32										threadgroup_size_x_ = 0;
+			u32										threadgroup_size_y_ = 0;
+			u32										threadgroup_size_z_ = 0;
 		};
 	}
 }
