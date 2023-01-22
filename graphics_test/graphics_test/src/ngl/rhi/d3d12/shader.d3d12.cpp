@@ -307,6 +307,11 @@ namespace rhi
 	{
 		if (0 < data_.size())
 		{
+#if _DEBUG
+			// テストのためメモリを無効値で埋めておく.
+			memset(data_.data(), 0xabababab, data_.size() * sizeof(data_[0]));
+#endif
+
 			std::vector<u8> temp{};
 			data_.swap(temp);
 		}

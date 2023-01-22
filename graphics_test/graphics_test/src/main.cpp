@@ -500,7 +500,6 @@ bool AppGame::Initialize()
 		ngl::rhi::ComputePipelineStateDep::Desc cs_pso_desc = {};
 		cs_pso_desc.cs = &sample_cs_;
 		sample_cs_pso_.Initialize(&device_, cs_pso_desc);
-
 	}
 
 	{

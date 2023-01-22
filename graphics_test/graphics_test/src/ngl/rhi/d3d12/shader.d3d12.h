@@ -302,6 +302,7 @@ namespace rhi
 		GraphicsPipelineStateDep();
 		~GraphicsPipelineStateDep();
 
+		// PSO生成後なら使用したShaderのByteCodeのメモリは破棄しても問題ない模様(DirectX12).
 		bool Initialize(DeviceDep* p_device, const Desc& desc);
 		void Finalize();
 
@@ -338,6 +339,7 @@ namespace rhi
 		ComputePipelineStateDep();
 		~ComputePipelineStateDep();
 
+		// PSO生成後なら使用したShaderのByteCodeのメモリは破棄しても問題ない模様(DirectX12).
 		bool Initialize(DeviceDep* p_device, const Desc& desc);
 		void Finalize();
 
