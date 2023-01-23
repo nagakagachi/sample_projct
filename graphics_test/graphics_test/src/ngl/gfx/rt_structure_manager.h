@@ -14,13 +14,20 @@
 #include "ngl/rhi/d3d12/shader.d3d12.h"
 #include "ngl/rhi/d3d12/command_list.d3d12.h"
 #include "ngl/rhi/d3d12/resource.d3d12.h"
-#include "ngl/rhi/d3d12/resource_view.d3d12.h"
+
 
 #include "mesh_resource.h"
 #include "mesh_component.h"
 
 namespace ngl
 {
+	namespace rhi
+	{
+		class ShaderResourceViewDep;
+		class UnorderedAccessViewDep;
+	}
+
+
 	namespace gfx
 	{
 		// ASはシステムから固定のレジスタへ設定する.

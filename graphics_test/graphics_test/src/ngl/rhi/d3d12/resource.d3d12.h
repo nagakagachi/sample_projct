@@ -6,7 +6,6 @@
 #include <memory>
 
 #include "ngl/rhi/rhi.h"
-#include "ngl/rhi/rhi_ref.h"
 #include "ngl/rhi/rhi_object_garbage_collect.h"
 
 #include "rhi_util.d3d12.h"

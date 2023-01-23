@@ -7,9 +7,8 @@
 
 
 #include "ngl/rhi/rhi.h"
+#include "ngl/rhi/rhi_object_garbage_collect.h"
 
-#include "device.d3d12.h"
-#include "shader.d3d12.h"
 #include "rhi_util.d3d12.h"
 #include "descriptor.d3d12.h"
 
@@ -18,10 +17,16 @@ namespace ngl
 {
 	namespace rhi
 	{
+		class Device;
+		class SwapChainDep;
+
 		class TextureDep;
 		class BufferDep;
 		class RenderTargetViewDep;
 		class DepthStencilViewDep;
+
+		class GraphicsPipelineStateDep;
+		class ComputePipelineStateDep;
 
 		// CommandList
 		class GraphicsCommandListDep : public RhiObjectBase

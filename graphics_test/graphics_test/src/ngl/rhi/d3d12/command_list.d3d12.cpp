@@ -1,6 +1,9 @@
 ﻿
 
 #include "command_list.d3d12.h"
+
+#include "device.d3d12.h"
+#include "shader.d3d12.h"
 #include "resource.d3d12.h"
 #include "resource_view.d3d12.h"
 

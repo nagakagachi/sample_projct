@@ -3,6 +3,8 @@
 #include <unordered_map>
 #include <algorithm>
 
+#include "ngl/rhi/d3d12/resource_view.d3d12.h"
+
 namespace ngl
 {
 	namespace gfx

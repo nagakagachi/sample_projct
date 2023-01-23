@@ -3,17 +3,14 @@
 #include <iostream>
 #include <memory>
 
-#include "ngl/rhi/rhi.h"
-#include "ngl/rhi/rhi_ref.h"
-
-#include "rhi_util.d3d12.h"
-#include "device.d3d12.h"
-#include "resource.d3d12.h"
-#include "descriptor.d3d12.h"
-
-
 #include "ngl/util/types.h"
 #include "ngl/text/hash_text.h"
+
+
+#include "ngl/rhi/rhi.h"
+#include "ngl/rhi/rhi_object_garbage_collect.h"
+#include "descriptor.d3d12.h"
+
 
 
 namespace ngl
@@ -21,8 +18,10 @@ namespace ngl
 	namespace rhi
 	{
 		class DeviceDep;
-		class PersistentDescriptorAllocator;
-		struct PersistentDescriptorInfo;
+		class SwapChainDep;
+
+		class BufferDep;
+		class TextureDep;
 
 
 		// VertexBufferView

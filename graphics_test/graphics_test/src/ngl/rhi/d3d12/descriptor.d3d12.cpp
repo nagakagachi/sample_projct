@@ -8,6 +8,7 @@
 
 #include "ngl/util/bit_operation.h"
 
+#include "device.d3d12.h"
 
 namespace ngl
 {
