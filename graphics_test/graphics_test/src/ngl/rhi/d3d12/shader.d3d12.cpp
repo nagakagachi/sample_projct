@@ -84,6 +84,73 @@ namespace rhi
 			return static_cast<int>(cnt);
 		}
 
+
+		// Shaderインクルード解決.
+		// 基底のIDxcIncludeHandlerではIncludeファイルされないようであるため実装.
+		class DefaultIncludeHandler
+			: public IDxcIncludeHandler
+		{
+		public:
+			DefaultIncludeHandler(CComPtr<IDxcLibrary> dxc_library)
+			{
+				dxc_library_ = dxc_library;
+			}
+			~DefaultIncludeHandler()
+			{
+			}
+
+			// シェーダインクルードファイルBlob解決.
+			virtual HRESULT STDMETHODCALLTYPE LoadSource(
+				_In_ LPCWSTR pFilename,                                   // Candidate filename.
+				_COM_Outptr_result_maybenull_ IDxcBlob** ppIncludeSource  // Resultant source object for included file, nullptr if not found.
+			) override
+			{
+				// pFilename はパス解決されたものが渡されてくる.
+
+				uint32_t codePage = CP_UTF8;
+				IDxcBlobEncoding* sourceBlob;
+				// そのままロード.
+				auto result_blob = dxc_library_->CreateBlobFromFile(pFilename, &codePage, &sourceBlob);
+				if (FAILED(result_blob))
+					return result_blob;
+				*ppIncludeSource = sourceBlob;
+				
+				return S_OK;
+			}
+
+
+			ULONG STDMETHODCALLTYPE AddRef()
+			{
+				return ++ref_;
+			}
+
+			ULONG STDMETHODCALLTYPE Release()
+			{
+				--ref_;
+				if (0 == ref_)
+				{
+					delete this;
+				}
+				return ref_;
+			}
+
+			HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject)
+			{
+				*ppvObject = nullptr;
+				if (riid == IID_IUnknown)
+				{
+					*ppvObject = static_cast<IDxcIncludeHandler*>(this);
+					AddRef();
+					return S_OK;
+				}
+				return E_NOINTERFACE;
+			}
+		private:
+			CComPtr<IDxcLibrary>	dxc_library_;
+			u32						ref_ = 0;
+		};
+
+
 	}
 
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -200,6 +267,10 @@ namespace rhi
 					compile_success &= false;
 			}
 
+			CComPtr<IDxcIncludeHandler> dxc_incHandler;
+			// 自前のハンドラ.
+			dxc_incHandler = new DefaultIncludeHandler(dxc_library);
+
 			CComPtr<IDxcBlobEncoding> sourceBlob;
 			if (compile_success)
 			{
@@ -222,9 +293,11 @@ namespace rhi
 					shader_file_path_ws,
 					shader_entry_point_name_w,
 					shader_model_name_w,	// "PS_6_0"
+					
 					NULL, 0,				// pArguments, argCount
+
 					NULL, 0,				// pDefines, defineCount
-					NULL,					// pIncludeHandler
+					dxc_incHandler,			// pIncludeHandler
 					&dxc_result				// ppResult
 				);
 
@@ -238,7 +311,6 @@ namespace rhi
 						hr = dxc_result->GetErrorBuffer(&errorsBlob);
 						if (SUCCEEDED(hr) && errorsBlob)
 						{
-							// FXCで失敗した場合は後段でDXCによるコンパイルを試みる.
 							wprintf(L"[ERROR] Compilation failed with errors:\n%hs\n",
 								(const char*)errorsBlob->GetBufferPointer());
 						}

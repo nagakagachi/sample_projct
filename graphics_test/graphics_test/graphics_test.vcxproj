@@ -231,6 +231,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\util\types.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="src\ngl\data\shader\include\scene_view_struct.hlsli" />
     <None Include="src\ngl\text\hash_text.inl" />
   </ItemGroup>
   <ItemGroup>
@@ -247,6 +248,11 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
       <FileType>Document</FileType>
     </None>
     <None Include="src\ngl\data\shader\sample_vs.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\ngl\data\shader\sample_cs.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

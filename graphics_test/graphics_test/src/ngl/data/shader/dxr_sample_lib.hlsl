@@ -27,40 +27,24 @@
 
 
 #endif
+//
 
-
+		
 // nglのmatrix系ははrow-majorメモリレイアウトであるための指定.
 #pragma pack_matrix( row_major )
+
+// SceneView定数バッファ構造定義.
+#include "include/scene_view_struct.hlsli"
+ConstantBuffer<SceneViewInfo> cb_sceneview : register(b0);
+
 
 // Global Srv.
 // システム供給のASはGlobalRootで衝突しないと思われるレジスタで供給.
 RaytracingAccelerationStructure	rt_as : register(t65535);
 
 
-
 // Global Srv.
 RWTexture2D<float4>				out_uav : register(u0);
-
-
-cbuffer CbSceneView : register(b0)
-{
-	float3x4 cb_view_mtx;
-	float3x4 cb_view_inv_mtx;
-	float4x4 cb_proj_mtx;
-	float4x4 cb_proj_inv_mtx;
-
-	// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
-	//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
-	//
-	//		cb_ndc_z_to_view_z_coef = 
-	//			Standard RH: (-far_z * near_z, near_z - far_z, far_z, 0.0)
-	//			Standard LH: ( far_z * near_z, near_z - far_z, far_z, 0.0)
-	//			Reverse RH: (-far_z * near_z, far_z - near_z, near_z, 0.0)
-	//			Reverse LH: ( far_z * near_z, far_z - near_z, near_z, 0.0)
-	//			Infinite Far Reverse RH: (-near_z, 1.0, 0.0, 0.0)
-	//			Infinite Far Reverse RH: ( near_z, 1.0, 0.0, 0.0)
-	float4	cb_ndc_z_to_view_z_coef;
-};
 
 
 
@@ -85,25 +69,25 @@ void rayGen()
 
 #if 1
 	// 逆行列を使わずにProj行列の要素からレイ方向計算.
-	const float inv_tan_horizontal = cb_proj_mtx._m00; // m00 = 1/tan(fov_x*0.5)
-	const float inv_tan_vertical = cb_proj_mtx._m11; // m11 = 1/tan(fov_y*0.5)
+	const float inv_tan_horizontal = cb_sceneview.cb_proj_mtx._m00; // m00 = 1/tan(fov_x*0.5)
+	const float inv_tan_vertical = cb_sceneview.cb_proj_mtx._m11; // m11 = 1/tan(fov_y*0.5)
 	const float3 ray_dir_view = float3(ndc_xy.x / inv_tan_horizontal, ndc_xy.y / inv_tan_vertical, 1.0);
 
 	// 向きのみなので w=0
-	float3 ray_dir_world = mul(cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
+	float3 ray_dir_world = mul(cb_sceneview.cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
 #else
 	// 逆行列からレイ方向計算.
-	float4 ray_dir_view = mul(cb_proj_inv_mtx, float4(ndc_xy, 1.0, 1.0));
+	float4 ray_dir_view = mul(cb_sceneview.cb_proj_inv_mtx, float4(ndc_xy, 1.0, 1.0));
 	ray_dir_view.xyz /= ray_dir_view.w;
 
 	// 向きのみなので w=0
-	float3 ray_dir_world = mul(cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
+	float3 ray_dir_world = mul(cb_sceneview.cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
 #endif
 	
 	float3 ray_dir = normalize(ray_dir_world.xyz);
 
 	RayDesc ray;
-	ray.Origin = float3(cb_view_inv_mtx._m03, cb_view_inv_mtx._m13, cb_view_inv_mtx._m23);// View逆行列からRay始点取得.
+	ray.Origin = float3(cb_sceneview.cb_view_inv_mtx._m03, cb_sceneview.cb_view_inv_mtx._m13, cb_sceneview.cb_view_inv_mtx._m23);// View逆行列からRay始点取得.
 	ray.Direction = ray_dir;
 	ray.TMin = 0.0;
 	ray.TMax = 1e38;

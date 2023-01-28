@@ -216,5 +216,7 @@
     <None Include="src\ngl\data\shader\sample_fullscr_procedural_vs.hlsl" />
     <None Include="src\ngl\data\shader\sample_ps.hlsl" />
     <None Include="src\ngl\data\shader\sample_vs.hlsl" />
+    <None Include="src\ngl\data\shader\sample_cs.hlsl" />
+    <None Include="src\ngl\data\shader\include\scene_view_struct.hlsli" />
   </ItemGroup>
 </Project>
