@@ -116,7 +116,7 @@ namespace ngl
 			}
 
 			int num_vertex_ = 0;
-			int num_primitive_ = 0;
+			int num_primitive_ = 0;// num primitive(triangle).
 
 			MeshShapeIndexData<uint32_t> index_ = {};
 			MeshShapeVertexData<math::Vec3> position_ = {};

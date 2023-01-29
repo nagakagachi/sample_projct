@@ -95,6 +95,20 @@ namespace ngl
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
 				ResourceHeapType	heap_type = ResourceHeapType::Default;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
 				ResourceState		initial_state = ResourceState::General;
+
+				// リソースのデフォルトクリア値を指定する. ハードウェア的に可能なら指定した値によるクリアが高速になる?.
+				// ただし指定した場合はクリア値のバリデーションチェックが有効になり異なる値でのクリアで警告がでるようになる.
+				bool				is_default_clear_value = true;
+				struct DepthStencil
+				{
+					// クリア値. 生成時指定による高速クリア. ReverseZの場合は 1.0.
+					float clear_value = 1.0f;
+				} depth_stencil = {};
+				struct RenderTarget
+				{
+					// クリア値. 生成時指定による高速クリア. ReverseZの場合は 1.0 .
+					std::array<float, 4> clear_value = {0.0f, 0.0f , 0.0f , 0.0f };
+				} rendertarget = {};
 			};
 
 			TextureDep();

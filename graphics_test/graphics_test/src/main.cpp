@@ -36,6 +36,8 @@
 #include "ngl/thread/lockfree_stack_intrusive.h"
 #include "ngl/thread/lockfree_stack_intrusive_test.h"
 
+#include "ngl/gfx/common_struct.h"
+
 
 struct CbSampleVs
 {
@@ -65,10 +67,6 @@ private:
 
 	ngl::platform::CoreWindow	window_;
 
-
-	ngl::math::Vec4 clear_color_ = ngl::math::Vec4(0.0f);
-
-
 	ngl::math::Vec3		camera_pos_ = {0.0f, 2.0f, -1.0f};
 	ngl::math::Mat33	camera_pose_ = ngl::math::Mat33::Identity();
 	float				camera_fov_y = ngl::math::Deg2Rad(60.0f);
@@ -92,9 +90,20 @@ private:
 	std::vector<ngl::rhi::RenderTargetViewDep>	swapchain_rtvs_;
 	std::vector <ngl::rhi::ResourceState>		swapchain_resource_state_;
 
+
+	ngl::rhi::TextureDep						tex_work_;
+	ngl::rhi::RenderTargetViewDep				tex_work_rtv_;
+	ngl::rhi::ShaderResourceViewDep				tex_work_srv_;
+
 	ngl::rhi::TextureDep						tex_depth_;
 	ngl::rhi::DepthStencilViewDep				tex_depth_dsv_;
+	ngl::rhi::ShaderResourceViewDep				tex_depth_srv_;
 	ngl::rhi::ResourceState						tex_depth_state_;
+
+
+	ngl::rhi::TextureDep						tex_lineardepth_;
+	ngl::rhi::ShaderResourceViewDep				tex_lineardepth_srv_;
+	ngl::rhi::UnorderedAccessViewDep			tex_lineardepth_uav_;
 
 
 	ngl::rhi::TextureDep						tex_rw_;
@@ -119,22 +128,43 @@ private:
 
 
 	ngl::rhi::ShaderDep							sample_fullscr_proc_vs_;
+
 	ngl::rhi::ShaderDep							sample_fullscr_proc_ps_;
 	ngl::rhi::GraphicsPipelineStateDep			sample_fullscr_proc_pso_;
 
-	ngl::rhi::SamplerDep						samp_;
+	ngl::rhi::SamplerDep						samp_linear_clamp_;
 
+
+	ngl::rhi::ShaderDep							vs_fullscr_proc_;
+
+	ngl::rhi::ShaderDep							ps_copy_to_swapchain;
+	ngl::rhi::GraphicsPipelineStateDep			pso_copy_to_swapchain;
+
+	ngl::rhi::ShaderDep							ps_final_screen_pass_;
+	ngl::rhi::GraphicsPipelineStateDep			pso_final_screen_pass_;
 
 	ngl::rhi::ShaderDep							sample_cs_;
 	ngl::rhi::ComputePipelineStateDep			sample_cs_pso_;
+
+
+	ngl::rhi::ShaderDep							cs_gen_lineardepth_;
+	ngl::rhi::ComputePipelineStateDep			pso_gen_lineardepth_;
+
+
+	std::array<ngl::rhi::BufferDep, 2>				cb_sceneview_;
+	std::array<ngl::rhi::ConstantBufferViewDep, 2>	cbv_sceneview_;
+	int												flip_index_sceneview_ = 0;
+
+
+	ngl::rhi::ShaderDep							vs_mesh_simple_depth;
+	ngl::rhi::ShaderDep							ps_mesh_simple_depth;
+	ngl::rhi::GraphicsPipelineStateDep			pso_mesh_simple_depth;
 
 
 	ngl::gfx::RaytraceStructureManager			rt_st_;
 
 	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
-
-
 	
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 	std::vector<ngl::gfx::StaticMeshComponent*>	test_move_mesh_comp_array_;
@@ -303,6 +333,7 @@ bool AppGame::Initialize()
 		desc.type = ngl::rhi::TextureType::Texture2D;
 		desc.width = scree_w;
 		desc.height = scree_h;
+		desc.depth_stencil.clear_value = 0.0f;// DepthBufferクリア既定値. ReverseZ.
 
 		if (!tex_depth_.Initialize(&device_, desc))
 		{
@@ -315,8 +346,61 @@ bool AppGame::Initialize()
 			std::cout << "[ERROR] Create Dsv Initialize" << std::endl;
 			assert(false);
 		}
+		if (!tex_depth_srv_.InitializeAsTexture(&device_, &tex_depth_, 0, 1, 0, 1))
+		{
+			assert(false);
+		}
 
 		tex_depth_state_ = desc.initial_state;
+	}
+
+	// Work RenderBuffer.
+	{
+		ngl::rhi::TextureDep::Desc desc = {};
+		desc.bind_flag = ngl::rhi::ResourceBindFlag::RenderTarget | ngl::rhi::ResourceBindFlag::ShaderResource;
+		desc.format = ngl::rhi::ResourceFormat::Format_R16G16B16A16_FLOAT;
+		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.width = scree_w;
+		desc.height = scree_h;
+		desc.initial_state = ngl::rhi::ResourceState::ShaderRead;
+
+		if (!tex_work_.Initialize(&device_, desc))
+		{
+			assert(false);
+		}
+		if (!tex_work_rtv_.Initialize(&device_, &tex_work_, 0, 0, 1))
+		{
+			assert(false);
+		}
+		if (!tex_work_srv_.InitializeAsTexture(&device_, &tex_work_, 0, 1, 0, 1))
+		{
+			assert(false);
+		}
+	}
+
+	// LinearDepth Texture.
+	{
+		ngl::rhi::TextureDep::Desc desc = {};
+		desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource | ngl::rhi::ResourceBindFlag::UnorderedAccess;
+		desc.format = ngl::rhi::ResourceFormat::Format_R32_FLOAT;
+		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.width = scree_w;
+		desc.height = scree_h;
+		desc.initial_state = ngl::rhi::ResourceState::ShaderRead;
+
+		if (!tex_lineardepth_.Initialize(&device_, desc))
+		{
+			assert(false);
+		}
+
+		if (!tex_lineardepth_srv_.InitializeAsTexture(&device_, &tex_lineardepth_, 0, 1, 0, 1))
+		{
+			assert(false);
+		}
+		if (!tex_lineardepth_uav_.Initialize(&device_, &tex_lineardepth_, 0, 0, 1))
+		{
+			assert(false);
+		}
 	}
 
 	// UnorderedAccess Texture.
@@ -358,9 +442,6 @@ bool AppGame::Initialize()
 		std::cout << "[ERROR] Fence Initialize" << std::endl;
 		return false;
 	}
-
-
-	clear_color_ = ngl::math::Vec4::Zero();
 
 	{
 		// HLSLからコンパイルして初期化.
@@ -418,7 +499,6 @@ bool AppGame::Initialize()
 				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
 			}
 		}
-
 	}
 
 	// PSO
@@ -431,7 +511,7 @@ bool AppGame::Initialize()
 		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
 
 		desc.depth_stencil_state.depth_enable = true;
-		desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Less;
+		desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater;// Reverse Z.
 		desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
 		desc.depth_stencil_state.stencil_enable = false;
 		desc.depth_stencil_format = tex_depth_.GetFormat();
@@ -628,11 +708,185 @@ bool AppGame::Initialize()
 		samp_desc.AddressV = ngl::rhi::TextureAddressMode::Clamp;
 		samp_desc.AddressW = ngl::rhi::TextureAddressMode::Clamp;
 		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
-		if (!samp_.Initialize(&device_, samp_desc))
+		if (!samp_linear_clamp_.Initialize(&device_, samp_desc))
 		{
 			std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
 			assert(false);
 		}
+	}
+
+	// MeshRendering Shader.
+	{
+		// SceneView Constant.
+		for (int i = 0; i < cb_sceneview_.size(); ++i)
+		{
+			ngl:: rhi::BufferDep::Desc desc = {};
+			desc.SetupAsConstantBuffer(sizeof(ngl::gfx::CbSceneView));
+			cb_sceneview_[i].Initialize(&device_, desc);
+
+			ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
+			cbv_sceneview_[i].Initialize(&cb_sceneview_[i], cbv_desc);
+		}
+
+		// Depth Prepass.
+		{
+			ngl::rhi::ShaderDep::InitFileDesc desc = {};
+			desc.entry_point_name = "main_vs";
+			desc.shader_file_path = "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl";
+			desc.shader_model_version = "6_0";
+			desc.stage = ngl::rhi::ShaderStage::Vertex;
+			if (!vs_mesh_simple_depth.Initialize(&device_, desc))
+			{
+				assert(false);
+			}
+		}
+		{
+			ngl::rhi::ShaderDep::InitFileDesc desc = {};
+			desc.entry_point_name = "main_ps";
+			desc.shader_file_path = "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl";
+			desc.shader_model_version = "6_0";
+			desc.stage = ngl::rhi::ShaderStage::Pixel;
+			if (!ps_mesh_simple_depth.Initialize(&device_, desc))
+			{
+				assert(false);
+			}
+		}
+		{
+			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+			desc.vs = &vs_mesh_simple_depth;
+			desc.ps = &ps_mesh_simple_depth;
+
+			desc.depth_stencil_state.depth_enable = true;
+			desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater; // ReverseZ.
+			desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
+			desc.depth_stencil_state.stencil_enable = false;
+			desc.depth_stencil_format = tex_depth_.GetFormat();
+
+
+			// 入力レイアウト
+			std::array<ngl::rhi::InputElement, 3> input_elem_data;
+			desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
+			desc.input_layout.p_input_elements = input_elem_data.data();
+			{
+				input_elem_data[0].semantic_name = "POSITION";
+				input_elem_data[0].semantic_index = 0;
+				input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+				input_elem_data[0].stream_slot = ngl::gfx::EMeshVertexSemanticSlot::POSITION;
+				input_elem_data[0].element_offset = 0;
+
+				input_elem_data[1].semantic_name = "NORMAL";
+				input_elem_data[1].semantic_index = 0;
+				input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+				input_elem_data[1].stream_slot = ngl::gfx::EMeshVertexSemanticSlot::NORMAL;
+				input_elem_data[1].element_offset = 0;
+
+				input_elem_data[2].semantic_name = "TEXCOORD";
+				input_elem_data[2].semantic_index = 0;
+				input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
+				input_elem_data[2].stream_slot = ngl::gfx::EMeshVertexSemanticSlot::TEXCOORD;
+				input_elem_data[2].element_offset = 0;
+			}
+			if (!pso_mesh_simple_depth.Initialize(&device_, desc))
+			{
+				assert(false);
+			}
+		}
+	}
+
+	{
+		ngl::rhi::ShaderDep::InitFileDesc desc = {};
+		desc.shader_file_path = "./src/ngl/data/shader/screen/generate_lineardepth_cs.hlsl";
+		desc.entry_point_name = "main_cs";
+		desc.shader_model_version = "6_0";
+		desc.stage = ngl::rhi::ShaderStage::Compute;
+		if (!cs_gen_lineardepth_.Initialize(&device_, desc))
+		{
+			assert(false);
+		}
+
+		ngl::rhi::ComputePipelineStateDep::Desc pso_desc = {};
+		pso_desc.cs = &cs_gen_lineardepth_;
+		if(!pso_gen_lineardepth_.Initialize(&device_, pso_desc))
+		{
+			assert(false);
+		}
+	}
+
+	{
+		{
+			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
+			shader_desc.shader_file_path = "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl";
+			shader_desc.entry_point_name = "main_vs";
+			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
+			shader_desc.shader_model_version = "6_0";
+
+			if (!vs_fullscr_proc_.Initialize(&device_, shader_desc))
+			{
+				assert(false);
+			}
+		}
+		{
+			{
+				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
+				shader_desc.shader_file_path = "./src/ngl/data/shader/final_screen_pass_ps.hlsl";
+				shader_desc.entry_point_name = "main_ps";
+				shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+				shader_desc.shader_model_version = "6_0";
+
+				if (!ps_final_screen_pass_.Initialize(&device_, shader_desc))
+				{
+					assert(false);
+				}
+			}
+			{
+				ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+				desc.vs = &vs_fullscr_proc_;
+				desc.ps = &ps_final_screen_pass_;
+
+				desc.num_render_targets = 1;
+				desc.render_target_formats[0] = tex_work_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+
+				desc.blend_state.target_blend_states[0].blend_enable = false;
+				desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
+
+				if (!pso_final_screen_pass_.Initialize(&device_, desc))
+				{
+					assert(false);
+				}
+			}
+		}
+
+		{
+			{
+				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
+				shader_desc.shader_file_path = "./src/ngl/data/shader/screen/copy_tex_to_screen_ps.hlsl";
+				shader_desc.entry_point_name = "main_ps";
+				shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+				shader_desc.shader_model_version = "6_0";
+
+				if (!ps_copy_to_swapchain.Initialize(&device_, shader_desc))
+				{
+					assert(false);
+				}
+			}
+			{
+				ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+				desc.vs = &vs_fullscr_proc_;
+				desc.ps = &ps_copy_to_swapchain;
+
+				desc.num_render_targets = 1;
+				desc.render_target_formats[0] = this->swapchain_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+
+				desc.blend_state.target_blend_states[0].blend_enable = false;
+				desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
+
+				if (!pso_copy_to_swapchain.Initialize(&device_, desc))
+				{
+					assert(false);
+				}
+			}
+		}
+
 	}
 
 	{
@@ -648,6 +902,7 @@ bool AppGame::Initialize()
 		{
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
@@ -657,6 +912,7 @@ bool AppGame::Initialize()
 			for(int i = 0; i < 100; ++i)
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_spider));
 
@@ -685,6 +941,7 @@ bool AppGame::Initialize()
 #if 0
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 
 				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
@@ -914,17 +1171,51 @@ bool AppGame::Execute()
 		}
 	}
 
+
+	const float screen_aspect_ratio = (float)swapchain_.GetWidth() / swapchain_.GetHeight();
+
+	{
+		ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1());
+
+		const float fov_y = camera_fov_y;;
+		const float aspect_ratio = screen_aspect_ratio;
+		const float near_z = 0.1f;
+		const float far_z = 10000.0f;
+
+		// Infinite Far Reverse Perspective
+		ngl::math::Mat44 proj_mat = ngl::math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, aspect_ratio, 0.1f);
+		ngl::math::Vec4 ndc_z_to_view_z_coef = ngl::math::CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(near_z);
+
+		flip_index_sceneview_ = (flip_index_sceneview_ + 1) % 2;
+		if (auto* mapped = (ngl::gfx::CbSceneView*)cb_sceneview_[flip_index_sceneview_].Map())
+		{
+			mapped->cb_view_mtx = view_mat;
+			mapped->cb_proj_mtx = proj_mat;
+			mapped->cb_view_inv_mtx = ngl::math::Mat34::Inverse(view_mat);
+			mapped->cb_proj_inv_mtx = ngl::math::Mat44::Inverse(proj_mat);
+
+			mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
+
+			cb_sceneview_[flip_index_sceneview_].Unmap();
+		}
+	}
+
+
 	// 描画用シーン情報.
 	ngl::gfx::SceneRepresentation frame_scene = {};
 	{
 		for (auto& e : mesh_comp_array_)
 		{
+			// Render更新.
+			e->UpdateRenderData();
+
+			// 登録.
 			frame_scene.mesh_instance_array_.push_back(e.get());
 		}
 	}
 
 	// カメラ設定.
-	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, (float)swapchain_.GetWidth()/swapchain_.GetHeight());
+	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
 
 
 	// RhiRefによるガベコレテスト.
@@ -949,12 +1240,6 @@ bool AppGame::Execute()
 	ngl::u32 screen_w, screen_h;
 	window_.Impl()->GetScreenSize(screen_w, screen_h);
 
-	{
-		// クリアカラー操作.
-		clear_color_.x = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.0f)) * 0.5f + 0.5f;
-		clear_color_.y = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.25f)) * 0.5f + 0.5f;
-		clear_color_.z = static_cast<float>(cos(app_sec_ * 2.0f * 3.14159f / 2.5f)) * 0.5f + 0.5f;
-	}
 
 	// Render Loop
 	{
@@ -1023,32 +1308,172 @@ bool AppGame::Execute()
 				gfx_command_list_.ResourceBarrier(&tex_rw_, ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
 			}
 
+
 			{
-				{
-					// Swapchain State to RenderTarget
-					gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
-					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
-				}
+				// Barrier.
 				{
 					// Dsv State
 					gfx_command_list_.ResourceBarrier(&tex_depth_, tex_depth_state_, ngl::rhi::ResourceState::DepthWrite);
 					tex_depth_state_ = ngl::rhi::ResourceState::DepthWrite;
 				}
 
-				// Rtvクリア.
-				gfx_command_list_.ClearRenderTarget(&swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()], clear_color_.data);
 				// Dsvクリア.
-				gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 1.0f, 0, true, false);
-
-				// Rtv, Dsv セット.
+				gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 0.0f, 0, true, false);
+				
+				// Mesh Raster Render テスト.
 				{
-					const auto* p_rtv = &swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()];
-					gfx_command_list_.SetRenderTargets(&p_rtv, 1, &tex_depth_dsv_);
+					// DepthPrepass.
+					{
+						auto* p_depth = &tex_depth_;
+						auto* p_depth_view = &tex_depth_dsv_;
+						// Dsv セット.
+						{
+							gfx_command_list_.SetRenderTargets(nullptr, 0, p_depth_view);
+						}
+
+						D3D12_VIEWPORT viewport;
+						viewport.MinDepth = 0.0f;
+						viewport.MaxDepth = 1.0f;
+						viewport.TopLeftX = 0.0f;
+						viewport.TopLeftY = 0.0f;
+						viewport.Width = static_cast<float>(p_depth->GetWidth());
+						viewport.Height = static_cast<float>(p_depth->GetHeight());
+						gfx_command_list_.SetViewports(1, &viewport);
+
+						D3D12_RECT scissor_rect;
+						scissor_rect.left = 0;
+						scissor_rect.top = 0;
+						scissor_rect.right = p_depth->GetWidth();
+						scissor_rect.bottom = p_depth->GetHeight();
+						gfx_command_list_.SetScissor(1, &scissor_rect);
+
+						// PSO.
+						gfx_command_list_.SetPipelineState(&pso_mesh_simple_depth);
+
+						for(int mesh_comp_i = 0; mesh_comp_i < mesh_comp_array_.size(); ++mesh_comp_i)
+						{
+							const auto* e = mesh_comp_array_[mesh_comp_i].get();
+
+							auto& cbv_sceneview = cbv_sceneview_[flip_index_sceneview_];
+							auto cbv_instance = e->GetInstanceBufferView();
+
+
+							for (int gi = 0; gi < e->GetMeshData()->data_.shape_array_.size(); ++gi)
+							{
+								// Descriptor.
+								{
+									ngl::rhi::DescriptorSetDep desc_set;
+
+									pso_mesh_simple_depth.SetDescriptorHandle(&desc_set, "cb_sceneview", cbv_sceneview.GetView().cpu_handle);
+									pso_mesh_simple_depth.SetDescriptorHandle(&desc_set, "cb_instance", cbv_instance->GetView().cpu_handle);
+
+
+									// DescriptorSetでViewを設定.
+									gfx_command_list_.SetDescriptorSet(&pso_mesh_simple_depth, &desc_set);
+								}
+
+
+								// Geometry.
+								auto& shape = e->GetMeshData()->data_.shape_array_[gi];
+
+								gfx_command_list_.SetVertexBuffers(ngl::gfx::EMeshVertexSemanticSlot::POSITION, 1, &shape.position_.rhi_vbv_.GetView());
+								gfx_command_list_.SetVertexBuffers(ngl::gfx::EMeshVertexSemanticSlot::NORMAL, 1, &shape.normal_.rhi_vbv_.GetView());
+								gfx_command_list_.SetVertexBuffers(ngl::gfx::EMeshVertexSemanticSlot::TEXCOORD, 1, &shape.texcoord_[0].rhi_vbv_.GetView());
+
+								gfx_command_list_.SetIndexBuffer(&shape.index_.rhi_vbv_.GetView());
+								gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+
+								// Draw.
+								gfx_command_list_.DrawIndexedInstanced(shape.num_primitive_ * 3, 1, 0, 0, 0);
+							}
+						}
+					}
 				}
 
-#if 1
-				// Draw Polygon
+				// Gen LinearDepth.
 				{
+					// Barrier.
+					{
+						gfx_command_list_.ResourceBarrier(&tex_depth_, ngl::rhi::ResourceState::DepthWrite, ngl::rhi::ResourceState::ShaderRead);
+						gfx_command_list_.ResourceBarrier(&tex_lineardepth_, ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::UnorderedAccess);
+					}
+
+					ngl::rhi::DescriptorSetDep desc_set = {};
+					pso_gen_lineardepth_.SetDescriptorHandle(&desc_set, "TexHardwareDepth", tex_depth_srv_.GetView().cpu_handle);
+					pso_gen_lineardepth_.SetDescriptorHandle(&desc_set, "RWTexLinearDepth", tex_lineardepth_uav_.GetView().cpu_handle);
+					pso_gen_lineardepth_.SetDescriptorHandle(&desc_set, "cb_sceneview", cbv_sceneview_[flip_index_sceneview_].GetView().cpu_handle);
+
+					gfx_command_list_.SetPipelineState(&pso_gen_lineardepth_);
+					gfx_command_list_.SetDescriptorSet(&pso_gen_lineardepth_, &desc_set);
+
+					pso_gen_lineardepth_.DispatchHelper(&gfx_command_list_, tex_lineardepth_.GetWidth(), tex_lineardepth_.GetHeight(), 1);
+
+					// Barrier.
+					{
+						gfx_command_list_.ResourceBarrier(&tex_depth_, ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::DepthWrite);
+						gfx_command_list_.ResourceBarrier(&tex_lineardepth_, ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
+					}
+				}
+
+
+
+				// 最終レンダリングパス.
+				{
+					// Barrier.
+					{
+						// WorkRenderTarget Transition to RenderTarget
+						gfx_command_list_.ResourceBarrier(&tex_work_, ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::RenderTarget);
+					}
+
+					// Rtvクリア.
+					std::array<float, 4> clear_color = { 0.0f, 0.0f , 0.0f , 0.0f };
+					gfx_command_list_.ClearRenderTarget(&tex_work_rtv_, clear_color.data());
+
+
+					D3D12_VIEWPORT viewport;
+					viewport.MinDepth = 0.0f;
+					viewport.MaxDepth = 1.0f;
+					viewport.TopLeftX = 0.0f;
+					viewport.TopLeftY = 0.0f;
+					viewport.Width = static_cast<float>(tex_work_.GetWidth());
+					viewport.Height = static_cast<float>(tex_work_.GetHeight());
+					gfx_command_list_.SetViewports(1, &viewport);
+
+					D3D12_RECT scissor_rect;
+					scissor_rect.left = 0;
+					scissor_rect.top = 0;
+					scissor_rect.right = tex_work_.GetWidth();
+					scissor_rect.bottom = tex_work_.GetHeight();
+					gfx_command_list_.SetScissor(1, &scissor_rect);
+
+					// Rtv, Dsv セット.
+					{
+						const auto* p_rtv = &tex_work_rtv_;
+						gfx_command_list_.SetRenderTargets(&p_rtv, 1, nullptr);
+					}
+
+					gfx_command_list_.SetPipelineState(&pso_final_screen_pass_);
+					ngl::rhi::DescriptorSetDep desc_set = {};
+					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_lineardepth", tex_lineardepth_srv_.GetView().cpu_handle);
+					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "samp", samp_linear_clamp_.GetView().cpu_handle);
+					gfx_command_list_.SetDescriptorSet(&pso_final_screen_pass_, &desc_set);
+
+					gfx_command_list_.DrawInstanced(3, 1, 0, 0);
+
+					// Barrier.
+					{
+						gfx_command_list_.ResourceBarrier(&tex_work_, ngl::rhi::ResourceState::RenderTarget, ngl::rhi::ResourceState::ShaderRead);
+					}
+				}
+
+
+				// Swapchainへのコピーパス.
+				{
+					// Barrier.
+					{
+						gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
+						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
+					}
 
 					D3D12_VIEWPORT viewport;
 					viewport.MinDepth = 0.0f;
@@ -1066,41 +1491,27 @@ bool AppGame::Execute()
 					scissor_rect.bottom = screen_h;
 					gfx_command_list_.SetScissor(1, &scissor_rect);
 
-					gfx_command_list_.SetPipelineState(&sample_pso_);
-
+					// Rtv, Dsv セット.
 					{
-						ngl::rhi::DescriptorSetDep empty_desc_set;
-
-						// DescriptorSetに名前で定数バッファViewをセット
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSampleVs", cbv_sample_vs_.GetView().cpu_handle);
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "CbSamplePs", cbv_sample_ps_.GetView().cpu_handle);
-
-						// Raytraceの出力バッファをシェーダリソースに利用するテスト.
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs0", rt_st_.GetResultSrv()->GetView().cpu_handle);
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "TexPs1", tex_rw_srv_.GetView().cpu_handle);
-
-
-						sample_pso_.SetDescriptorHandle(&empty_desc_set, "SmpPs", samp_.GetView().cpu_handle);
-
-						// DescriptorSetでViewを設定.
-						gfx_command_list_.SetDescriptorSet(&sample_pso_, &empty_desc_set);
+						const auto* p_rtv = &swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()];
+						gfx_command_list_.SetRenderTargets(&p_rtv, 1, nullptr);
 					}
 
-					gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+					gfx_command_list_.SetPipelineState(&pso_copy_to_swapchain);
+					ngl::rhi::DescriptorSetDep desc_set = {};
+					pso_copy_to_swapchain.SetDescriptorHandle(&desc_set, "tex", tex_work_srv_.GetView().cpu_handle);
+					pso_copy_to_swapchain.SetDescriptorHandle(&desc_set, "samp", samp_linear_clamp_.GetView().cpu_handle);
+					gfx_command_list_.SetDescriptorSet(&pso_copy_to_swapchain, &desc_set);
 
-					gfx_command_list_.SetVertexBuffers(0, 1, &vbv_sample_.GetView());
+					gfx_command_list_.DrawInstanced(3, 1, 0, 0);
 
-
-					gfx_command_list_.SetIndexBuffer(&ibv_sample_.GetView());
-					gfx_command_list_.DrawIndexedInstanced(6, 1, 0, 0, 0);
+					{
+						// Swapchain State to Present
+						gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
+						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
+					}
 				}
-#endif
 			}
-
-
-			// Swapchain State to Present
-			gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
-			swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
 
 			gfx_command_list_.End();
 		}

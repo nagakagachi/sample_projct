@@ -1,4 +1,5 @@
-
+#ifndef NGL_SHADER_SCENE_VIEW_STRUCT_H
+#define NGL_SHADER_SCENE_VIEW_STRUCT_H
 
 // nglのmatrix系ははrow-majorメモリレイアウトであるための指定.
 #pragma pack_matrix( row_major )
@@ -24,3 +25,5 @@ struct SceneViewInfo
 	float4	cb_ndc_z_to_view_z_coef;
 };
 
+
+#endif // NGL_SHADER_SCENE_VIEW_STRUCT_H

@@ -87,6 +87,9 @@
     <ClCompile Include="src\ngl\rhi\d3d12\shader.d3d12.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="src\ngl\gfx\mesh_component.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\util\bit_operation.h">
@@ -206,6 +209,9 @@
     <ClInclude Include="src\ngl\rhi\d3d12\shader.d3d12.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="src\ngl\gfx\common_struct.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\ngl\text\hash_text.inl">
@@ -218,5 +224,11 @@
     <None Include="src\ngl\data\shader\sample_vs.hlsl" />
     <None Include="src\ngl\data\shader\sample_cs.hlsl" />
     <None Include="src\ngl\data\shader\include\scene_view_struct.hlsli" />
+    <None Include="src\ngl\data\shader\mesh\mesh_simple_depth_ps.hlsl" />
+    <None Include="src\ngl\data\shader\mesh\mesh_simple_depth_vs.hlsl" />
+    <None Include="src\ngl\data\shader\screen\generate_lineardepth_cs.hlsl" />
+    <None Include="src\ngl\data\shader\screen\copy_tex_to_screen_ps.hlsl" />
+    <None Include="src\ngl\data\shader\screen\fullscr_procedural_vs.hlsl" />
+    <None Include="src\ngl\data\shader\final_screen_pass_ps.hlsl" />
   </ItemGroup>
 </Project>

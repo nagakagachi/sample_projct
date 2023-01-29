@@ -331,13 +331,16 @@ namespace ngl
 			// クリア値
 			D3D12_CLEAR_VALUE clearValue = {};
 			D3D12_CLEAR_VALUE* pClearVal = nullptr;
-			if (check_bits(ResourceBindFlag::RenderTarget | ResourceBindFlag::DepthStencil, desc_.bind_flag))
+			if (desc.is_default_clear_value && (check_bits(ResourceBindFlag::RenderTarget | ResourceBindFlag::DepthStencil, desc_.bind_flag)))
 			{
 				clearValue.Format = resource_desc.Format;
-				if (check_bits(ResourceBindFlag::DepthStencil, desc_.bind_flag))
-				{
-					clearValue.DepthStencil.Depth = 1.0f;
-				}
+				clearValue.DepthStencil.Depth = desc.depth_stencil.clear_value;
+
+				clearValue.Color[0] = desc.rendertarget.clear_value[0];
+				clearValue.Color[1] = desc.rendertarget.clear_value[1];
+				clearValue.Color[2] = desc.rendertarget.clear_value[2];
+				clearValue.Color[3] = desc.rendertarget.clear_value[3];
+
 				pClearVal = &clearValue;
 			}
 			if (isDepthFormat(desc_.format) && (check_bits(ResourceBindFlag::ShaderResource | ResourceBindFlag::UnorderedAccess, desc_.bind_flag)) )
