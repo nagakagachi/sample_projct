@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#include <memory>
-
 #include "ngl/util/noncopyable.h"
 #include "ngl/math/math.h"
 

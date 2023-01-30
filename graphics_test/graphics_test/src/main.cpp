@@ -29,6 +29,7 @@
 
 
 // gfx
+#include "ngl/gfx/common_struct.h"
 #include "ngl/gfx/mesh_resource.h"
 #include "ngl/gfx/rt_structure_manager.h"
 #include "ngl/gfx/mesh_component.h"
@@ -36,7 +37,7 @@
 #include "ngl/thread/lockfree_stack_intrusive.h"
 #include "ngl/thread/lockfree_stack_intrusive_test.h"
 
-#include "ngl/gfx/common_struct.h"
+#include "ngl/gfx/command_helper.h"
 
 
 struct CbSampleVs
@@ -115,25 +116,8 @@ private:
 	ngl::rhi::ShaderDep							sample_ps_;
 	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
 
-	ngl::rhi::BufferDep							cb_sample_vs_;
-	ngl::rhi::ConstantBufferViewDep				cbv_sample_vs_;
-	ngl::rhi::BufferDep							cb_sample_ps_;
-	ngl::rhi::ConstantBufferViewDep				cbv_sample_ps_;
-
-	ngl::rhi::BufferDep							vb_sample_;
-	ngl::rhi::VertexBufferViewDep				vbv_sample_;
-
-	ngl::rhi::BufferDep							ib_sample_;
-	ngl::rhi::IndexBufferViewDep				ibv_sample_;
-
-
-	ngl::rhi::ShaderDep							sample_fullscr_proc_vs_;
-
-	ngl::rhi::ShaderDep							sample_fullscr_proc_ps_;
-	ngl::rhi::GraphicsPipelineStateDep			sample_fullscr_proc_pso_;
 
 	ngl::rhi::SamplerDep						samp_linear_clamp_;
-
 
 	ngl::rhi::ShaderDep							vs_fullscr_proc_;
 
@@ -142,10 +126,6 @@ private:
 
 	ngl::rhi::ShaderDep							ps_final_screen_pass_;
 	ngl::rhi::GraphicsPipelineStateDep			pso_final_screen_pass_;
-
-	ngl::rhi::ShaderDep							sample_cs_;
-	ngl::rhi::ComputePipelineStateDep			sample_cs_pso_;
-
 
 	ngl::rhi::ShaderDep							cs_gen_lineardepth_;
 	ngl::rhi::ComputePipelineStateDep			pso_gen_lineardepth_;
@@ -474,31 +454,6 @@ bool AppGame::Initialize()
 			}
 			reflect00.Initialize(&device_, &sample_ps_);
 		}
-
-		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_fullscr_procedural_vs.hlsl";
-			shader_desc.entry_point_name = "main_vs";
-			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
-			shader_desc.shader_model_version = "6_0";
-
-			if (!sample_fullscr_proc_vs_.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-			}
-		}
-		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_draw_procedural_ps.hlsl";
-			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-			shader_desc.shader_model_version = "6_0";
-
-			if (!sample_fullscr_proc_ps_.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-			}
-		}
 	}
 
 	// PSO
@@ -539,166 +494,6 @@ bool AppGame::Initialize()
 			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
 		}
 	}
-
-	// InputLayout無しのPSO
-	{
-		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-		desc.vs = &sample_fullscr_proc_vs_;
-		desc.ps = &sample_fullscr_proc_ps_;
-
-		desc.num_render_targets = 1;
-		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
-
-
-		desc.blend_state.target_blend_states[0].blend_enable = false;
-		desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
-		if (!sample_fullscr_proc_pso_.Initialize(&device_, desc))
-		{
-			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
-		}
-	}
-
-	{
-		// HLSLからコンパイルして初期化.
-		
-		ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-		shader_desc.shader_file_path = "./src/ngl/data/shader/sample_cs.hlsl";
-		shader_desc.entry_point_name = "main_cs";
-		shader_desc.stage = ngl::rhi::ShaderStage::Compute;
-		shader_desc.shader_model_version = "6_0";
-
-		if (!sample_cs_.Initialize(&device_, shader_desc))
-		{
-			std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-		}
-
-		ngl::rhi::ShaderReflectionDep reflect00;
-		reflect00.Initialize(&device_, &sample_cs_);
-
-
-		ngl::rhi::ComputePipelineStateDep::Desc cs_pso_desc = {};
-		cs_pso_desc.cs = &sample_cs_;
-		sample_cs_pso_.Initialize(&device_, cs_pso_desc);
-	}
-
-	{
-		// ConstantBuffer作成
-		ngl::rhi::BufferDep::Desc cb_desc = {};
-		cb_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-		cb_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
-		cb_desc.element_byte_size = sizeof(CbSampleVs);
-		cb_desc.element_count = 1;
-
-		if (cb_sample_vs_.Initialize(&device_, cb_desc))
-		{
-			if (auto* map_data = reinterpret_cast<CbSampleVs*>(cb_sample_vs_.Map()))
-			{
-				map_data->cb_param_vs0 = ngl::math::Vec4(1.0f, 0.5f, 0.0f, 1.0f);
-
-				cb_sample_vs_.Unmap();
-			}
-		}
-
-		// ConstantBufferView作成
-		ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
-		cbv_sample_vs_.Initialize(&cb_sample_vs_, cbv_desc);
-	}
-	{
-		// ConstantBuffer作成
-		ngl::rhi::BufferDep::Desc cb_desc = {};
-		cb_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-		cb_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
-		cb_desc.element_byte_size = sizeof(CbSamplePs);
-		cb_desc.element_count = 1;
-
-		if (cb_sample_ps_.Initialize(&device_, cb_desc))
-		{
-			if (auto* map_data = reinterpret_cast<CbSamplePs*>(cb_sample_ps_.Map()))
-			{
-				map_data->cb_param0 = ngl::math::Vec4(1.0f, 0.5f, 0.0f, 1.0f);
-
-				cb_sample_ps_.Unmap();
-			}
-		}
-
-		// ConstantBufferView作成
-		ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
-		cbv_sample_ps_.Initialize(&cb_sample_ps_, cbv_desc);
-	}
-
-	{
-		// VertexBuffer作成
-		struct VertexPosUv
-		{
-			ngl::math::Vec4 pos;
-
-			float u;
-			float v;
-		};
-
-		constexpr float shape_scale = 0.95f;
-		VertexPosUv sample_vtx_list[] =
-		{
-			{{-shape_scale, shape_scale, 0.0f, 1.0f},	0.0f, 0.0f },
-			{{shape_scale, -shape_scale, 0.0f, 1.0f},	1.0f, 1.0f },
-			{{-shape_scale, -shape_scale, 0.0f, 1.0f},	0.0f, 1.0f},
-
-			{{-shape_scale, shape_scale, 0.0f, 1.0f},	0.0f, 0.0f },
-			{{ shape_scale, shape_scale, 0.0f, 1.0f},	1.0f, 0.0f },
-			{{ shape_scale, -shape_scale, 0.0f, 1.0f},	1.0f, 1.0f},
-		};
-
-
-		ngl::rhi::BufferDep::Desc vtx_desc = {};
-		vtx_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-		vtx_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::VertexBuffer;
-		vtx_desc.element_count = static_cast<ngl::u32>(std::size(sample_vtx_list));
-		vtx_desc.element_byte_size = sizeof(sample_vtx_list[0]);
-
-		if (vb_sample_.Initialize(&device_, vtx_desc))
-		{
-			if (auto* map_data = reinterpret_cast<VertexPosUv*>(vb_sample_.Map()))
-			{
-				memcpy(map_data, sample_vtx_list, sizeof(sample_vtx_list));
-
-				vb_sample_.Unmap();
-			}
-		}
-
-		ngl::rhi::VertexBufferViewDep::Desc vbv_desc{};
-		if (!vbv_sample_.Initialize(&vb_sample_, vbv_desc))
-		{
-			assert(false);
-		}
-	}
-	{
-		int sample_index_data[] =
-		{
-			0, 1, 2,
-			3, 4, 5,
-		};
-		ngl::rhi::BufferDep::Desc idx_desc = {};
-		idx_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-		idx_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::IndexBuffer;
-		idx_desc.element_count = static_cast<ngl::u32>(std::size(sample_index_data));
-		idx_desc.element_byte_size = sizeof(sample_index_data[0]);
-
-		if (!ib_sample_.Initialize(&device_, idx_desc))
-		{
-			assert(false);
-		}
-		if (auto* map_data = reinterpret_cast<int*>(ib_sample_.Map()))
-		{
-			memcpy(map_data, sample_index_data, sizeof(sample_index_data));
-		}
-
-		ngl::rhi::IndexBufferViewDep::Desc ibv_desc = {};
-		if (!ibv_sample_.Initialize(&ib_sample_, ibv_desc))
-		{
-		}
-	}
-
 
 	{
 		// Samplerテスト
@@ -1266,49 +1061,6 @@ bool AppGame::Execute()
 				rt_st_.DispatchRay(&gfx_command_list_);
 			}
 
-			// Compute.
-			{
-				struct CbSampleCs
-				{
-					float cb_time;
-				};
-
-
-				auto cb_cs = ngl::rhi::RhiRef(new ngl::rhi::BufferDep);
-				auto cbv_cs = ngl::rhi::RhiRef(new ngl::rhi::ConstantBufferViewDep);
-				{
-					ngl::rhi::BufferDep::Desc cb_cs_desc = {};
-					cb_cs_desc.SetupAsConstantBuffer(sizeof(CbSampleCs));
-					cb_cs->Initialize(&device_, cb_cs_desc);
-
-					if (auto* mapped = cb_cs->MapAs<CbSampleCs>())
-					{
-						mapped->cb_time = app_sec_;
-						cb_cs->Unmap();
-					}
-
-					ngl::rhi::ConstantBufferViewDep::Desc cbv_cs_desc = {};
-					cbv_cs->Initialize(cb_cs.Get(), cbv_cs_desc);
-				}
-
-
-				// to SRV.
-				gfx_command_list_.ResourceBarrier(&tex_rw_, ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::UnorderedAccess);
-
-
-				ngl::rhi::DescriptorSetDep desc_set = {};
-				sample_cs_pso_.SetDescriptorHandle(&desc_set, "out_uav", tex_rw_uav_.GetView().cpu_handle);
-				sample_cs_pso_.SetDescriptorHandle(&desc_set, "CbSampleCs", cbv_cs->GetView().cpu_handle);
-
-				gfx_command_list_.SetPipelineState(&sample_cs_pso_);
-				gfx_command_list_.SetDescriptorSet(&sample_cs_pso_, &desc_set);
-				sample_cs_pso_.DispatchHelper(&gfx_command_list_, tex_rw_.GetWidth(), tex_rw_.GetHeight(), 1);
-
-				// to UAV.
-				gfx_command_list_.ResourceBarrier(&tex_rw_, ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
-			}
-
-
 			{
 				// Barrier.
 				{
@@ -1331,21 +1083,8 @@ bool AppGame::Execute()
 							gfx_command_list_.SetRenderTargets(nullptr, 0, p_depth_view);
 						}
 
-						D3D12_VIEWPORT viewport;
-						viewport.MinDepth = 0.0f;
-						viewport.MaxDepth = 1.0f;
-						viewport.TopLeftX = 0.0f;
-						viewport.TopLeftY = 0.0f;
-						viewport.Width = static_cast<float>(p_depth->GetWidth());
-						viewport.Height = static_cast<float>(p_depth->GetHeight());
-						gfx_command_list_.SetViewports(1, &viewport);
-
-						D3D12_RECT scissor_rect;
-						scissor_rect.left = 0;
-						scissor_rect.top = 0;
-						scissor_rect.right = p_depth->GetWidth();
-						scissor_rect.bottom = p_depth->GetHeight();
-						gfx_command_list_.SetScissor(1, &scissor_rect);
+						// Viewport and Scissor.
+						ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, p_depth->GetWidth(), p_depth->GetHeight());
 
 						// PSO.
 						gfx_command_list_.SetPipelineState(&pso_mesh_simple_depth);
@@ -1429,22 +1168,8 @@ bool AppGame::Execute()
 					std::array<float, 4> clear_color = { 0.0f, 0.0f , 0.0f , 0.0f };
 					gfx_command_list_.ClearRenderTarget(&tex_work_rtv_, clear_color.data());
 
-
-					D3D12_VIEWPORT viewport;
-					viewport.MinDepth = 0.0f;
-					viewport.MaxDepth = 1.0f;
-					viewport.TopLeftX = 0.0f;
-					viewport.TopLeftY = 0.0f;
-					viewport.Width = static_cast<float>(tex_work_.GetWidth());
-					viewport.Height = static_cast<float>(tex_work_.GetHeight());
-					gfx_command_list_.SetViewports(1, &viewport);
-
-					D3D12_RECT scissor_rect;
-					scissor_rect.left = 0;
-					scissor_rect.top = 0;
-					scissor_rect.right = tex_work_.GetWidth();
-					scissor_rect.bottom = tex_work_.GetHeight();
-					gfx_command_list_.SetScissor(1, &scissor_rect);
+					// Viewport and Scissor.
+					ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, tex_work_.GetWidth(), tex_work_.GetHeight());
 
 					// Rtv, Dsv セット.
 					{
@@ -1475,21 +1200,8 @@ bool AppGame::Execute()
 						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 					}
 
-					D3D12_VIEWPORT viewport;
-					viewport.MinDepth = 0.0f;
-					viewport.MaxDepth = 1.0f;
-					viewport.TopLeftX = 0.0f;
-					viewport.TopLeftY = 0.0f;
-					viewport.Width = static_cast<float>(screen_w);
-					viewport.Height = static_cast<float>(screen_h);
-					gfx_command_list_.SetViewports(1, &viewport);
-
-					D3D12_RECT scissor_rect;
-					scissor_rect.left = 0;
-					scissor_rect.top = 0;
-					scissor_rect.right = screen_w;
-					scissor_rect.bottom = screen_h;
-					gfx_command_list_.SetScissor(1, &scissor_rect);
+					// Viewport and Scissor.
+					ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, screen_w, screen_h);
 
 					// Rtv, Dsv セット.
 					{
