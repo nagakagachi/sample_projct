@@ -5,7 +5,7 @@
 #include "ngl/util/noncopyable.h"
 #include "ngl/math/math.h"
 
-#include "mesh_resource.h"
+#include "resource_mesh.h"
 
 namespace ngl
 {

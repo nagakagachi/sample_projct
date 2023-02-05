@@ -155,6 +155,12 @@ namespace ngl
 			NGL_RES_MEMBER_DECLARE(ResMeshData)
 
 		public:
+			struct LoadDesc
+			{
+				int dummy;
+			};
+
+
 			ResMeshData()
 			{
 			}
@@ -163,6 +169,8 @@ namespace ngl
 				std::cout << "[ResMeshData] Destruct " << this << std::endl;
 			}
 
+
+			bool IsNeedRenderUpdate() const override { return true; }
 			void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override;
 
 			MeshData data_ = {};

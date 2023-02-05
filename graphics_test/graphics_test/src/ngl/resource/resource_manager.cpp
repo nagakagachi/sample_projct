@@ -1,10 +1,6 @@
 ﻿
 #include "resource_manager.h"
 
-// resource derived.
-#include "ngl/gfx/mesh_resource.h"
-// other.
-
 #include "ngl/gfx/mesh_loader_assimp.h"
 
 namespace ngl
@@ -112,49 +108,28 @@ namespace res
 		}
 	}
 
-
-	// Load Mesh.
-	// Thread Safe.
-	ResourceHandle<gfx::ResMeshData> ResourceManager::LoadResMesh(rhi::DeviceDep* p_device, const char* filename)
+	// Mesh Load 実装部.
+	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc)
 	{
-		// 返すResクラスの型を取得(e.g. ResMeshData).
-		using ResType = std::remove_const < std::remove_reference< decltype(*LoadResMesh({}, {})) > ::type > ::type;
-
-
-		// 登録済みか検索.
-		auto exist_handle = FindHandle(ResType::k_resource_type_name, filename);
-		if (exist_handle.get())
-		{
-			// あれば返却.
-			return ResourceHandle<ResType>(exist_handle);
-		}
-
-		// 存在しない場合は読み込み.
-
-		// 新規生成.
-		auto p_res = new ResType();
-		res::ResoucePrivateAccess::SetResourceInfo(p_res, filename);
-		// Handle生成.
-		auto handle = ResourceHandle(p_res, &deleter_instance_);
-		// 内部管理用RawHandle取得. handleの内部参照カウンタ共有.
-		auto raw_handle = ResoucePrivateAccess::GetRawHandle(handle);
-		// データベースに登録.
-		Register(raw_handle);
-
-
-		// 実際にリソースロード.
-		assimp::LoadMeshData(*p_res, p_device, filename);
-
-
-		// 新規リソースをRenderThread初期化リストへ登録.
-		{
-			auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
-			frame_render_update_list_with_handle_.push_back(raw_handle);
-		}
-
-		// 新規ハンドルを生成して返す.
-		return handle;
+		return assimp::LoadMeshData(*p_res, p_device, p_res->GetFileName());
 	}
+	// Shader Load 実装部.
+	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc)
+	{
+		ngl::rhi::ShaderDep::InitFileDesc desc = {};
+		desc.entry_point_name = p_desc->entry_point_name;// "main_vs";
+		desc.shader_file_path = p_res->GetFileName();
+		desc.shader_model_version = p_desc->shader_model_version;// "6_0";
+		desc.stage = p_desc->stage;// ngl::rhi::ShaderStage::Vertex;
+		if (!p_res->data_.Initialize(p_device, desc))
+		{
+			assert(false);
+			return false;
+		}
+
+		return true;
+	}
+
 
 	// Thread Safe.
 	detail::ResourceHolderHandle ResourceManager::FindHandle(const char* res_typename, const char* filename)

@@ -4,7 +4,7 @@
 
 #include "ngl/rhi/d3d12/device.d3d12.h"
 
-#include "ngl/gfx/mesh_resource.h"
+#include "ngl/gfx/resource_mesh.h"
 
 namespace ngl
 {

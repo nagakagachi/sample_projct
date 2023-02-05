@@ -30,7 +30,7 @@
 
 // gfx
 #include "ngl/gfx/common_struct.h"
-#include "ngl/gfx/mesh_resource.h"
+#include "ngl/gfx/resource_mesh.h"
 #include "ngl/gfx/rt_structure_manager.h"
 #include "ngl/gfx/mesh_component.h"
 
@@ -112,22 +112,25 @@ private:
 	ngl::rhi::UnorderedAccessViewDep			tex_rw_uav_;
 
 
-	ngl::rhi::ShaderDep							sample_vs_;
-	ngl::rhi::ShaderDep							sample_ps_;
-	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_sample_vs_;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_sample_ps_;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_vs_fullscr_proc_;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_copy_to_screen;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_final_screen_pass_;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_cs_gen_lineardepth_;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_vs_mesh_simple_depth;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_mesh_simple_depth;
+	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_rt_shader_lib0_;
 
+
+	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
 
 	ngl::rhi::SamplerDep						samp_linear_clamp_;
 
-	ngl::rhi::ShaderDep							vs_fullscr_proc_;
-
-	ngl::rhi::ShaderDep							ps_copy_to_swapchain;
 	ngl::rhi::GraphicsPipelineStateDep			pso_copy_to_swapchain;
 
-	ngl::rhi::ShaderDep							ps_final_screen_pass_;
 	ngl::rhi::GraphicsPipelineStateDep			pso_final_screen_pass_;
 
-	ngl::rhi::ShaderDep							cs_gen_lineardepth_;
 	ngl::rhi::ComputePipelineStateDep			pso_gen_lineardepth_;
 
 
@@ -136,14 +139,11 @@ private:
 	int												flip_index_sceneview_ = 0;
 
 
-	ngl::rhi::ShaderDep							vs_mesh_simple_depth;
-	ngl::rhi::ShaderDep							ps_mesh_simple_depth;
 	ngl::rhi::GraphicsPipelineStateDep			pso_mesh_simple_depth;
 
 
 	ngl::gfx::RaytraceStructureManager			rt_st_;
 
-	ngl::rhi::ShaderDep							rt_shader_lib0_;
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 	
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
@@ -423,44 +423,83 @@ bool AppGame::Initialize()
 		return false;
 	}
 
+	
+
+	// Shader Load.
 	{
-		// HLSLからコンパイルして初期化.
-		ngl::rhi::ShaderReflectionDep reflect02;
-		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_vs.hlsl";
-			shader_desc.entry_point_name = "main_vs";
-			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
-			shader_desc.shader_model_version = "6_0";
+		auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
-			if (!sample_vs_.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-			}
-			reflect02.Initialize(&device_, &sample_vs_);
+		static const char* k_shader_model = "6_3";
+
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_vs";
+			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_sample_vs_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/sample_vs.hlsl", &loaddesc);
 		}
-		// HLSLからコンパイルして初期化.
-		ngl::rhi::ShaderReflectionDep reflect00;
 		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
-			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-			shader_desc.shader_model_version = "6_0";
-
-			if (!sample_ps_.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-			}
-			reflect00.Initialize(&device_, &sample_ps_);
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_ps";
+			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_sample_ps_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/sample_ps.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_vs";
+			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_vs_mesh_simple_depth= ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_ps";
+			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_ps_mesh_simple_depth = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_vs";
+			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_vs_fullscr_proc_= ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_ps";
+			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_ps_final_screen_pass_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/final_screen_pass_ps.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_ps";
+			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_ps_copy_to_screen = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/screen/copy_tex_to_screen_ps.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.entry_point_name = "main_cs";
+			loaddesc.stage = ngl::rhi::ShaderStage::Compute;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_cs_gen_lineardepth_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/screen/generate_lineardepth_cs.hlsl", &loaddesc);
+		}
+		{
+			ngl::gfx::ResShader::LoadDesc loaddesc = {};
+			loaddesc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
+			loaddesc.shader_model_version = k_shader_model;
+			res_shader_rt_shader_lib0_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/dxr_sample_lib.hlsl", &loaddesc);
 		}
 	}
 
 	// PSO
 	{
 		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-		desc.vs = &sample_vs_;
-		desc.ps = &sample_ps_;
+		desc.vs = &res_shader_sample_vs_->data_;
+		desc.ps = &res_shader_sample_ps_->data_;
 
 		desc.num_render_targets = 1;
 		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
@@ -525,31 +564,9 @@ bool AppGame::Initialize()
 
 		// Depth Prepass.
 		{
-			ngl::rhi::ShaderDep::InitFileDesc desc = {};
-			desc.entry_point_name = "main_vs";
-			desc.shader_file_path = "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl";
-			desc.shader_model_version = "6_0";
-			desc.stage = ngl::rhi::ShaderStage::Vertex;
-			if (!vs_mesh_simple_depth.Initialize(&device_, desc))
-			{
-				assert(false);
-			}
-		}
-		{
-			ngl::rhi::ShaderDep::InitFileDesc desc = {};
-			desc.entry_point_name = "main_ps";
-			desc.shader_file_path = "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl";
-			desc.shader_model_version = "6_0";
-			desc.stage = ngl::rhi::ShaderStage::Pixel;
-			if (!ps_mesh_simple_depth.Initialize(&device_, desc))
-			{
-				assert(false);
-			}
-		}
-		{
 			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-			desc.vs = &vs_mesh_simple_depth;
-			desc.ps = &ps_mesh_simple_depth;
+			desc.vs = &res_shader_vs_mesh_simple_depth->data_;
+			desc.ps = &res_shader_ps_mesh_simple_depth->data_;
 
 			desc.depth_stencil_state.depth_enable = true;
 			desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater; // ReverseZ.
@@ -589,18 +606,8 @@ bool AppGame::Initialize()
 	}
 
 	{
-		ngl::rhi::ShaderDep::InitFileDesc desc = {};
-		desc.shader_file_path = "./src/ngl/data/shader/screen/generate_lineardepth_cs.hlsl";
-		desc.entry_point_name = "main_cs";
-		desc.shader_model_version = "6_0";
-		desc.stage = ngl::rhi::ShaderStage::Compute;
-		if (!cs_gen_lineardepth_.Initialize(&device_, desc))
-		{
-			assert(false);
-		}
-
 		ngl::rhi::ComputePipelineStateDep::Desc pso_desc = {};
-		pso_desc.cs = &cs_gen_lineardepth_;
+		pso_desc.cs = &res_shader_cs_gen_lineardepth_->data_;
 		if(!pso_gen_lineardepth_.Initialize(&device_, pso_desc))
 		{
 			assert(false);
@@ -609,79 +616,37 @@ bool AppGame::Initialize()
 
 	{
 		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl";
-			shader_desc.entry_point_name = "main_vs";
-			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
-			shader_desc.shader_model_version = "6_0";
+			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+			desc.vs = &res_shader_vs_fullscr_proc_->data_;
+			desc.ps = &res_shader_ps_final_screen_pass_->data_;
 
-			if (!vs_fullscr_proc_.Initialize(&device_, shader_desc))
+			desc.num_render_targets = 1;
+			desc.render_target_formats[0] = tex_work_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+
+			desc.blend_state.target_blend_states[0].blend_enable = false;
+			desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
+
+			if (!pso_final_screen_pass_.Initialize(&device_, desc))
 			{
 				assert(false);
 			}
 		}
 		{
+			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+			desc.vs = &res_shader_vs_fullscr_proc_->data_;
+			desc.ps = &res_shader_ps_copy_to_screen->data_;
+
+			desc.num_render_targets = 1;
+			desc.render_target_formats[0] = this->swapchain_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+
+			desc.blend_state.target_blend_states[0].blend_enable = false;
+			desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
+
+			if (!pso_copy_to_swapchain.Initialize(&device_, desc))
 			{
-				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-				shader_desc.shader_file_path = "./src/ngl/data/shader/final_screen_pass_ps.hlsl";
-				shader_desc.entry_point_name = "main_ps";
-				shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-				shader_desc.shader_model_version = "6_0";
-
-				if (!ps_final_screen_pass_.Initialize(&device_, shader_desc))
-				{
-					assert(false);
-				}
-			}
-			{
-				ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-				desc.vs = &vs_fullscr_proc_;
-				desc.ps = &ps_final_screen_pass_;
-
-				desc.num_render_targets = 1;
-				desc.render_target_formats[0] = tex_work_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
-
-				desc.blend_state.target_blend_states[0].blend_enable = false;
-				desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
-				if (!pso_final_screen_pass_.Initialize(&device_, desc))
-				{
-					assert(false);
-				}
+				assert(false);
 			}
 		}
-
-		{
-			{
-				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-				shader_desc.shader_file_path = "./src/ngl/data/shader/screen/copy_tex_to_screen_ps.hlsl";
-				shader_desc.entry_point_name = "main_ps";
-				shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-				shader_desc.shader_model_version = "6_0";
-
-				if (!ps_copy_to_swapchain.Initialize(&device_, shader_desc))
-				{
-					assert(false);
-				}
-			}
-			{
-				ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-				desc.vs = &vs_fullscr_proc_;
-				desc.ps = &ps_copy_to_swapchain;
-
-				desc.num_render_targets = 1;
-				desc.render_target_formats[0] = this->swapchain_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
-
-				desc.blend_state.target_blend_states[0].blend_enable = false;
-				desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
-				if (!pso_copy_to_swapchain.Initialize(&device_, desc))
-				{
-					assert(false);
-				}
-			}
-		}
-
 	}
 
 	{
@@ -700,7 +665,8 @@ bool AppGame::Initialize()
 				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 
-				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_sponza));
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_sponza, &loaddesc));
 				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 0)).SetDiagonal(ngl::math::Vec3(0.1f));
 			}
 
@@ -709,7 +675,8 @@ bool AppGame::Initialize()
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
-				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_spider));
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 
 
 
@@ -739,13 +706,15 @@ bool AppGame::Initialize()
 				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 
-				mc->SetMeshData(ResourceMan.LoadResMesh(&device_, mesh_file_box));
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_box, &loaddesc));
 				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(10, 30, 0));
 			}
 #else
 			{
 				// 即時破棄をしても内部でのRenderThread初期化処理リストでの参照保持等が正常に動作するか確認するため.
-				auto immediate_destroy_resmesh = ResourceMan.LoadResMesh(&device_, mesh_file_box);
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				auto immediate_destroy_resmesh = ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_box, &loaddesc);
 				immediate_destroy_resmesh = {};
 			}
 #endif
@@ -753,17 +722,6 @@ bool AppGame::Initialize()
 	}
 
 	{
-		// ShaderLibrary.
-		ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-		shader_desc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
-		shader_desc.shader_model_version = "6_3";
-		shader_desc.shader_file_path = "./src/ngl/data/shader/dxr_sample_lib.hlsl";
-		if (!rt_shader_lib0_.Initialize(&device_, shader_desc))
-		{
-			std::cout << "[ERROR] Create DXR ShaderLib" << std::endl;
-			assert(false);
-		}
-
 		// StateObject生成.
 		{
 			std::vector<ngl::gfx::RaytraceShaderRegisterInfo> shader_reg_info_array = {};
@@ -773,7 +731,7 @@ bool AppGame::Initialize()
 				shader_reg_info_array.push_back({});
 
 				// 関数登録元ShaderLib参照.
-				shader_reg_info_array[shader_index].p_shader_library = &rt_shader_lib0_;
+				shader_reg_info_array[shader_index].p_shader_library = &res_shader_rt_shader_lib0_->data_;
 
 				// シェーダから公開するRaygenerationShader名.
 				shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
@@ -1411,8 +1369,8 @@ void AppGame::TestCode()
 			ngl::rhi::GraphicsPipelineStateDep pso;
 
 			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-			desc.vs = &sample_vs_;
-			desc.ps = &sample_ps_;
+			desc.vs = &res_shader_sample_vs_->data_;
+			desc.ps = &res_shader_sample_ps_->data_;
 
 			desc.num_render_targets = 1;
 			desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;

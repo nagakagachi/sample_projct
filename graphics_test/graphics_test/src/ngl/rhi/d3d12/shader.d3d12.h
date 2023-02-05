@@ -178,12 +178,12 @@ namespace rhi
 	public:
 		struct Desc
 		{
-			ShaderDep* vs = nullptr;
-			ShaderDep* hs = nullptr;
-			ShaderDep* ds = nullptr;
-			ShaderDep* gs = nullptr;
-			ShaderDep* ps = nullptr;
-			ShaderDep* cs = nullptr;
+			const ShaderDep* vs = nullptr;
+			const ShaderDep* hs = nullptr;
+			const ShaderDep* ds = nullptr;
+			const ShaderDep* gs = nullptr;
+			const ShaderDep* ps = nullptr;
+			const ShaderDep* cs = nullptr;
 		};
 
 		// RootSignatureで定義されたあるシェーダステージのあるリソースタイプのテーブルインデックスを保持
@@ -277,11 +277,11 @@ namespace rhi
 	public:
 		struct Desc
 		{
-			ShaderDep* vs = nullptr;
-			ShaderDep* ps = nullptr;
-			ShaderDep* ds = nullptr;
-			ShaderDep* hs = nullptr;
-			ShaderDep* gs = nullptr;
+			const ShaderDep* vs = nullptr;
+			const ShaderDep* ps = nullptr;
+			const ShaderDep* ds = nullptr;
+			const ShaderDep* hs = nullptr;
+			const ShaderDep* gs = nullptr;
 
 			BlendState			blend_state = {};
 			u32					sample_mask = ~(u32(0));
@@ -331,7 +331,7 @@ namespace rhi
 	public:
 		struct Desc
 		{
-			ShaderDep* cs = nullptr;
+			const ShaderDep* cs = nullptr;
 			u32			node_mask = 0;
 		};
 

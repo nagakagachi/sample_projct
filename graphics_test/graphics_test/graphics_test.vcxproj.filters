@@ -72,7 +72,7 @@
     <ClCompile Include="src\ngl\resource\resource.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="src\ngl\gfx\mesh_resource.cpp">
+    <ClCompile Include="src\ngl\gfx\resource_mesh.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="src\ngl\thread\lockfree_stack_intrusive_test.cpp">
@@ -185,7 +185,7 @@
     <ClInclude Include="src\ngl\math\detail\math_matrix.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\gfx\mesh_resource.h">
+    <ClInclude Include="src\ngl\gfx\resource_mesh.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h">
@@ -216,6 +216,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\gfx\command_helper.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\gfx\resource_shader.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

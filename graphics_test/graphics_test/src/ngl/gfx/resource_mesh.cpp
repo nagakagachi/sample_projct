@@ -1,5 +1,5 @@
 ﻿
-#include "mesh_resource.h"
+#include "resource_mesh.h"
 
 #include "ngl/resource/resource_manager.h"
 
