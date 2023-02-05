@@ -20,8 +20,8 @@
 #include "resource.h"
 
 // resource derived.
-#include "ngl/gfx/resource_mesh.h"
-#include "ngl/gfx/resource_shader.h"
+#include "ngl/gfx/resource/resource_mesh.h"
+#include "ngl/gfx/resource/resource_shader.h"
 // other.
 
 

@@ -170,7 +170,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\gfx\command_helper.cpp" />
     <ClCompile Include="src\ngl\gfx\mesh_component.cpp" />
     <ClCompile Include="src\ngl\gfx\mesh_loader_assimp.cpp" />
-    <ClCompile Include="src\ngl\gfx\resource_mesh.cpp" />
+    <ClCompile Include="src\ngl\gfx\resource\resource_mesh.cpp" />
     <ClCompile Include="src\ngl\gfx\rt_structure_manager.cpp" />
     <ClCompile Include="src\ngl\memory\boundary_tag_block.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
@@ -198,9 +198,9 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\gfx\command_helper.h" />
     <ClInclude Include="src\ngl\gfx\common_struct.h" />
     <ClInclude Include="src\ngl\gfx\mesh_component.h" />
-    <ClInclude Include="src\ngl\gfx\resource_mesh.h" />
+    <ClInclude Include="src\ngl\gfx\resource\resource_mesh.h" />
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h" />
-    <ClInclude Include="src\ngl\gfx\resource_shader.h" />
+    <ClInclude Include="src\ngl\gfx\resource\resource_shader.h" />
     <ClInclude Include="src\ngl\gfx\rt_structure_manager.h" />
     <ClInclude Include="src\ngl\math\detail\math_matrix.h" />
     <ClInclude Include="src\ngl\math\detail\math_vector.h" />
@@ -243,21 +243,10 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <None Include="src\ngl\data\shader\dxr_sample_lib.hlsl">
       <FileType>Document</FileType>
     </None>
-    <None Include="src\ngl\data\shader\sample_draw_procedural_ps.hlsl">
-      <FileType>Document</FileType>
-    </None>
-    <None Include="src\ngl\data\shader\sample_fullscr_procedural_vs.hlsl">
-      <FileType>Document</FileType>
-    </None>
     <None Include="src\ngl\data\shader\sample_ps.hlsl">
       <FileType>Document</FileType>
     </None>
     <None Include="src\ngl\data\shader\sample_vs.hlsl">
-      <FileType>Document</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="src\ngl\data\shader\sample_cs.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

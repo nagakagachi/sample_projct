@@ -30,7 +30,6 @@
 
 // gfx
 #include "ngl/gfx/common_struct.h"
-#include "ngl/gfx/resource_mesh.h"
 #include "ngl/gfx/rt_structure_manager.h"
 #include "ngl/gfx/mesh_component.h"
 

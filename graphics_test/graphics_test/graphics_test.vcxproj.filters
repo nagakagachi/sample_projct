@@ -72,7 +72,7 @@
     <ClCompile Include="src\ngl\resource\resource.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="src\ngl\gfx\resource_mesh.cpp">
+    <ClCompile Include="src\ngl\gfx\resource\resource_mesh.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="src\ngl\thread\lockfree_stack_intrusive_test.cpp">
@@ -185,7 +185,7 @@
     <ClInclude Include="src\ngl\math\detail\math_matrix.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\gfx\resource_mesh.h">
+    <ClInclude Include="src\ngl\gfx\resource\resource_mesh.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h">
@@ -218,7 +218,7 @@
     <ClInclude Include="src\ngl\gfx\command_helper.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\gfx\resource_shader.h">
+    <ClInclude Include="src\ngl\gfx\resource\resource_shader.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
@@ -227,11 +227,8 @@
       <Filter>ヘッダー ファイル</Filter>
     </None>
     <None Include="src\ngl\data\shader\dxr_sample_lib.hlsl" />
-    <None Include="src\ngl\data\shader\sample_draw_procedural_ps.hlsl" />
-    <None Include="src\ngl\data\shader\sample_fullscr_procedural_vs.hlsl" />
     <None Include="src\ngl\data\shader\sample_ps.hlsl" />
     <None Include="src\ngl\data\shader\sample_vs.hlsl" />
-    <None Include="src\ngl\data\shader\sample_cs.hlsl" />
     <None Include="src\ngl\data\shader\include\scene_view_struct.hlsli" />
     <None Include="src\ngl\data\shader\mesh\mesh_simple_depth_ps.hlsl" />
     <None Include="src\ngl\data\shader\mesh\mesh_simple_depth_vs.hlsl" />

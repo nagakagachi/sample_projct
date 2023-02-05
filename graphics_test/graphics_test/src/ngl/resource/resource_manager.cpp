@@ -117,10 +117,10 @@ namespace res
 	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc)
 	{
 		ngl::rhi::ShaderDep::InitFileDesc desc = {};
-		desc.entry_point_name = p_desc->entry_point_name;// "main_vs";
+		desc.entry_point_name = p_desc->entry_point_name;
 		desc.shader_file_path = p_res->GetFileName();
-		desc.shader_model_version = p_desc->shader_model_version;// "6_0";
-		desc.stage = p_desc->stage;// ngl::rhi::ShaderStage::Vertex;
+		desc.shader_model_version = p_desc->shader_model_version;
+		desc.stage = p_desc->stage;
 		if (!p_res->data_.Initialize(p_device, desc))
 		{
 			assert(false);
