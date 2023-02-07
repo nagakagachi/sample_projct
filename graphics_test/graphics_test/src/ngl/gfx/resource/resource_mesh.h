@@ -33,17 +33,13 @@ namespace ngl
 		};
 
 
-		template<typename T>
 		class MeshShapeGeomBufferBase
 		{
 		public:
-			MeshShapeGeomBufferBase()
-			{
-			}
+			MeshShapeGeomBufferBase() {}
 			virtual ~MeshShapeGeomBufferBase()
 			{
 			}
-
 			void InitRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
 			{
 				// バッファ自体が生成されていなければ終了.
@@ -60,21 +56,40 @@ namespace ngl
 				ref_upload_rhibuffer_.Reset();
 			}
 
+			bool IsValid() const { return rhi_buffer_.IsValid(); }
+
 			// rhi buffer for gpu.
 			rhi::BufferDep	rhi_buffer_ = {};
 			// rhi srv.
 			rhi::ShaderResourceViewDep rhi_srv = {};
 
-
-			// raw data ptr.
-			T* raw_ptr_ = nullptr;
 			// 初期データバッファ. InitRenderでrhi_buffer_へコピー命令を発行した後に破棄される.
 			rhi::RhiRef<rhi::BufferDep>	ref_upload_rhibuffer_ = {};
+			void* raw_ptr_ = nullptr;
+		};
 
+		class MeshShapeVertexDataBase : public MeshShapeGeomBufferBase
+		{
+		public:
+			MeshShapeVertexDataBase() {}
+			virtual ~MeshShapeVertexDataBase() {}
+
+			// rhi vertex buffer view.
+			rhi::VertexBufferViewDep rhi_vbv_ = {};
+		};
+
+		class MeshShapeIndexDataBase : public MeshShapeGeomBufferBase
+		{
+		public:
+			MeshShapeIndexDataBase() {}
+			virtual ~MeshShapeIndexDataBase() {}
+
+			// rhi vertex buffer view.
+			rhi::IndexBufferViewDep rhi_vbv_ = {};
 		};
 
 		template<typename T>
-		class MeshShapeVertexData : public MeshShapeGeomBufferBase<T>
+		class MeshShapeVertexData : public MeshShapeVertexDataBase
 		{
 		public:
 			MeshShapeVertexData()
@@ -83,13 +98,16 @@ namespace ngl
 			~MeshShapeVertexData()
 			{
 			}
+			// raw data ptr.
+			T* GetTypedRawDataPtr() { return static_cast<T*>(raw_ptr_); }
+			const T* GetTypedRawDataPtr() const { return static_cast<T*>(raw_ptr_); }
 
 			// rhi vertex buffer view.
 			rhi::VertexBufferViewDep rhi_vbv_ = {};
 		};
 
 		template<typename T>
-		class MeshShapeIndexData : public MeshShapeGeomBufferBase<T>
+		class MeshShapeIndexData : public MeshShapeIndexDataBase
 		{
 		public:
 			MeshShapeIndexData()
@@ -98,6 +116,9 @@ namespace ngl
 			~MeshShapeIndexData()
 			{
 			}
+			// raw data ptr.
+			T* GetTypedRawDataPtr() { return static_cast<T*>(raw_ptr_); }
+			const T* GetTypedRawDataPtr() const { return static_cast<T*>(raw_ptr_); }
 
 			// rhi index buffer view.
 			rhi::IndexBufferViewDep rhi_vbv_ = {};

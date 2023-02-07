@@ -48,13 +48,13 @@ namespace ngl
 			void Finalize();
 
 			void* Map();
-
 			template<typename T>
 			T* MapAs() {
 				return (T*)Map();
 			}
-
 			void Unmap();
+
+			bool IsValid() const { return (nullptr != resource_.p); }
 
 			const Desc& GetDesc() const { return desc_; }
 
@@ -119,6 +119,8 @@ namespace ngl
 
 			void* Map();
 			void Unmap();
+
+			bool IsValid() const { return (nullptr != resource_.p); }
 
 			const Desc& GetDesc() const { return desc_; }
 

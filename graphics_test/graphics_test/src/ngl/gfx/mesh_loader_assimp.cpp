@@ -303,32 +303,37 @@ namespace assimp
 			for (int ci = 0; ci < info.num_color_ch; ++ci)
 			{
 				auto* p_src = ai_scene->mMeshes[i]->mColors[ci];
+				auto* data_ptr = mesh.color_[ci].GetTypedRawDataPtr();
 				for (int vi = 0; vi < info.num_vertex; ++vi)
 				{
-					mesh.color_[ci].raw_ptr_[vi].r = uint8_t(p_src[vi].r * 255);
-					mesh.color_[ci].raw_ptr_[vi].g = uint8_t(p_src[vi].g * 255);
-					mesh.color_[ci].raw_ptr_[vi].b = uint8_t(p_src[vi].b * 255);
-					mesh.color_[ci].raw_ptr_[vi].a = uint8_t(p_src[vi].a * 255);
+					data_ptr[vi].r = uint8_t(p_src[vi].r * 255);
+					data_ptr[vi].g = uint8_t(p_src[vi].g * 255);
+					data_ptr[vi].b = uint8_t(p_src[vi].b * 255);
+					data_ptr[vi].a = uint8_t(p_src[vi].a * 255);
 				}
 			}
 
 			for (int ci = 0; ci < info.num_uv_ch; ++ci)
 			{
 				auto* p_src = ai_scene->mMeshes[i]->mTextureCoords[ci];
+				auto* data_ptr = mesh.texcoord_[ci].GetTypedRawDataPtr();
 				for (int vi = 0; vi < info.num_vertex; ++vi)
 				{
-					mesh.texcoord_[ci].raw_ptr_[vi] = { p_src[vi].x, p_src[vi].y };
+					data_ptr[vi] = { p_src[vi].x, p_src[vi].y };
 				}
 			}
 
-			for (uint32_t face_i = 0; face_i < ai_scene->mMeshes[i]->mNumFaces; ++face_i)
 			{
-				// 三角化前提.
-				const auto p_face_index = ai_scene->mMeshes[i]->mFaces[face_i].mIndices;
+				auto* data_ptr = mesh.index_.GetTypedRawDataPtr();
+				for (uint32_t face_i = 0; face_i < ai_scene->mMeshes[i]->mNumFaces; ++face_i)
+				{
+					// 三角化前提.
+					const auto p_face_index = ai_scene->mMeshes[i]->mFaces[face_i].mIndices;
 
-				mesh.index_.raw_ptr_[face_i * 3 + 0] = p_face_index[0];
-				mesh.index_.raw_ptr_[face_i * 3 + 1] = p_face_index[1];
-				mesh.index_.raw_ptr_[face_i * 3 + 2] = p_face_index[2];
+					data_ptr[face_i * 3 + 0] = p_face_index[0];
+					data_ptr[face_i * 3 + 1] = p_face_index[1];
+					data_ptr[face_i * 3 + 2] = p_face_index[2];
+				}
 			}
 		}
 
