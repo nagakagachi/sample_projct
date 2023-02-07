@@ -191,6 +191,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\thread\lockfree_stack_intrusive_test.cpp" />
     <ClCompile Include="src\ngl\util\bit_operation.cpp" />
     <ClCompile Include="src\ngl\util\time\timer.cpp" />
+    <ClCompile Include="src\test\test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\boot\boot_application.h" />
@@ -236,6 +237,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\util\singleton.h" />
     <ClInclude Include="src\ngl\util\time\timer.h" />
     <ClInclude Include="src\ngl\util\types.h" />
+    <ClInclude Include="src\test\test.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\ngl\data\shader\include\scene_view_struct.hlsli" />

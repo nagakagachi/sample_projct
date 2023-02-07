@@ -41,14 +41,9 @@
 #include "ngl/gfx/render/mesh_renderer.h"
 
 
-struct CbSampleVs
-{
-	ngl::math::Vec4 cb_param_vs0;
-};
-struct CbSamplePs
-{
-	ngl::math::Vec4 cb_param0;
-};
+// test
+#include "test/test.h"
+
 
 
 // アプリ本体.
@@ -60,8 +55,6 @@ public:
 
 	bool Initialize() override;
 	bool Execute() override;
-
-	void TestCode();
 
 private:
 	double						app_sec_ = 0.0f;
@@ -124,8 +117,6 @@ private:
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_rt_shader_lib0_;
 
 
-	ngl::rhi::GraphicsPipelineStateDep			sample_pso_;
-
 	ngl::rhi::SamplerDep						samp_linear_clamp_;
 
 	ngl::rhi::GraphicsPipelineStateDep			pso_copy_to_swapchain;
@@ -143,7 +134,7 @@ private:
 	ngl::rhi::GraphicsPipelineStateDep			pso_mesh_simple_depth;
 
 
-	ngl::gfx::RaytraceSceneManager			rt_st_;
+	ngl::gfx::RaytraceSceneManager				rt_st_;
 
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 	
@@ -170,75 +161,6 @@ int main()
 
 AppGame::AppGame()
 {
-	ngl::math::funcAA();
-
-
-
-	// RangeAllocテスト.
-	constexpr int k_debug_handle_count = 100000;
-
-	ngl::rhi::dynamic_descriptor_allocator::RangeAllocator range_alloc1 = {};
-	range_alloc1.Initialize(5000*1024);
-	
-	std::vector<bool> handle_valid_array;
-	std::vector<ngl::rhi::dynamic_descriptor_allocator::RangeHandle> handle_array;
-	for (int i = 0; i < k_debug_handle_count; ++i)
-	{
-		if (0 != (std::rand() & 0x01))
-		{
-			auto alloc_size = std::rand() % 1025 + 1024;
-
-			// 確保.
-			auto h = range_alloc1.Alloc(alloc_size);
-			if (h.IsValid())
-			{
-				int fi = 0;
-				for (; fi < handle_valid_array.size() && handle_valid_array[fi]; ++fi)
-				{
-				}
-				if (handle_valid_array.size() <= fi)
-				{
-					fi = (int)handle_valid_array.size();
-					handle_valid_array.push_back(false);
-					handle_array.push_back({});
-				}
-
-				handle_valid_array[fi] = true;
-				handle_array[fi] = h;
-			}
-		}
-		else
-		{
-			int fi = 0;
-			for (; fi < handle_valid_array.size() && !handle_valid_array[fi]; ++fi)
-			{}
-
-			// 解放.
-			if (handle_valid_array.size() > fi && handle_valid_array[fi])
-			{
-				range_alloc1.Dealloc(handle_array[fi]);
-				
-				handle_array[fi] = {};
-				handle_valid_array[fi] = false;
-			}
-		}
-	}
-
-	// 全て解放.
-	for (int i = 0; i < handle_valid_array.size(); ++i)
-	{
-		int remove_index = (int)handle_valid_array.size() - 1 - i;
-
-		if (handle_valid_array[remove_index])
-		{
-			range_alloc1.Dealloc(handle_array[remove_index]);
-		}
-	}
-	// 全て解放した後に最大サイズアロケーション. 成功するはず.
-	auto h_max_alloc = range_alloc1.Alloc(range_alloc1.MaxSize());
-	assert(h_max_alloc.IsValid());
-
-	range_alloc1.Finalize();
 }
 AppGame::~AppGame()
 {
@@ -496,47 +418,8 @@ bool AppGame::Initialize()
 		}
 	}
 
-	// PSO
 	{
-		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-		desc.vs = &res_shader_sample_vs_->data_;
-		desc.ps = &res_shader_sample_ps_->data_;
-
-		desc.num_render_targets = 1;
-		desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
-
-		desc.depth_stencil_state.depth_enable = true;
-		desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater;// Reverse Z.
-		desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
-		desc.depth_stencil_state.stencil_enable = false;
-		desc.depth_stencil_format = tex_depth_.GetFormat();
-
-		desc.blend_state.target_blend_states[0].blend_enable = false;
-		desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
-		// 入力レイアウト
-		std::array<ngl::rhi::InputElement, 2> input_elem_data;
-		desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-		desc.input_layout.p_input_elements = input_elem_data.data();
-		input_elem_data[0].semantic_name = "POSITION";
-		input_elem_data[0].semantic_index = 0;
-		input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32A32_FLOAT;
-		input_elem_data[0].stream_slot = 0;
-		input_elem_data[0].element_offset = 0;
-		input_elem_data[1].semantic_name = "TEXCOORD";
-		input_elem_data[1].semantic_index = 0;
-		input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
-		input_elem_data[1].stream_slot = 0;
-		input_elem_data[1].element_offset = sizeof(float) * 4;
-
-		if (!sample_pso_.Initialize(&device_, desc))
-		{
-			std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
-		}
-	}
-
-	{
-		// Samplerテスト
+		// Sampler.
 		ngl::rhi::SamplerDep::Desc samp_desc = {};
 		samp_desc.Filter = ngl::rhi::TextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
 		samp_desc.AddressU = ngl::rhi::TextureAddressMode::Clamp;
@@ -606,6 +489,7 @@ bool AppGame::Initialize()
 		}
 	}
 
+	// リニア深度生成パスPSO.
 	{
 		ngl::rhi::ComputePipelineStateDep::Desc pso_desc = {};
 		pso_desc.cs = &res_shader_cs_gen_lineardepth_->data_;
@@ -616,13 +500,14 @@ bool AppGame::Initialize()
 	}
 
 	{
+		// 最終画面コンポジットパスPSO.
 		{
 			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
 			desc.vs = &res_shader_vs_fullscr_proc_->data_;
 			desc.ps = &res_shader_ps_final_screen_pass_->data_;
 
 			desc.num_render_targets = 1;
-			desc.render_target_formats[0] = tex_work_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+			desc.render_target_formats[0] = tex_work_.GetDesc().format;
 
 			desc.blend_state.target_blend_states[0].blend_enable = false;
 			desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
@@ -632,13 +517,15 @@ bool AppGame::Initialize()
 				assert(false);
 			}
 		}
+
+		// SwapchainコピーパスPSO.
 		{
 			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
 			desc.vs = &res_shader_vs_fullscr_proc_->data_;
 			desc.ps = &res_shader_ps_copy_to_screen->data_;
 
 			desc.num_render_targets = 1;
-			desc.render_target_formats[0] = this->swapchain_.GetDesc().format;// ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+			desc.render_target_formats[0] = this->swapchain_.GetDesc().format;
 
 			desc.blend_state.target_blend_states[0].blend_enable = false;
 			desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
@@ -778,7 +665,7 @@ bool AppGame::Initialize()
 
 
 	// テストコード
-	TestCode();
+	ngl_test::TestFunc00(&device_);
 
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
@@ -1168,465 +1055,4 @@ bool AppGame::Execute()
 	}
 
 	return true;
-}
-
-
-void AppGame::TestCode()
-{
-	ngl::text::FixedString<8> fixed_text0("abc");
-	ngl::text::FixedString<8> fixed_text1("abcd");
-	ngl::text::FixedString<8> fixed_text2("01234567");
-	ngl::text::FixedString<8> fixed_text3("012345678");
-
-	std::unordered_map<ngl::text::FixedString<8>, int> fixstr_map;
-	auto in0 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text0, 0));
-	auto in1 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text1, 1));
-	auto in2 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text2, 2));
-	auto in3 = fixstr_map.insert(std::pair<ngl::text::FixedString<8>, int>(fixed_text3, 3));
-
-	auto find0 = fixstr_map.find("");
-	auto find1 = fixstr_map.find("a");
-	auto find2 = fixstr_map.find("abc");
-	auto find3 = fixstr_map.find("01234567");
-	auto find4 = fixstr_map.find("012345678");
-
-	if(true)
-	{
-		bool is_uav_test = true;
-
-
-		// Buffer生成テスト
-		ngl::rhi::BufferDep buffer0;
-		ngl::rhi::BufferDep::Desc buffer_desc0 = {};
-		buffer_desc0.element_byte_size = sizeof(ngl::u64);
-		buffer_desc0.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
-		buffer_desc0.element_count = 1;
-		buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
-		if(is_uav_test)
-		{
-			// UAV用設定.
-			buffer_desc0.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;
-			// UAVはDefaultHeap必須
-			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Default;
-		}
-		else
-		{
-			// CPU->GPU Uploadリソース
-			buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;
-		}
-
-		if (!buffer0.Initialize(&device_, buffer_desc0))
-		{
-			std::cout << "[ERROR] Create rhi::Buffer" << std::endl;
-			assert(false);
-		}
-
-		if (auto* buffer0_map = reinterpret_cast<ngl::u64*>(buffer0.Map()))
-		{
-			*buffer0_map = 111u;
-			buffer0.Unmap();
-		}
-
-		auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
-
-		// SRV生成テスト. persistent上に作成.
-		auto pd_srv = persistent_desc_allocator->Allocate();
-		if (pd_srv.allocator)
-		{
-			D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
-			srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-			srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			srv_desc.Format = DXGI_FORMAT_UNKNOWN;
-			srv_desc.Buffer.FirstElement = 0;
-			srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-			srv_desc.Buffer.NumElements = 1;
-			srv_desc.Buffer.StructureByteStride = sizeof(ngl::u64);
-
-			device_.GetD3D12Device()->CreateShaderResourceView(buffer0.GetD3D12Resource() , &srv_desc, pd_srv.cpu_handle);
-
-			// 解放
-			persistent_desc_allocator->Deallocate(pd_srv);
-		}
-		// UAV生成テスト. persistent上に作成.
-		if (is_uav_test)
-		{
-			auto pd_uav = persistent_desc_allocator->Allocate();
-			if (pd_uav.allocator)
-			{
-				D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
-				uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-				uav_desc.Format = DXGI_FORMAT_UNKNOWN;
-				uav_desc.Buffer.CounterOffsetInBytes = 0;// カウンタバッファ不使用の場合はゼロ
-				uav_desc.Buffer.FirstElement = 0;
-				uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-				uav_desc.Buffer.NumElements = 1;
-				uav_desc.Buffer.StructureByteStride = sizeof(ngl::u64);
-
-				device_.GetD3D12Device()->CreateUnorderedAccessView(buffer0.GetD3D12Resource(), nullptr, &uav_desc, pd_uav.cpu_handle);
-
-				// 解放
-				persistent_desc_allocator->Deallocate(pd_uav);
-			}
-		}
-	}
-
-	if (true)
-	{
-		// Textureテスト
-		ngl::rhi::TextureDep::Desc tex_desc00 = {};
-		tex_desc00.heap_type = ngl::rhi::ResourceHeapType::Default;
-		tex_desc00.type = ngl::rhi::TextureType::Texture3D;
-		tex_desc00.width = 64;
-		tex_desc00.height = 64;
-		tex_desc00.depth = 64;
-		tex_desc00.format = ngl::rhi::ResourceFormat::Format_R16_FLOAT;
-		tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
-		
-		//tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::RenderTarget;
-		tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;// UAV
-
-		ngl::rhi::TextureDep tex00;
-		if (!tex00.Initialize( &device_, tex_desc00))
-		{
-			std::cout << "[ERROR] Create rhi::TextureDep" << std::endl;
-			assert(false);
-		}
-	}
-
-	if (true)
-	{
-		// Samplerテスト
-		ngl::rhi::SamplerDep::Desc samp_desc = {};
-		samp_desc.AddressU = ngl::rhi::TextureAddressMode::Repeat;
-		samp_desc.AddressV = ngl::rhi::TextureAddressMode::Repeat;
-		samp_desc.AddressW = ngl::rhi::TextureAddressMode::Repeat;
-		samp_desc.BorderColor[0] = 0.0f;
-		samp_desc.BorderColor[1] = 0.0f;
-		samp_desc.BorderColor[2] = 0.0f;
-		samp_desc.BorderColor[3] = 0.0f;
-		samp_desc.ComparisonFunc = ngl::rhi::CompFunc::Never;
-		samp_desc.Filter = ngl::rhi::TextureFilterMode::Min_Point_Mag_Point_Mip_Linear;
-		samp_desc.MaxAnisotropy = 0;
-		samp_desc.MaxLOD = FLT_MAX;
-		samp_desc.MinLOD = 0.0f;
-		samp_desc.MipLODBias = 0.0f;
-
-		// ダミー用Descriptorの1個分を除いた最大数まで確保するテスト.
-		ngl::rhi::SamplerDep samp[1];
-		for (auto&& e : samp)
-		{
-			if (!e.Initialize(&device_, samp_desc))
-			{
-				std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
-				assert(false);
-			}
-		}
-	}
-
-	if (true)
-	{
-		// PSO
-		{
-			ngl::rhi::GraphicsPipelineStateDep pso;
-
-			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-			desc.vs = &res_shader_sample_vs_->data_;
-			desc.ps = &res_shader_sample_ps_->data_;
-
-			desc.num_render_targets = 1;
-			desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
-
-			desc.depth_stencil_state.depth_enable = false;
-			desc.depth_stencil_state.stencil_enable = false;
-
-			desc.blend_state.target_blend_states[0].blend_enable = false;;
-
-			// 入力レイアウト
-			std::array<ngl::rhi::InputElement, 2> input_elem_data;
-			desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-			desc.input_layout.p_input_elements = input_elem_data.data();
-			input_elem_data[0].semantic_name = "POSITION";
-			input_elem_data[0].semantic_index = 0;
-			input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32A32_FLOAT;
-			input_elem_data[0].stream_slot = 0;
-			input_elem_data[0].element_offset = 0;
-			input_elem_data[1].semantic_name = "TEXCOORD";
-			input_elem_data[1].semantic_index = 0;
-			input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
-			input_elem_data[1].stream_slot = 0;
-			input_elem_data[1].element_offset = sizeof(float) * 4;
-
-			if (!pso.Initialize(&device_, desc))
-			{
-				std::cout << "[ERROR] Create rhi::GraphicsPipelineState" << std::endl;
-				assert(false);
-			}
-
-			// DescriptorSet設定テスト
-			{
-				// Buffer生成テスト
-				struct CbTest
-				{
-					float cb_param0 = 1.111f;
-					ngl::u32 cb_param1 = 0;
-				};
-				ngl::rhi::BufferDep buffer0;
-				ngl::rhi::BufferDep::Desc buffer_desc0 = {};
-				buffer_desc0.element_byte_size = sizeof(CbTest);
-				buffer_desc0.element_count = 1;
-				buffer_desc0.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
-				buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
-				// CPU->GPU Uploadリソース
-				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;
-
-				if (!buffer0.Initialize(&device_, buffer_desc0))
-				{
-					std::cout << "[ERROR] Create rhi::Buffer" << std::endl;
-					assert(false);
-				}
-
-				if (auto* buffer0_map = reinterpret_cast<CbTest*>(buffer0.Map()))
-				{
-					buffer0_map->cb_param0 = 2.0f;
-					buffer0_map->cb_param1 = 1;
-					buffer0.Unmap();
-				}
-
-				auto* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
-				// CBV生成テスト. persistent上に作成.
-				auto pd_cbv = persistent_desc_allocator->Allocate();
-				if (pd_cbv.allocator)
-				{
-					D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
-					cbv_desc.BufferLocation = buffer0.GetD3D12Resource()->GetGPUVirtualAddress();
-					cbv_desc.SizeInBytes = buffer0.GetBufferSize();
-					device_.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
-
-				}
-				// psoで名前解決をしてDescSetにハンドルを設定するテスト.
-				ngl::rhi::DescriptorSetDep desc_set;
-				pso.SetDescriptorHandle(&desc_set, "CbTest", pd_cbv.cpu_handle);
-
-				// 一応解放しておく
-				persistent_desc_allocator->Deallocate(pd_cbv);
-			}
-		}
-	}
-
-	// シェーダテスト
-	{
-#if 0
-		// バイナリ読み込み.
-		{
-			ngl::file::FileObject file_obj;
-			ngl::rhi::ShaderDep	shader00;
-			ngl::rhi::ShaderReflectionDep reflect00;
-			file_obj.ReadFile("./data/sample_vs.cso");
-			if (!shader00.Initialize(&device_, ngl::rhi::ShaderStage::Vertex, file_obj.GetFileData(), file_obj.GetFileSize()))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-				assert(false);
-			}
-			reflect00.Initialize(&device_, &shader00);
-		}
-		// バイナリ読み込み.
-		{
-			ngl::file::FileObject file_obj;
-			ngl::rhi::ShaderDep	shader01;
-			ngl::rhi::ShaderReflectionDep reflect00;
-			file_obj.ReadFile("./data/sample_ps.cso");
-			if (!shader01.Initialize(&device_, ngl::rhi::ShaderStage::Pixel, file_obj.GetFileData(), file_obj.GetFileSize()))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-				assert(false);
-			}
-			reflect00.Initialize(&device_, &shader01);
-		}
-#endif
-
-		// HLSLからコンパイルして初期化.
-		ngl::rhi::ShaderDep shader00;
-		ngl::rhi::ShaderReflectionDep reflect00;
-		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
-			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-			shader_desc.shader_model_version = "5_0";
-
-			if (!shader00.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-				assert(false);
-			}
-			reflect00.Initialize(&device_, &shader00);
-
-			auto cb0 = reflect00.GetCbInfo(0);
-			auto cb1 = reflect00.GetCbInfo(1);
-			auto cb0_var0 = reflect00.GetCbVariableInfo(0, 0);
-			auto cb0_var1 = reflect00.GetCbVariableInfo(0, 1);
-			auto cb0_var2 = reflect00.GetCbVariableInfo(0, 2);
-			auto cb1_var0 = reflect00.GetCbVariableInfo(1, 0);
-
-			float default_value;
-			reflect00.GetCbDefaultValue(0, 0, default_value);
-			std::cout << "cb default value " << default_value << std::endl;
-		}
-		// HLSLからコンパイルして初期化.
-		ngl::rhi::ShaderDep shader01;
-		ngl::rhi::ShaderReflectionDep reflect01;
-		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
-			shader_desc.entry_point_name = "main_ps";
-			shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
-			shader_desc.shader_model_version = "6_0";
-
-			if (!shader01.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-				assert(false);
-			}
-			reflect01.Initialize(&device_, &shader01);
-
-			float default_value;
-			reflect01.GetCbDefaultValue(0, 0, default_value);
-			std::cout << "cb default value " << default_value << std::endl;
-		}
-
-		// HLSLからコンパイルして初期化.
-		ngl::rhi::ShaderDep shader02;
-		ngl::rhi::ShaderReflectionDep reflect02;
-		{
-			ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
-			shader_desc.shader_file_path = "./src/ngl/data/shader/sample_vs.hlsl";
-			shader_desc.entry_point_name = "main_vs";
-			shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
-			shader_desc.shader_model_version = "5_0";
-
-			if (!shader02.Initialize(&device_, shader_desc))
-			{
-				std::cout << "[ERROR] Create rhi::ShaderDep" << std::endl;
-				assert(false);
-			}
-			reflect02.Initialize(&device_, &shader02);
-
-			float default_value;
-			reflect02.GetCbDefaultValue(0, 0, default_value);
-			std::cout << "cb default value " << default_value << std::endl;
-		}
-
-	}
-
-	// PersistentDescriptorAllocatorテスト. 確保と解放を繰り返すテスト.
-	{
-		ngl::time::Timer::Instance().StartTimer("PersistentDescriptorAllocatorTest");
-
-		ngl::rhi::PersistentDescriptorAllocator* persistent_desc_allocator = device_.GetPersistentDescriptorAllocator();
-
-		std::vector<ngl::rhi::PersistentDescriptorInfo> debug_alloc_pd;
-		for (ngl::u32 i = 0u; i  < (100000); ++i)
-		{
-			auto pd0 = persistent_desc_allocator->Allocate();
-
-			if (0 != pd0.allocator)
-			{
-				debug_alloc_pd.push_back(pd0);
-			}
-
-			const auto dealloc_index = std::rand() % debug_alloc_pd.size();
-#if 1
-			if (debug_alloc_pd[dealloc_index].allocator)
-			{
-				// ランダムに選んだものがまだDeallocされていなければDealloc
-				persistent_desc_allocator->Deallocate(debug_alloc_pd[dealloc_index]);
-				debug_alloc_pd[dealloc_index] = {};
-			}
-#endif
-		}
-
-		std::cout << "PersistentDescriptorAllocatorTest time -> " << ngl::time::Timer::Instance().GetElapsedSec("PersistentDescriptorAllocatorTest") << std::endl;
-	}
-
-	if(false)
-	{
-		// フレームでのDescriptorマネージャ初期化
-		ngl::rhi::DynamicDescriptorManager* frame_desc_man = device_.GeDynamicDescriptorManager();
-		// バッファリング数分のフレームDescriptorインターフェース初期化
-		const ngl::u32 buffer_count = 3;
-		std::vector<ngl::rhi::FrameCommandListDynamicDescriptorAllocatorInterface> frame_desc_interface;
-		frame_desc_interface.resize(buffer_count);
-		for (auto&& e : frame_desc_interface)
-		{
-			ngl::rhi::FrameCommandListDynamicDescriptorAllocatorInterface::Desc frame_desc_interface_desc = {};
-			frame_desc_interface_desc.stack_size = 2000;
-			e.Initialize(frame_desc_man, frame_desc_interface_desc);
-		}
-
-		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
-		ngl::u32 frame_flip_index = 0;
-		for (auto f_i = 0u; f_i < 1000; ++f_i)
-		{
-			// マネージャのフレーム開始処理で過去フレーム確保分の解放(実際にはDeviceのフレーム開始処理で実行される).
-			frame_desc_man->ReadyToNewFrame(f_i);
-
-			// インターフェイスのフレーム開始処理.
-			frame_desc_interface[frame_flip_index].ReadyToNewFrame(f_i);
-
-			// 確保テスト.
-			for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
-			{
-				D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-				D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-				frame_desc_interface[frame_flip_index].Allocate(16, cpu_handle, gpu_handle);
-			}
-			
-			frame_flip_index = (frame_flip_index + 1) % buffer_count;
-
-		}
-	}
-
-	if(false)
-	{
-		ngl::rhi::FrameDescriptorHeapPagePool* frame_desc_page_pool = device_.GetFrameDescriptorHeapPagePool();
-
-		// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
-		//ngl::u32 frame_index = 0;
-		//for (auto f_i = 0u; f_i < 5; ++f_i)
-		{
-			ngl::rhi::FrameDescriptorHeapPageInterface fmra_page_interface_sampler;
-			{
-				ngl::rhi::FrameDescriptorHeapPageInterface::Desc desc = {};
-				desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-				fmra_page_interface_sampler.Initialize(frame_desc_page_pool, desc);
-			}
-
-			ngl::rhi::FrameDescriptorHeapPageInterface fmra_page_interface_srv;
-			{
-				ngl::rhi::FrameDescriptorHeapPageInterface::Desc desc = {};
-				desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-				fmra_page_interface_srv.Initialize(frame_desc_page_pool, desc);
-			}
-
-			for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
-			{
-				{
-					D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-					D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-					fmra_page_interface_sampler.Allocate(16, cpu_handle, gpu_handle);
-				}
-				{
-					D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-					D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-					fmra_page_interface_srv.Allocate(16, cpu_handle, gpu_handle);
-				}
-			}
-		}
-	}
-
-
-	if (false)
-	{
-		ngl::thread::test::LockfreeStackIntrusiveTest();
-	}
 }
