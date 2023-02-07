@@ -352,7 +352,7 @@ namespace rhi
 		void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
 
 		// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
-		void DispatchHelper(GraphicsCommandListDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z);
+		void DispatchHelper(GraphicsCommandListDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z) const;
 
 		u32 GetThreadGroupSizeX() const { return threadgroup_size_x_; }
 		u32 GetThreadGroupSizeY() const { return threadgroup_size_y_; }

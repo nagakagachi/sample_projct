@@ -1521,7 +1521,7 @@ namespace rhi
 		view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
 	}
 	// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
-	void ComputePipelineStateDep::DispatchHelper(GraphicsCommandListDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z)
+	void ComputePipelineStateDep::DispatchHelper(GraphicsCommandListDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z) const
 	{
 		const u32 nx = (thread_count_x + (threadgroup_size_x_ - 1)) / threadgroup_size_x_;
 		const u32 ny = (thread_count_y + (threadgroup_size_y_ - 1)) / threadgroup_size_y_;
