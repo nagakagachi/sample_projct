@@ -38,6 +38,8 @@
 
 #include "ngl/gfx/command_helper.h"
 
+#include "ngl/gfx/render/mesh_renderer.h"
+
 
 struct CbSampleVs
 {
@@ -1029,61 +1031,20 @@ bool AppGame::Execute()
 				// Dsvクリア.
 				gfx_command_list_.ClearDepthTarget(&tex_depth_dsv_, 0.0f, 0, true, false);
 				
-				// Mesh Raster Render テスト.
+				// Mesh Raster Render.
+				// DepthPrepass.
 				{
-					// DepthPrepass.
-					{
-						auto* p_depth = &tex_depth_;
-						auto* p_depth_view = &tex_depth_dsv_;
-						// Dsv セット.
-						{
-							gfx_command_list_.SetRenderTargets(nullptr, 0, p_depth_view);
-						}
+					auto* p_depth = &tex_depth_;
+					auto* p_depth_view = &tex_depth_dsv_;
+						
+					// Set RenderTarget.
+					gfx_command_list_.SetRenderTargets(nullptr, 0, p_depth_view);
 
-						// Viewport and Scissor.
-						ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, p_depth->GetWidth(), p_depth->GetHeight());
+					// Set Viewport and Scissor.
+					ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, p_depth->GetWidth(), p_depth->GetHeight());
 
-						// PSO.
-						gfx_command_list_.SetPipelineState(&pso_mesh_simple_depth);
-
-						for(int mesh_comp_i = 0; mesh_comp_i < mesh_comp_array_.size(); ++mesh_comp_i)
-						{
-							const auto* e = mesh_comp_array_[mesh_comp_i].get();
-
-							auto& cbv_sceneview = cbv_sceneview_[flip_index_sceneview_];
-							auto cbv_instance = e->GetInstanceBufferView();
-
-
-							for (int gi = 0; gi < e->GetMeshData()->data_.shape_array_.size(); ++gi)
-							{
-								// Descriptor.
-								{
-									ngl::rhi::DescriptorSetDep desc_set;
-
-									pso_mesh_simple_depth.SetDescriptorHandle(&desc_set, "cb_sceneview", cbv_sceneview.GetView().cpu_handle);
-									pso_mesh_simple_depth.SetDescriptorHandle(&desc_set, "cb_instance", cbv_instance->GetView().cpu_handle);
-
-
-									// DescriptorSetでViewを設定.
-									gfx_command_list_.SetDescriptorSet(&pso_mesh_simple_depth, &desc_set);
-								}
-
-
-								// Geometry.
-								auto& shape = e->GetMeshData()->data_.shape_array_[gi];
-
-								gfx_command_list_.SetVertexBuffers(ngl::gfx::EMeshVertexSemanticSlot::POSITION, 1, &shape.position_.rhi_vbv_.GetView());
-								gfx_command_list_.SetVertexBuffers(ngl::gfx::EMeshVertexSemanticSlot::NORMAL, 1, &shape.normal_.rhi_vbv_.GetView());
-								gfx_command_list_.SetVertexBuffers(ngl::gfx::EMeshVertexSemanticSlot::TEXCOORD, 1, &shape.texcoord_[0].rhi_vbv_.GetView());
-
-								gfx_command_list_.SetIndexBuffer(&shape.index_.rhi_vbv_.GetView());
-								gfx_command_list_.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
-
-								// Draw.
-								gfx_command_list_.DrawIndexedInstanced(shape.num_primitive_ * 3, 1, 0, 0, 0);
-							}
-						}
-					}
+					// Mesh Rendering.
+					ngl::gfx::RenderMeshSinglePso(gfx_command_list_, pso_mesh_simple_depth, frame_scene.mesh_instance_array_, cbv_sceneview_[flip_index_sceneview_]);
 				}
 
 				// Gen LinearDepth.

@@ -787,6 +787,16 @@ namespace ngl
 					0.0f, 0.0f, 1.0f, 0.0f
 				);
 			}
+
+
+			bool operator==(const Mat34& m)
+			{
+				return (r0 == m.r0) && (r1 == m.r1) && (r2 == m.r2);
+			}
+			bool operator!=(const Mat34& m)
+			{
+				return !(*this == m);
+			}
 		};
 	}
 }

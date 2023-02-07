@@ -324,17 +324,6 @@ namespace ngl
 			const RaytraceTlas& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name);
 
 
-		// 簡易シーン.
-		class SceneRepresentation
-		{
-		public:
-			SceneRepresentation() {}
-			~SceneRepresentation() {}
-
-			std::vector<gfx::StaticMeshComponent*> mesh_instance_array_ = {};
-		};
-
-
 		// RaytracingのAS管理.
 		class RaytraceSceneManager
 		{

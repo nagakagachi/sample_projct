@@ -26,6 +26,14 @@ namespace gfx
 			cbv_instance_[i] = new rhi::ConstantBufferViewDep();
 			rhi::ConstantBufferViewDep::Desc cbv_desc = {};
 			cbv_instance_[i]->Initialize(cb_instance_[i].Get(), cbv_desc);
+
+			// 初期値
+			if (auto* mapped = cb_instance_[i]->MapAs<InstanceInfo>())
+			{
+				mapped->mtx = transform_;
+
+				cb_instance_[i]->Unmap();
+			}
 		}
 
 		return true;
@@ -42,12 +50,18 @@ namespace gfx
 
 	void StaticMeshComponent::UpdateRenderData()
 	{
-		flip_index_ = (flip_index_ + 1) % 2;
+		// 変更チェック.
+		if (transform_ == transform_prev_)
+			return;
 
+		// 内部更新
+		transform_prev_ = transform_;
+
+		// バッファFlipと更新.
+		flip_index_ = (flip_index_ + 1) % 2;
 		if (auto* mapped = (InstanceInfo*)cb_instance_[flip_index_]->Map())
 		{
 			mapped->mtx = transform_;
-
 			cb_instance_[flip_index_]->Unmap();
 		}
 
