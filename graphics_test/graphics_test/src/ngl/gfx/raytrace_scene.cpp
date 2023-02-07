@@ -1,4 +1,4 @@
-﻿#include "rt_structure_manager.h"
+﻿#include "raytrace_scene.h"
 
 #include <unordered_map>
 #include <algorithm>
@@ -12,13 +12,13 @@ namespace ngl
 	namespace gfx
 	{
 
-		RaytraceStructureBottom::RaytraceStructureBottom()
+		RaytraceBlas::RaytraceBlas()
 		{
 		}
-		RaytraceStructureBottom::~RaytraceStructureBottom()
+		RaytraceBlas::~RaytraceBlas()
 		{
 		}
-		bool RaytraceStructureBottom::Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceStructureBottomGeometryDesc>& geometry_desc_array)
+		bool RaytraceBlas::Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceBlasGeometryDesc>& geometry_desc_array)
 		{
 			// CommandListが不要な生成部だけを実行する.
 
@@ -140,7 +140,7 @@ namespace ngl
 		// Setup の情報を元に構造構築コマンドを発行する.
 		// Buildタイミングをコントロールするために分離している.
 		// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
-		bool RaytraceStructureBottom::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
+		bool RaytraceBlas::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
 		{
 			assert(p_device);
 			assert(p_command_list);
@@ -175,28 +175,28 @@ namespace ngl
 			is_built_ = true;
 			return true;
 		}
-		bool RaytraceStructureBottom::IsSetuped() const
+		bool RaytraceBlas::IsSetuped() const
 		{
 			return SETUP_TYPE::NONE != setup_type_;
 		}
-		bool RaytraceStructureBottom::IsBuilt() const
+		bool RaytraceBlas::IsBuilt() const
 		{
 			return is_built_;
 		}
 
-		rhi::BufferDep* RaytraceStructureBottom::GetBuffer()
+		rhi::BufferDep* RaytraceBlas::GetBuffer()
 		{
 			return main_.Get();
 		}
-		const rhi::BufferDep* RaytraceStructureBottom::GetBuffer() const
+		const rhi::BufferDep* RaytraceBlas::GetBuffer() const
 		{
 			return main_.Get();
 		}
 
 		// 内部Geometry情報.
-		RaytraceStructureBottomGeometryResource RaytraceStructureBottom::GetGeometryData(uint32_t index)
+		RaytraceBlasGeometryResource RaytraceBlas::GetGeometryData(uint32_t index)
 		{
-			RaytraceStructureBottomGeometryResource ret = {};
+			RaytraceBlasGeometryResource ret = {};
 			if (NumGeometry() <= index)
 			{
 				assert(false);
@@ -207,16 +207,16 @@ namespace ngl
 			return ret;
 		}
 
-		RaytraceStructureTop::RaytraceStructureTop()
+		RaytraceTlas::RaytraceTlas()
 		{
 		}
-		RaytraceStructureTop::~RaytraceStructureTop()
+		RaytraceTlas::~RaytraceTlas()
 		{
 		}
 		// TLAS setup.
 		// index_buffer : optional.
 		// bufferの管理責任は外部.
-		bool RaytraceStructureTop::Setup(rhi::DeviceDep* p_device, std::vector<RaytraceStructureBottom*>& blas_array,
+		bool RaytraceTlas::Setup(rhi::DeviceDep* p_device, std::vector<RaytraceBlas*>& blas_array,
 			const std::vector<uint32_t>& instance_geom_id_array,
 			const std::vector<math::Mat34>& instance_transform_array,
 			const std::vector<uint32_t>& instance_hitgroup_id_array
@@ -395,7 +395,7 @@ namespace ngl
 		// Setup の情報を元に構造構築コマンドを発行する.
 		// Buildタイミングをコントロールするために分離している.
 		// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
-		bool RaytraceStructureTop::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
+		bool RaytraceTlas::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
 		{
 			assert(p_device);
 			assert(p_command_list);
@@ -429,53 +429,53 @@ namespace ngl
 			is_built_ = true;
 			return true;
 		}
-		bool RaytraceStructureTop::IsSetuped() const
+		bool RaytraceTlas::IsSetuped() const
 		{
 			return SETUP_TYPE::NONE != setup_type_;
 		}
-		bool RaytraceStructureTop::IsBuilt() const
+		bool RaytraceTlas::IsBuilt() const
 		{
 			return is_built_;
 		}
-		rhi::BufferDep* RaytraceStructureTop::GetBuffer()
+		rhi::BufferDep* RaytraceTlas::GetBuffer()
 		{
 			return main_.Get();
 		}
-		const rhi::BufferDep* RaytraceStructureTop::GetBuffer() const
+		const rhi::BufferDep* RaytraceTlas::GetBuffer() const
 		{
 			return main_.Get();
 		}
-		rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv()
+		rhi::ShaderResourceViewDep* RaytraceTlas::GetSrv()
 		{
 			return main_srv_.Get();
 		}
-		const rhi::ShaderResourceViewDep* RaytraceStructureTop::GetSrv() const
+		const rhi::ShaderResourceViewDep* RaytraceTlas::GetSrv() const
 		{
 			return main_srv_.Get();
 		}
 
 
-		uint32_t RaytraceStructureTop::NumBlas() const
+		uint32_t RaytraceTlas::NumBlas() const
 		{
 			return static_cast<uint32_t>(blas_array_.size());
 		}
-		const std::vector<RaytraceStructureBottom*>& RaytraceStructureTop::GetBlasArray() const
+		const std::vector<RaytraceBlas*>& RaytraceTlas::GetBlasArray() const
 		{
 			return blas_array_;
 		}
-		uint32_t RaytraceStructureTop::NumInstance() const
+		uint32_t RaytraceTlas::NumInstance() const
 		{
 			return static_cast<uint32_t>(hitgroup_id_array_.size());
 		}
-		const std::vector<uint32_t>& RaytraceStructureTop::GetInstanceBlasIndexArray() const
+		const std::vector<uint32_t>& RaytraceTlas::GetInstanceBlasIndexArray() const
 		{
 			return instance_blas_id_array_;
 		}
-		const std::vector<math::Mat34>& RaytraceStructureTop::GetInstanceTransformArray() const
+		const std::vector<math::Mat34>& RaytraceTlas::GetInstanceTransformArray() const
 		{
 			return transform_array_;
 		}
-		const std::vector<uint32_t>& RaytraceStructureTop::GetInstanceHitgroupIndexArray() const
+		const std::vector<uint32_t>& RaytraceTlas::GetInstanceHitgroupIndexArray() const
 		{
 			return hitgroup_id_array_;
 		}
@@ -1234,7 +1234,7 @@ namespace ngl
 		// BLAS内Geometryは個別のShaderRecordを持つ(multiplier_for_subgeometry_index = 1)
 		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
-			const RaytraceStructureTop& tlas, 
+			const RaytraceTlas& tlas, 
 			const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name)
 		{
 			out = {};
@@ -1435,11 +1435,11 @@ namespace ngl
 
 
 		// ---------------------------------------------------------------------------------------------------------------------------------
-		RaytraceStructureManager::DynamicTlasSet::DynamicTlasSet(rhi::DynamicDescriptorStackAllocatorInterface* p_desc_alloc_interface)
+		RaytraceSceneManager::DynamicTlasSet::DynamicTlasSet(rhi::DynamicDescriptorStackAllocatorInterface* p_desc_alloc_interface)
 			{
 				p_desc_alloc_interface_ = p_desc_alloc_interface;
 			}
-			RaytraceStructureManager::DynamicTlasSet::~DynamicTlasSet()
+			RaytraceSceneManager::DynamicTlasSet::~DynamicTlasSet()
 			{
 				if (p_desc_alloc_interface_)
 				{
@@ -1449,15 +1449,15 @@ namespace ngl
 		// ---------------------------------------------------------------------------------------------------------------------------------
 
 
-		RaytraceStructureManager::RaytraceStructureManager()
+		RaytraceSceneManager::RaytraceSceneManager()
 		{
 		}
-		RaytraceStructureManager::~RaytraceStructureManager()
+		RaytraceSceneManager::~RaytraceSceneManager()
 		{
 			// 内部で使用しているDescriptorのDeallocをDescriptorAllocatorInterfaceの解放より先に明示的に実行.
 			dynamic_tlas_.reset();
 		}
-		bool RaytraceStructureManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state)
+		bool RaytraceSceneManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state)
 		{
 			// Descriptor確保用Interface初期化.
 			{
@@ -1524,7 +1524,7 @@ namespace ngl
 			return true;
 		}
 
-		void RaytraceStructureManager::UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene)
+		void RaytraceSceneManager::UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene)
 		{
 			// 現在SceneでのMesh情報収集.
 			std::unordered_map<const ResMeshData*, int> scene_mesh_to_id;
@@ -1565,7 +1565,7 @@ namespace ngl
 					}
 
 					// New Blas.
-					auto new_blas = new RaytraceStructureBottom();
+					auto new_blas = new RaytraceBlas();
 					// データベース登録.
 					dynamic_scene_blas_array_[empty_index].reset(new_blas);
 					// Map登録.
@@ -1574,7 +1574,7 @@ namespace ngl
 
 					// BLAS Setup.
 					const auto& p_data = p_mesh->data_;
-					std::vector<RaytraceStructureBottomGeometryDesc> blas_geom_desc_arrray = {};
+					std::vector<RaytraceBlasGeometryDesc> blas_geom_desc_arrray = {};
 					blas_geom_desc_arrray.reserve(p_data.shape_array_.size());
 
 					for (uint32_t gi = 0; gi < p_data.shape_array_.size(); ++gi)
@@ -1597,7 +1597,7 @@ namespace ngl
 
 
 			// TLAS Setup.
-			std::vector<RaytraceStructureBottom*> scene_blas_array;
+			std::vector<RaytraceBlas*> scene_blas_array;
 			std::vector<math::Mat34> scene_inst_transform_array;
 			std::vector<uint32_t> scene_inst_blas_id_array;
 			std::vector<uint32_t> scene_inst_hitgroup_id_array;
@@ -1632,7 +1632,7 @@ namespace ngl
 			// ShaderTable生成.
 			if (!CreateShaderTable(dynamic_tlas_->dynamic_shader_table_,
 				p_device,
-				desc_alloc_interface_,
+				*dynamic_tlas_->p_desc_alloc_interface_, //desc_alloc_interface_,
 				dynamic_tlas_->dynamic_scene_tlas_, *p_state_object_, "rayGen", "miss"))
 			{
 				assert(false);
@@ -1640,7 +1640,7 @@ namespace ngl
 
 		}
 
-		void RaytraceStructureManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene)
+		void RaytraceSceneManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene)
 		{
 			++frame_count_;
 			const uint32_t safe_frame_count_ = frame_count_ % 10000;
@@ -1707,7 +1707,7 @@ namespace ngl
 			}
 		}
 
-		void RaytraceStructureManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
+		void RaytraceSceneManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
 		{
 			const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
 
@@ -1891,7 +1891,7 @@ namespace ngl
 			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}
 
-		void  RaytraceStructureManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio)
+		void  RaytraceSceneManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio)
 		{
 			camera_pos_ = position;
 			camera_dir_ = dir;

@@ -2,8 +2,6 @@
 
 #include "command_helper.h"
 
-#include "ngl/math/math.h"
-
 #include "ngl/rhi/d3d12/command_list.d3d12.h"
 
 namespace ngl

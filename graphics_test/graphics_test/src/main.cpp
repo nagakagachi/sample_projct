@@ -30,7 +30,7 @@
 
 // gfx
 #include "ngl/gfx/common_struct.h"
-#include "ngl/gfx/rt_structure_manager.h"
+#include "ngl/gfx/raytrace_scene.h"
 #include "ngl/gfx/mesh_component.h"
 
 #include "ngl/thread/lockfree_stack_intrusive.h"
@@ -141,7 +141,7 @@ private:
 	ngl::rhi::GraphicsPipelineStateDep			pso_mesh_simple_depth;
 
 
-	ngl::gfx::RaytraceStructureManager			rt_st_;
+	ngl::gfx::RaytraceSceneManager			rt_st_;
 
 	ngl::gfx::RaytraceStateObject				rt_state_object_;
 	
@@ -768,7 +768,7 @@ bool AppGame::Initialize()
 		// AS他.
 		if (!rt_st_.Initialize(&device_, &rt_state_object_))
 		{
-			std::cout << "[ERROR] Create gfx::RaytraceStructureManager" << std::endl;
+			std::cout << "[ERROR] Create gfx::RaytraceSceneManager" << std::endl;
 			assert(false);
 		}
 
@@ -1137,6 +1137,7 @@ bool AppGame::Execute()
 					gfx_command_list_.SetPipelineState(&pso_final_screen_pass_);
 					ngl::rhi::DescriptorSetDep desc_set = {};
 					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_lineardepth", tex_lineardepth_srv_.GetView().cpu_handle);
+					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_rt", rt_st_.GetResultSrv()->GetView().cpu_handle);
 					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "samp", samp_linear_clamp_.GetView().cpu_handle);
 					gfx_command_list_.SetDescriptorSet(&pso_final_screen_pass_, &desc_set);
 
