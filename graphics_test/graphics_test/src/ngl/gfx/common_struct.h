@@ -35,21 +35,70 @@ namespace gfx
 		ngl::math::Vec4	cb_ndc_z_to_view_z_coef;
 	};
 
+
+
+
+
 	static constexpr int k_mesh_vertex_semantic_texcoord_max_count = 4;
 	static constexpr int k_mesh_vertex_semantic_color_max_count = 4;
-	struct EMeshVertexSemanticSlot
+	// サポートしているセマンティクス種別.
+	struct EMeshVertexSemanticSlotKind
 	{
-		enum 
+		enum Type : int
 		{
 			POSITION,
 			NORMAL,
 			TANNGENT,
 			BINORMAL,
 			TEXCOORD,
-			COLOR = TEXCOORD + k_mesh_vertex_semantic_texcoord_max_count,
+			COLOR,
 
-			_MAX = COLOR + k_mesh_vertex_semantic_color_max_count,
+			_MAX,
 		};
+	};
+	// セマンティクス種別毎の数とオフセット等.
+	struct MeshVertexSemanticSlotCount
+	{
+		static constexpr int count[] =
+		{
+			1,
+			1,
+			1,
+			1,
+			k_mesh_vertex_semantic_texcoord_max_count,
+			k_mesh_vertex_semantic_color_max_count,
+		};
+		int offset[EMeshVertexSemanticSlotKind::_MAX];
+
+		constexpr MeshVertexSemanticSlotCount()
+			: offset()
+		{
+			offset[0] = 0;
+			for (auto i = 1; i < std::size(offset); ++i)
+			{
+				offset[i] = count[i - 1] + offset[i - 1];
+			}
+		}
+	};
+
+	// セマンティクス種別とインデックスからマッピングされたSlotインデックスの計算等を提供.
+	struct MeshVertexSemanticSlotInfo
+	{
+		static constexpr MeshVertexSemanticSlotCount count{};
+
+		// セマンティクスとそのインデックスからスロット番号を返す.
+		//	TEXCOORD, 1 -> 5
+		static constexpr int SemanticSlot(EMeshVertexSemanticSlotKind::Type semantic, int semantic_index)
+		{
+			assert(count.count[semantic] > semantic_index);
+			return count.offset[semantic] + semantic_index;
+		}
+		// 各セマンティクスの最大スロット数を返す.
+		static constexpr int SemanticCount(EMeshVertexSemanticSlotKind::Type semantic)
+		{
+			return count.count[semantic];
+		}
+
 	};
 
 }

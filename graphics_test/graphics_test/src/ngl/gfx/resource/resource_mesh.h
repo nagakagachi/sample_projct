@@ -103,7 +103,7 @@ namespace ngl
 			const T* GetTypedRawDataPtr() const { return static_cast<T*>(raw_ptr_); }
 
 			// rhi vertex buffer view.
-			rhi::VertexBufferViewDep rhi_vbv_ = {};
+			//rhi::VertexBufferViewDep rhi_vbv_ = {};
 		};
 
 		template<typename T>
@@ -121,7 +121,7 @@ namespace ngl
 			const T* GetTypedRawDataPtr() const { return static_cast<T*>(raw_ptr_); }
 
 			// rhi index buffer view.
-			rhi::IndexBufferViewDep rhi_vbv_ = {};
+			//rhi::IndexBufferViewDep rhi_vbv_ = {};
 		};
 
 		// Mesh Shape Data.

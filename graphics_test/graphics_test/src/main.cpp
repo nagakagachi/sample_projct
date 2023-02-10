@@ -467,19 +467,19 @@ bool AppGame::Initialize()
 				input_elem_data[0].semantic_name = "POSITION";
 				input_elem_data[0].semantic_index = 0;
 				input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-				input_elem_data[0].stream_slot = ngl::gfx::EMeshVertexSemanticSlot::POSITION;
+				input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemanticSlotInfo::SemanticSlot(ngl::gfx::EMeshVertexSemanticSlotKind::POSITION, 0);
 				input_elem_data[0].element_offset = 0;
 
 				input_elem_data[1].semantic_name = "NORMAL";
 				input_elem_data[1].semantic_index = 0;
 				input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-				input_elem_data[1].stream_slot = ngl::gfx::EMeshVertexSemanticSlot::NORMAL;
+				input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemanticSlotInfo::SemanticSlot(ngl::gfx::EMeshVertexSemanticSlotKind::NORMAL, 0);
 				input_elem_data[1].element_offset = 0;
 
 				input_elem_data[2].semantic_name = "TEXCOORD";
 				input_elem_data[2].semantic_index = 0;
 				input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
-				input_elem_data[2].stream_slot = ngl::gfx::EMeshVertexSemanticSlot::TEXCOORD;
+				input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemanticSlotInfo::SemanticSlot(ngl::gfx::EMeshVertexSemanticSlotKind::TEXCOORD, 0);
 				input_elem_data[2].element_offset = 0;
 			}
 			if (!pso_mesh_simple_depth.Initialize(&device_, desc))
