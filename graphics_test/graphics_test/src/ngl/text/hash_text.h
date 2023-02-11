@@ -29,6 +29,7 @@ namespace ngl
 		constexpr size_t NGL_FNV_prime = 16777619U;
 #endif // defined(_WIN64)
 
+#if 0
 		// 配列から Fnv1aハッシュを計算
 		// accumulate range [_First, _First + _Count) into partial FNV-1a hash _Val
 		inline size_t Fnv1a_append_bytes(size_t _Val, const unsigned char* const _First, const size_t _Count) noexcept
@@ -45,10 +46,136 @@ namespace ngl
 		// bitwise hashes the representation of an array
 		template <class _Kty>
 		size_t Fnv1a_Hash_array_representation(
-			const _Kty* const _First, const size_t _Count) noexcept 
+			const _Kty* const _First, const size_t _Count) noexcept
 		{
 			return Fnv1a_append_bytes(NGL_FNV_offset_basis, reinterpret_cast<const unsigned char*>(_First), _Count * sizeof(_Kty));
 		}
+#endif
+
+		// 配列から Fnv1aハッシュを計算
+		// accumulate range [_First, _First + _Count) into partial FNV-1a hash _Val
+		inline constexpr size_t Fnv1a_append_bytes_char(size_t _Val, const char* const _First, const size_t _Count) noexcept
+		{
+			for (size_t _Idx = 0; _Idx < _Count; ++_Idx) {
+				_Val ^= static_cast<size_t>(_First[_Idx]);
+				_Val *= NGL_FNV_prime;
+			}
+
+			return _Val;
+		}
+		// 配列から Fnv1aハッシュを計算
+		// FUNCTION TEMPLATE _Hash_array_representation
+		// bitwise hashes the representation of an array
+		constexpr size_t Fnv1a_Hash_array_representation_char(
+			const char* const _First, const size_t _Count) noexcept
+		{
+			return Fnv1a_append_bytes_char(NGL_FNV_offset_basis, _First, _Count * sizeof(char));
+		}
+
+
+
+
+
+		template<int LEN>
+		class HashCharPtr
+		{
+		private:
+			static constexpr int StrLenConstexpr(const char* str)
+			{
+				int l = 0;
+				for (; 0 != str[l]; ++l)
+				{
+				}
+				return l;
+			}
+
+		public:
+			constexpr HashCharPtr()
+				: str_()
+				, valid_len_()
+				, hash_()
+			{
+			}
+			constexpr HashCharPtr(const char* s)
+				: str_()
+				, valid_len_()
+				, hash_()
+			{
+				const int N = StrLenConstexpr(s);
+				valid_len_ = (LEN < N) ? LEN : N;
+				str_[valid_len_] = 0;
+				for (auto i = 0; i < valid_len_; ++i)
+					str_[i] = s[i];
+
+				// Hash.
+				hash_ = ngl::text::Fnv1a_Hash_array_representation_char(str_, valid_len_);
+			}
+			void Set(const char* s, int len)
+			{
+				const int N = len;
+				valid_len_ = (LEN < N) ? LEN : N;
+
+				for (auto i = 0; i < valid_len_; ++i)
+					str_[i] = s[i];
+				for (auto i = valid_len_; i < LEN; ++i)
+					str_[i] = 0;
+
+				// Hash.
+				hash_ = ngl::text::Fnv1a_Hash_array_representation_char(str_, valid_len_);
+			}
+			constexpr const char* Get() const
+			{
+				return &str_[0];
+			}
+			constexpr uint64_t Hash() const
+			{
+				return hash_;
+			}
+			constexpr int Length() const
+			{
+				return valid_len_;
+			}
+			constexpr int MaxLength() const
+			{
+				return LEN;
+			}
+
+		private:
+			char str_[LEN + 1] = {};
+			int  valid_len_ = {};
+			uint64_t hash_ = {};
+		};
+		namespace
+		{
+			template<int N0, int N1>
+			struct CompStr
+			{
+				constexpr CompStr(const HashCharPtr<N0>& v0, const HashCharPtr<N1>& v1)
+					: result()
+				{
+					result = true;
+					const int n = (v0.Length() < v1.Length()) ? v0.Length() : v1.Length();
+					for (int i = 0; i < n; ++i)
+					{
+						result &= (v0.Get()[i] == v1.Get()[i]);
+					}
+				}
+				bool result;
+			};
+		}
+		template<int LEN0, int LEN1>
+		static constexpr bool operator == (const HashCharPtr<LEN0>& v0, const HashCharPtr<LEN1>& v1)
+		{
+			bool result = (v0.Hash() == v1.Hash()) && CompStr(v0, v1).result;
+			return result;
+		}
+		template<int LEN0, int LEN1>
+		static constexpr bool operator != (const HashCharPtr<LEN0>& v0, const HashCharPtr<LEN1>& v1)
+		{
+			return !(v0 == v1);
+		}
+
+
 
 		/*
 			バッファの末尾が常に0で埋められていることを保証する固定長文字列.
@@ -138,55 +265,21 @@ namespace ngl
 			char				text_[SIZE + 1] = {};
 		};
 
-
-		/*
-			旧ハッシュテキスト
-			TODO. FixedStringを利用した実装に置き換えたい.
-		*/
-		template<unsigned int SIZE>
-		class HashText
-		{
-		public:
-			HashText();
-			~HashText();
-
-			HashText(const char* str);
-			HashText(const HashText& obj);
-
-			HashText& operator = (const char* str);
-			HashText& operator = (const HashText& obj);
-
-			bool operator == (const HashText& obj) const;
-			bool operator == (const char* str) const;
-
-			bool operator < (const HashText& rhs) const;
-			bool operator > (const HashText& rhs) const;
-
-			void Set(const char* str, unsigned int size);
-			const char* Get() const;
-			unsigned int GetHash() const;
-
-			unsigned int GetMaxLen() const;
-			static unsigned int MaxLength() { return SIZE; }
-
-		private:
-			void Reset();
-
-		private:
-			unsigned int hash_ = 0;
-			char text_[SIZE + 1] = {};
-		};
 	}
 }
 
-/*
-	std::hash 向けの特殊化
-*/
-template<unsigned int SIZE>
-bool operator==(const ngl::text::FixedString<SIZE>& lhs, const ngl::text::FixedString<SIZE>& rhs) 
+namespace std
 {
-	return lhs == rhs.d;
+	template <unsigned int SIZE>
+	struct hash<ngl::text::HashCharPtr<SIZE>>
+	{
+		size_t operator()(const ngl::text::HashCharPtr<SIZE>& v) const
+		{
+			return v.Hash();
+		}
+	};
 }
+
 namespace std
 {
 	template <unsigned int SIZE>
@@ -194,7 +287,7 @@ namespace std
 	{
 		size_t operator()(const ngl::text::FixedString<SIZE>& v) const
 		{
-			return ngl::text::Fnv1a_Hash_array_representation(v.Get(), v.GetValidLen());
+			return ngl::text::Fnv1a_Hash_array_representation_char(v.Get(), v.GetValidLen());
 		}
 	};
 }

@@ -93,7 +93,9 @@ namespace rhi
 
 		struct InputParamInfo
 		{
-			char	semantic_name[32];
+			//char	semantic_name[32];
+			text::HashCharPtr<32>	semantic_name;
+
 			u8		semantic_index;
 
 			// if float3 then 3. if int4 then 4.

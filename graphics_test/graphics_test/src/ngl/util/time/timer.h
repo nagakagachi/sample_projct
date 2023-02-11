@@ -21,7 +21,8 @@
 #include <windows.h>
 
 #include <string>
-#include <map>
+//#include <map>
+#include <unordered_map>
 
 #include "ngl/util/types.h"
 #include "ngl/util/singleton.h"
@@ -31,7 +32,9 @@ namespace ngl
 {
 	namespace time
 	{
-		typedef ngl::text::HashText<64>	TimerName;
+		//typedef ngl::text::HashText<64>	TimerName;
+		using TimerName = ngl::text::HashCharPtr<64>;
+
 
 		class Timer : public Singleton< Timer >
 		{
@@ -85,8 +88,10 @@ namespace ngl
 				LARGE_INTEGER time_suspemd_total = {};
 			};
 
-			//std::map<std::string, TimerEntity> timers_;
-			std::map<TimerName, TimerEntity> timers_ = {};
+			//using TimerMapType = std::map<TimerName, Timer::TimerEntity>;
+			using TimerMapType = std::unordered_map<TimerName, TimerEntity>;
+
+			TimerMapType timers_ = {};
 		};
 	}
 }

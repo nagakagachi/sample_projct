@@ -635,8 +635,10 @@ namespace rhi
 							std::cout << "		ComponentType = " << input_desc.ComponentType << std::endl;
 
 							tar.semantic_index = input_desc.SemanticIndex;
+
 							size_t copy_name_len = std::min<>(std::strlen(input_desc.SemanticName), sizeof(tar.semantic_name));
-							std::copy_n(input_desc.SemanticName, copy_name_len, tar.semantic_name);
+							//std::copy_n(input_desc.SemanticName, copy_name_len, tar.semantic_name);
+							tar.semantic_name.Set(input_desc.SemanticName, (int)copy_name_len);
 
 							tar.num_component = MaskCount(input_desc.Mask);
 						}

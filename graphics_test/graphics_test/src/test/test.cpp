@@ -34,6 +34,7 @@ namespace ngl_test
 	// 機能テスト用.
 	void TestFunc00(ngl::rhi::DeviceDep* p_device)
 	{
+#if defined(_DEBUG)
 		auto& device = *p_device;
 		auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
@@ -53,6 +54,35 @@ namespace ngl_test
 		auto find2 = fixstr_map.find("abc");
 		auto find3 = fixstr_map.find("01234567");
 		auto find4 = fixstr_map.find("012345678");
+
+
+
+		ngl::text::HashCharPtr<8> fixstr00("abc");
+		constexpr ngl::text::HashCharPtr<8> fixstr01("abc");
+		constexpr ngl::text::HashCharPtr<8> fixstr02("abc");
+		constexpr ngl::text::HashCharPtr<8> fixstr03("abd");
+		constexpr ngl::text::HashCharPtr<16> fixstr04("abc");
+		constexpr ngl::text::HashCharPtr<16> fixstr05("abcde");
+
+		constexpr bool comp00 = (fixstr01 == fixstr02);
+		constexpr bool comp01 = (fixstr01 == fixstr03);
+		constexpr bool comp02 = (fixstr01 == fixstr04);
+		constexpr bool comp03 = (fixstr01 == fixstr05);
+		constexpr bool comp03_ = (fixstr01 != fixstr05);
+
+		const bool comp04 = (fixstr00 == fixstr01);
+		const bool comp05 = (fixstr01 == fixstr02);
+		const bool comp06 = (fixstr01 == fixstr05);
+
+		//using FixedStr32 = ngl::text::FixedString<32>;
+		using FixedStr32 = ngl::text::HashCharPtr<32>;
+		std::unordered_map<FixedStr32, int> map00;
+		map00["fdafda"] = 1;
+		map00["fdafda"] = 2;
+
+		const char* adsfadfasf = "fdafda";
+		auto finditr00 = map00.find(adsfadfasf);
+
 
 
 		ngl::math::funcAA();
@@ -515,5 +545,6 @@ namespace ngl_test
 		{
 			ngl::thread::test::LockfreeStackIntrusiveTest();
 		}
+#endif
 	}
 }

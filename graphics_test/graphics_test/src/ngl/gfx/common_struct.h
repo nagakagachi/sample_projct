@@ -2,6 +2,7 @@
 
 #include "ngl/util/noncopyable.h"
 #include "ngl/math/math.h"
+#include "ngl/text/hash_text.h"
 
 
 namespace ngl
@@ -51,8 +52,11 @@ namespace gfx
 		}
 		char str[LEN+1];
 	};
+
+
 	// セマンティクス名.
-	using SemanticNameType = FixSizeName<32>;
+	//using SemanticNameType = FixSizeName<32>;
+	using SemanticNameType = text::HashCharPtr<32>;
 
 
 	static constexpr int k_mesh_vertex_semantic_texcoord_max_count = 4;
@@ -146,7 +150,8 @@ namespace gfx
 		// セマンティクス名.
 		static const char* SemanticNameStr(EMeshVertexSemanticKind::Type semantic)
 		{
-			return SemanticName(semantic).str;
+			//return SemanticName(semantic).str;
+			return SemanticName(semantic).Get();
 		}
 	};
 

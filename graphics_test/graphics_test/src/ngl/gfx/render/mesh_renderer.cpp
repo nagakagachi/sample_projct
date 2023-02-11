@@ -13,18 +13,6 @@ namespace gfx
 {
     // TODO. メッシュ描画用のヘルパを実装.
 
-	namespace
-	{
-		// TODO. 有効なバッファのみ設定.
-		void SetVertexBufferHelper(rhi::GraphicsCommandListDep& command_list, EMeshVertexSemanticKind::Type semantic_kind, int semantic_index, const MeshShapeVertexDataBase& vtx_buffer)
-		{
-			const auto slot_index = MeshVertexSemantic::SemanticSlot(semantic_kind, semantic_index);
-
-			if (vtx_buffer.IsValid())
-				command_list.SetVertexBuffers(slot_index, 1, &vtx_buffer.rhi_vbv_.GetView());
-		}
-	}
-
 	// 単一PSOでのメッシュ描画.
 	// RenderTargetやViewport設定が完了している状態で呼び出される前提.
     void RenderMeshSinglePso(rhi::GraphicsCommandListDep& command_list, rhi::GraphicsPipelineStateDep& pso, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
