@@ -16,9 +16,9 @@ namespace gfx
 	namespace
 	{
 		// TODO. 有効なバッファのみ設定.
-		void SetVertexBufferHelper(rhi::GraphicsCommandListDep& command_list, EMeshVertexSemanticSlotKind::Type semantic_kind, int semantic_index, const MeshShapeVertexDataBase& vtx_buffer)
+		void SetVertexBufferHelper(rhi::GraphicsCommandListDep& command_list, EMeshVertexSemanticKind::Type semantic_kind, int semantic_index, const MeshShapeVertexDataBase& vtx_buffer)
 		{
-			const auto slot_index = MeshVertexSemanticSlotInfo::SemanticSlot(semantic_kind, semantic_index);
+			const auto slot_index = MeshVertexSemantic::SemanticSlot(semantic_kind, semantic_index);
 
 			if (vtx_buffer.IsValid())
 				command_list.SetVertexBuffers(slot_index, 1, &vtx_buffer.rhi_vbv_.GetView());
@@ -55,16 +55,16 @@ namespace gfx
 
 				// Geometry.
 				auto& shape = e->GetMeshData()->data_.shape_array_[gi];
-				// Set Vertex.
-				SetVertexBufferHelper(command_list, EMeshVertexSemanticSlotKind::POSITION, 0, shape.position_);
-				SetVertexBufferHelper(command_list, EMeshVertexSemanticSlotKind::NORMAL, 0, shape.normal_);
-				SetVertexBufferHelper(command_list, EMeshVertexSemanticSlotKind::TANNGENT, 0, shape.normal_);
-				SetVertexBufferHelper(command_list, EMeshVertexSemanticSlotKind::BINORMAL, 0, shape.normal_);
-				for(auto si = 0; si < shape.texcoord_.size(); ++si)
-					SetVertexBufferHelper(command_list, EMeshVertexSemanticSlotKind::TEXCOORD, si, shape.texcoord_[si]);
-				for (auto si = 0; si < shape.color_.size(); ++si)
-					SetVertexBufferHelper(command_list, EMeshVertexSemanticSlotKind::COLOR, si, shape.color_[si]);
 
+				// 一括設定. Mesh描画はセマンティクスとスロットを固定化しているため, Meshデータロード時にマッピングを構築してそのまま利用する.
+				// PSO側のInputLayoutが要求するセマンティクスとのValidationチェックも可能なはず.
+				D3D12_VERTEX_BUFFER_VIEW vtx_views[gfx::MeshVertexSemantic::SemanticSlotMaxCount()] = {};
+				for (auto vi = 0; vi < gfx::MeshVertexSemantic::SemanticSlotMaxCount(); ++vi)
+				{
+					if (shape.slot_mask_.mask & (1 << vi))
+						vtx_views[vi] = shape.p_slot_mapping_[vi]->rhi_vbv_.GetView();
+				}
+				command_list.SetVertexBuffers(0, (u32)std::size(vtx_views), vtx_views);
 
 				// Set Index and topology.
 				command_list.SetIndexBuffer(&shape.index_.rhi_vbv_.GetView());

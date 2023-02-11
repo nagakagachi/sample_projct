@@ -178,12 +178,12 @@ namespace assimp
 			const int num_prim = ai_scene->mMeshes[mesh_i]->mNumFaces;
 			const int num_vertex = ai_scene->mMeshes[mesh_i]->mNumVertices;
 
-			const int num_color_ch = ai_scene->mMeshes[mesh_i]->GetNumColorChannels();
-			const int num_uv_ch = ai_scene->mMeshes[mesh_i]->GetNumUVChannels();
 			const int num_position = ai_scene->mMeshes[mesh_i]->mVertices ? num_vertex : 0;
 			const int num_normal = ai_scene->mMeshes[mesh_i]->mNormals ? num_vertex : 0;
 			const int num_tangent = ai_scene->mMeshes[mesh_i]->mTangents ? num_vertex : 0;
 			const int num_binormal = ai_scene->mMeshes[mesh_i]->mBitangents ? num_vertex : 0;
+			const int num_color_ch = std::min(ai_scene->mMeshes[mesh_i]->GetNumColorChannels(), (uint32_t)gfx::MeshVertexSemantic::SemanticCount(gfx::EMeshVertexSemanticKind::COLOR));// Colorのサポート最大数でクランプ.
+			const int num_uv_ch = std::min(ai_scene->mMeshes[mesh_i]->GetNumUVChannels(), (uint32_t)gfx::MeshVertexSemantic::SemanticCount(gfx::EMeshVertexSemanticKind::TEXCOORD));// Texcoordのサポート最大数でクランプ.
 
 			offset_info.push_back({});
 			auto& info = offset_info.back();
@@ -343,6 +343,10 @@ namespace assimp
 			const auto& info = offset_info[i];
 			auto& mesh = out_mesh.shape_array_[i];
 
+			// Slotマッピングクリア.
+			mesh.p_slot_mapping_.fill(nullptr);
+			mesh.slot_mask_ = {};
+
 			// Vertex Attribute.
 			{
 				mesh.position_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
@@ -355,6 +359,10 @@ namespace assimp
 					mesh.position_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.position_.raw_ptr_);
+
+				// Slotマッピング.
+				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::POSITION)] = &mesh.position_;
+				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::POSITION);
 			}
 
 			if (mesh.normal_.raw_ptr_)
@@ -372,6 +380,10 @@ namespace assimp
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
 				mesh.normal_.rhi_vbv_.Initialize(&mesh.normal_.rhi_buffer_, vbv_desc);
+
+				// Slotマッピング.
+				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::NORMAL)] = &mesh.normal_;
+				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::NORMAL);
 			}
 			if (mesh.tangent_.raw_ptr_)
 			{
@@ -388,6 +400,10 @@ namespace assimp
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
 				mesh.tangent_.rhi_vbv_.Initialize(&mesh.tangent_.rhi_buffer_, vbv_desc);
+
+				// Slotマッピング.
+				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TANNGENT)] = &mesh.tangent_;
+				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TANNGENT);
 			}
 			if (mesh.binormal_.raw_ptr_)
 			{
@@ -404,6 +420,10 @@ namespace assimp
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
 				mesh.binormal_.rhi_vbv_.Initialize(&mesh.binormal_.rhi_buffer_, vbv_desc);
+
+				// Slotマッピング.
+				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::BINORMAL)] = &mesh.binormal_;
+				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::BINORMAL);
 			}
 			// SRGBかLinearで問題になるかもしれない. 現状はとりあえずLinear扱い.
 			for (int ci = 0; ci < mesh.color_.size(); ++ci)
@@ -421,6 +441,10 @@ namespace assimp
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
 				mesh.color_[ci].rhi_vbv_.Initialize(&mesh.color_[ci].rhi_buffer_, vbv_desc);
+
+				// Slotマッピング.
+				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::COLOR, ci)] = &mesh.color_[ci];
+				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::COLOR, ci);
 			}
 			for (int ci = 0; ci < mesh.texcoord_.size(); ++ci)
 			{
@@ -437,6 +461,10 @@ namespace assimp
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
 				mesh.texcoord_[ci].rhi_vbv_.Initialize(&mesh.texcoord_[ci].rhi_buffer_, vbv_desc);
+
+				// Slotマッピング.
+				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TEXCOORD, ci)] = &mesh.texcoord_[ci];
+				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TEXCOORD, ci);
 			}
 
 			// Index.

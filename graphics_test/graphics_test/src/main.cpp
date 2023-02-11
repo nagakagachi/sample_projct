@@ -464,22 +464,22 @@ bool AppGame::Initialize()
 			desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
 			desc.input_layout.p_input_elements = input_elem_data.data();
 			{
-				input_elem_data[0].semantic_name = "POSITION";
+				input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
 				input_elem_data[0].semantic_index = 0;
 				input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-				input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemanticSlotInfo::SemanticSlot(ngl::gfx::EMeshVertexSemanticSlotKind::POSITION, 0);
+				input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
 				input_elem_data[0].element_offset = 0;
 
-				input_elem_data[1].semantic_name = "NORMAL";
+				input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
 				input_elem_data[1].semantic_index = 0;
 				input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-				input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemanticSlotInfo::SemanticSlot(ngl::gfx::EMeshVertexSemanticSlotKind::NORMAL, 0);
+				input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
 				input_elem_data[1].element_offset = 0;
 
-				input_elem_data[2].semantic_name = "TEXCOORD";
+				input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
 				input_elem_data[2].semantic_index = 0;
 				input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
-				input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemanticSlotInfo::SemanticSlot(ngl::gfx::EMeshVertexSemanticSlotKind::TEXCOORD, 0);
+				input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
 				input_elem_data[2].element_offset = 0;
 			}
 			if (!pso_mesh_simple_depth.Initialize(&device_, desc))

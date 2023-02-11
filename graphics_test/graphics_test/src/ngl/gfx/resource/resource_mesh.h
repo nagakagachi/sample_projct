@@ -14,6 +14,9 @@
 
 #include "ngl/resource/resource.h"
 
+// Mesh用セマンティクスマッピング等.
+#include "ngl/gfx/common_struct.h"
+
 namespace ngl
 {
 	namespace res
@@ -146,6 +149,12 @@ namespace ngl
 			MeshShapeVertexData<math::Vec3> binormal_ = {};
 			std::vector<MeshShapeVertexData<VertexColor>>	color_;
 			std::vector<MeshShapeVertexData<math::Vec2>>	texcoord_;
+
+
+			// バインド時等に効率的に設定するためのポインタ配列.
+			std::array<MeshShapeVertexDataBase*, MeshVertexSemantic::SemanticSlotMaxCount()> p_slot_mapping_ = {};
+			MeshVertexSemanticSlotMask	slot_mask_ = {};
+
 		};
 
 		// Mesh Shape Data.

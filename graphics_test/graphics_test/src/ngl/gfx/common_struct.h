@@ -37,12 +37,28 @@ namespace gfx
 
 
 
+	template<int LEN>
+	struct FixSizeName
+	{
+		template<int N>
+		constexpr FixSizeName(const char (&s)[N])
+			: str()
+		{
+			constexpr auto n = (LEN < N) ? LEN : N;
+			str[n] = 0;
+			for (auto i = 0; i < n; ++i)
+				str[i] = s[i];
+		}
+		char str[LEN+1];
+	};
+	// セマンティクス名.
+	using SemanticNameType = FixSizeName<32>;
 
 
 	static constexpr int k_mesh_vertex_semantic_texcoord_max_count = 4;
 	static constexpr int k_mesh_vertex_semantic_color_max_count = 4;
 	// サポートしているセマンティクス種別.
-	struct EMeshVertexSemanticSlotKind
+	struct EMeshVertexSemanticKind
 	{
 		enum Type : int
 		{
@@ -50,55 +66,111 @@ namespace gfx
 			NORMAL,
 			TANNGENT,
 			BINORMAL,
-			TEXCOORD,
 			COLOR,
+			TEXCOORD,
 
 			_MAX,
 		};
-	};
-	// セマンティクス種別毎の数とオフセット等.
-	struct MeshVertexSemanticSlotCount
-	{
-		static constexpr int count[] =
+		static constexpr SemanticNameType Name[] =
 		{
-			1,
-			1,
-			1,
-			1,
-			k_mesh_vertex_semantic_texcoord_max_count,
-			k_mesh_vertex_semantic_color_max_count,
+			"POSITION",
+			"NORMAL",
+			"TANNGENT",
+			"BINORMAL",
+			"COLOR",
+			"TEXCOORD",
 		};
-		int offset[EMeshVertexSemanticSlotKind::_MAX];
-
-		constexpr MeshVertexSemanticSlotCount()
-			: offset()
+		static constexpr int Count[] =
 		{
+			1,
+			1,
+			1,
+			1,
+			k_mesh_vertex_semantic_color_max_count,
+			k_mesh_vertex_semantic_texcoord_max_count,
+		};
+	};
+
+	// セマンティクス種別毎の数とオフセット等.
+	struct MeshVertexSemanticSlotOffset
+	{
+		int offset[EMeshVertexSemanticKind::_MAX];
+		int max_slot_count;
+
+		constexpr MeshVertexSemanticSlotOffset()
+			: offset()
+			, max_slot_count()
+		{
+			// スロットオフセット計算.
+			// メッシュ描画時の各セマンティクスに対応するスロットは固定(TEXCOORD1 -> 5).
 			offset[0] = 0;
 			for (auto i = 1; i < std::size(offset); ++i)
 			{
-				offset[i] = count[i - 1] + offset[i - 1];
+				offset[i] = EMeshVertexSemanticKind::Count[i - 1] + offset[i - 1];
 			}
+			max_slot_count = offset[EMeshVertexSemanticKind::_MAX-1] + EMeshVertexSemanticKind::Count[EMeshVertexSemanticKind::_MAX - 1];
 		}
 	};
 
 	// セマンティクス種別とインデックスからマッピングされたSlotインデックスの計算等を提供.
-	struct MeshVertexSemanticSlotInfo
+	struct MeshVertexSemantic
 	{
-		static constexpr MeshVertexSemanticSlotCount count{};
+		static constexpr MeshVertexSemanticSlotOffset count{};
+		// MeshVertexSemanticSlotMaskで保持するため32以下チェック.
+		static_assert(count.max_slot_count <= 32);
+		
+		// サポートしている最大スロット数.
+		static constexpr int SemanticSlotMaxCount()
+		{
+			return count.max_slot_count;
+		}
 
 		// セマンティクスとそのインデックスからスロット番号を返す.
 		//	TEXCOORD, 1 -> 5
-		static constexpr int SemanticSlot(EMeshVertexSemanticSlotKind::Type semantic, int semantic_index)
+		static constexpr int SemanticSlot(EMeshVertexSemanticKind::Type semantic, int semantic_index = 0)
 		{
-			assert(count.count[semantic] > semantic_index);
+			assert(EMeshVertexSemanticKind::Count[semantic] > semantic_index);
 			return count.offset[semantic] + semantic_index;
 		}
 		// 各セマンティクスの最大スロット数を返す.
-		static constexpr int SemanticCount(EMeshVertexSemanticSlotKind::Type semantic)
+		static constexpr int SemanticCount(EMeshVertexSemanticKind::Type semantic)
 		{
-			return count.count[semantic];
+			return EMeshVertexSemanticKind::Count[semantic];
 		}
 
+		// セマンティクス名.
+		static const SemanticNameType& SemanticName(EMeshVertexSemanticKind::Type semantic)
+		{
+			return EMeshVertexSemanticKind::Name[semantic];
+		}
+		// セマンティクス名.
+		static const char* SemanticNameStr(EMeshVertexSemanticKind::Type semantic)
+		{
+			return SemanticName(semantic).str;
+		}
+	};
+
+	// Meshのセマンティクス有効BitMask. max 32.
+	struct MeshVertexSemanticSlotMask
+	{
+		void Clear()
+		{
+			mask = 0;
+		}
+		void AddSlot(EMeshVertexSemanticKind::Type semantic, int semantic_index = 0)
+		{
+			mask |= (1 << MeshVertexSemantic::SemanticSlot(semantic, semantic_index));
+		}
+		void RemoveSlot(EMeshVertexSemanticKind::Type semantic, int semantic_index = 0)
+		{
+			mask &= ~(1 << MeshVertexSemantic::SemanticSlot(semantic, semantic_index));
+		}
+
+		const uint32_t& operator()()
+		{
+			return mask;
+		}
+		uint32_t mask = 0;
 	};
 
 }
