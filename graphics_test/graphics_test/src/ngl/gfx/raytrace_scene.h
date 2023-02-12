@@ -373,8 +373,7 @@ namespace ngl
 				RaytraceShaderTable dynamic_shader_table_ = {};
 			};
 			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
-			uint32_t						dynamic_tlas_flip_ = 0;
-
+			
 			rhi::DynamicDescriptorStackAllocatorInterface	desc_alloc_interface_ = {};
 
 			rhi::RhiRef<rhi::BufferDep>				cb_test_scene_view[2];

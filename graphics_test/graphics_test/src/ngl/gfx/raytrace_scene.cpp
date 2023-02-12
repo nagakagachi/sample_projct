@@ -1616,12 +1616,8 @@ namespace ngl
 				scene_inst_hitgroup_id_array.push_back(hitgroup_id);
 			}
 
-			// フレーム毎に作り直すShaderTable用のDescriptorアロケーションIDの個数. RenderThreadで生成,GPU処理の2フレ分あれば十分なはず.
-			const int dynamic_tlas_flip_max = 2;
 			// 新規TLAS. DynamicTlasSet内部のRHIオブジェクトは全てRhiRef管理で安全に遅延破棄されるはず.
 			dynamic_tlas_.reset(new DynamicTlasSet(&desc_alloc_interface_));
-
-			dynamic_tlas_flip_ = (dynamic_tlas_flip_ + 1) % dynamic_tlas_flip_max;
 
 			// TLAS Setup.
 			if (!dynamic_tlas_->dynamic_scene_tlas_.Setup(p_device, scene_blas_array, scene_inst_blas_id_array, scene_inst_transform_array, scene_inst_hitgroup_id_array))
@@ -1632,7 +1628,7 @@ namespace ngl
 			// ShaderTable生成.
 			if (!CreateShaderTable(dynamic_tlas_->dynamic_shader_table_,
 				p_device,
-				*dynamic_tlas_->p_desc_alloc_interface_, //desc_alloc_interface_,
+				*dynamic_tlas_->p_desc_alloc_interface_,
 				dynamic_tlas_->dynamic_scene_tlas_, *p_state_object_, "rayGen", "miss"))
 			{
 				assert(false);
