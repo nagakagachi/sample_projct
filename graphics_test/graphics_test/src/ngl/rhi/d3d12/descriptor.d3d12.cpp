@@ -783,8 +783,7 @@ namespace ngl
 				// Empty
 				cur_stack_use_count_ = 0;
 
-				// idに関連付けてStack分を新規に確保する.
-				// CommandList用のフレーム単位自動解放では 0,1,2 のIDを使い毎フレーム自動で解放されるためフレームを跨ぐDescriptorの場合はそのIDを避けて運用する.
+				// Stack分を新規に確保する.
 				auto alloc_result = p_manager_->AllocateDescriptorArray(desc_.stack_size);
 				if (alloc_result.IsValid())
 				{

@@ -12,13 +12,13 @@ namespace ngl
 	namespace gfx
 	{
 
-		RaytraceBlas::RaytraceBlas()
+		RtBlas::RtBlas()
 		{
 		}
-		RaytraceBlas::~RaytraceBlas()
+		RtBlas::~RtBlas()
 		{
 		}
-		bool RaytraceBlas::Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceBlasGeometryDesc>& geometry_desc_array)
+		bool RtBlas::Setup(rhi::DeviceDep* p_device, const std::vector<RtBlasGeometryDesc>& geometry_desc_array)
 		{
 			// CommandListが不要な生成部だけを実行する.
 
@@ -140,7 +140,7 @@ namespace ngl
 		// Setup の情報を元に構造構築コマンドを発行する.
 		// Buildタイミングをコントロールするために分離している.
 		// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
-		bool RaytraceBlas::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
+		bool RtBlas::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
 		{
 			assert(p_device);
 			assert(p_command_list);
@@ -175,28 +175,28 @@ namespace ngl
 			is_built_ = true;
 			return true;
 		}
-		bool RaytraceBlas::IsSetuped() const
+		bool RtBlas::IsSetuped() const
 		{
 			return SETUP_TYPE::NONE != setup_type_;
 		}
-		bool RaytraceBlas::IsBuilt() const
+		bool RtBlas::IsBuilt() const
 		{
 			return is_built_;
 		}
 
-		rhi::BufferDep* RaytraceBlas::GetBuffer()
+		rhi::BufferDep* RtBlas::GetBuffer()
 		{
 			return main_.Get();
 		}
-		const rhi::BufferDep* RaytraceBlas::GetBuffer() const
+		const rhi::BufferDep* RtBlas::GetBuffer() const
 		{
 			return main_.Get();
 		}
 
 		// 内部Geometry情報.
-		RaytraceBlasGeometryResource RaytraceBlas::GetGeometryData(uint32_t index)
+		RtBlasGeometryResource RtBlas::GetGeometryData(uint32_t index)
 		{
-			RaytraceBlasGeometryResource ret = {};
+			RtBlasGeometryResource ret = {};
 			if (NumGeometry() <= index)
 			{
 				assert(false);
@@ -207,16 +207,16 @@ namespace ngl
 			return ret;
 		}
 
-		RaytraceTlas::RaytraceTlas()
+		RtTlas::RtTlas()
 		{
 		}
-		RaytraceTlas::~RaytraceTlas()
+		RtTlas::~RtTlas()
 		{
 		}
 		// TLAS setup.
 		// index_buffer : optional.
 		// bufferの管理責任は外部.
-		bool RaytraceTlas::Setup(rhi::DeviceDep* p_device, std::vector<RaytraceBlas*>& blas_array,
+		bool RtTlas::Setup(rhi::DeviceDep* p_device, std::vector<RtBlas*>& blas_array,
 			const std::vector<uint32_t>& instance_geom_id_array,
 			const std::vector<math::Mat34>& instance_transform_array,
 			const std::vector<uint32_t>& instance_hitgroup_id_array
@@ -311,8 +311,8 @@ namespace ngl
 				int total_geom_index = 0;
 				for (auto inst_i = 0; inst_i < transform_array_.size(); ++inst_i)
 				{
-					// Instance毎Geom毎にShaderTableを割り当てる場合はすべて直列に並べた際のInstance毎の先頭インデックスを使用し,
-					// TraceRay()のRayContributionToHitGroupIndexでGeom毎のインデックス加算をすることでInstance毎Geom毎のTable参照を実現する.
+					// Instance毎Geom毎にShaderTableを割り当てるた, 全Instance全Geomを直列に並べた際のInstance先頭Geomインデックスを使用する.
+					//	シェーダ側ではInstanceのHitGroupIndexに TraceRay()のRayContributionToHitGroupIndex でGeom毎のインデックス加算をすることでInstance毎Geom毎のTable参照を実現する.
 					const auto instance_shader_table_head_per_geom = total_geom_index;
 					total_geom_index += blas_array_[instance_blas_id_array_[inst_i]]->NumGeometry();
 
@@ -395,7 +395,7 @@ namespace ngl
 		// Setup の情報を元に構造構築コマンドを発行する.
 		// Buildタイミングをコントロールするために分離している.
 		// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
-		bool RaytraceTlas::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
+		bool RtTlas::Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list)
 		{
 			assert(p_device);
 			assert(p_command_list);
@@ -429,53 +429,53 @@ namespace ngl
 			is_built_ = true;
 			return true;
 		}
-		bool RaytraceTlas::IsSetuped() const
+		bool RtTlas::IsSetuped() const
 		{
 			return SETUP_TYPE::NONE != setup_type_;
 		}
-		bool RaytraceTlas::IsBuilt() const
+		bool RtTlas::IsBuilt() const
 		{
 			return is_built_;
 		}
-		rhi::BufferDep* RaytraceTlas::GetBuffer()
+		rhi::BufferDep* RtTlas::GetBuffer()
 		{
 			return main_.Get();
 		}
-		const rhi::BufferDep* RaytraceTlas::GetBuffer() const
+		const rhi::BufferDep* RtTlas::GetBuffer() const
 		{
 			return main_.Get();
 		}
-		rhi::ShaderResourceViewDep* RaytraceTlas::GetSrv()
+		rhi::ShaderResourceViewDep* RtTlas::GetSrv()
 		{
 			return main_srv_.Get();
 		}
-		const rhi::ShaderResourceViewDep* RaytraceTlas::GetSrv() const
+		const rhi::ShaderResourceViewDep* RtTlas::GetSrv() const
 		{
 			return main_srv_.Get();
 		}
 
 
-		uint32_t RaytraceTlas::NumBlas() const
+		uint32_t RtTlas::NumBlas() const
 		{
 			return static_cast<uint32_t>(blas_array_.size());
 		}
-		const std::vector<RaytraceBlas*>& RaytraceTlas::GetBlasArray() const
+		const std::vector<RtBlas*>& RtTlas::GetBlasArray() const
 		{
 			return blas_array_;
 		}
-		uint32_t RaytraceTlas::NumInstance() const
+		uint32_t RtTlas::NumInstance() const
 		{
 			return static_cast<uint32_t>(hitgroup_id_array_.size());
 		}
-		const std::vector<uint32_t>& RaytraceTlas::GetInstanceBlasIndexArray() const
+		const std::vector<uint32_t>& RtTlas::GetInstanceBlasIndexArray() const
 		{
 			return instance_blas_id_array_;
 		}
-		const std::vector<math::Mat34>& RaytraceTlas::GetInstanceTransformArray() const
+		const std::vector<math::Mat34>& RtTlas::GetInstanceTransformArray() const
 		{
 			return transform_array_;
 		}
-		const std::vector<uint32_t>& RaytraceTlas::GetInstanceHitgroupIndexArray() const
+		const std::vector<uint32_t>& RtTlas::GetInstanceHitgroupIndexArray() const
 		{
 			return hitgroup_id_array_;
 		}
@@ -916,8 +916,8 @@ namespace ngl
 
 		}
 
-		bool RaytraceStateObject::Initialize(rhi::DeviceDep* p_device, 
-			const std::vector<RaytraceShaderRegisterInfo>& shader_info_array, 
+		bool RtStateObject::Initialize(rhi::DeviceDep* p_device, 
+			const std::vector<RtShaderRegisterInfo>& shader_info_array, 
 			uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursion)
 		{
 			if (initialized_)
@@ -1232,10 +1232,10 @@ namespace ngl
 
 		// per_entry_descriptor_param_count が0だとAlignmentエラーになるため注意.
 		// BLAS内Geometryは個別のShaderRecordを持つ(multiplier_for_subgeometry_index = 1)
-		bool CreateShaderTable(RaytraceShaderTable& out, rhi::DeviceDep* p_device,
+		bool CreateShaderTable(RtShaderTable& out, rhi::DeviceDep* p_device,
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
-			const RaytraceTlas& tlas, 
-			const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name)
+			const RtTlas& tlas, 
+			const RtStateObject& state_object, const char* raygen_name, const char* miss_name)
 		{
 			out = {};
 
@@ -1333,7 +1333,7 @@ namespace ngl
 				uint32_t hitgroup_count = 0;
 				for (uint32_t inst_i = 0u; inst_i < num_instance; ++inst_i)
 				{
-					// 現状はBLAS内Geometryはすべて同じHitgroupとしている.
+					// 現状はBLAS内Geometryは すべて同じHitgroup としている(Entryは別にして異なるテクスチャ等を設定できるようにはなっている).
 					// Geometry毎に別マテリアル等とする場合はここをGeomety毎とする.
 					const uint32_t hitgroup_id = tlas.GetInstanceHitgroupIndexArray()[inst_i];
 					const char* hitgroup_name = state_object.GetHitgroupName(hitgroup_id);
@@ -1433,47 +1433,120 @@ namespace ngl
 		}
 		// -------------------------------------------------------------------------------
 
-
-		// ---------------------------------------------------------------------------------------------------------------------------------
-		RaytraceSceneManager::DynamicTlasSet::DynamicTlasSet(rhi::DynamicDescriptorStackAllocatorInterface* p_desc_alloc_interface)
-			{
-				p_desc_alloc_interface_ = p_desc_alloc_interface;
-			}
-			RaytraceSceneManager::DynamicTlasSet::~DynamicTlasSet()
-			{
-				if (p_desc_alloc_interface_)
-				{
-					p_desc_alloc_interface_->DeallocateDeferred((u32)p_desc_alloc_interface_->GetManager()->GetDevice()->GetDeviceFrameIndex());
-				}
-			}
-		// ---------------------------------------------------------------------------------------------------------------------------------
-
-
-		RaytraceSceneManager::RaytraceSceneManager()
+		RtPassCore::RtPassCore()
 		{
 		}
-		RaytraceSceneManager::~RaytraceSceneManager()
+		RtPassCore::~RtPassCore()
 		{
-			// 内部で使用しているDescriptorのDeallocをDescriptorAllocatorInterfaceの解放より先に明示的に実行.
-			dynamic_tlas_.reset();
+			DestroyShaderTable();
 		}
-		bool RaytraceSceneManager::Initialize(rhi::DeviceDep* p_device, RaytraceStateObject* p_state)
+		bool RtPassCore::InitializeBase(rhi::DeviceDep* p_device,
+			const std::vector<RtShaderRegisterInfo>& shader_info_array,
+			uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursion)
 		{
+			p_device_ = p_device;
+			assert(p_device_);
+
 			// Descriptor確保用Interface初期化.
 			{
 				rhi::DynamicDescriptorStackAllocatorInterface::Desc descriptor_interface_desc = {};
-				desc_alloc_interface_.Initialize(p_device->GeDynamicDescriptorManager(), descriptor_interface_desc);
+				if (!desc_alloc_interface_.Initialize(p_device_->GeDynamicDescriptorManager(), descriptor_interface_desc))
+				{
+					assert(false);
+					return false;
+				}
 			}
 
-			// StateObjectは外部から.
-			assert(p_state);
-			if (!p_state)
+			// StateObject.
+			if (!state_object_.Initialize(p_device_, shader_info_array, payload_byte_size, attribute_byte_size, max_trace_recursion))
 			{
+				assert(false);
 				return false;
 			}
-			p_state_object_ = p_state;
 
+			return true;
+		}
+		void RtPassCore::DestroyShaderTable()
+		{
+			// ShaderTableに利用したDynamicDescriptorを安全に破棄.
+			desc_alloc_interface_.DeallocateDeferred((u32)desc_alloc_interface_.GetManager()->GetDevice()->GetDeviceFrameIndex());
 
+			// shader table解放.
+			shader_table_ = {};
+		}
+		bool RtPassCore::UpdateScene(RtSceneManager* p_rt_scene)
+		{
+			// Scene用にShaderTable生成.
+			assert(p_device_);
+			assert(p_rt_scene);
+			auto p_tlas = p_rt_scene->GetSceneTlas();
+			if (!p_tlas)
+				return false;
+
+			p_rt_scene_ = p_rt_scene;
+
+			// 古いShaderTableを破棄.
+			DestroyShaderTable();
+
+			// ShaderTable生成. Local Resource等の設定.
+			if (!CreateShaderTable(shader_table_,
+				p_device_,
+				desc_alloc_interface_,
+				*p_tlas, state_object_, "rayGen", "miss"))
+			{
+				assert(false);
+				return false;
+			}
+
+			return true;
+		}
+		void RtPassCore::DispatchRay(rhi::GraphicsCommandListDep* p_command_list, const DispatchRayParam& param)
+		{
+			assert(p_rt_scene_);
+
+			RtSceneManager::DispatchRayParam dispatch_param = {};
+			dispatch_param.count_x = param.count_x;
+			dispatch_param.count_y = param.count_y;
+			dispatch_param.p_state_object = &state_object_;
+			dispatch_param.p_shader_table = &shader_table_;
+
+			// global resourceのセット (arrayのコピーだがこの関数が呼ばれる回数自体は少ないはずなのでとりあえずこのまま).
+			{
+				dispatch_param.cbv_slot = param.cbv_slot;
+			}
+			{
+				dispatch_param.srv_slot = param.srv_slot;
+			}
+			{
+				dispatch_param.uav_slot = param.uav_slot;
+			}
+			{
+				dispatch_param.sampler_slot = param.sampler_slot;
+			}
+
+			// dispatch.
+			p_rt_scene_->DispatchRay(p_command_list, dispatch_param);
+		}
+		RtStateObject* RtPassCore::GetStateObject()
+		{
+			return &state_object_;
+		}
+		RtShaderTable* RtPassCore::GetShaderTable()
+		{
+			return &shader_table_;
+		}
+
+		// ------------------------------------------------------------------------------------------------------------------------------------
+		RtPassTest::RtPassTest()
+		{
+		}
+		RtPassTest::~RtPassTest()
+		{
+		}
+		bool RtPassTest::Initialize(rhi::DeviceDep* p_device,
+			std::vector<ngl::gfx::RtShaderRegisterInfo>& shader_reg_info,
+			uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursionmiss_name)
+		{
 			// 出力テスト用のTextureとUAV.
 			{
 				rhi::TextureDep::Desc tex_desc = {};
@@ -1488,13 +1561,11 @@ namespace ngl
 				{
 					assert(false);
 				}
-				// この生成はDeviceの持つシェーダから不可視のPersistentHeap上に作られる. 実際にはDispatch時のHeap上に CopyDescriptors をする.
 				ray_result_uav_.Reset(new rhi::UnorderedAccessViewDep());
 				if (!ray_result_uav_->Initialize(p_device, ray_result_.Get(), 0, 0, 1))
 				{
 					assert(false);
 				}
-				// 同様にPersistent
 				ray_result_srv_.Reset(new rhi::ShaderResourceViewDep());
 				if (!ray_result_srv_->InitializeAsTexture(p_device, ray_result_.Get(), 0, 1, 0, 1))
 				{
@@ -1504,6 +1575,76 @@ namespace ngl
 				ray_result_state_ = rhi::ResourceState::General;
 			}
 
+			if (!rt_pass_core_.InitializeBase(p_device, shader_reg_info, payload_byte_size, attribute_byte_size, max_trace_recursionmiss_name))
+			{
+				assert(false);
+				return false;
+			}
+
+			return true;
+		}
+		void RtPassTest::PreRenderUpdate(class RtSceneManager* p_rt_scene, rhi::GraphicsCommandListDep* p_command_list)
+		{
+			p_rt_scene_ = p_rt_scene;
+			rt_pass_core_.UpdateScene(p_rt_scene);
+		}
+		void RtPassTest::Render(rhi::GraphicsCommandListDep* p_command_list)
+		{
+			rhi::DeviceDep* p_device = p_command_list->GetDevice();
+
+			// 出力先UAVバリア.
+			{
+				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::UnorderedAccess);
+				ray_result_state_ = rhi::ResourceState::UnorderedAccess;
+			}
+
+			{
+				RtPassCore::DispatchRayParam param = {};
+				param.count_x = ray_result_.Get()->GetWidth();
+				param.count_y = ray_result_.Get()->GetHeight();
+				// global resourceのセット.
+				{
+					param.cbv_slot[0] = p_rt_scene_->GetSceneViewCbv();// View.
+				}
+				{
+					param.srv_slot;
+				}
+				{
+					param.uav_slot[0] = ray_result_uav_.Get();//出力UAV.
+				}
+				{
+					param.sampler_slot;
+				}
+
+				// dispatch.
+				rt_pass_core_.DispatchRay(p_command_list, param);
+			}
+
+			// to SRV.
+			{
+				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::ShaderRead);
+				ray_result_state_ = rhi::ResourceState::ShaderRead;
+			}
+		}
+		// ------------------------------------------------------------------------------------------------------------------------------------
+
+
+		RtSceneManager::RtSceneManager()
+		{
+		}
+		RtSceneManager::~RtSceneManager()
+		{
+			// 内部で使用しているDescriptorのDeallocをDescriptorAllocatorInterfaceの解放より先に明示的に実行.
+			dynamic_tlas_.reset();
+		}
+		bool RtSceneManager::Initialize(rhi::DeviceDep* p_device)
+		{
+			// Descriptor確保用Interface初期化.
+			{
+				rhi::DynamicDescriptorStackAllocatorInterface::Desc descriptor_interface_desc = {};
+				desc_alloc_interface_.Initialize(p_device->GeDynamicDescriptorManager(), descriptor_interface_desc);
+			}
+
 			// SceneView定数バッファ.
 			{
 				rhi::BufferDep::Desc buff_desc = {};
@@ -1511,20 +1652,20 @@ namespace ngl
 				buff_desc.bind_flag = rhi::ResourceBindFlag::ConstantBuffer;
 				buff_desc.element_count = 1;
 				buff_desc.element_byte_size = sizeof(CbSceneView);
-				for (auto i = 0; i < std::size(cb_test_scene_view); ++i)
+				for (auto i = 0; i < std::size(cb_scene_view); ++i)
 				{
-					cb_test_scene_view[i].Reset(new rhi::BufferDep());
-					cb_test_scene_view[i]->Initialize(p_device, buff_desc);
+					cb_scene_view[i].Reset(new rhi::BufferDep());
+					cb_scene_view[i]->Initialize(p_device, buff_desc);
 
-					cbv_test_scene_view[i].Reset(new rhi::ConstantBufferViewDep());
-					cbv_test_scene_view[i]->Initialize(cb_test_scene_view[i].Get(), {});
+					cbv_scene_view[i].Reset(new rhi::ConstantBufferViewDep());
+					cbv_scene_view[i]->Initialize(cb_scene_view[i].Get(), {});
 				}
 			}
 
 			return true;
 		}
 
-		void RaytraceSceneManager::UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene)
+		void RtSceneManager::UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene)
 		{
 			// 現在SceneでのMesh情報収集.
 			std::unordered_map<const ResMeshData*, int> scene_mesh_to_id;
@@ -1565,7 +1706,7 @@ namespace ngl
 					}
 
 					// New Blas.
-					auto new_blas = new RaytraceBlas();
+					auto new_blas = new RtBlas();
 					// データベース登録.
 					dynamic_scene_blas_array_[empty_index].reset(new_blas);
 					// Map登録.
@@ -1574,7 +1715,7 @@ namespace ngl
 
 					// BLAS Setup.
 					const auto& p_data = p_mesh->data_;
-					std::vector<RaytraceBlasGeometryDesc> blas_geom_desc_arrray = {};
+					std::vector<RtBlasGeometryDesc> blas_geom_desc_arrray = {};
 					blas_geom_desc_arrray.reserve(p_data.shape_array_.size());
 
 					for (uint32_t gi = 0; gi < p_data.shape_array_.size(); ++gi)
@@ -1597,7 +1738,7 @@ namespace ngl
 
 
 			// TLAS Setup.
-			std::vector<RaytraceBlas*> scene_blas_array;
+			std::vector<RtBlas*> scene_blas_array;
 			std::vector<math::Mat34> scene_inst_transform_array;
 			std::vector<uint32_t> scene_inst_blas_id_array;
 			std::vector<uint32_t> scene_inst_hitgroup_id_array;
@@ -1617,26 +1758,15 @@ namespace ngl
 			}
 
 			// 新規TLAS. DynamicTlasSet内部のRHIオブジェクトは全てRhiRef管理で安全に遅延破棄されるはず.
-			dynamic_tlas_.reset(new DynamicTlasSet(&desc_alloc_interface_));
-
+			dynamic_tlas_.reset(new RtTlas());
 			// TLAS Setup.
-			if (!dynamic_tlas_->dynamic_scene_tlas_.Setup(p_device, scene_blas_array, scene_inst_blas_id_array, scene_inst_transform_array, scene_inst_hitgroup_id_array))
+			if (!dynamic_tlas_->Setup(p_device, scene_blas_array, scene_inst_blas_id_array, scene_inst_transform_array, scene_inst_hitgroup_id_array))
 			{
 				assert(false);
 			}
-
-			// ShaderTable生成.
-			if (!CreateShaderTable(dynamic_tlas_->dynamic_shader_table_,
-				p_device,
-				*dynamic_tlas_->p_desc_alloc_interface_,
-				dynamic_tlas_->dynamic_scene_tlas_, *p_state_object_, "rayGen", "miss"))
-			{
-				assert(false);
-			}
-
 		}
 
-		void RaytraceSceneManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene)
+		void RtSceneManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene)
 		{
 			++frame_count_;
 			const uint32_t safe_frame_count_ = frame_count_ % 10000;
@@ -1659,11 +1789,11 @@ namespace ngl
 
 				// TLAS ビルド.
 				if (dynamic_tlas_.get() && 
-					dynamic_tlas_->dynamic_scene_tlas_.IsSetuped() &&
-					!dynamic_tlas_->dynamic_scene_tlas_.IsBuilt()
+					dynamic_tlas_->IsSetuped() &&
+					!dynamic_tlas_->IsBuilt()
 					)
 				{
-					dynamic_tlas_->dynamic_scene_tlas_.Build(p_device, p_command_list);
+					dynamic_tlas_->Build(p_device, p_command_list);
 				}
 			}
 
@@ -1688,8 +1818,8 @@ namespace ngl
 #endif
 			// 定数バッファ更新.
 			{
-				const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
-				if (auto* mapped = static_cast<CbSceneView*>(cb_test_scene_view[cb_index]->Map()))
+				const auto cb_index = frame_count_ % std::size(cb_scene_view);
+				if (auto* mapped = static_cast<CbSceneView*>(cb_scene_view[cb_index]->Map()))
 				{
 					mapped->cb_view_mtx = view_mat;
 					mapped->cb_proj_mtx = proj_mat;
@@ -1698,68 +1828,49 @@ namespace ngl
 
 					mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
 
-					cb_test_scene_view[cb_index]->Unmap();
+					cb_scene_view[cb_index]->Unmap();
 				}
 			}
 		}
 
-		void RaytraceSceneManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list)
+		RtTlas* RtSceneManager::GetSceneTlas()
 		{
-			const auto cb_index = frame_count_ % std::size(cb_test_scene_view);
+			return dynamic_tlas_.get();
+		}
+		const RtTlas* RtSceneManager::GetSceneTlas() const
+		{
+			return dynamic_tlas_.get();
+		}
+		rhi::ConstantBufferViewDep* RtSceneManager::GetSceneViewCbv()
+		{
+			const auto cb_index = frame_count_ % std::size(cb_scene_view);
+			return (cbv_scene_view[cb_index].IsValid())? cbv_scene_view[cb_index].Get() : nullptr;
+		}
+		const rhi::ConstantBufferViewDep* RtSceneManager::GetSceneViewCbv() const
+		{
+			const auto cb_index = frame_count_ % std::size(cb_scene_view);
+			return (cbv_scene_view[cb_index].IsValid()) ? cbv_scene_view[cb_index].Get() : nullptr;
+		}
+
+		void RtSceneManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list, const DispatchRayParam& param)
+		{
+			const auto cb_index = frame_count_ % std::size(cb_scene_view);
 
 			rhi::DeviceDep* p_device = p_command_list->GetDevice();
 			auto* d3d_device = p_device->GetD3D12Device();
 			auto* d3d_command_list = p_command_list->GetD3D12GraphicsCommandListForDxr();
 
 
-
-			auto* p_target_tlas = &dynamic_tlas_->dynamic_scene_tlas_;
-			auto* p_target_shader_table = &dynamic_tlas_->dynamic_shader_table_;
-
-			auto shader_table_head = p_target_shader_table->shader_table_->GetD3D12Resource()->GetGPUVirtualAddress();
-
-			// 出力先UAVバリア. これはできれば外側に移行したい.
-			p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::UnorderedAccess);
-			ray_result_state_ = rhi::ResourceState::UnorderedAccess;
-
-
-
-			// -----------------------------------------------------------------------------------------------------------------------
-			// Global Resource設定. 各ResourceType毎のレジスタ範囲への設定を代行する.
-			// Global Resourceはそれぞれ0番レジスタから固定最大数分割り当てられている. 例) cbv_slot[2]-> b0
-
-			std::array<rhi::ConstantBufferViewDep*,		k_rt_global_descriptor_cbvsrvuav_table_size>	cbv_slot		= {};
-			std::array<rhi::ShaderResourceViewDep*,		k_rt_global_descriptor_cbvsrvuav_table_size>	srv_slot		= {};
-			std::array<rhi::UnorderedAccessViewDep*,	k_rt_global_descriptor_cbvsrvuav_table_size>	uav_slot		= {};
-			std::array<rhi::SamplerDep*,				k_rt_global_descriptor_sampler_table_size>		sampler_slot	= {};
-			// Global Resouceのスロットへの設定.
-			{
-				// Cbv.
-				{
-					cbv_slot[0] = cbv_test_scene_view[cb_index].Get();
-				}
-				// Srv.
-				{
-				}
-				// Uav.
-				{
-					uav_slot[0] = ray_result_uav_.Get();
-				}
-				// Sampler.
-				{
-				}
-			}
-			// -----------------------------------------------------------------------------------------------------------------------
-
-
+			auto* p_target_tlas = dynamic_tlas_.get();
+			auto shader_table_head = param.p_shader_table->shader_table_->GetD3D12Resource()->GetGPUVirtualAddress();
 
 
 			// Bind the root signature
-			d3d_command_list->SetComputeRootSignature(p_state_object_->GetGlobalRootSignature());
+			d3d_command_list->SetComputeRootSignature(param.p_state_object->GetGlobalRootSignature());
 			// State.
-			d3d_command_list->SetPipelineState1(p_state_object_->GetStateObject());
+			d3d_command_list->SetPipelineState1(param.p_state_object->GetStateObject());
 
-			// Globalリソース設定.
+			// Global Resource設定.
 			{
 				// CBV,SRV,UAVの3種それぞれに固定数分でframe descriptor heap確保.
 				const int num_frame_descriptor_cbvsrvuav_count = k_rt_global_descriptor_cbvsrvuav_table_size * 3;
@@ -1767,7 +1878,7 @@ namespace ngl
 
 				const auto resource_descriptor_step_size = p_command_list->GetFrameDescriptorInterface()->GetManager()->GetHandleIncrementSize();
 				const auto sampler_descriptor_step_size = p_command_list->GetFrameSamplerDescriptorHeapInterface()->GetHandleIncrementSize();
-				auto get_descriptor_with_pos = [](const DescriptorHandleSet& base,  int offset_index, u32 handle_step_size) -> DescriptorHandleSet
+				auto get_descriptor_with_pos = [](const DescriptorHandleSet& base, int offset_index, u32 handle_step_size) -> DescriptorHandleSet
 				{
 					const auto offset_addr = handle_step_size * offset_index;
 					DescriptorHandleSet ret(base);
@@ -1775,7 +1886,6 @@ namespace ngl
 					ret.h_gpu.ptr += offset_addr;
 					return ret;
 				};
-
 
 				DescriptorHandleSet res_heap_head;
 				DescriptorHandleSet sampler_heap_head;
@@ -1798,41 +1908,41 @@ namespace ngl
 				DescriptorHandleSet descriptor_table_base_sampler = get_descriptor_with_pos(sampler_heap_head, k_rt_global_descriptor_sampler_table_size * 0, sampler_descriptor_step_size);
 				{
 					// レンダリング用にFrameHeapにコピーする.
-					
+
 					// Global Cbv.
-					for (auto si = 0; si < cbv_slot.size(); ++si)
+					for (auto si = 0; si < param.cbv_slot.size(); ++si)
 					{
-						if (cbv_slot[si])
+						if (param.cbv_slot[si])
 						{
 							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_cbv, si, resource_descriptor_step_size);
-							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, cbv_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, param.cbv_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 						}
 					}
 					// Global Srv.
-					for (auto si = 0; si < srv_slot.size(); ++si)
+					for (auto si = 0; si < param.srv_slot.size(); ++si)
 					{
-						if (srv_slot[si])
+						if (param.srv_slot[si])
 						{
 							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_srv, si, resource_descriptor_step_size);
-							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, srv_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, param.srv_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 						}
 					}
 					// Global Uav.
-					for (auto si = 0; si < uav_slot.size(); ++si)
+					for (auto si = 0; si < param.uav_slot.size(); ++si)
 					{
-						if (uav_slot[si])
+						if (param.uav_slot[si])
 						{
 							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_uav, si, resource_descriptor_step_size);
-							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, uav_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, param.uav_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 						}
 					}
 					// Global Sampler.
-					for (auto si = 0; si < sampler_slot.size(); ++si)
+					for (auto si = 0; si < param.sampler_slot.size(); ++si)
 					{
-						if (sampler_slot[si])
+						if (param.sampler_slot[si])
 						{
 							DescriptorHandleSet table_handle = get_descriptor_with_pos(descriptor_table_base_sampler, si, sampler_descriptor_step_size);
-							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, sampler_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+							d3d_device->CopyDescriptorsSimple(1, table_handle.h_cpu, param.sampler_slot[si]->GetView().cpu_handle, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 						}
 					}
 				}
@@ -1857,37 +1967,31 @@ namespace ngl
 				d3d_command_list->SetComputeRootDescriptorTable(4, descriptor_table_base_uav.h_gpu);
 			}
 
-
 			// Dispatch.
 			D3D12_DISPATCH_RAYS_DESC raytraceDesc = {};
-			raytraceDesc.Width = ray_result_->GetDesc().width;
-			raytraceDesc.Height = ray_result_->GetDesc().height;
+			raytraceDesc.Width = param.count_x;
+			raytraceDesc.Height = param.count_y;
 			raytraceDesc.Depth = 1;
 
 			// RayGeneration Shaderのテーブル位置.
-			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + p_target_shader_table->table_raygen_offset_;
-			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = p_target_shader_table->table_entry_byte_size_;
+			raytraceDesc.RayGenerationShaderRecord.StartAddress = shader_table_head + param.p_shader_table->table_raygen_offset_;
+			raytraceDesc.RayGenerationShaderRecord.SizeInBytes = param.p_shader_table->table_entry_byte_size_;
 
 			// Miss Shaderのテーブル位置.
-			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + p_target_shader_table->table_miss_offset_;
-			raytraceDesc.MissShaderTable.StrideInBytes = p_target_shader_table->table_entry_byte_size_;
-			raytraceDesc.MissShaderTable.SizeInBytes = p_target_shader_table->table_entry_byte_size_ * p_target_shader_table->table_miss_count_;
+			raytraceDesc.MissShaderTable.StartAddress = shader_table_head + param.p_shader_table->table_miss_offset_;
+			raytraceDesc.MissShaderTable.StrideInBytes = param.p_shader_table->table_entry_byte_size_;
+			raytraceDesc.MissShaderTable.SizeInBytes = param.p_shader_table->table_entry_byte_size_ * param.p_shader_table->table_miss_count_;
 
 			// HitGroup群の先頭のテーブル位置.
 			// マテリアル毎のHitGroupはここから連続領域に格納. Instanceに設定されたHitGroupIndexでアクセスされる.
-			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + p_target_shader_table->table_hitgroup_offset_;
-			raytraceDesc.HitGroupTable.StrideInBytes = p_target_shader_table->table_entry_byte_size_;
-			raytraceDesc.HitGroupTable.SizeInBytes = p_target_shader_table->table_entry_byte_size_ * p_target_shader_table->table_hitgroup_count_;
-			
+			raytraceDesc.HitGroupTable.StartAddress = shader_table_head + param.p_shader_table->table_hitgroup_offset_;
+			raytraceDesc.HitGroupTable.StrideInBytes = param.p_shader_table->table_entry_byte_size_;
+			raytraceDesc.HitGroupTable.SizeInBytes = param.p_shader_table->table_entry_byte_size_ * param.p_shader_table->table_hitgroup_count_;
+
 			d3d_command_list->DispatchRays(&raytraceDesc);
-
-
-			// to SRV. .
-			p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::ShaderRead);
-			ray_result_state_ = rhi::ResourceState::ShaderRead;
 		}
 
-		void  RaytraceSceneManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio)
+		void  RtSceneManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio)
 		{
 			camera_pos_ = position;
 			camera_dir_ = dir;

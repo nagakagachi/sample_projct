@@ -133,10 +133,10 @@ private:
 
 	ngl::rhi::GraphicsPipelineStateDep			pso_mesh_simple_depth;
 
-
-	ngl::gfx::RaytraceSceneManager				rt_st_;
-
-	ngl::gfx::RaytraceStateObject				rt_state_object_;
+	// RtScene.
+	ngl::gfx::RtSceneManager					rt_st_;
+	// RtPass.
+	ngl::gfx::RtPassTest						rt_pass_test;
 	
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 	std::vector<ngl::gfx::StaticMeshComponent*>	test_move_mesh_comp_array_;
@@ -587,80 +587,66 @@ bool AppGame::Initialize()
 				test_move_mesh_comp_array_.push_back(mc.get());
 			}
 
-
-#if 0
-			{
-				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mc->Initialize(&device_);
-				mesh_comp_array_.push_back(mc);
-
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
-				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_box, &loaddesc));
-				mc->transform_.SetDiagonal(ngl::math::Vec3(0.01f)).SetColumn3(ngl::math::Vec3(10, 30, 0));
-			}
-#else
 			{
 				// 即時破棄をしても内部でのRenderThread初期化処理リストでの参照保持等が正常に動作するか確認するため.
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
 				auto immediate_destroy_resmesh = ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_box, &loaddesc);
 				immediate_destroy_resmesh = {};
 			}
-#endif
 		}
 	}
 
 	{
-		// StateObject生成.
-		{
-			std::vector<ngl::gfx::RaytraceShaderRegisterInfo> shader_reg_info_array = {};
-			{
-				// Shader登録エントリ新規.
-				auto shader_index = shader_reg_info_array.size();
-				shader_reg_info_array.push_back({});
-
-				// 関数登録元ShaderLib参照.
-				shader_reg_info_array[shader_index].p_shader_library = &res_shader_rt_shader_lib0_->data_;
-
-				// シェーダから公開するRaygenerationShader名.
-				shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
-
-				// シェーダから公開するMissShader名.
-				shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
-				shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
-
-				// シェーダから公開するHitGroup関連情報.
-				{
-					auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
-					shader_reg_info_array[shader_index].hitgroup_array.push_back({});
-
-					shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
-					// このHitGroupはClosestHitのみ.
-					shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
-				}
-				{
-					auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
-					shader_reg_info_array[shader_index].hitgroup_array.push_back({});
-
-					shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
-					// このHitGroupはClosestHitのみ.
-					shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
-				}
-			}
-
-			if (!rt_state_object_.Initialize(&device_, shader_reg_info_array, sizeof(float) * 4, sizeof(float) * 2, 1))
-			{
-				assert(false);
-				return false;
-			}
-		}
 
 		// AS他.
-		if (!rt_st_.Initialize(&device_, &rt_state_object_))
+		if (!rt_st_.Initialize(&device_))
 		{
-			std::cout << "[ERROR] Create gfx::RaytraceSceneManager" << std::endl;
+			std::cout << "[ERROR] Create gfx::RtSceneManager" << std::endl;
 			assert(false);
 		}
 
+
+		// StateObject生成.
+		std::vector<ngl::gfx::RtShaderRegisterInfo> shader_reg_info_array = {};
+		{
+			// Shader登録エントリ新規.
+			auto shader_index = shader_reg_info_array.size();
+			shader_reg_info_array.push_back({});
+
+			// ShaderLibバイナリ.
+			shader_reg_info_array[shader_index].p_shader_library = &res_shader_rt_shader_lib0_->data_;
+
+			// シェーダから公開するRayGen名.
+			shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
+
+			// シェーダから公開するMissShader名.
+			shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
+			shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
+
+			// HitGroup関連情報.
+			{
+				auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+				shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+				shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
+				// このHitGroupはClosestHitのみ.
+				shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
+			}
+			{
+				auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+				shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+				shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
+				// このHitGroupはClosestHitのみ.
+				shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
+			}
+		}
+
+		// RtPass.
+		if(!rt_pass_test.Initialize(&device_, shader_reg_info_array, sizeof(float) * 4, sizeof(float) * 2, 1))
+		{
+			assert(false);
+		}
 	}
 
 
@@ -896,15 +882,18 @@ bool AppGame::Execute()
 			// CommandList に最初にResourceManagerの処理を積み込み.
 			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, &gfx_command_list_);
 
-			// Raytrace Structure ビルド.
+			// RtScene更新.
 			{
 				rt_st_.UpdateOnRender(&device_, &gfx_command_list_, frame_scene);
 			}
 
-
-			// Raytrace Dispatch.
+			// RtPass 更新.
 			{
-				rt_st_.DispatchRay(&gfx_command_list_);
+				rt_pass_test.PreRenderUpdate(&rt_st_, &gfx_command_list_);
+			}
+			// RtPass Render.
+			{
+				rt_pass_test.Render(&gfx_command_list_);
 			}
 
 			{
@@ -985,7 +974,7 @@ bool AppGame::Execute()
 					gfx_command_list_.SetPipelineState(&pso_final_screen_pass_);
 					ngl::rhi::DescriptorSetDep desc_set = {};
 					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_lineardepth", tex_lineardepth_srv_.GetView().cpu_handle);
-					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_rt", rt_st_.GetResultSrv()->GetView().cpu_handle);
+					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_rt", rt_pass_test.ray_result_srv_->GetView().cpu_handle);
 					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "samp", samp_linear_clamp_.GetView().cpu_handle);
 					gfx_command_list_.SetDescriptorSet(&pso_final_screen_pass_, &desc_set);
 

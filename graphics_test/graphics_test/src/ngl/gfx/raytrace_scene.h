@@ -59,20 +59,20 @@ namespace ngl
 
 
 
-		struct RaytraceBlasGeometryResource
+		struct RtBlasGeometryResource
 		{
 			const rhi::ShaderResourceViewDep* vertex_srv = nullptr;
 			const rhi::ShaderResourceViewDep* index_srv = nullptr;
 		};
 
 
-		struct RaytraceBlasGeometryDesc
+		struct RtBlasGeometryDesc
 		{
 			const gfx::MeshShapePart* mesh_data = nullptr;
 		};
 
 		// BLAS.
-		class RaytraceBlas
+		class RtBlas
 		{
 		public:
 			enum SETUP_TYPE : int
@@ -81,13 +81,13 @@ namespace ngl
 				BLAS_TRIANGLE,
 			};
 
-			RaytraceBlas();
-			~RaytraceBlas();
+			RtBlas();
+			~RtBlas();
 
 			// BLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(rhi::DeviceDep* p_device, const std::vector<RaytraceBlasGeometryDesc>& geometry_desc_array);
+			bool Setup(rhi::DeviceDep* p_device, const std::vector<RtBlasGeometryDesc>& geometry_desc_array);
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
@@ -108,13 +108,13 @@ namespace ngl
 				return static_cast<uint32_t>(geom_desc_array_.size());
 			}
 			// 内部Geometry情報.
-			RaytraceBlasGeometryResource GetGeometryData(uint32_t index);
+			RtBlasGeometryResource GetGeometryData(uint32_t index);
 
 		private:
 			bool is_built_ = false;
 
 			// リソースとして頂点バッファやインデックスバッファへアクセスをするために保持.
-			std::vector<RaytraceBlasGeometryDesc> geometry_desc_array_;
+			std::vector<RtBlasGeometryDesc> geometry_desc_array_;
 
 			// setup data.
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;
@@ -131,7 +131,7 @@ namespace ngl
 		};
 
 		// TLAS.
-		class RaytraceTlas
+		class RtTlas
 		{
 		public:
 			enum SETUP_TYPE : int
@@ -140,13 +140,13 @@ namespace ngl
 				TLAS,
 			};
 
-			RaytraceTlas();
-			~RaytraceTlas();
+			RtTlas();
+			~RtTlas();
 
 			// TLAS setup. 必要なBufferやViewの生成まで実行する. Buffer上にAccelerationStructureをビルドするのはBuild関数まで遅延する.
 			// index_buffer : optional.
 			// bufferの管理責任は外部.
-			bool Setup(rhi::DeviceDep* p_device, std::vector<RaytraceBlas*>& blas_array,
+			bool Setup(rhi::DeviceDep* p_device, std::vector<RtBlas*>& blas_array,
 				const std::vector<uint32_t>& instance_geom_id_array,
 				const std::vector<math::Mat34>& instance_transform_array,
 				const std::vector<uint32_t>& instance_hitgroup_id_array
@@ -175,7 +175,7 @@ namespace ngl
 
 
 			uint32_t NumBlas() const;
-			const std::vector<RaytraceBlas*>& GetBlasArray() const;
+			const std::vector<RtBlas*>& GetBlasArray() const;
 
 		private:
 			bool is_built_ = false;
@@ -183,7 +183,7 @@ namespace ngl
 			// setup data.
 			SETUP_TYPE		setup_type_ = SETUP_TYPE::NONE;
 
-			std::vector<RaytraceBlas*> blas_array_ = {};
+			std::vector<RtBlas*> blas_array_ = {};
 			std::vector<uint32_t> instance_blas_id_array_;
 			std::vector<math::Mat34> transform_array_;
 			// Instance毎のHitgroupID.
@@ -204,7 +204,7 @@ namespace ngl
 
 
 		// RaytraceStateObjectの初期化用シェーダ情報.
-		struct RaytraceShaderRegisterInfo
+		struct RtShaderRegisterInfo
 		{
 			struct HitgroupInfo
 			{
@@ -229,14 +229,14 @@ namespace ngl
 
 		// RaytracingのStateObject生成と管理.
 		// マテリアルシェーダが動的に追加されるような状況では作り直しになるが, ShaderTable側を一旦デフォルトに割り当てて数フレーム後に作り直したStateで置き換える等を検討中.
-		class RaytraceStateObject
+		class RtStateObject
 		{
 		public:
-			RaytraceStateObject() {}
-			~RaytraceStateObject() {}
+			RtStateObject() {}
+			~RtStateObject() {}
 
 			bool Initialize(rhi::DeviceDep* p_device,
-				const std::vector<RaytraceShaderRegisterInfo>& shader_info_array, 
+				const std::vector<RtShaderRegisterInfo>& shader_info_array, 
 				uint32_t payload_byte_size = sizeof(float) * 4, uint32_t attribute_byte_size = sizeof(float) * 2, uint32_t max_trace_recursion = 1);
 
 			CComPtr<ID3D12StateObject> GetStateObject() const
@@ -298,12 +298,11 @@ namespace ngl
 			CComPtr<ID3D12StateObject>		state_oject_ = {};
 		};
 
-
-		class RaytraceShaderTable
+		class RtShaderTable
 		{
 		public:
-			RaytraceShaderTable() {}
-			~RaytraceShaderTable() {}
+			RtShaderTable() {}
+			~RtShaderTable() {}
 
 
 			rhi::RhiRef<rhi::BufferDep>	shader_table_;
@@ -318,73 +317,149 @@ namespace ngl
 		};
 		// 引数のTLASはSetupでRHIリソース確保等がされていれば良い(Build不要).
 		static bool CreateShaderTable(
-			RaytraceShaderTable& out,
+			RtShaderTable& out,
 			rhi::DeviceDep* p_device,
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
-			const RaytraceTlas& tlas, const RaytraceStateObject& state_object, const char* raygen_name, const char* miss_name);
+			const RtTlas& tlas, const RtStateObject& state_object, const char* raygen_name, const char* miss_name);
 
-
-		// RaytracingのAS管理.
-		class RaytraceSceneManager
+		// Raytraceの基本部分を担当するクラス.
+		//	実際のPassクラスから利用され, ShaderTableの設定やRtSceneとのやり取りなどを隠蔽する.
+		class RtPassCore
 		{
 		public:
-			RaytraceSceneManager();
-			~RaytraceSceneManager();
+			RtPassCore();
+			~RtPassCore();
 
-			bool Initialize(rhi::DeviceDep* p_device, 
-				RaytraceStateObject* p_state
+			// StateObject等の生成. TODO ここももっと柔軟に対応したい.
+			bool InitializeBase(rhi::DeviceDep* p_device,
+				const std::vector<RtShaderRegisterInfo>& shader_info_array,
+				uint32_t payload_byte_size = sizeof(float) * 4, uint32_t attribute_byte_size = sizeof(float) * 2, uint32_t max_trace_recursion = 1);
+			
+			// ShaderTable再生成等.
+			bool UpdateScene(class RtSceneManager* p_rt_scene);
+			
+			struct DispatchRayParam
+			{
+				// Global Resource.
+				std::array<rhi::ConstantBufferViewDep*, k_rt_global_descriptor_cbvsrvuav_table_size>	cbv_slot = {};
+				std::array<rhi::ShaderResourceViewDep*, k_rt_global_descriptor_cbvsrvuav_table_size>	srv_slot = {};
+				std::array<rhi::UnorderedAccessViewDep*, k_rt_global_descriptor_cbvsrvuav_table_size>	uav_slot = {};
+				std::array<rhi::SamplerDep*, k_rt_global_descriptor_sampler_table_size>					sampler_slot = {};
+
+				// dispatch ray count.
+				u32 count_x = {};
+				u32 count_y = {};
+			};
+			// Dispatch.
+			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list, const DispatchRayParam& param);
+		public:
+			RtStateObject* GetStateObject();
+			RtShaderTable* GetShaderTable();
+
+		protected:
+			// UpdateSceneでのShaderTable再生成に伴う破棄処理.
+			void DestroyShaderTable();
+		protected:
+			rhi::DeviceDep* p_device_ = {};
+
+			RtStateObject state_object_ = {};
+			rhi::DynamicDescriptorStackAllocatorInterface	desc_alloc_interface_ = {};
+			
+			RtShaderTable shader_table_ = {};
+
+			class RtSceneManager* p_rt_scene_ = {};
+		};
+
+
+		// Passの実装テスト.
+		class RtPassTest
+		{
+		public:
+			RtPassTest();
+			~RtPassTest();
+
+			// Pass毎に自由.
+			// サンプルのため外部からShaderとRaygen情報などを指定する.
+			bool Initialize(rhi::DeviceDep* p_device,
+				std::vector<ngl::gfx::RtShaderRegisterInfo>& shader_reg_info,
+				uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursion
 				);
 
-			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene);
-			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list);
-
-			// TLAS他のリビルド. 破棄バッファリングの関係でRenderThread実行を想定.
-			void UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene);
-
-			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio);
-
-			const rhi::ShaderResourceViewDep* GetResultSrv() const
-			{
-				return ray_result_srv_.Get();
-			}
-
-		private:
-			uint32_t frame_count_ = 0;
-
-			// テスト用StateObject.
-			// 管理責任は外部.
-			RaytraceStateObject* p_state_object_ = {};
-
-			
-			// MeshPtrからBLASへのMap.
-			std::unordered_map<const ResMeshData*, int> mesh_to_blas_id_;
-			// 動的更新でのBLAS管理.
-			std::vector<std::shared_ptr<RaytraceBlas>> dynamic_scene_blas_array_;
+			void PreRenderUpdate(class RtSceneManager* p_rt_scene, rhi::GraphicsCommandListDep* p_command_list);
+			void Render(rhi::GraphicsCommandListDep* p_command_list);
 
 
-			// 動的更新TLASにまつわるオブジェクト群.
-			struct DynamicTlasSet
-			{
-				DynamicTlasSet(rhi::DynamicDescriptorStackAllocatorInterface* p_desc_alloc_interface);
-				~DynamicTlasSet();
-
-				rhi::DynamicDescriptorStackAllocatorInterface*	p_desc_alloc_interface_ = nullptr;
-				RaytraceTlas dynamic_scene_tlas_ = {};
-				RaytraceShaderTable dynamic_shader_table_ = {};
-			};
-			std::shared_ptr<DynamicTlasSet> dynamic_tlas_ = {};
-			
-			rhi::DynamicDescriptorStackAllocatorInterface	desc_alloc_interface_ = {};
-
-			rhi::RhiRef<rhi::BufferDep>				cb_test_scene_view[2];
-			rhi::RhiRef<rhi::ConstantBufferViewDep>	cbv_test_scene_view[2];
+			RtPassCore	rt_pass_core_ = {};
+			class RtSceneManager* p_rt_scene_ = {};
 
 			// テスト用のRayDispatch出力先UAV.
 			rhi::RhiRef<rhi::TextureDep>				ray_result_;
 			rhi::RhiRef<rhi::ShaderResourceViewDep>		ray_result_srv_;
 			rhi::RhiRef<rhi::UnorderedAccessViewDep>	ray_result_uav_;
 			rhi::ResourceState							ray_result_state_ = {};
+		};
 
+
+
+		// RaytracingのAS管理.
+		class RtSceneManager
+		{
+		public:
+			RtSceneManager();
+			~RtSceneManager();
+
+			bool Initialize(rhi::DeviceDep* p_device);
+
+			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene);
+
+			struct DispatchRayParam
+			{
+				// pipeline.
+				RtStateObject* p_state_object = {};
+				// shader table.
+				RtShaderTable* p_shader_table = {};
+
+				// Global Resource.
+				std::array<rhi::ConstantBufferViewDep*, k_rt_global_descriptor_cbvsrvuav_table_size>	cbv_slot = {};
+				std::array<rhi::ShaderResourceViewDep*, k_rt_global_descriptor_cbvsrvuav_table_size>	srv_slot = {};
+				std::array<rhi::UnorderedAccessViewDep*, k_rt_global_descriptor_cbvsrvuav_table_size>	uav_slot = {};
+				std::array<rhi::SamplerDep*, k_rt_global_descriptor_sampler_table_size>					sampler_slot = {};
+
+				// dispatch ray count.
+				u32 count_x = {};
+				u32 count_y = {};
+			};
+			void DispatchRay(rhi::GraphicsCommandListDep* p_command_list, const DispatchRayParam& param);
+
+			// TLAS他のリビルド. 破棄バッファリングの関係でRenderThread実行を想定.
+			void UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene);
+
+		public:
+			rhi::DynamicDescriptorStackAllocatorInterface& GetDynamicDescriptorAllocator() { return desc_alloc_interface_; }
+
+			RtTlas* GetSceneTlas();
+			const RtTlas* GetSceneTlas() const;
+
+			rhi::ConstantBufferViewDep* GetSceneViewCbv();
+			const rhi::ConstantBufferViewDep* GetSceneViewCbv() const;
+
+			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio);
+
+		private:
+			uint32_t frame_count_ = 0;
+
+			// MeshPtrからBLASへのMap.
+			std::unordered_map<const ResMeshData*, int> mesh_to_blas_id_;
+			// 動的更新でのBLAS管理.
+			std::vector<std::shared_ptr<RtBlas>> dynamic_scene_blas_array_;
+
+			// 動的更新TLAS.
+			std::shared_ptr<RtTlas> dynamic_tlas_ = {};
+			
+			rhi::DynamicDescriptorStackAllocatorInterface	desc_alloc_interface_ = {};
+
+			rhi::RhiRef<rhi::BufferDep>				cb_scene_view[2];
+			rhi::RhiRef<rhi::ConstantBufferViewDep>	cbv_scene_view[2];
 
 			math::Vec3 camera_pos_ = {};
 			math::Vec3 camera_dir_ = {};
@@ -393,7 +468,6 @@ namespace ngl
 			float fov_y_radian_ = math::Deg2Rad(60.0f);
 			float aspect_ratio_ = 16.0f / 9.0f;
 		};
-
 	}
 }
 
