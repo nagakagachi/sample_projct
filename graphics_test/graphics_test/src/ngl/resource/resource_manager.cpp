@@ -98,7 +98,7 @@ namespace res
 				if (e)
 				{
 					// RenderCommand.
-					(*(e->p_res_))(p_device, p_commandlist);
+					e->p_res_->OnResourceRenderUpdate(p_device, p_commandlist);
 
 					e.reset();// 参照リセット.
 				}

@@ -46,7 +46,7 @@ namespace ngl
 				std::cout << "[ResShader] Destruct " << this << std::endl;
 			}
 
-			void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override
+			void OnResourceRenderUpdate(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override
 			{
 			}
 

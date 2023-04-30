@@ -7,7 +7,7 @@ namespace ngl
 {
 namespace gfx
 {
-	void ResMeshData::operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
+	void ResMeshData::OnResourceRenderUpdate(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist)
 	{
 		auto* p_d3d_commandlist = p_commandlist->GetD3D12GraphicsCommandList();
 

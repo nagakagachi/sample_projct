@@ -201,7 +201,7 @@ namespace ngl
 
 
 			bool IsNeedRenderUpdate() const override { return true; }
-			void operator()(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override;
+			void OnResourceRenderUpdate(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override;
 
 			MeshData data_ = {};
 		};
