@@ -24,6 +24,19 @@ namespace ngl
 		class TextureDep;
 
 
+		using RefVbvDep = RhiRef<class VertexBufferViewDep>;
+		using RefIbvDep = RhiRef<class IndexBufferViewDep>;
+
+		using RefSampDep = RhiRef<class SamplerDep>;
+
+		using RefCbvDep = RhiRef<class ConstantBufferViewDep>;
+		using RefSrvDep = RhiRef<class ShaderResourceViewDep>;
+		using RefUavDep = RhiRef<class UnorderedAccessViewDep>;
+		using RefRtvDep = RhiRef<class RenderTargetViewDep>;
+		using RefDsvDep = RhiRef<class DepthStencilViewDep>;
+
+
+
 		// VertexBufferView
 		class VertexBufferViewDep : public RhiObjectBase
 		{

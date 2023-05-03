@@ -214,6 +214,9 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\memory\tlsf_memory_pool.h" />
     <ClInclude Include="src\ngl\platform\window.h" />
     <ClInclude Include="src\ngl\platform\win\window.win.h" />
+    <ClInclude Include="src\ngl\render\graph_builder.h" />
+    <ClInclude Include="src\ngl\render\render_pass.h" />
+    <ClInclude Include="src\ngl\render\test_pass.h" />
     <ClInclude Include="src\ngl\resource\resource.h" />
     <ClInclude Include="src\ngl\resource\resource_manager.h" />
     <ClInclude Include="src\ngl\rhi\d3d12\device.d3d12.h" />

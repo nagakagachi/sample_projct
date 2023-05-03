@@ -20,6 +20,11 @@ namespace ngl
 	{
 		class DeviceDep;
 
+
+		using RefBufferDep = RhiRef<class BufferDep>;
+		using RefTextureDep = RhiRef<class TextureDep>;
+
+
 		// Buffer
 		class BufferDep : public RhiObjectBase
 		{
@@ -73,7 +78,6 @@ namespace ngl
 
 			CComPtr<ID3D12Resource> resource_;
 		};
-
 
 		// Texture
 		// TODO. Array対応, Cubemap対応.
