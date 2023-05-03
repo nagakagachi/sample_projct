@@ -45,6 +45,15 @@ namespace ngl::render
 			frame_samp_map_[name] = v;
 		}
 
+		void AddFrameResource(const GraphResouceNameText& name, rhi::RefRtvDep v)
+		{
+			frame_rtv_map_[name] = v;
+		}
+		void AddFrameResource(const GraphResouceNameText& name, rhi::RefDsvDep v)
+		{
+			frame_dsv_map_[name] = v;
+		}
+
 		void AddFrameResource(const GraphResouceNameText& name, rhi::RefTextureDep v)
 		{
 			frame_tex_map_[name] = v;
@@ -76,11 +85,34 @@ namespace ngl::render
 			return frame_samp_map_[name];
 		}
 
+		rhi::RefRtvDep GetFrameRtv(const GraphResouceNameText& name)
+		{
+			if (frame_rtv_map_.end() == frame_rtv_map_.find(name))
+				return {};
+			return frame_rtv_map_[name];
+		}
+		rhi::RefDsvDep GetFrameDsv(const GraphResouceNameText& name)
+		{
+			if (frame_dsv_map_.end() == frame_dsv_map_.find(name))
+				return {};
+			return frame_dsv_map_[name];
+		}
+
 		rhi::RefTextureDep GetFrameTexture(const GraphResouceNameText& name)
 		{
 			if (frame_tex_map_.end() == frame_tex_map_.find(name))
 				return {};
 			return frame_tex_map_[name];
+		}
+
+	public:
+		void SetSwapchain(rhi::RhiRef<rhi::SwapChainDep> v)
+		{
+			swapchain_ = v;
+		}
+		rhi::RhiRef<rhi::SwapChainDep> GetSwapchain()
+		{
+			return swapchain_;
 		}
 
 	public:
@@ -93,8 +125,13 @@ namespace ngl::render
 		std::unordered_map<GraphResouceNameText, rhi::RefUavDep>	frame_uav_map_;
 		std::unordered_map<GraphResouceNameText, rhi::RefSampDep>	frame_samp_map_;
 
+		std::unordered_map<GraphResouceNameText, rhi::RefRtvDep>	frame_rtv_map_;
+		std::unordered_map<GraphResouceNameText, rhi::RefDsvDep>	frame_dsv_map_;
+
 		std::unordered_map<GraphResouceNameText, rhi::RefTextureDep>	frame_tex_map_;
 
+
+		rhi::RhiRef<rhi::SwapChainDep>	swapchain_;
 
 	};
 

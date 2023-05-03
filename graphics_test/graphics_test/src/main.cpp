@@ -84,9 +84,9 @@ private:
 	ngl::rhi::GraphicsCommandListDep			gfx_command_list_;
 
 	// SwapChain
-	ngl::rhi::SwapChainDep						swapchain_;
-	std::vector<ngl::rhi::RenderTargetViewDep>	swapchain_rtvs_;
-	std::vector <ngl::rhi::ResourceState>		swapchain_resource_state_;
+	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
+	std::vector<ngl::rhi::RefRtvDep>			swapchain_rtvs_;
+	std::vector<ngl::rhi::ResourceState>		swapchain_resource_state_;
 
 
 	ngl::rhi::RefTextureDep						tex_work_;
@@ -111,9 +111,7 @@ private:
 
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_sample_vs_;
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_sample_ps_;
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_vs_fullscr_proc_;
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_copy_to_screen;
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_final_screen_pass_;
+
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_vs_mesh_simple_depth;
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_mesh_simple_depth;
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_rt_shader_lib0_;
@@ -121,9 +119,6 @@ private:
 
 	ngl::rhi::RefSampDep						samp_linear_clamp_;
 
-	ngl::rhi::GraphicsPipelineStateDep			pso_copy_to_swapchain;
-
-	ngl::rhi::GraphicsPipelineStateDep			pso_final_screen_pass_;
 
 	std::array<ngl::rhi::RefBufferDep, 2>		cb_sceneview_;
 	std::array<ngl::rhi::RefCbvDep, 2>			cbv_sceneview_;
@@ -137,10 +132,13 @@ private:
 	// RtPass.
 	ngl::gfx::RtPassTest						rt_pass_test;
 	
+	// -----------------------------------------------------------------------------------
+	// Pass
 
-	// LinearDepthPass.
 	ngl::render::PassGenLinearDepth				pass_gen_linear_depth;
-
+	ngl::render::PassFinalComposite				pass_final_composite;
+	ngl::render::PassCopyFullscreen				pass_copy_to_swapchain;
+	// -----------------------------------------------------------------------------------
 
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 	std::vector<ngl::gfx::StaticMeshComponent*>	test_move_mesh_comp_array_;
@@ -176,7 +174,7 @@ AppGame::~AppGame()
 
 
 	gfx_command_list_.Finalize();
-	swapchain_.Finalize();
+	swapchain_.Reset();
 	graphics_queue_.Finalize();
 	device_.Finalize();
 }
@@ -216,18 +214,20 @@ bool AppGame::Initialize()
 	}
 	{
 		ngl::rhi::SwapChainDep::Desc swap_chain_desc;
-		swap_chain_desc.format = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;// DXGI_FORMAT_R10G10B10A2_UNORM;
-		if (!swapchain_.Initialize(&device_, &graphics_queue_, swap_chain_desc))
+		swap_chain_desc.format = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+		swapchain_ = new ngl::rhi::SwapChainDep();
+		if (!swapchain_->Initialize(&device_, &graphics_queue_, swap_chain_desc))
 		{
 			std::cout << "[ERROR] SwapChain Initialize" << std::endl;
 			return false;
 		}
 
-		swapchain_rtvs_.resize(swapchain_.NumResource());
-		swapchain_resource_state_.resize(swapchain_.NumResource());
-		for (auto i = 0u; i < swapchain_.NumResource(); ++i)
+		swapchain_rtvs_.resize(swapchain_->NumResource());
+		swapchain_resource_state_.resize(swapchain_->NumResource());
+		for (auto i = 0u; i < swapchain_->NumResource(); ++i)
 		{
-			swapchain_rtvs_[i].Initialize(&device_, &swapchain_, i);
+			swapchain_rtvs_[i] = new ngl::rhi::RenderTargetViewDep();
+			swapchain_rtvs_[i]->Initialize(&device_, swapchain_.Get(), i);
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 	}
@@ -398,27 +398,6 @@ bool AppGame::Initialize()
 		}
 		{
 			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_vs";
-			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_vs_fullscr_proc_= ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_ps";
-			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_ps_final_screen_pass_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/final_screen_pass_ps.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_ps";
-			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_ps_copy_to_screen = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/screen/copy_tex_to_screen_ps.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
 			loaddesc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
 			loaddesc.shader_model_version = k_shader_model;
 			res_shader_rt_shader_lib0_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/dxr_sample_lib.hlsl", &loaddesc);
@@ -500,47 +479,22 @@ bool AppGame::Initialize()
 	}
 
 	{
+		// LinearDepth生成パス.
 		if (!pass_gen_linear_depth.Initialize(&device_))
 		{
 			assert(false);
 		}
-	}
 
-	{
-		// 最終画面コンポジットパスPSO.
+		// 最終画面生成パス.
+		if (!pass_final_composite.Initialize(&device_, tex_work_->GetFormat()))
 		{
-			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-			desc.vs = &res_shader_vs_fullscr_proc_->data_;
-			desc.ps = &res_shader_ps_final_screen_pass_->data_;
-
-			desc.num_render_targets = 1;
-			desc.render_target_formats[0] = tex_work_->GetDesc().format;
-
-			desc.blend_state.target_blend_states[0].blend_enable = false;
-			desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
-			if (!pso_final_screen_pass_.Initialize(&device_, desc))
-			{
-				assert(false);
-			}
+			assert(false);
 		}
 
-		// SwapchainコピーパスPSO.
+		// Swapchainへのコピーパス.
+		if (!pass_copy_to_swapchain.Initialize(&device_, swapchain_->GetDesc().format, "swapchain", "tex_work"))
 		{
-			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-			desc.vs = &res_shader_vs_fullscr_proc_->data_;
-			desc.ps = &res_shader_ps_copy_to_screen->data_;
-
-			desc.num_render_targets = 1;
-			desc.render_target_formats[0] = this->swapchain_.GetDesc().format;
-
-			desc.blend_state.target_blend_states[0].blend_enable = false;
-			desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
-			if (!pso_copy_to_swapchain.Initialize(&device_, desc))
-			{
-				assert(false);
-			}
+			assert(false);
 		}
 	}
 
@@ -812,7 +766,7 @@ bool AppGame::Execute()
 	}
 
 
-	const float screen_aspect_ratio = (float)swapchain_.GetWidth() / swapchain_.GetHeight();
+	const float screen_aspect_ratio = (float)swapchain_->GetWidth() / swapchain_->GetHeight();
 
 	{
 		ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1());
@@ -883,18 +837,37 @@ bool AppGame::Execute()
 	{
 		// リソース登録.
 		{
-			frame_graph_builder.AddFrameResource("scene_view", cbv_sceneview_[flip_index_sceneview_]);
+			frame_graph_builder.SetSwapchain(swapchain_);
+			frame_graph_builder.AddFrameResource("swapchain", swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
 
 
+			frame_graph_builder.AddFrameResource("hardware_depth", tex_depth_);
 			frame_graph_builder.AddFrameResource("hardware_depth", tex_depth_srv_);
+			frame_graph_builder.AddFrameResource("hardware_depth", tex_depth_dsv_);
+
 
 			frame_graph_builder.AddFrameResource("linear_depth", tex_lineardepth_);
 			frame_graph_builder.AddFrameResource("linear_depth", tex_lineardepth_srv_);
 			frame_graph_builder.AddFrameResource("linear_depth", tex_lineardepth_uav_);
+
+
+			frame_graph_builder.AddFrameResource("tex_work", tex_work_);
+			frame_graph_builder.AddFrameResource("tex_work", tex_work_rtv_);
+			frame_graph_builder.AddFrameResource("tex_work", tex_work_srv_);
+
+			frame_graph_builder.AddFrameResource("rt_test_buffer", rt_pass_test.ray_result_srv_);
+
+
+			frame_graph_builder.AddFrameResource("samp_linear", samp_linear_clamp_);
+
+
+			frame_graph_builder.AddFrameResource("scene_view", cbv_sceneview_[flip_index_sceneview_]);
 		}
 
 		// Passセットアップ.
 		pass_gen_linear_depth.Setup(frame_graph_builder);
+		pass_final_composite.Setup(frame_graph_builder);
+		pass_copy_to_swapchain.Setup(frame_graph_builder);
 	}
 
 
@@ -905,7 +878,7 @@ bool AppGame::Execute()
 		// RHIガベコレ.
 		device_.ExecuteFrameGabageCollect();
 
-		const auto swapchain_index = swapchain_.GetCurrentBufferIndex();
+		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 		{
 			gfx_command_list_.Begin();
 
@@ -981,27 +954,7 @@ bool AppGame::Execute()
 						gfx_command_list_.ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::RenderTarget);
 					}
 
-					// Rtvクリア.
-					std::array<float, 4> clear_color = { 0.0f, 0.0f , 0.0f , 0.0f };
-					gfx_command_list_.ClearRenderTarget(tex_work_rtv_.Get(), clear_color.data());
-
-					// Viewport and Scissor.
-					ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, tex_work_->GetWidth(), tex_work_->GetHeight());
-
-					// Rtv, Dsv セット.
-					{
-						const auto* p_rtv = tex_work_rtv_.Get();
-						gfx_command_list_.SetRenderTargets(&p_rtv, 1, nullptr);
-					}
-
-					gfx_command_list_.SetPipelineState(&pso_final_screen_pass_);
-					ngl::rhi::DescriptorSetDep desc_set = {};
-					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_lineardepth", tex_lineardepth_srv_->GetView().cpu_handle);
-					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "tex_rt", rt_pass_test.ray_result_srv_->GetView().cpu_handle);
-					pso_final_screen_pass_.SetDescriptorHandle(&desc_set, "samp", samp_linear_clamp_->GetView().cpu_handle);
-					gfx_command_list_.SetDescriptorSet(&pso_final_screen_pass_, &desc_set);
-
-					gfx_command_list_.DrawInstanced(3, 1, 0, 0);
+					pass_final_composite.Execute(frame_graph_builder, &gfx_command_list_);
 
 					// Barrier.
 					{
@@ -1014,30 +967,15 @@ bool AppGame::Execute()
 				{
 					// Barrier.
 					{
-						gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
+						gfx_command_list_.ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
 						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 					}
 
-					// Viewport and Scissor.
-					ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, screen_w, screen_h);
-
-					// Rtv, Dsv セット.
-					{
-						const auto* p_rtv = &swapchain_rtvs_[swapchain_.GetCurrentBufferIndex()];
-						gfx_command_list_.SetRenderTargets(&p_rtv, 1, nullptr);
-					}
-
-					gfx_command_list_.SetPipelineState(&pso_copy_to_swapchain);
-					ngl::rhi::DescriptorSetDep desc_set = {};
-					pso_copy_to_swapchain.SetDescriptorHandle(&desc_set, "tex", tex_work_srv_->GetView().cpu_handle);
-					pso_copy_to_swapchain.SetDescriptorHandle(&desc_set, "samp", samp_linear_clamp_->GetView().cpu_handle);
-					gfx_command_list_.SetDescriptorSet(&pso_copy_to_swapchain, &desc_set);
-
-					gfx_command_list_.DrawInstanced(3, 1, 0, 0);
+					pass_copy_to_swapchain.Execute(frame_graph_builder, &gfx_command_list_);
 
 					{
 						// Swapchain State to Present
-						gfx_command_list_.ResourceBarrier(&swapchain_, swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
+						gfx_command_list_.ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
 						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
 					}
 				}
@@ -1054,7 +992,7 @@ bool AppGame::Execute()
 		graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(command_lists)), command_lists);
 
 		// Present
-		swapchain_.GetDxgiSwapChain()->Present(1, 0);
+		swapchain_->GetDxgiSwapChain()->Present(1, 0);
 
 		// 完了シグナル
 		graphics_queue_.Signal(&wait_fence_, wait_fence_value_);
