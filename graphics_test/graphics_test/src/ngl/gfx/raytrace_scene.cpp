@@ -7,6 +7,7 @@
 
 #include "common_struct.h"
 
+
 namespace ngl
 {
 	namespace gfx
@@ -1544,9 +1545,61 @@ namespace ngl
 		{
 		}
 		bool RtPassTest::Initialize(rhi::DeviceDep* p_device,
-			std::vector<ngl::gfx::RtShaderRegisterInfo>& shader_reg_info,
 			uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursionmiss_name)
 		{
+
+			// Shaderセットアップ.
+			{
+				auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+				ngl::gfx::ResShader::LoadDesc loaddesc = {};
+				loaddesc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
+				loaddesc.shader_model_version = "6_3";
+				res_shader_lib_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/dxr_sample_lib.hlsl", &loaddesc);
+			}
+
+			// StateObject生成.
+			std::vector<ngl::gfx::RtShaderRegisterInfo> shader_reg_info_array = {};
+			{
+				// Shader登録エントリ新規.
+				auto shader_index = shader_reg_info_array.size();
+				shader_reg_info_array.push_back({});
+
+				// ShaderLibバイナリ.
+				shader_reg_info_array[shader_index].p_shader_library = &res_shader_lib_->data_;
+
+				// シェーダから公開するRayGen名.
+				shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
+
+				// シェーダから公開するMissShader名.
+				shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
+				shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
+
+				// HitGroup関連情報.
+				{
+					auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+					shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
+					// このHitGroupはClosestHitのみ.
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
+				}
+				{
+					auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+					shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
+					// このHitGroupはClosestHitのみ.
+					shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
+				}
+			}
+
+			if (!rt_pass_core_.InitializeBase(p_device, shader_reg_info_array, payload_byte_size, attribute_byte_size, max_trace_recursionmiss_name))
+			{
+				assert(false);
+				return false;
+			}
+
 			// 出力テスト用のTextureとUAV.
 			{
 				rhi::TextureDep::Desc tex_desc = {};
@@ -1575,11 +1628,6 @@ namespace ngl
 				ray_result_state_ = rhi::ResourceState::General;
 			}
 
-			if (!rt_pass_core_.InitializeBase(p_device, shader_reg_info, payload_byte_size, attribute_byte_size, max_trace_recursionmiss_name))
-			{
-				assert(false);
-				return false;
-			}
 
 			return true;
 		}

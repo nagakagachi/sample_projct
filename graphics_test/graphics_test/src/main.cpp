@@ -108,13 +108,8 @@ private:
 	ngl::rhi::RefSrvDep							tex_rw_srv_;
 	ngl::rhi::RefUavDep							tex_rw_uav_;
 
-
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_sample_vs_;
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_sample_ps_;
-
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_vs_mesh_simple_depth;
 	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_mesh_simple_depth;
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_rt_shader_lib0_;
 
 
 	ngl::rhi::RefSampDep						samp_linear_clamp_;
@@ -373,20 +368,6 @@ bool AppGame::Initialize()
 			loaddesc.entry_point_name = "main_vs";
 			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
 			loaddesc.shader_model_version = k_shader_model;
-			res_shader_sample_vs_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/sample_vs.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_ps";
-			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_sample_ps_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/sample_ps.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_vs";
-			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
-			loaddesc.shader_model_version = k_shader_model;
 			res_shader_vs_mesh_simple_depth= ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl", &loaddesc);
 		}
 		{
@@ -395,12 +376,6 @@ bool AppGame::Initialize()
 			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
 			loaddesc.shader_model_version = k_shader_model;
 			res_shader_ps_mesh_simple_depth = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_rt_shader_lib0_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/dxr_sample_lib.hlsl", &loaddesc);
 		}
 	}
 
@@ -566,45 +541,8 @@ bool AppGame::Initialize()
 			assert(false);
 		}
 
-
-		// StateObject生成.
-		std::vector<ngl::gfx::RtShaderRegisterInfo> shader_reg_info_array = {};
-		{
-			// Shader登録エントリ新規.
-			auto shader_index = shader_reg_info_array.size();
-			shader_reg_info_array.push_back({});
-
-			// ShaderLibバイナリ.
-			shader_reg_info_array[shader_index].p_shader_library = &res_shader_rt_shader_lib0_->data_;
-
-			// シェーダから公開するRayGen名.
-			shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
-
-			// シェーダから公開するMissShader名.
-			shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
-			shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
-
-			// HitGroup関連情報.
-			{
-				auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
-				shader_reg_info_array[shader_index].hitgroup_array.push_back({});
-
-				shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
-				// このHitGroupはClosestHitのみ.
-				shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
-			}
-			{
-				auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
-				shader_reg_info_array[shader_index].hitgroup_array.push_back({});
-
-				shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
-				// このHitGroupはClosestHitのみ.
-				shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
-			}
-		}
-
 		// RtPass.
-		if(!rt_pass_test.Initialize(&device_, shader_reg_info_array, sizeof(float) * 4, sizeof(float) * 2, 1))
+		if(!rt_pass_test.Initialize(&device_, sizeof(float) * 4, sizeof(float) * 2, 1))
 		{
 			assert(false);
 		}

@@ -19,6 +19,9 @@
 #include "resource/resource_mesh.h"
 #include "mesh_component.h"
 
+#include "ngl/resource/resource_manager.h"
+#include "ngl/gfx/resource/resource_shader.h"
+
 namespace ngl
 {
 	namespace rhi
@@ -322,6 +325,7 @@ namespace ngl
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
 			const RtTlas& tlas, const RtStateObject& state_object, const char* raygen_name, const char* miss_name);
 
+
 		// Raytraceの基本部分を担当するクラス.
 		//	実際のPassクラスから利用され, ShaderTableの設定やRtSceneとのやり取りなどを隠蔽する.
 		class RtPassCore
@@ -381,7 +385,6 @@ namespace ngl
 			// Pass毎に自由.
 			// サンプルのため外部からShaderとRaygen情報などを指定する.
 			bool Initialize(rhi::DeviceDep* p_device,
-				std::vector<ngl::gfx::RtShaderRegisterInfo>& shader_reg_info,
 				uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursion
 				);
 
@@ -389,7 +392,9 @@ namespace ngl
 			void Render(rhi::GraphicsCommandListDep* p_command_list);
 
 
+			ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_lib_;
 			RtPassCore	rt_pass_core_ = {};
+
 			class RtSceneManager* p_rt_scene_ = {};
 
 			// テスト用のRayDispatch出力先UAV.
