@@ -257,11 +257,8 @@ namespace ngl
 			p_dynamic_descriptor_manager_->ReadyToNewFrame((u32)frame_index_);
 
 			gb_.ReadyToNewFrame();
-		}
 
-		// 破棄待ちオブジェクトの処理.
-		void DeviceDep::ExecuteFrameGabageCollect()
-		{
+
 			// ガベコレ. 実際にはここを別スレッドに逃がすことも考えられる.
 			gb_.Execute();
 		}

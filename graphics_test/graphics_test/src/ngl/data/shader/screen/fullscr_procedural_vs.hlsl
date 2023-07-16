@@ -1,4 +1,23 @@
 
+#if 0
+
+頂点入力無しでフルスクリーン描画Triangleを出力するVS.
+
+
+PrimitiveTopology::TriangleList
+として
+DrawInstanced(3, 1, 0, 0);
+によって計算でフルスクリーン描画用Triangleを描画する
+
+ --------------
+  ＼    |     |
+    ＼  |     |
+      ＼|_____|
+        ＼    |
+          ＼  |
+            ＼|
+
+#endif
 
 
 struct VS_OUTPUT
@@ -7,21 +26,6 @@ struct VS_OUTPUT
 	float2 uv	:	TEXCOORD0;
 };
 
-/*
-	PrimitiveTopology::TriangleList
-	として
-	DrawInstanced(3, 1, 0, 0);
-	によって計算でフルスクリーン描画用Triangleを描画する
-
-	    --------------
-         ＼    |     |
-           ＼  |     |
-             ＼|_____|
-               ＼    |
-                 ＼  |
-                   ＼|
-
-*/
 VS_OUTPUT main_vs(uint sv_vtx_id : SV_VertexID)
 {
 	VS_OUTPUT output = (VS_OUTPUT)0;

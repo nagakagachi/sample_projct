@@ -1,16 +1,16 @@
 
+#if 0
+
+ハードウェア深度バッファからリニア深度バッファを生成
+
+#endif
+
+
 
 // SceneView定数バッファ構造定義.
 #include "../include/scene_view_struct.hlsli"
-ConstantBuffer<SceneViewInfo> cb_sceneview;
 
-/*
-struct GenerateLinearDepthInfo
-{
-	uint3 num_thread;
-};
-ConstantBuffer<GenerateLinearDepthInfo> cb_generate_lineardepth;
-*/
+ConstantBuffer<SceneViewInfo> cb_sceneview;
 
 Texture2D			TexHardwareDepth;
 RWTexture2D<float>	RWTexLinearDepth;

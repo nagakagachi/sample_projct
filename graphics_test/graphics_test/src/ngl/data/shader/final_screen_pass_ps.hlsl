@@ -1,4 +1,10 @@
 
+#if 0
+
+最終画面描画パスPS.
+
+#endif
+
 struct VS_OUTPUT
 {
 	float4 pos	:	SV_POSITION;

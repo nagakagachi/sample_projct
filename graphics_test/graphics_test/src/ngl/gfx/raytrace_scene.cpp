@@ -1640,12 +1640,14 @@ namespace ngl
 		{
 			rhi::DeviceDep* p_device = p_command_list->GetDevice();
 
-			// 出力先UAVバリア.
+			// Resource State Transition.
 			{
+				// 出力先UAVバリア.
 				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::UnorderedAccess);
 				ray_result_state_ = rhi::ResourceState::UnorderedAccess;
 			}
 
+			// Ray Dispatch.
 			{
 				RtPassCore::DispatchRayParam param = {};
 				param.count_x = ray_result_.Get()->GetWidth();
@@ -1668,8 +1670,9 @@ namespace ngl
 				rt_pass_core_.DispatchRay(p_command_list, param);
 			}
 
-			// to SRV.
+			// Resource State Transition.
 			{
+				// to SRV.
 				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::ShaderRead);
 				ray_result_state_ = rhi::ResourceState::ShaderRead;
 			}

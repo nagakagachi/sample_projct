@@ -119,9 +119,6 @@ namespace ngl
 			// RHIオブジェクトの参照ハンドルの破棄で呼び出されるオブジェクト破棄依頼関数.
 			void DestroyRhiObject(IRhiObject* p) override;
 
-			// 破棄待ちオブジェクトの処理.
-			void ExecuteFrameGabageCollect();
-
 		private:
 			Desc	desc_ = {};
 

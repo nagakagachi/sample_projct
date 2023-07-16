@@ -1,3 +1,10 @@
+#if 0
+
+入力テクスチャをそのまま出力.
+
+#endif
+
+
 
 struct VS_OUTPUT
 {

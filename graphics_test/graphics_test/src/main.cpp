@@ -813,8 +813,6 @@ bool AppGame::Execute()
 	{
 		// Deviceのフレーム準備
 		device_.ReadyToNewFrame();
-		// RHIガベコレ.
-		device_.ExecuteFrameGabageCollect();
 
 		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 		{
@@ -823,17 +821,15 @@ bool AppGame::Execute()
 			// CommandList に最初にResourceManagerの処理を積み込み.
 			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, &gfx_command_list_);
 
-			// RtScene更新.
+			// Rt.
 			{
+				// RtScene更新.
 				rt_st_.UpdateOnRender(&device_, &gfx_command_list_, frame_scene);
-			}
-
-			// RtPass 更新.
-			{
+				
+				// RtPass 更新.
 				rt_pass_test.PreRenderUpdate(&rt_st_, &gfx_command_list_);
-			}
-			// RtPass Render.
-			{
+				
+				// RtPass Render.
 				rt_pass_test.Render(&gfx_command_list_);
 			}
 
