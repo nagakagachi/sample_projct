@@ -55,6 +55,33 @@ namespace ngl::render
 			}
 		};
 
+		struct GraphBuilder
+		{
+			// IPassNode派生クラス.
+			template<typename TPassNode>
+			TPassNode* CreateNode()
+			{
+				auto new_node = new TPassNode();
+				node_array_.push_back(new_node);
+				return new_node;
+			}
+
+			~GraphBuilder()
+			{
+				for (auto* p : node_array_)
+				{
+					if (p)
+					{
+						delete p;
+						p = nullptr;
+					}
+				}
+				node_array_.clear();
+			}
+
+			std::vector<IPassNode*> node_array_{};
+		};
+
 		struct PassPreZ : public IPassNode
 		{
 			PinWrapper out_depth_{};
@@ -152,20 +179,22 @@ namespace ngl::render
 
 		void Test()
 		{
-			PassPreZ prez{};
-			PassGbuffer gbuffer{};
-			PassLighting lighting{};
-			PassPost post{};
+			GraphBuilder builder{};
 
 
+			auto p_prez = builder.CreateNode<PassPreZ>();
+
+			auto p_gbuffer = builder.CreateNode<PassGbuffer>();
 			// prez -> gbuffer.
-			gbuffer.SetupGraph(prez.out_depth_);
-			
-			// gbuffer -> lighting.
-			lighting.SetupGraph(gbuffer.out_depth_, gbuffer.out_gbuffer0_, gbuffer.out_gbuffer1_);
+			p_gbuffer->SetupGraph(p_prez->out_depth_);
 
+			auto p_lighting = builder.CreateNode<PassLighting>();
+			// gbuffer -> lighting.
+			p_lighting->SetupGraph(p_gbuffer->out_depth_, p_gbuffer->out_gbuffer0_, p_gbuffer->out_gbuffer1_);
+
+			auto p_post = builder.CreateNode<PassPost>();
 			// lighting -> post.
-			post.SetupGraph(lighting.out_lighting_);
+			p_post->SetupGraph(p_lighting->out_lighting_);
 
 
 			return;
