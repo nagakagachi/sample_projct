@@ -6,6 +6,178 @@
 namespace ngl::render
 {
 
+	namespace graph
+	{
+		using ResName = text::HashCharPtr<64>;
+
+
+		enum class AccessType
+		{
+			ReadOnly,
+			WriteOnly,
+			ReadWrite
+		};
+
+		
+		struct IPassNode;
+
+		struct PinWrapper
+		{
+			// Pinの親Node.
+			IPassNode* p_parent_{};
+			// Pinのローカル名.
+			ResName local_name_{};
+			// Pinの参照先.
+			const PinWrapper* ref_{};
+
+			// Pinの参照をつなげる.
+			void connect_from(const PinWrapper& src)
+			{
+				ref_ = &src;
+			}
+		};
+
+		struct IPassNode
+		{
+			ResName name_{};
+
+			// Nodeの情報セットアップ.
+			void SetupNode(ResName node_name)
+			{
+				name_ = node_name;
+			}
+
+			// 保持するPinのセットアップ.
+			void SetupPin(PinWrapper& pin, ResName name)
+			{
+				// Pinの親Nodeへの参照他をセットアップ.
+				pin = { this, name , {} };
+			}
+		};
+
+		struct PassPreZ : public IPassNode
+		{
+			PinWrapper out_depth_{};
+
+			PassPreZ()
+			{
+				SetupNode("prez");
+
+				SetupPin(out_depth_, "depth");
+			}
+
+			void SetupGraph()
+			{
+			}
+		};
+
+		struct PassGbuffer : public IPassNode
+		{
+			PinWrapper readwrite_depth_{};
+
+			PinWrapper out_gbuffer0_{};
+			PinWrapper out_gbuffer1_{};
+			PinWrapper out_depth_{};
+
+			PassGbuffer()
+			{
+				SetupNode("gbuffer");
+
+				SetupPin(readwrite_depth_, "gbuffer_depth");
+				SetupPin(out_gbuffer0_, "gbuffer0");
+				SetupPin(out_gbuffer1_, "gbuffer1");
+
+				SetupPin(out_depth_, "depth");
+
+				// 参照したDepthを出力としてエイリアス.
+				out_depth_.connect_from(readwrite_depth_);
+			}
+
+			void SetupGraph(const PinWrapper& readwrite_depth)
+			{
+				readwrite_depth_.connect_from(readwrite_depth);
+			}
+		};
+
+		struct PassLighting : public IPassNode
+		{
+			PinWrapper read_depth_{};
+			PinWrapper read_gbuffer0_{};
+			PinWrapper read_gbuffer1_{};
+
+			PinWrapper out_lighting_{};
+
+			PassLighting()
+			{
+				SetupNode("lighting");
+
+				SetupPin(read_depth_, "read_depth");
+				SetupPin(read_gbuffer0_, "read_gbuffer0");
+				SetupPin(read_gbuffer1_, "read_gbuffer1");
+
+				SetupPin(out_lighting_, "lighting");
+			}
+
+			void SetupGraph(const PinWrapper& read_depth, const PinWrapper& read_gbuffer0, const PinWrapper& read_gbuffer1)
+			{
+				read_depth_.connect_from(read_depth);
+				read_gbuffer0_.connect_from(read_gbuffer0);
+				read_gbuffer1_.connect_from(read_gbuffer1);
+			}
+		};
+
+		struct PassPost : public IPassNode
+		{
+			PinWrapper read_lighting_{};
+
+			PinWrapper out_post_{};
+
+			PassPost()
+			{
+				SetupNode("post");
+
+				SetupPin(read_lighting_, "read_lighting");
+
+				SetupPin(out_post_, "post");
+
+				// 参照したバッファを出力としてエイリアス.
+				out_post_.connect_from(read_lighting_);
+			}
+
+			void SetupGraph(const PinWrapper& read_lighting)
+			{
+				read_lighting_.connect_from(read_lighting);
+			}
+		};
+
+		void Test()
+		{
+			PassPreZ prez{};
+			PassGbuffer gbuffer{};
+			PassLighting lighting{};
+			PassPost post{};
+
+
+			// prez -> gbuffer.
+			gbuffer.SetupGraph(prez.out_depth_);
+			
+			// gbuffer -> lighting.
+			lighting.SetupGraph(gbuffer.out_depth_, gbuffer.out_gbuffer0_, gbuffer.out_gbuffer1_);
+
+			// lighting -> post.
+			post.SetupGraph(lighting.out_lighting_);
+
+
+			return;
+		}
+
+	}
+
+
+
+
+
+
 	// LinearDepth生成ComputePass.
 	class PassGenLinearDepth
 	{
