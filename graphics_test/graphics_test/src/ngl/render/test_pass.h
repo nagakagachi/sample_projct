@@ -41,12 +41,27 @@ namespace ngl::render
 		{
 			ResName name_{};
 
+			std::vector<PinWrapper*> ref_pin_list_{};
+			std::vector<PinWrapper*> out_pin_list_{};
+
 			// Nodeの情報セットアップ.
 			void SetupNode(ResName node_name)
 			{
 				name_ = node_name;
 			}
 
+			void InitRefPin(PinWrapper& pin, ResName name)
+			{
+				SetupPin(pin, name);
+				ref_pin_list_.push_back(&pin);
+			}
+			void InitOutPin(PinWrapper& pin, ResName name)
+			{
+				SetupPin(pin, name);
+				out_pin_list_.push_back(&pin);
+			}
+
+		private:
 			// 保持するPinのセットアップ.
 			void SetupPin(PinWrapper& pin, ResName name)
 			{
@@ -55,9 +70,24 @@ namespace ngl::render
 			}
 		};
 
-		struct GraphBuilder
+		struct ResourceAllocHandle
 		{
-			// IPassNode派生クラス.
+			uint32_t inner_data = {};
+
+			
+			static constexpr ResourceAllocHandle InvalidHandle()
+			{
+				return ResourceAllocHandle({});
+			}
+			bool IsInvalid() const
+			{
+				return inner_data == InvalidHandle().inner_data;
+			}
+		};
+
+		struct GpuTaskGraphBuilder
+		{
+			// IPassNode
 			template<typename TPassNode>
 			TPassNode* CreateNode()
 			{
@@ -66,7 +96,30 @@ namespace ngl::render
 				return new_node;
 			}
 
-			~GraphBuilder()
+			ResourceAllocHandle CreateResource(int res_desc)
+			{
+				ResourceAllocHandle handle{};
+
+				++s_res_handle_id_counter_;
+				if (0 == s_res_handle_id_counter_)
+					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+
+				handle.inner_data = s_res_handle_id_counter_;// ユニークID割当.
+
+				return handle;
+			}
+
+			void CreateResourceAccess(ResourceAllocHandle handle, bool write)
+			{
+				if (handle.IsInvalid())
+				{
+					assert(false);
+					return;
+				}
+
+			}
+
+			~GpuTaskGraphBuilder()
 			{
 				for (auto* p : node_array_)
 				{
@@ -80,6 +133,8 @@ namespace ngl::render
 			}
 
 			std::vector<IPassNode*> node_array_{};
+
+			uint32_t s_res_handle_id_counter_ = {};
 		};
 
 		struct PassPreZ : public IPassNode
@@ -90,7 +145,7 @@ namespace ngl::render
 			{
 				SetupNode("prez");
 
-				SetupPin(out_depth_, "depth");
+				InitOutPin(out_depth_, "depth");
 			}
 
 			void SetupGraph()
@@ -110,11 +165,11 @@ namespace ngl::render
 			{
 				SetupNode("gbuffer");
 
-				SetupPin(readwrite_depth_, "gbuffer_depth");
-				SetupPin(out_gbuffer0_, "gbuffer0");
-				SetupPin(out_gbuffer1_, "gbuffer1");
+				InitRefPin(readwrite_depth_, "gbuffer_depth");
+				InitRefPin(out_gbuffer0_, "gbuffer0");
+				InitRefPin(out_gbuffer1_, "gbuffer1");
 
-				SetupPin(out_depth_, "depth");
+				InitOutPin(out_depth_, "depth");
 
 				// 参照したDepthを出力としてエイリアス.
 				out_depth_.connect_from(readwrite_depth_);
@@ -138,11 +193,11 @@ namespace ngl::render
 			{
 				SetupNode("lighting");
 
-				SetupPin(read_depth_, "read_depth");
-				SetupPin(read_gbuffer0_, "read_gbuffer0");
-				SetupPin(read_gbuffer1_, "read_gbuffer1");
+				InitRefPin(read_depth_, "read_depth");
+				InitRefPin(read_gbuffer0_, "read_gbuffer0");
+				InitRefPin(read_gbuffer1_, "read_gbuffer1");
 
-				SetupPin(out_lighting_, "lighting");
+				InitOutPin(out_lighting_, "lighting");
 			}
 
 			void SetupGraph(const PinWrapper& read_depth, const PinWrapper& read_gbuffer0, const PinWrapper& read_gbuffer1)
@@ -163,9 +218,9 @@ namespace ngl::render
 			{
 				SetupNode("post");
 
-				SetupPin(read_lighting_, "read_lighting");
+				InitRefPin(read_lighting_, "read_lighting");
 
-				SetupPin(out_post_, "post");
+				InitOutPin(out_post_, "post");
 
 				// 参照したバッファを出力としてエイリアス.
 				out_post_.connect_from(read_lighting_);
@@ -177,9 +232,12 @@ namespace ngl::render
 			}
 		};
 
+
+		void Test1();
+
 		void Test()
 		{
-			GraphBuilder builder{};
+			GpuTaskGraphBuilder builder{};
 
 
 			auto p_prez = builder.CreateNode<PassPreZ>();
@@ -197,9 +255,248 @@ namespace ngl::render
 			p_post->SetupGraph(p_lighting->out_lighting_);
 
 
+			Test1();
+			
 			return;
 		}
 
+		namespace rtg
+		{
+			enum class ETASK_TYPE : int
+			{
+				GRAPHICS,
+				COMPUTE,
+				ALLOW_ASYNC_COMPUTE,
+			};
+
+			enum class EACCESS_TYPE : int
+			{
+				READ,
+				WRITE,
+				READWRITE,
+			};
+
+			struct RenderTaskGraphBuilder;
+
+
+
+			struct ResourceHandle
+			{
+				uint32_t inner_data = {};
+
+
+				static constexpr ResourceHandle InvalidHandle()
+				{
+					return ResourceHandle({});
+				}
+				bool IsInvalid() const
+				{
+					return inner_data == InvalidHandle().inner_data;
+				}
+			};
+
+
+			// 生成はRenderTaskGraphBuilder経由.
+			struct ITaskNode
+			{
+				virtual ETASK_TYPE TaskType() const
+				{
+					return ETASK_TYPE::GRAPHICS;
+				}
+				
+				virtual void Run(RenderTaskGraphBuilder& builder)
+				{
+				}
+				
+			};
+			struct RenderTaskGraphBuilder
+			{
+				struct ResourceAccessInfo
+				{
+					ResourceHandle	resource{};
+					EACCESS_TYPE	access{};
+				};
+
+				// ITaskNode
+				template<typename TPassNode>
+				TPassNode* CreateNode()
+				{
+					auto new_node = new TPassNode();
+					node_array_.push_back(new_node);
+					return new_node;
+				}
+
+				// リソースハンドルを生成.
+				ResourceHandle CreateResource(int res_desc)
+				{
+					++s_res_handle_id_counter_;
+					if (0 == s_res_handle_id_counter_)
+						++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+
+
+					ResourceHandle handle{};
+
+					handle.inner_data = s_res_handle_id_counter_;// ユニークID割当.
+
+					res_desc_map_[s_res_handle_id_counter_] = res_desc;// desc記録.
+
+					return handle;
+				}
+
+				// Nodeからのリソースアクセスを記録.
+				void RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type)
+				{
+					if (res_access_map_.end() == res_access_map_.find(&node))
+					{
+						res_access_map_[&node] = {};
+					}
+
+					ResourceAccessInfo push_info{};
+					push_info.resource = res_handle;
+					push_info.access = access_type;
+					res_access_map_[&node].push_back(push_info);
+				}
+
+				~RenderTaskGraphBuilder()
+				{
+					for (auto* p : node_array_)
+					{
+						if (p)
+						{
+							delete p;
+							p = nullptr;
+						}
+					}
+					node_array_.clear();
+				}
+
+				std::vector<ITaskNode*> node_array_{};
+
+				std::unordered_map<uint32_t, int> res_desc_map_{};
+
+				std::unordered_map<const ITaskNode*, std::vector<ResourceAccessInfo>> res_access_map_{};
+
+				uint32_t s_res_handle_id_counter_{};
+			};
+		}
+
+		void Test1()
+		{
+			struct TaskDepthPass : public rtg::ITaskNode
+			{
+				virtual rtg::ETASK_TYPE TaskType() const
+				{
+					return rtg::ETASK_TYPE::GRAPHICS;
+				}
+
+				// リソースとアクセスを定義するプリプロセス.
+				void Setup(rtg::RenderTaskGraphBuilder& builder)
+				{
+					// リソース定義.
+					int depth_desc{};
+					h_depth_ = builder.CreateResource(depth_desc);
+
+					// リソースアクセス定義.
+					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::WRITE);
+				}
+
+				// 実際のレンダリング処理.
+				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				{
+					// builder から リソースハンドル h_depth_ で実リソースを取得する.
+				}
+
+				rtg::ResourceHandle h_depth_{};
+			};
+
+			struct TaskGBufferPass : public rtg::ITaskNode
+			{
+				virtual rtg::ETASK_TYPE TaskType() const
+				{
+					return rtg::ETASK_TYPE::GRAPHICS;
+				}
+
+				// リソースとアクセスを定義するプリプロセス.
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth)
+				{
+					// リソース定義.
+					h_depth_ = h_depth; // Depthは外部から.
+
+					int gbuffer0_desc{};
+					h_gb0_ = builder.CreateResource(gbuffer0_desc);
+					int gbuffer1_desc{};
+					h_gb1_ = builder.CreateResource(gbuffer1_desc);
+
+
+					// リソースアクセス定義.
+					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::WRITE);
+					builder.RegisterResourceAccess(*this, h_gb0_, rtg::EACCESS_TYPE::WRITE);
+					builder.RegisterResourceAccess(*this, h_gb1_, rtg::EACCESS_TYPE::WRITE);
+				}
+
+				// 実際のレンダリング処理.
+				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				{
+					// builder から リソースハンドル out_depth で実リソースを取得する.
+				}
+
+				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_gb0_{};
+				rtg::ResourceHandle h_gb1_{};
+			};
+			struct TaskLightPass : public rtg::ITaskNode
+			{
+				virtual rtg::ETASK_TYPE TaskType() const
+				{
+					return rtg::ETASK_TYPE::GRAPHICS;
+				}
+
+				// リソースとアクセスを定義するプリプロセス.
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
+				{
+					// リソース定義.
+					h_depth_ = h_depth; // Depthは外部から.
+					h_gb0_ = h_gb0;
+					h_gb1_ = h_gb1;
+
+					int light_desc{};
+					h_light_ = builder.CreateResource(light_desc);
+
+
+					// リソースアクセス定義.
+					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::READ);
+					builder.RegisterResourceAccess(*this, h_gb0_, rtg::EACCESS_TYPE::READ);
+					builder.RegisterResourceAccess(*this, h_gb1_, rtg::EACCESS_TYPE::READ);
+					builder.RegisterResourceAccess(*this, h_light_, rtg::EACCESS_TYPE::WRITE);
+				}
+
+				// 実際のレンダリング処理.
+				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				{
+					// builder から リソースハンドル out_depth で実リソースを取得する.
+				}
+
+				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_gb0_{};
+				rtg::ResourceHandle h_gb1_{};
+				rtg::ResourceHandle h_light_{};
+			};
+
+
+			rtg::RenderTaskGraphBuilder rtg_builder{};
+
+			auto* task_depth = rtg_builder.CreateNode<TaskDepthPass>();
+			task_depth->Setup(rtg_builder);
+
+			auto* task_gbuffer = rtg_builder.CreateNode<TaskGBufferPass>();
+			task_gbuffer->Setup(rtg_builder, task_depth->h_depth_);
+
+			auto* task_light = rtg_builder.CreateNode<TaskLightPass>();
+			task_light->Setup(rtg_builder, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
+
+
+			return;
+		}
 	}
 
 
