@@ -271,16 +271,27 @@ namespace ngl::render
 				ALLOW_ASYNC_COMPUTE,
 			};
 
-			enum class EACCESS_TYPE : int
+			// リソースアクセス時の読み書きモード.
+			enum class EACCESS_MODE : int
 			{
 				READ,
-				WRITE,
+				WRITE,		// Discarded Prev Data.
 				READWRITE,
 			};
 
+			/*
+			// リソースアクセス時のリソース解釈.
+			//	MODEと分ける必要があるかという問題もある UAVはRWでしかありえないし, SHADER_READはRしかありえない...
+			enum class EACCESS_TYPE : int
+			{
+				RENDER_TARTGET,
+				DEPTH_TARGET,
+				SHADER_READ,
+				UAV,
+			};
+			*/
+
 			struct RenderTaskGraphBuilder;
-
-
 			struct ResourceDesc2D
 			{
 					struct Desc
@@ -406,7 +417,7 @@ namespace ngl::render
 				struct ResourceAccessInfo
 				{
 					ResourceHandle	resource{};
-					EACCESS_TYPE	access{};
+					EACCESS_MODE	access{};
 				};
 
 				// ITaskNode
@@ -434,8 +445,8 @@ namespace ngl::render
 
 					return handle;
 				}
-				// Swapchainリソースハンドルを生成.
-				ResourceHandle CreateResourceSwapchain()
+				// Swapchainリソースハンドルを取得.
+				ResourceHandle GetSwapchainResourceHandle()
 				{
 					ResourceHandle handle{};
 
@@ -445,7 +456,7 @@ namespace ngl::render
 				}
 
 				// Nodeからのリソースアクセスを記録.
-				void RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type)
+				ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_MODE access_type)
 				{
 					if (res_access_map_.end() == res_access_map_.find(&node))
 					{
@@ -456,6 +467,9 @@ namespace ngl::render
 					push_info.resource = res_handle;
 					push_info.access = access_type;
 					res_access_map_[&node].push_back(push_info);
+
+					// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
+					return res_handle;
 				}
 
 				~RenderTaskGraphBuilder()
@@ -495,10 +509,9 @@ namespace ngl::render
 				{
 					// リソース定義.
 					rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);
-					h_depth_ = builder.CreateResource(depth_desc);
 
 					// リソースアクセス定義.
-					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::WRITE);
+					h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::EACCESS_MODE::WRITE);
 				}
 
 				// 実際のレンダリング処理.
@@ -521,18 +534,13 @@ namespace ngl::render
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth)
 				{
 					// リソース定義.
-					h_depth_ = h_depth; // 外部から.
-
 					rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
-					h_gb0_ = builder.CreateResource(gbuffer0_desc);
 					rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
-					h_gb1_ = builder.CreateResource(gbuffer1_desc);
-
-
+					
 					// リソースアクセス定義.
-					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::WRITE);
-					builder.RegisterResourceAccess(*this, h_gb0_, rtg::EACCESS_TYPE::WRITE);
-					builder.RegisterResourceAccess(*this, h_gb1_, rtg::EACCESS_TYPE::WRITE);
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_MODE::WRITE);
+					h_gb0_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::EACCESS_MODE::WRITE);
+					h_gb1_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::EACCESS_MODE::WRITE);
 				}
 
 				// 実際のレンダリング処理.
@@ -556,19 +564,13 @@ namespace ngl::render
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
 				{
 					// リソース定義.
-					h_depth_ = h_depth; // 外部から.
-					h_gb0_ = h_gb0;
-					h_gb1_ = h_gb1;
-
 					rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
-					h_light_ = builder.CreateResource(light_desc);
-
-
+					
 					// リソースアクセス定義.
-					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::READ);
-					builder.RegisterResourceAccess(*this, h_gb0_, rtg::EACCESS_TYPE::READ);
-					builder.RegisterResourceAccess(*this, h_gb1_, rtg::EACCESS_TYPE::READ);
-					builder.RegisterResourceAccess(*this, h_light_, rtg::EACCESS_TYPE::WRITE);
+					h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_MODE::READ);
+					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::EACCESS_MODE::READ);
+					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::EACCESS_MODE::READ);
+					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::EACCESS_MODE::WRITE);
 				}
 
 				// 実際のレンダリング処理.
@@ -592,15 +594,10 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_light, rtg::ResourceHandle h_final)
 				{
-					// リソース定義.
-					h_depth_ = h_depth; // 外部から.
-					h_light_ = h_light;
-					h_final_ = h_final;
-
 					// リソースアクセス定義.
-					builder.RegisterResourceAccess(*this, h_depth_, rtg::EACCESS_TYPE::READ);
-					builder.RegisterResourceAccess(*this, h_light_, rtg::EACCESS_TYPE::READ);
-					builder.RegisterResourceAccess(*this, h_final_, rtg::EACCESS_TYPE::WRITE);
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_MODE::READ);
+					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::EACCESS_MODE::READ);
+					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::EACCESS_MODE::WRITE);
 				}
 
 				// 実際のレンダリング処理.
@@ -626,7 +623,7 @@ namespace ngl::render
 			auto* task_light = rtg_builder.CreateNode<TaskLightPass>();
 			task_light->Setup(rtg_builder, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
 
-			auto h_swapchain = rtg_builder.CreateResourceSwapchain();// Swapchain.
+			auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
 			auto* task_final = rtg_builder.CreateNode<TaskFinalPass>();
 			task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
 
