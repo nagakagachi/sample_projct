@@ -271,17 +271,8 @@ namespace ngl::render
 				ALLOW_ASYNC_COMPUTE,
 			};
 
-			// リソースアクセス時の読み書きモード.
-			enum class EACCESS_MODE : int
-			{
-				READ,
-				WRITE,		// Discarded Prev Data.
-				READWRITE,
-			};
-
-			/*
 			// リソースアクセス時のリソース解釈.
-			//	MODEと分ける必要があるかという問題もある UAVはRWでしかありえないし, SHADER_READはRしかありえない...
+			// ひとまず用途のみ指定してそこから書き込みや読み取りなどは自明ということにする. 必要になったら情報追加するなど.
 			enum class EACCESS_TYPE : int
 			{
 				RENDER_TARTGET,
@@ -289,7 +280,6 @@ namespace ngl::render
 				SHADER_READ,
 				UAV,
 			};
-			*/
 
 			struct RenderTaskGraphBuilder;
 			struct ResourceDesc2D
@@ -417,7 +407,7 @@ namespace ngl::render
 				struct ResourceAccessInfo
 				{
 					ResourceHandle	resource{};
-					EACCESS_MODE	access{};
+					EACCESS_TYPE	access{};
 				};
 
 				// ITaskNode
@@ -456,7 +446,7 @@ namespace ngl::render
 				}
 
 				// Nodeからのリソースアクセスを記録.
-				ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_MODE access_type)
+				ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type)
 				{
 					if (res_access_map_.end() == res_access_map_.find(&node))
 					{
@@ -511,7 +501,7 @@ namespace ngl::render
 					rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);
 
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::EACCESS_MODE::WRITE);
+					h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::EACCESS_TYPE::DEPTH_TARGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -538,9 +528,9 @@ namespace ngl::render
 					rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 					
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_MODE::WRITE);
-					h_gb0_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::EACCESS_MODE::WRITE);
-					h_gb1_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::EACCESS_MODE::WRITE);
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::DEPTH_TARGET);
+					h_gb0_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::EACCESS_TYPE::RENDER_TARTGET);
+					h_gb1_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::EACCESS_TYPE::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -567,10 +557,10 @@ namespace ngl::render
 					rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
 					
 					// リソースアクセス定義.
-					h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_MODE::READ);
-					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::EACCESS_MODE::READ);
-					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::EACCESS_MODE::READ);
-					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::EACCESS_MODE::WRITE);
+					h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::SHADER_READ);
+					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::EACCESS_TYPE::SHADER_READ);
+					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::EACCESS_TYPE::SHADER_READ);
+					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::EACCESS_TYPE::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -595,9 +585,9 @@ namespace ngl::render
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_light, rtg::ResourceHandle h_final)
 				{
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_MODE::READ);
-					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::EACCESS_MODE::READ);
-					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::EACCESS_MODE::WRITE);
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::SHADER_READ);
+					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::EACCESS_TYPE::SHADER_READ);
+					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::EACCESS_TYPE::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
