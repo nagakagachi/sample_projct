@@ -262,228 +262,6 @@ namespace ngl::render
 			return;
 		}
 
-		namespace rtg
-		{
-			enum class ETASK_TYPE : int
-			{
-				GRAPHICS,
-				COMPUTE,
-				ALLOW_ASYNC_COMPUTE,
-			};
-
-			// リソースアクセス時のリソース解釈.
-			// ひとまず用途のみ指定してそこから書き込みや読み取りなどは自明ということにする. 必要になったら情報追加するなど.
-			enum class EACCESS_TYPE : int
-			{
-				RENDER_TARTGET,
-				DEPTH_TARGET,
-				SHADER_READ,
-				UAV,
-			};
-
-			struct RenderTaskGraphBuilder;
-			struct ResourceDesc2D
-			{
-					struct Desc
-					{
-						union
-						{
-							struct AbsSize
-							{
-								int w;
-								int h;
-							} abs_size;
-
-							struct RelSize
-							{
-								float w;
-								float h;
-							} rel_size;
-						};
-						rhi::ResourceFormat format;
-						bool is_relative;
-
-
-						// サイズ直接指定. その他データはEmpty.
-						static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h)
-						{
-							ResourceDesc2D v{};
-							v.desc.is_relative = false;
-							v.desc.abs_size = { w, h };
-							return v;
-						}
-						// 相対サイズ指定. その他データはEmpty.
-						static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate)
-						{
-							ResourceDesc2D v{};
-							v.desc.is_relative = true;
-							v.desc.rel_size = { w_rate, h_rate };
-							return v;
-						}
-					};
-
-					// オブジェクトのHashKey用全域包括Storage.
-					// unionでこのオブジェクトがResourceDesc2D全体を包括する.
-					struct Storage
-					{
-						uint64_t a{};
-						uint64_t b{};
-					};
-
-
-				// データ部.
-				union
-				{
-					Storage storage{};// HashKey用.
-					Desc	desc; // 実際のデータ用.
-				};
-
-				// サイズ直接指定.
-				static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h, rhi::ResourceFormat format)
-				{
-					ResourceDesc2D v = Desc::CreateAsAbsoluteSize(w, h);
-
-					v.desc.format = format;
-					return v;
-				}
-				// 相対サイズ指定.
-				static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::ResourceFormat format)
-				{
-					ResourceDesc2D v = Desc::CreateAsRelative(w_rate, h_rate);
-
-					v.desc.format = format;
-					return v;
-				}
-			};
-			// StorageをHashKey扱いするためStorageがオブジェクト全体を包括するサイズである必要がある.
-			static_assert(sizeof(ResourceDesc2D) == sizeof(ResourceDesc2D::Storage));
-			static constexpr auto sizeof_ResourceDesc2D_Desc = sizeof(ResourceDesc2D::Desc);
-			static constexpr auto sizeof_ResourceDesc2D_Storage = sizeof(ResourceDesc2D::Storage);
-			static constexpr auto sizeof_ResourceDesc2D = sizeof(ResourceDesc2D);
-
-
-			struct ResourceHandle
-			{
-				union
-				{
-					// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
-					uint64_t data = 0;
-					struct detail
-					{
-						uint32_t unique_id;
-
-						uint32_t is_swapchain : 1;
-						uint32_t dummy : 31;
-					}detail;
-				};
-
-				static constexpr ResourceHandle InvalidHandle()
-				{
-					return ResourceHandle({});
-				}
-				bool IsInvalid() const
-				{
-					return detail.unique_id == InvalidHandle().detail.unique_id;
-				}
-			};
-			static constexpr auto sizeof_ResourceHandle = sizeof(ResourceHandle);
-
-
-			// 生成はRenderTaskGraphBuilder経由.
-			struct ITaskNode
-			{
-				virtual ETASK_TYPE TaskType() const
-				{
-					return ETASK_TYPE::GRAPHICS;
-				}
-				
-				virtual void Run(RenderTaskGraphBuilder& builder)
-				{
-				}
-				
-			};
-			struct RenderTaskGraphBuilder
-			{
-				struct ResourceAccessInfo
-				{
-					ResourceHandle	resource{};
-					EACCESS_TYPE	access{};
-				};
-
-				// ITaskNode
-				template<typename TPassNode>
-				TPassNode* CreateNode()
-				{
-					auto new_node = new TPassNode();
-					node_array_.push_back(new_node);
-					return new_node;
-				}
-
-				// リソースハンドルを生成.
-				ResourceHandle CreateResource(ResourceDesc2D res_desc)
-				{
-					++s_res_handle_id_counter_;
-					if (0 == s_res_handle_id_counter_)
-						++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
-
-
-					ResourceHandle handle{};
-
-					handle.detail.unique_id = s_res_handle_id_counter_;// ユニークID割当.
-
-					res_desc_map_[s_res_handle_id_counter_] = res_desc;// desc記録.
-
-					return handle;
-				}
-				// Swapchainリソースハンドルを取得.
-				ResourceHandle GetSwapchainResourceHandle()
-				{
-					ResourceHandle handle{};
-
-					handle.detail.is_swapchain = 1;// swapchain.
-
-					return handle;
-				}
-
-				// Nodeからのリソースアクセスを記録.
-				ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type)
-				{
-					if (res_access_map_.end() == res_access_map_.find(&node))
-					{
-						res_access_map_[&node] = {};
-					}
-
-					ResourceAccessInfo push_info{};
-					push_info.resource = res_handle;
-					push_info.access = access_type;
-					res_access_map_[&node].push_back(push_info);
-
-					// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
-					return res_handle;
-				}
-
-				~RenderTaskGraphBuilder()
-				{
-					for (auto* p : node_array_)
-					{
-						if (p)
-						{
-							delete p;
-							p = nullptr;
-						}
-					}
-					node_array_.clear();
-				}
-
-				std::vector<ITaskNode*> node_array_{};
-
-				std::unordered_map<uint32_t, ResourceDesc2D> res_desc_map_{};
-
-				std::unordered_map<const ITaskNode*, std::vector<ResourceAccessInfo>> res_access_map_{};
-
-				uint32_t s_res_handle_id_counter_{};
-			};
-		}
 
 		void Test1()
 		{
@@ -497,6 +275,8 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder)
 				{
+					SetDebugNodeName("TaskDepthPass");
+
 					// リソース定義.
 					rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);
 
@@ -523,6 +303,8 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth)
 				{
+					SetDebugNodeName("TaskGBufferPass");
+
 					// リソース定義.
 					rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
 					rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
@@ -553,6 +335,8 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
 				{
+					SetDebugNodeName("TaskLightPass");
+
 					// リソース定義.
 					rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
 					
@@ -584,6 +368,8 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_light, rtg::ResourceHandle h_final)
 				{
+					SetDebugNodeName("TaskFinalPass");
+
 					// リソースアクセス定義.
 					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::SHADER_READ);
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::EACCESS_TYPE::SHADER_READ);
@@ -617,6 +403,7 @@ namespace ngl::render
 			auto* task_final = rtg_builder.CreateNode<TaskFinalPass>();
 			task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
 
+			rtg_builder.Compile();
 
 			return;
 		}

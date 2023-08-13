@@ -99,6 +99,9 @@
     <ClCompile Include="src\test\test.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="src\ngl\render\graph_builder.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\util\bit_operation.h">

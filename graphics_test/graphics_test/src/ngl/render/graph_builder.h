@@ -12,6 +12,212 @@
 #include "ngl/resource/resource_manager.h"
 #include "ngl/gfx/resource/resource_shader.h"
 
+
+namespace ngl
+{
+
+	// Render Task Graph 検証実装.
+	namespace rtg
+	{
+		using RtgNameType = text::HashCharPtr<64>;
+
+		enum class ETASK_TYPE : int
+		{
+			GRAPHICS,
+			COMPUTE,
+			ALLOW_ASYNC_COMPUTE,
+		};
+
+		// リソースアクセス時のリソース解釈.
+		// ひとまず用途のみ指定してそこから書き込みや読み取りなどは自明ということにする. 必要になったら情報追加するなど.
+		enum class EACCESS_TYPE : int
+		{
+			RENDER_TARTGET,
+			DEPTH_TARGET,
+			SHADER_READ,
+			UAV,
+		};
+
+		struct RenderTaskGraphBuilder;
+		struct ResourceDesc2D
+		{
+			struct Desc
+			{
+				union
+				{
+					struct AbsSize
+					{
+						int w;
+						int h;
+					} abs_size;
+
+					struct RelSize
+					{
+						float w;
+						float h;
+					} rel_size;
+				};
+				rhi::ResourceFormat format;
+				bool is_relative;
+
+
+				// サイズ直接指定. その他データはEmpty.
+				static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h)
+				{
+					ResourceDesc2D v{};
+					v.desc.is_relative = false;
+					v.desc.abs_size = { w, h };
+					return v;
+				}
+				// 相対サイズ指定. その他データはEmpty.
+				static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate)
+				{
+					ResourceDesc2D v{};
+					v.desc.is_relative = true;
+					v.desc.rel_size = { w_rate, h_rate };
+					return v;
+				}
+			};
+
+			// オブジェクトのHashKey用全域包括Storage.
+			// unionでこのオブジェクトがResourceDesc2D全体を包括する.
+			struct Storage
+			{
+				uint64_t a{};
+				uint64_t b{};
+			};
+
+
+			// データ部.
+			union
+			{
+				Storage storage{};// HashKey用.
+				Desc	desc; // 実際のデータ用.
+			};
+
+			// サイズ直接指定.
+			static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h, rhi::ResourceFormat format)
+			{
+				ResourceDesc2D v = Desc::CreateAsAbsoluteSize(w, h);
+
+				v.desc.format = format;
+				return v;
+			}
+			// 相対サイズ指定.
+			static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::ResourceFormat format)
+			{
+				ResourceDesc2D v = Desc::CreateAsRelative(w_rate, h_rate);
+
+				v.desc.format = format;
+				return v;
+			}
+		};
+		// StorageをHashKey扱いするためStorageがオブジェクト全体を包括するサイズである必要がある.
+		static_assert(sizeof(ResourceDesc2D) == sizeof(ResourceDesc2D::Storage));
+		static constexpr auto sizeof_ResourceDesc2D_Desc = sizeof(ResourceDesc2D::Desc);
+		static constexpr auto sizeof_ResourceDesc2D_Storage = sizeof(ResourceDesc2D::Storage);
+		static constexpr auto sizeof_ResourceDesc2D = sizeof(ResourceDesc2D);
+
+		// RTGのノードが利用するリソースハンドル.
+		// 識別IDやSwapchain識別等の情報を保持.
+		using ResourceHandleDataType = uint64_t;
+		struct ResourceHandle
+		{
+			union
+			{
+				// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
+				ResourceHandleDataType data = 0;
+				struct detail
+				{
+					uint32_t unique_id;
+
+					uint32_t is_swapchain : 1;
+					uint32_t dummy : 31;
+				}detail;
+			};
+
+			static constexpr ResourceHandle InvalidHandle()
+			{
+				return ResourceHandle({});
+			}
+			bool IsInvalid() const
+			{
+				return detail.unique_id == InvalidHandle().detail.unique_id;
+			}
+
+			operator ResourceHandleDataType() const
+			{
+				return data;
+			}
+		};
+		static constexpr auto sizeof_ResourceHandle = sizeof(ResourceHandle);
+
+
+		// 生成はRenderTaskGraphBuilder経由.
+		struct ITaskNode
+		{
+			virtual ETASK_TYPE TaskType() const
+			{
+				return ETASK_TYPE::GRAPHICS;
+			}
+
+
+			virtual void Run(RenderTaskGraphBuilder& builder)
+			{
+			}
+
+			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
+			RtgNameType debug_node_name_{};
+		};
+
+		// Taskノードのリソースアロケーションやノード間リソース状態遷移を計算する.
+		// GPU実行順はCreateされたTaskノードの順序.
+		//  
+		struct RenderTaskGraphBuilder
+		{
+			struct ResourceAccessInfo
+			{
+				const ITaskNode*		p_node{};
+				EACCESS_TYPE			access{};
+			};
+
+			// ITaskNode
+			template<typename TPassNode>
+			TPassNode* CreateNode()
+			{
+				auto new_node = new TPassNode();
+				node_array_.push_back(new_node);
+				return new_node;
+			}
+
+			// リソースハンドルを生成.
+			ResourceHandle CreateResource(ResourceDesc2D res_desc);
+			// Swapchainリソースハンドルを取得.
+			ResourceHandle GetSwapchainResourceHandle();
+
+			// Nodeからのリソースアクセスを記録.
+			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type);
+
+			// グラフからリソース割当と状態遷移を確定.
+			void Compile();
+
+
+			// -------------------------------------------------------------------------------------------
+
+			~RenderTaskGraphBuilder();
+
+			// -------------------------------------------------------------------------------------------
+
+			std::vector<ITaskNode*> node_array_{};// Graph構成ノード. 簡易化のため生成順がそのままGPU実行順.
+			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
+			std::unordered_map<ResourceHandleDataType, std::vector<ResourceAccessInfo>> res_access_map_{};// ResourceHandleからそのリソースへのノードアクセス情報.
+
+			uint32_t s_res_handle_id_counter_{};// 生成リソースユニークID.
+		};
+	}
+}
+
+
 namespace ngl::render
 {
 	using GraphResouceNameText = text::HashCharPtr<64>;
@@ -134,5 +340,4 @@ namespace ngl::render
 		rhi::RhiRef<rhi::SwapChainDep>	swapchain_;
 
 	};
-
 }
