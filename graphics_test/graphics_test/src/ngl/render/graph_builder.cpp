@@ -56,14 +56,17 @@ namespace ngl
 		// グラフからリソース割当と状態遷移を確定.
 		void RenderTaskGraphBuilder::Compile()
 		{
-			// node_array_内で他のノードから参照されていない終端ノードをリストアップ.
+			// node_sequence_内で自身より後ろのノードに参照されていないノードを終端ノードとしてリストアップ.
+			// 
 			// 終端ノードから遡って有効ノードをカリング.
 			// 同時にレンダリングフローとしてのValidationチェック.
 
-			int i = node_array_.size() - 1;
+			// TODO.
+			int i = node_sequence_.size() - 1;
 			for (; 0 <= i; --i)
 			{
-				auto* p_node = node_array_[i];
+				auto* p_node = node_sequence_[i];
+
 			}
 
 		}
@@ -73,7 +76,7 @@ namespace ngl
 
 		RenderTaskGraphBuilder::~RenderTaskGraphBuilder()
 		{
-			for (auto* p : node_array_)
+			for (auto* p : node_sequence_)
 			{
 				if (p)
 				{
@@ -81,7 +84,7 @@ namespace ngl
 					p = nullptr;
 				}
 			}
-			node_array_.clear();
+			node_sequence_.clear();
 		}
 
 	}

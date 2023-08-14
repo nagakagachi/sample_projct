@@ -267,6 +267,14 @@ namespace ngl::render
 		{
 			struct TaskDepthPass : public rtg::ITaskNode
 			{
+				// ノード定義コンストラクタ記述マクロ.
+				ITASK_NODE_DEF_BEGIN(TaskDepthPass)
+					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+				ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};
+
+
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
 					return rtg::ETASK_TYPE::GRAPHICS;
@@ -275,8 +283,6 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder)
 				{
-					SetDebugNodeName("TaskDepthPass");
-
 					// リソース定義.
 					rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);
 
@@ -290,11 +296,22 @@ namespace ngl::render
 					// builder から リソースハンドル h_depth_ で実リソースを取得する.
 				}
 
-				rtg::ResourceHandle h_depth_{};
 			};
 
 			struct TaskGBufferPass : public rtg::ITaskNode
 			{
+				// ノード定義コンストラクタ記述マクロ.
+				ITASK_NODE_DEF_BEGIN(TaskGBufferPass)
+					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+					ITASK_NODE_HANDLE_REGISTER(h_gb0_)
+					ITASK_NODE_HANDLE_REGISTER(h_gb1_)
+				ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_gb0_{};
+				rtg::ResourceHandle h_gb1_{};
+
+
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
 					return rtg::ETASK_TYPE::GRAPHICS;
@@ -303,8 +320,6 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth)
 				{
-					SetDebugNodeName("TaskGBufferPass");
-
 					// リソース定義.
 					rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
 					rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
@@ -321,12 +336,23 @@ namespace ngl::render
 					// builder から リソースハンドル out_depth で実リソースを取得する.
 				}
 
-				rtg::ResourceHandle h_depth_{};
-				rtg::ResourceHandle h_gb0_{};
-				rtg::ResourceHandle h_gb1_{};
 			};
 			struct TaskLightPass : public rtg::ITaskNode
 			{
+				// ノード定義コンストラクタ記述マクロ.
+				ITASK_NODE_DEF_BEGIN(TaskLightPass)
+					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+					ITASK_NODE_HANDLE_REGISTER(h_gb0_)
+					ITASK_NODE_HANDLE_REGISTER(h_gb1_)
+					ITASK_NODE_HANDLE_REGISTER(h_light_)
+				ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_gb0_{};
+				rtg::ResourceHandle h_gb1_{};
+				rtg::ResourceHandle h_light_{};
+
+
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
 					return rtg::ETASK_TYPE::GRAPHICS;
@@ -335,8 +361,6 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
 				{
-					SetDebugNodeName("TaskLightPass");
-
 					// リソース定義.
 					rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
 					
@@ -352,14 +376,21 @@ namespace ngl::render
 				{
 					// builder から リソースハンドル out_depth で実リソースを取得する.
 				}
-
-				rtg::ResourceHandle h_depth_{};
-				rtg::ResourceHandle h_gb0_{};
-				rtg::ResourceHandle h_gb1_{};
-				rtg::ResourceHandle h_light_{};
 			};
 			struct TaskFinalPass : public rtg::ITaskNode
 			{
+				// ノード定義コンストラクタ記述マクロ.
+				ITASK_NODE_DEF_BEGIN(TaskFinalPass)
+					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+					ITASK_NODE_HANDLE_REGISTER(h_light_)
+					ITASK_NODE_HANDLE_REGISTER(h_final_)
+				ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_light_{};
+				rtg::ResourceHandle h_final_{};
+
+
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
 					return rtg::ETASK_TYPE::GRAPHICS;
@@ -368,8 +399,6 @@ namespace ngl::render
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_light, rtg::ResourceHandle h_final)
 				{
-					SetDebugNodeName("TaskFinalPass");
-
 					// リソースアクセス定義.
 					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::SHADER_READ);
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::EACCESS_TYPE::SHADER_READ);
@@ -381,26 +410,22 @@ namespace ngl::render
 				{
 					// builder から リソースハンドル out_depth で実リソースを取得する.
 				}
-
-				rtg::ResourceHandle h_depth_{};
-				rtg::ResourceHandle h_light_{};
-				rtg::ResourceHandle h_final_{};
 			};
 
 
 			rtg::RenderTaskGraphBuilder rtg_builder{};
 
-			auto* task_depth = rtg_builder.CreateNode<TaskDepthPass>();
+			auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskDepthPass>();
 			task_depth->Setup(rtg_builder);
 
-			auto* task_gbuffer = rtg_builder.CreateNode<TaskGBufferPass>();
+			auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<TaskGBufferPass>();
 			task_gbuffer->Setup(rtg_builder, task_depth->h_depth_);
 
-			auto* task_light = rtg_builder.CreateNode<TaskLightPass>();
+			auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<TaskLightPass>();
 			task_light->Setup(rtg_builder, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
 
 			auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
-			auto* task_final = rtg_builder.CreateNode<TaskFinalPass>();
+			auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<TaskFinalPass>();
 			task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
 
 			rtg_builder.Compile();

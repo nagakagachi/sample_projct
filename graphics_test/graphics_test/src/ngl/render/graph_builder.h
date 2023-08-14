@@ -153,7 +153,20 @@ namespace ngl
 		static constexpr auto sizeof_ResourceHandle = sizeof(ResourceHandle);
 
 
+		/*
 		// 生成はRenderTaskGraphBuilder経由.
+		// 派生クラスではメンバハンドルや基本情報の簡易定義のために専用のマクロを利用する.
+
+			struct TaskSamplePass : public rtg::ITaskNode
+			{
+				// ノード定義コンストラクタ記述マクロ.
+				ITASK_NODE_DEF_BEGIN(TaskSamplePass)
+					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+				ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};// メンバハンドル.
+			}
+		*/
 		struct ITaskNode
 		{
 			virtual ETASK_TYPE TaskType() const
@@ -166,9 +179,50 @@ namespace ngl
 			{
 			}
 
+			struct RefHandle
+			{
+				RtgNameType name{};
+				ResourceHandle* p_handle{};
+			};
+
+			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
+			{
+				RefHandle elem = { name , &handle};
+				ref_handle_.push_back(elem);
+			}
+			
+			std::vector<RefHandle> ref_handle_{};
+
+		protected:
 			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
 			RtgNameType debug_node_name_{};
 		};
+
+// -------------------------------------------------------------
+		// Nodeクラスのコンストラクタ定義開始マクロ. デバッグ名登録等も自動化.
+#		define ITASK_NODE_DEF_BEGIN(CLASS_NAME) CLASS_NAME()\
+				{\
+					SetDebugNodeName( #CLASS_NAME );
+// -------------------------------------------------------------
+
+// -------------------------------------------------------------
+		// Nodeのメンバハンドル定義. 
+		// ITASK_NODE_DEF_BEGIN と ITASK_NODE_DEF_END の間に記述.
+		// マクロで登録処理などを隠蔽.
+#define ITASK_NODE_HANDLE_REGISTER(name)\
+					{\
+							RefHandle elem = { #name , &name};\
+							ref_handle_.push_back(elem);\
+					};
+// -------------------------------------------------------------
+
+// -------------------------------------------------------------
+		// Nodeクラスのコンストラクタ定義終端マクロ.
+#define ITASK_NODE_DEF_END\
+				};
+// -------------------------------------------------------------
+
+
 
 		// Taskノードのリソースアロケーションやノード間リソース状態遷移を計算する.
 		// GPU実行順はCreateされたTaskノードの順序.
@@ -181,12 +235,12 @@ namespace ngl
 				EACCESS_TYPE			access{};
 			};
 
-			// ITaskNode
+			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
 			template<typename TPassNode>
-			TPassNode* CreateNode()
+			TPassNode* CreateNewNodeInSequenceTail()
 			{
 				auto new_node = new TPassNode();
-				node_array_.push_back(new_node);
+				node_sequence_.push_back(new_node);
 				return new_node;
 			}
 
@@ -208,7 +262,7 @@ namespace ngl
 
 			// -------------------------------------------------------------------------------------------
 
-			std::vector<ITaskNode*> node_array_{};// Graph構成ノード. 簡易化のため生成順がそのままGPU実行順.
+			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
 			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
 			std::unordered_map<ResourceHandleDataType, std::vector<ResourceAccessInfo>> res_access_map_{};// ResourceHandleからそのリソースへのノードアクセス情報.
 
