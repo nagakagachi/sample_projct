@@ -188,10 +188,10 @@ namespace ngl
 			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
 			{
 				RefHandle elem = { name , &handle};
-				ref_handle_.push_back(elem);
+				ref_handle_array_.push_back(elem);
 			}
 			
-			std::vector<RefHandle> ref_handle_{};
+			std::vector<RefHandle> ref_handle_array_{};
 
 		protected:
 			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
@@ -212,7 +212,7 @@ namespace ngl
 #define ITASK_NODE_HANDLE_REGISTER(name)\
 					{\
 							RefHandle elem = { #name , &name};\
-							ref_handle_.push_back(elem);\
+							ref_handle_array_.push_back(elem);\
 					};
 // -------------------------------------------------------------
 

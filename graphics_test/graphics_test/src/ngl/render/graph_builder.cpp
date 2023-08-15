@@ -62,10 +62,26 @@ namespace ngl
 			// 同時にレンダリングフローとしてのValidationチェック.
 
 			// TODO.
-			int i = node_sequence_.size() - 1;
-			for (; 0 <= i; --i)
+			for (auto ni = 0; ni < node_sequence_.size(); ++ni)
 			{
-				auto* p_node = node_sequence_[i];
+				auto* p_node = node_sequence_[ni];
+
+				// Nodeのハンドルを検査.
+				for (const auto& ref_h : p_node->ref_handle_array_)
+				{
+
+					// ハンドルへのアクセス情報を引き出し.
+					assert(res_access_map_.end() != res_access_map_.find(*ref_h.p_handle));
+					const auto& handle_access_list = res_access_map_[*ref_h.p_handle];
+
+
+					// 自身よりも後ろのNodeで参照されているか.
+					bool exist_access_after = false;
+
+					// TODO.
+					// handle_access_list[]のアクセス元ノードに, node_sequence_[]のni+1以降のノードがあれば exist_access_after=true.
+
+				}
 
 			}
 
