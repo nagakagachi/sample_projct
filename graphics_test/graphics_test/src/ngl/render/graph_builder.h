@@ -193,6 +193,8 @@ namespace ngl
 			
 			std::vector<RefHandle> ref_handle_array_{};
 
+		public:
+			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
 		protected:
 			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
 			RtgNameType debug_node_name_{};
@@ -267,6 +269,10 @@ namespace ngl
 			std::unordered_map<ResourceHandleDataType, std::vector<ResourceAccessInfo>> res_access_map_{};// ResourceHandleからそのリソースへのノードアクセス情報.
 
 			uint32_t s_res_handle_id_counter_{};// 生成リソースユニークID.
+
+		private:
+			// Sequence上でのノードの位置を返す.
+			int GetNodeSequencePosition(const ITaskNode* p_node) const;
 		};
 	}
 }

@@ -61,10 +61,14 @@ namespace ngl
 			// 終端ノードから遡って有効ノードをカリング.
 			// 同時にレンダリングフローとしてのValidationチェック.
 
+			std::vector<ITaskNode*> goal_nodes{};
 			// TODO.
 			for (auto ni = 0; ni < node_sequence_.size(); ++ni)
 			{
 				auto* p_node = node_sequence_[ni];
+
+				// 自身よりも後ろのNodeで参照されているか.
+				bool exist_access_after = false;
 
 				// Nodeのハンドルを検査.
 				for (const auto& ref_h : p_node->ref_handle_array_)
@@ -75,14 +79,27 @@ namespace ngl
 					const auto& handle_access_list = res_access_map_[*ref_h.p_handle];
 
 
-					// 自身よりも後ろのNodeで参照されているか.
-					bool exist_access_after = false;
-
-					// TODO.
 					// handle_access_list[]のアクセス元ノードに, node_sequence_[]のni+1以降のノードがあれば exist_access_after=true.
-
+					for (auto& ha : handle_access_list)
+					{
+						// 後ろかどうかはシーケンス上のインデックスから決定.
+						int node_pos = GetNodeSequencePosition(ha.p_node);
+						if (ni < node_pos)
+						{
+							exist_access_after = true;
+							break;
+						}
+					}
 				}
 
+				if (!exist_access_after)
+					goal_nodes.push_back(p_node);
+			}
+
+			// 終端Nodeのリスト.
+			for (auto& n : goal_nodes)
+			{
+				std::cout << n->GetDebugNodeName().Get() << std::endl;
 			}
 
 		}
@@ -103,5 +120,16 @@ namespace ngl
 			node_sequence_.clear();
 		}
 
+
+		// Sequence上でのノードの位置を返す.
+		int RenderTaskGraphBuilder::GetNodeSequencePosition(const ITaskNode* p_node) const
+		{
+			int i = 0;
+			auto find_pos = std::find(node_sequence_.begin(), node_sequence_.end(), p_node);
+			
+			if (node_sequence_.end() == find_pos)
+				return -1;
+			return std::distance(node_sequence_.begin(), find_pos);
+		}
 	}
 }
