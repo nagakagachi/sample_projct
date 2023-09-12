@@ -169,6 +169,8 @@ namespace ngl
 		*/
 		struct ITaskNode
 		{
+			virtual ~ITaskNode() = default;
+			
 			virtual ETASK_TYPE TaskType() const
 			{
 				return ETASK_TYPE::GRAPHICS;
@@ -274,6 +276,8 @@ namespace ngl
 			// Sequence上でのノードの位置を返す.
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
 		};
+
+		
 	}
 }
 

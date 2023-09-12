@@ -56,11 +56,12 @@ namespace ngl
 		// グラフからリソース割当と状態遷移を確定.
 		void RenderTaskGraphBuilder::Compile()
 		{
+			// MEMO 終端に寄与しないノードのカリングは保留.
+			
 			// node_sequence_内で自身より後ろのノードに参照されていないノードを終端ノードとしてリストアップ.
-			// 
 			// 終端ノードから遡って有効ノードをカリング.
 			// 同時にレンダリングフローとしてのValidationチェック.
-
+			/*
 			std::vector<ITaskNode*> goal_nodes{};
 			// TODO.
 			for (auto ni = 0; ni < node_sequence_.size(); ++ni)
@@ -73,7 +74,6 @@ namespace ngl
 				// Nodeのハンドルを検査.
 				for (const auto& ref_h : p_node->ref_handle_array_)
 				{
-
 					// ハンドルへのアクセス情報を引き出し.
 					assert(res_access_map_.end() != res_access_map_.find(*ref_h.p_handle));
 					const auto& handle_access_list = res_access_map_[*ref_h.p_handle];
@@ -101,7 +101,12 @@ namespace ngl
 			{
 				std::cout << n->GetDebugNodeName().Get() << std::endl;
 			}
+			*/
 
+
+			node_sequence_;
+			
+			
 		}
 
 
@@ -122,6 +127,7 @@ namespace ngl
 
 
 		// Sequence上でのノードの位置を返す.
+		// シンプルに直列なリスト上での位置.
 		int RenderTaskGraphBuilder::GetNodeSequencePosition(const ITaskNode* p_node) const
 		{
 			int i = 0;
@@ -129,7 +135,7 @@ namespace ngl
 			
 			if (node_sequence_.end() == find_pos)
 				return -1;
-			return std::distance(node_sequence_.begin(), find_pos);
+			return static_cast<int>(std::distance(node_sequence_.begin(), find_pos));
 		}
 	}
 }
