@@ -683,7 +683,7 @@ namespace ngl::render
 			auto rtv_target = builder.GetFrameRtv(target_res_name_); assert(rtv_target.IsValid());
 			uint32_t target_w{}, target_h{};
 			// ターゲットサイズを取得. swapchain の場合は専用に取得.
-			if (target_res_name_ == GraphResouceNameText("swapchain"))
+			if (target_res_name_ == GraphResourceNameText("swapchain"))
 			{
 				auto tmp = builder.GetSwapchain();
 				assert(tmp.IsValid());
@@ -720,8 +720,8 @@ namespace ngl::render
 	private:
 		rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
-		GraphResouceNameText src_res_name_;
-		GraphResouceNameText target_res_name_;
+		GraphResourceNameText src_res_name_;
+		GraphResourceNameText target_res_name_;
 	};
 }
 

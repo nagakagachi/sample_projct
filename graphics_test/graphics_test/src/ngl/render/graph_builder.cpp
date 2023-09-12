@@ -37,17 +37,21 @@ namespace ngl
 		}
 
 		// Nodeからのリソースアクセスを記録.
+		// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 		ResourceHandle RenderTaskGraphBuilder::RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type)
 		{
-			if (res_access_map_.end() == res_access_map_.find(res_handle))
+			// Node->Handle&AccessTypeのMap登録.
 			{
-				res_access_map_[res_handle] = {};
-			}
+				if(node_res_usage_map_.end() == node_res_usage_map_.find(&node))
+				{
+					node_res_usage_map_[&node] = {};
+				}
 
-			ResourceAccessInfo push_info{};
-			push_info.p_node = &node;
-			push_info.access = access_type;
-			res_access_map_[res_handle].push_back(push_info);
+				NodeResourceUsageInfo push_info = {};
+				push_info.handle = res_handle;
+				push_info.access = access_type;
+				node_res_usage_map_[&node].push_back(push_info);
+			}
 
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
 			return res_handle;
@@ -103,9 +107,72 @@ namespace ngl
 			}
 			*/
 
-
-			node_sequence_;
 			
+			// 念のためのValidation Check.
+			{
+				for(int sequence_id = 0; sequence_id < node_sequence_.size(); ++sequence_id)
+				{
+					ITaskNode* p_node = node_sequence_[sequence_id];
+					assert(node_res_usage_map_.end() != node_res_usage_map_.find(p_node));// ありえない.
+
+					// Nodeが同じHandleに対して重複したRegisterを指定ないかチェック.
+					for(int i = 0; i < node_res_usage_map_[p_node].size() - 1; ++i)
+					{
+						for(int j = i + 1; j < node_res_usage_map_[p_node].size(); ++j)
+						{
+							if(node_res_usage_map_[p_node][i].handle == node_res_usage_map_[p_node][j].handle)
+							{
+								std::cout << u8"[RenderTaskGraphBuilder][Validation Error] 同一リソースへの重複アクセス登録." <<std::endl;
+								assert(false);
+							}
+						}
+					}
+				}
+			}
+
+			
+			// SequenceのNodeを順に処理して実リソースの割当とそのステート遷移確定をしていく.
+			struct NodeResourceHandleAccessInfo
+			{
+				const ITaskNode*	p_node_ = {};
+				EACCESS_TYPE		access_type = EACCESS_TYPE::INVALID;
+			};
+			// ResourceHandle -> このResourceHandleへの{Node, AccessType}のSequenceと同じ順序でのリスト.
+			std::unordered_map<ResourceHandleDataType, std::vector<NodeResourceHandleAccessInfo>> res_access_flow = {};
+
+			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
+			{
+				const ITaskNode* p_node = node_sequence_[node_i];
+				// このNodeのリソースアクセス情報を巡回.
+				for(auto& res_access : node_res_usage_map_[p_node])
+				{
+					if(res_access_flow.end() == res_access_flow.find(res_access.handle))
+					{
+						// このResourceHandleの要素が未登録なら新規.
+						res_access_flow[res_access.handle] = {};
+					}
+					// このResourceHandleへのNodeからのアクセスを順にリストアップ.
+					NodeResourceHandleAccessInfo access_flow_part = {};
+					access_flow_part.p_node_ = p_node;
+					access_flow_part.access_type = res_access.access;
+					res_access_flow[res_access.handle].push_back(access_flow_part);
+				}
+			}
+
+			// デバッグ表示.
+			{
+				// 各ResourceHandleへの処理順でのアクセス情報.
+				std::cout << "-Access Flow Debug" << std::endl;
+				for(auto res_access_flow_elem : res_access_flow)
+				{
+					std::cout << "	-ResourceHandle ID " << res_access_flow_elem.first << std::endl;
+					for(auto res_access : res_access_flow_elem.second)
+					{
+						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
+						std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
+					}
+				}
+			}
 			
 		}
 

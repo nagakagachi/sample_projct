@@ -32,6 +32,7 @@ namespace ngl
 		// ひとまず用途のみ指定してそこから書き込みや読み取りなどは自明ということにする. 必要になったら情報追加するなど.
 		enum class EACCESS_TYPE : int
 		{
+			INVALID,
 			RENDER_TARTGET,
 			DEPTH_TARGET,
 			SHADER_READ,
@@ -57,8 +58,8 @@ namespace ngl
 						float h;
 					} rel_size;
 				};
-				rhi::ResourceFormat format;
-				bool is_relative;
+				rhi::ResourceFormat format {};
+				bool is_relative {};
 
 
 				// サイズ直接指定. その他データはEmpty.
@@ -238,6 +239,12 @@ namespace ngl
 				const ITaskNode*		p_node{};
 				EACCESS_TYPE			access{};
 			};
+			
+			struct NodeResourceUsageInfo
+			{
+				ResourceHandle			handle{};
+				EACCESS_TYPE			access{};
+			};
 
 			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
 			template<typename TPassNode>
@@ -254,6 +261,7 @@ namespace ngl
 			ResourceHandle GetSwapchainResourceHandle();
 
 			// Nodeからのリソースアクセスを記録.
+			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type);
 
 			// グラフからリソース割当と状態遷移を確定.
@@ -268,7 +276,8 @@ namespace ngl
 
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
 			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
-			std::unordered_map<ResourceHandleDataType, std::vector<ResourceAccessInfo>> res_access_map_{};// ResourceHandleからそのリソースへのノードアクセス情報.
+			
+			std::unordered_map<const ITaskNode*, std::vector<NodeResourceUsageInfo>> node_res_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
 			uint32_t s_res_handle_id_counter_{};// 生成リソースユニークID.
 
@@ -284,7 +293,7 @@ namespace ngl
 
 namespace ngl::render
 {
-	using GraphResouceNameText = text::HashCharPtr<64>;
+	using GraphResourceNameText = text::HashCharPtr<64>;
 
 	// 簡易リソース登録クラス.
 	//	将来的にはRenderGraphの構築とリソース割り当て, 自動ステート遷移などをしたい.
@@ -298,77 +307,77 @@ namespace ngl::render
 			p_device_ = p_device;
 		}
 
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefCbvDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefCbvDep v)
 		{
 			frame_cbv_map_[name] = v;
 		}
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefSrvDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefSrvDep v)
 		{
 			frame_srv_map_[name] = v;
 		}
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefUavDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefUavDep v)
 		{
 			frame_uav_map_[name] = v;
 		}
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefSampDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefSampDep v)
 		{
 			frame_samp_map_[name] = v;
 		}
 
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefRtvDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefRtvDep v)
 		{
 			frame_rtv_map_[name] = v;
 		}
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefDsvDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefDsvDep v)
 		{
 			frame_dsv_map_[name] = v;
 		}
 
-		void AddFrameResource(const GraphResouceNameText& name, rhi::RefTextureDep v)
+		void AddFrameResource(const GraphResourceNameText& name, rhi::RefTextureDep v)
 		{
 			frame_tex_map_[name] = v;
 		}
 
 
-		rhi::RefCbvDep GetFrameCbv(const GraphResouceNameText& name)
+		rhi::RefCbvDep GetFrameCbv(const GraphResourceNameText& name)
 		{
 			if (frame_cbv_map_.end() == frame_cbv_map_.find(name))
 				return {};
 			return frame_cbv_map_[name];
 		}
-		rhi::RefSrvDep GetFrameSrv(const GraphResouceNameText& name)
+		rhi::RefSrvDep GetFrameSrv(const GraphResourceNameText& name)
 		{
 			if (frame_srv_map_.end() == frame_srv_map_.find(name))
 				return {};
 			return frame_srv_map_[name];
 		}
-		rhi::RefUavDep GetFrameUav(const GraphResouceNameText& name)
+		rhi::RefUavDep GetFrameUav(const GraphResourceNameText& name)
 		{
 			if (frame_uav_map_.end() == frame_uav_map_.find(name))
 				return {};
 			return frame_uav_map_[name];
 		}
-		rhi::RefSampDep GetFrameSamp(const GraphResouceNameText& name)
+		rhi::RefSampDep GetFrameSamp(const GraphResourceNameText& name)
 		{
 			if (frame_samp_map_.end() == frame_samp_map_.find(name))
 				return {};
 			return frame_samp_map_[name];
 		}
 
-		rhi::RefRtvDep GetFrameRtv(const GraphResouceNameText& name)
+		rhi::RefRtvDep GetFrameRtv(const GraphResourceNameText& name)
 		{
 			if (frame_rtv_map_.end() == frame_rtv_map_.find(name))
 				return {};
 			return frame_rtv_map_[name];
 		}
-		rhi::RefDsvDep GetFrameDsv(const GraphResouceNameText& name)
+		rhi::RefDsvDep GetFrameDsv(const GraphResourceNameText& name)
 		{
 			if (frame_dsv_map_.end() == frame_dsv_map_.find(name))
 				return {};
 			return frame_dsv_map_[name];
 		}
 
-		rhi::RefTextureDep GetFrameTexture(const GraphResouceNameText& name)
+		rhi::RefTextureDep GetFrameTexture(const GraphResourceNameText& name)
 		{
 			if (frame_tex_map_.end() == frame_tex_map_.find(name))
 				return {};
@@ -390,15 +399,15 @@ namespace ngl::render
 	private:
 		rhi::DeviceDep* p_device_ = {};
 
-		std::unordered_map<GraphResouceNameText, rhi::RefCbvDep>	frame_cbv_map_;
-		std::unordered_map<GraphResouceNameText, rhi::RefSrvDep>	frame_srv_map_;
-		std::unordered_map<GraphResouceNameText, rhi::RefUavDep>	frame_uav_map_;
-		std::unordered_map<GraphResouceNameText, rhi::RefSampDep>	frame_samp_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefCbvDep>	frame_cbv_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefSrvDep>	frame_srv_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefUavDep>	frame_uav_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefSampDep>	frame_samp_map_;
 
-		std::unordered_map<GraphResouceNameText, rhi::RefRtvDep>	frame_rtv_map_;
-		std::unordered_map<GraphResouceNameText, rhi::RefDsvDep>	frame_dsv_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefRtvDep>	frame_rtv_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefDsvDep>	frame_dsv_map_;
 
-		std::unordered_map<GraphResouceNameText, rhi::RefTextureDep>	frame_tex_map_;
+		std::unordered_map<GraphResourceNameText, rhi::RefTextureDep>	frame_tex_map_;
 
 
 		rhi::RhiRef<rhi::SwapChainDep>	swapchain_;

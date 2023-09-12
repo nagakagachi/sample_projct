@@ -363,3 +363,4 @@ FodyWeavers.xsd
 
 *.cso
 graphics_test/nsight_debug/nsight_debug.ngfx-proj
+graphics_test/.idea/.idea.graphics_test/.idea/workspace.xml
