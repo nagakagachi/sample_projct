@@ -146,6 +146,12 @@ namespace ngl
 				return detail.unique_id == InvalidHandle().detail.unique_id;
 			}
 
+			constexpr ResourceHandle() = default;
+			constexpr ResourceHandle(ResourceHandleDataType handle_data)
+			{
+				this->data = handle_data;
+			}
+			
 			operator ResourceHandleDataType() const
 			{
 				return data;

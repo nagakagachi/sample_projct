@@ -159,6 +159,26 @@ namespace ngl
 				}
 			}
 
+
+			int res_inst_count = 0;
+			std::unordered_map<uint32_t, int> unique_id_2_res_inst_id = {};
+			for(auto res_access_flow_elem : res_access_flow)
+			{
+				const ResourceHandle res_handle = ResourceHandle(res_access_flow_elem.first);
+
+				if(0 == res_handle.detail.is_swapchain)
+				{
+					const auto handle_unique_id = res_handle.detail.unique_id;
+					if(unique_id_2_res_inst_id.end() == unique_id_2_res_inst_id.find(handle_unique_id))
+					{
+						// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
+						// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
+						unique_id_2_res_inst_id[handle_unique_id] = res_inst_count;
+						++res_inst_count;
+					}
+				}
+			}
+			
 			// デバッグ表示.
 			{
 				// 各ResourceHandleへの処理順でのアクセス情報.
@@ -173,7 +193,6 @@ namespace ngl
 					}
 				}
 			}
-			
 		}
 
 
