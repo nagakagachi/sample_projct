@@ -30,16 +30,30 @@ namespace ngl
 
 		// リソースアクセス時のリソース解釈.
 		// ひとまず用途のみ指定してそこから書き込みや読み取りなどは自明ということにする. 必要になったら情報追加するなど.
-		enum class EACCESS_TYPE : int
+		using ACCESS_TYPE = int;
+		struct access_type
 		{
-			INVALID,
-			RENDER_TARTGET,
-			DEPTH_TARGET,
-			SHADER_READ,
-			UAV,
+			static constexpr ACCESS_TYPE INVALID		= {0};
+			
+			static constexpr ACCESS_TYPE RENDER_TARTGET	= {1};
+			static constexpr ACCESS_TYPE DEPTH_TARGET	= {2};
+			static constexpr ACCESS_TYPE SHADER_READ	= 3;
+			static constexpr ACCESS_TYPE UAV			= 4;
+			
+			static constexpr ACCESS_TYPE _MAX			= 5;
 		};
+		using ACCESS_TYPE_MASK = int;
+		struct access_type_mask
+		{
+			static constexpr ACCESS_TYPE_MASK RENDER_TARTGET	= 1 << (access_type::RENDER_TARTGET);
+			static constexpr ACCESS_TYPE_MASK DEPTH_TARGET		= 1 << (access_type::DEPTH_TARGET);
+			static constexpr ACCESS_TYPE_MASK SHADER_READ		= 1 << (access_type::SHADER_READ);
+			static constexpr ACCESS_TYPE_MASK UAV				= 1 << (access_type::UAV);
+		};
+		
 
 		struct RenderTaskGraphBuilder;
+		// Passが必要とするリソースの定義.
 		struct ResourceDesc2D
 		{
 			struct Desc
@@ -48,14 +62,14 @@ namespace ngl
 				{
 					struct AbsSize
 					{
-						int w;
-						int h;
+						int w;// 要求するバッファのWidth (例 1920).
+						int h;// 要求するバッファのHeight (例 1080).
 					} abs_size;
 
 					struct RelSize
 					{
-						float w;
-						float h;
+						float w;// 要求するバッファの基準Widthに対する相対スケール値(例 半解像度 0.5).
+						float h;// 要求するバッファの基準Heightに対する相対スケール値(例 半解像度 0.5).
 					} rel_size;
 				};
 				rhi::ResourceFormat format {};
@@ -111,6 +125,22 @@ namespace ngl
 
 				v.desc.format = format;
 				return v;
+			}
+
+			// 具体的なサイズ(Width, Height)を計算して返す.
+			void GetConcreteTextureSize(int work_width, int work_height, int& out_width, int& out_height) const
+			{
+				if(desc.is_relative)
+				{
+					// 相対サイズ解決.
+					out_width = static_cast<int>(work_width * desc.rel_size.w);
+					out_height = static_cast<int>(work_height * desc.rel_size.h);
+				}
+				else
+				{
+					out_width = desc.abs_size.w;
+					out_height = desc.abs_size.h;
+				}
 			}
 		};
 		// StorageをHashKey扱いするためStorageがオブジェクト全体を包括するサイズである必要がある.
@@ -180,7 +210,7 @@ namespace ngl
 			
 			virtual ETASK_TYPE TaskType() const
 			{
-				return ETASK_TYPE::GRAPHICS;
+				return ETASK_TYPE::GRAPHICS;// 基底はGraphics.
 			}
 
 
@@ -243,13 +273,13 @@ namespace ngl
 			struct ResourceAccessInfo
 			{
 				const ITaskNode*		p_node{};
-				EACCESS_TYPE			access{};
+				ACCESS_TYPE				access{};
 			};
 			
 			struct NodeResourceUsageInfo
 			{
 				ResourceHandle			handle{};
-				EACCESS_TYPE			access{};
+				ACCESS_TYPE				access{};
 			};
 
 			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
@@ -268,10 +298,10 @@ namespace ngl
 
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type);
+			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
 
 			// グラフからリソース割当と状態遷移を確定.
-			void Compile();
+			bool Compile(rhi::DeviceDep& device);
 
 
 			// -------------------------------------------------------------------------------------------
@@ -279,17 +309,45 @@ namespace ngl
 			~RenderTaskGraphBuilder();
 
 			// -------------------------------------------------------------------------------------------
-
+			static constexpr  int k_base_height = 1080;
+			int res_base_height_ = k_base_height;
+			int res_base_width_ = static_cast<int>( static_cast<float>(k_base_height) * 16.0f/9.0f);
+			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
 			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
 			
 			std::unordered_map<const ITaskNode*, std::vector<NodeResourceUsageInfo>> node_res_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
-			uint32_t s_res_handle_id_counter_{};// 生成リソースユニークID.
-
+			struct TextureInstancePoolElement
+			{
+				bool lending_		= false;// 貸出中の場合true.
+				rhi::ResourceState	global_begin_state_ = rhi::ResourceState::General;// Graph開始時点のステート.
+				rhi::ResourceState	global_end_state_ = rhi::ResourceState::General;// Graph終了時点のステート.
+				
+				rhi::RefTextureDep	tex_ = {};
+				rhi::RefRtvDep		rtv_ = {};
+				rhi::RefDsvDep		dsv_ = {};
+				rhi::RefUavDep		uav_ = {};
+				rhi::RefSrvDep		srv_ = {};
+			};
+			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
+			
+			uint32_t s_res_handle_id_counter_{};// リソースハンドルユニークID.
 		private:
 			// Sequence上でのノードの位置を返す.
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
+			
+			// ------------------------------------------
+			// 実リソースの割当.
+			struct ResourceSearchKey
+			{
+				rhi::ResourceFormat format = {};
+				int require_width_ = {};
+				int require_height_ = {};
+				ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
+			};
+			// Poolからリソース検索または新規生成.
+			int GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key);
 		};
 
 		

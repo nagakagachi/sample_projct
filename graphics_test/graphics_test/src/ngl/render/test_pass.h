@@ -235,9 +235,9 @@ namespace ngl::render
 		};
 
 
-		void Test1();
+		void Test1(rhi::DeviceDep& device);
 
-		void Test()
+		void Test(rhi::DeviceDep& device)
 		{
 			GpuTaskGraphBuilder builder{};
 
@@ -257,13 +257,13 @@ namespace ngl::render
 			p_post->SetupGraph(p_lighting->out_lighting_);
 
 
-			Test1();
+			Test1(device);
 			
 			return;
 		}
 
 
-		void Test1()
+		void Test1(rhi::DeviceDep& device)
 		{
 			struct TaskDepthPass : public rtg::ITaskNode
 			{
@@ -284,10 +284,11 @@ namespace ngl::render
 				void Setup(rtg::RenderTaskGraphBuilder& builder)
 				{
 					// リソース定義.
-					rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);
+					//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
+					rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT);
 
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::EACCESS_TYPE::DEPTH_TARGET);
+					h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -325,9 +326,9 @@ namespace ngl::render
 					rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 					
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::DEPTH_TARGET);
-					h_gb0_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::EACCESS_TYPE::RENDER_TARTGET);
-					h_gb1_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::EACCESS_TYPE::RENDER_TARTGET);
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
+					h_gb0_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
+					h_gb1_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -365,10 +366,10 @@ namespace ngl::render
 					rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
 					
 					// リソースアクセス定義.
-					h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::SHADER_READ);
-					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::EACCESS_TYPE::SHADER_READ);
-					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::EACCESS_TYPE::SHADER_READ);
-					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::EACCESS_TYPE::RENDER_TARTGET);
+					h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
+					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
+					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -400,9 +401,9 @@ namespace ngl::render
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_light, rtg::ResourceHandle h_final)
 				{
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::EACCESS_TYPE::SHADER_READ);
-					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::EACCESS_TYPE::SHADER_READ);
-					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::EACCESS_TYPE::RENDER_TARTGET);
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
+					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::access_type::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
@@ -428,7 +429,7 @@ namespace ngl::render
 			auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<TaskFinalPass>();
 			task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
 
-			rtg_builder.Compile();
+			rtg_builder.Compile(device);
 
 			return;
 		}

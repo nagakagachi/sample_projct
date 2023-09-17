@@ -2,6 +2,8 @@
 
 #include "graph_builder.h"
 
+#include "ngl/rhi/d3d12/command_list.d3d12.h"
+
 
 namespace ngl
 {
@@ -38,7 +40,7 @@ namespace ngl
 
 		// Nodeからのリソースアクセスを記録.
 		// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-		ResourceHandle RenderTaskGraphBuilder::RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, EACCESS_TYPE access_type)
+		ResourceHandle RenderTaskGraphBuilder::RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type)
 		{
 			// Node->Handle&AccessTypeのMap登録.
 			{
@@ -57,8 +59,166 @@ namespace ngl
 			return res_handle;
 		}
 
+
+		// Poolからリソース検索または新規生成.
+		int RenderTaskGraphBuilder::GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key)
+		{
+			// keyで既存リソースから検索または新規生成.
+					
+			// poolから検索.
+			int res_inst_id = -1;
+			for(int i = 0; i < tex_instance_pool_.size(); ++i)
+			{
+				// 貸出可能か.
+				if(tex_instance_pool_[i].lending_)
+					continue;
+						
+				// フォーマットチェック.
+				if(tex_instance_pool_[i].tex_->GetFormat() != key.format)
+					continue;
+				// 要求サイズを格納できるならOK.
+				if(tex_instance_pool_[i].tex_->GetWidth() < static_cast<uint32_t>(key.require_width_))
+					continue;
+				// 要求サイズを格納できるならOK.
+				if(tex_instance_pool_[i].tex_->GetHeight() < static_cast<uint32_t>(key.require_height_))
+					continue;
+				// RTV要求している場合.
+				if(key.usage_ & access_type_mask::RENDER_TARTGET)
+				{
+					if(!tex_instance_pool_[i].rtv_.IsValid())
+						continue;
+				}
+				// DSV要求している場合.
+				if(key.usage_ & access_type_mask::DEPTH_TARGET)
+				{
+					if(!tex_instance_pool_[i].dsv_.IsValid())
+						continue;
+				}
+				// UAV要求している場合.
+				if(key.usage_ & access_type_mask::UAV)
+				{
+					if(!tex_instance_pool_[i].uav_.IsValid())
+						continue;
+				}
+				// SRV要求している場合.
+				if(key.usage_ & access_type_mask::SHADER_READ)
+				{
+					if(!tex_instance_pool_[i].srv_.IsValid())
+						continue;
+				}
+
+				// 再利用可能なリソース発見.
+				res_inst_id = i;
+				break;
+			}
+
+			// 新規生成.
+			if(0 > res_inst_id)
+			{
+				rhi::TextureDep::Desc desc = {};
+				rhi::ResourceState init_state = rhi::ResourceState::General;
+				{
+					desc.type = rhi::TextureType::Texture2D;// 現状2D固定.
+					desc.initial_state = init_state;
+					desc.array_size = 1;
+					desc.mip_count = 1;
+					desc.sample_count = 1;
+					desc.heap_type = rhi::ResourceHeapType::Default;
+						
+					desc.format = key.format;
+					desc.width = key.require_width_;	// MEMO 相対サイズの場合はここには縮小サイズ等が来てしまうので無駄がありそう.
+					desc.height = key.require_height_;
+					desc.depth = 1;
+							
+					desc.bind_flag = 0;
+					{
+						if(key.usage_ & access_type_mask::RENDER_TARTGET)
+							desc.bind_flag |= rhi::ResourceBindFlag::RenderTarget;
+						if(key.usage_ & access_type_mask::DEPTH_TARGET)
+							desc.bind_flag |= rhi::ResourceBindFlag::DepthStencil;
+						if(key.usage_ & access_type_mask::UAV)
+							desc.bind_flag |= rhi::ResourceBindFlag::UnorderedAccess;
+						if(key.usage_ & access_type_mask::SHADER_READ)
+							desc.bind_flag |= rhi::ResourceBindFlag::ShaderResource;
+					}
+				}
+
+						
+				rhi::RefTextureDep new_tex = {};
+				rhi::RefRtvDep new_rtv = {};
+				rhi::RefDsvDep new_dsv = {};
+				rhi::RefUavDep new_uav = {};
+				rhi::RefSrvDep new_srv = {};
+
+				// Texture.
+				new_tex = new rhi::TextureDep();
+				if (!new_tex->Initialize(&device, desc))
+				{
+					assert(false);
+					return -1;
+				}
+				// Rtv.
+				if(key.usage_ & access_type_mask::RENDER_TARTGET)
+				{
+					new_rtv = new rhi::RenderTargetViewDep();
+					if (!new_rtv->Initialize(&device, new_tex.Get(), 0, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+				// Dsv.
+				if(key.usage_ & access_type_mask::DEPTH_TARGET)
+				{
+					new_dsv = new rhi::DepthStencilViewDep();
+					if (!new_dsv->Initialize(&device, new_tex.Get(), 0, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+				// Uav.
+				if(key.usage_ & access_type_mask::UAV)
+				{
+					new_uav = new rhi::UnorderedAccessViewDep();
+					if (!new_uav->Initialize(&device, new_tex.Get(), 0, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+				// Srv.
+				if(key.usage_ & access_type_mask::SHADER_READ)
+				{
+					new_srv = new rhi::ShaderResourceViewDep();
+					if (!new_srv->InitializeAsTexture(&device, new_tex.Get(), 0, 1, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+
+				TextureInstancePoolElement new_pool_elem = {};
+				{
+					new_pool_elem.tex_ = new_tex;
+					new_pool_elem.rtv_ = new_rtv;
+					new_pool_elem.dsv_ = new_dsv;
+					new_pool_elem.uav_ = new_uav;
+					new_pool_elem.srv_ = new_srv;
+						
+					new_pool_elem.global_begin_state_ = init_state;
+					new_pool_elem.global_end_state_ = init_state;
+				}
+				res_inst_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
+				tex_instance_pool_.push_back(new_pool_elem);//登録.
+			}
+
+			return res_inst_id;
+		}
+		
+
 		// グラフからリソース割当と状態遷移を確定.
-		void RenderTaskGraphBuilder::Compile()
+		bool RenderTaskGraphBuilder::Compile(rhi::DeviceDep& device)
 		{
 			// MEMO 終端に寄与しないノードのカリングは保留.
 			
@@ -132,67 +292,138 @@ namespace ngl
 
 			
 			// SequenceのNodeを順に処理して実リソースの割当とそのステート遷移確定をしていく.
-			struct NodeResourceHandleAccessInfo
+			struct ResourceHandleAccessFromNode
 			{
 				const ITaskNode*	p_node_ = {};
-				EACCESS_TYPE		access_type = EACCESS_TYPE::INVALID;
+				ACCESS_TYPE			access_type = access_type::INVALID;
 			};
-			// ResourceHandle -> このResourceHandleへの{Node, AccessType}のSequenceと同じ順序でのリスト.
-			std::unordered_map<ResourceHandleDataType, std::vector<NodeResourceHandleAccessInfo>> res_access_flow = {};
+			struct ResourceHandleAccessInfo
+			{
+				bool access_pattern_[access_type::_MAX] = {};
+				std::vector<ResourceHandleAccessFromNode> from_node_ = {};
+			};
 
+			// リソースハンドルへのアクセスを時系列で収集.
+			// ResourceHandle -> このResourceHandleへの{Node, AccessType}のSequenceと同じ順序でのリスト.
+			std::unordered_map<ResourceHandleDataType, ResourceHandleAccessInfo> res_access_map = {};
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
 				for(auto& res_access : node_res_usage_map_[p_node])
 				{
-					if(res_access_flow.end() == res_access_flow.find(res_access.handle))
+					if(res_access_map.end() == res_access_map.find(res_access.handle))
 					{
 						// このResourceHandleの要素が未登録なら新規.
-						res_access_flow[res_access.handle] = {};
+						res_access_map[res_access.handle] = {};
 					}
+					
 					// このResourceHandleへのNodeからのアクセスを順にリストアップ.
-					NodeResourceHandleAccessInfo access_flow_part = {};
+					ResourceHandleAccessFromNode access_flow_part = {};
 					access_flow_part.p_node_ = p_node;
 					access_flow_part.access_type = res_access.access;
-					res_access_flow[res_access.handle].push_back(access_flow_part);
+					res_access_map[res_access.handle].from_node_.push_back(access_flow_part);
+
+					// アクセスパターンタイプに追加.
+					res_access_map[res_access.handle].access_pattern_[res_access.access] = true;
 				}
 			}
-
-
-			int res_inst_count = 0;
-			std::unordered_map<uint32_t, int> unique_id_2_res_inst_id = {};
-			for(auto res_access_flow_elem : res_access_flow)
-			{
-				const ResourceHandle res_handle = ResourceHandle(res_access_flow_elem.first);
-
-				if(0 == res_handle.detail.is_swapchain)
+				// デバッグ表示.
 				{
-					const auto handle_unique_id = res_handle.detail.unique_id;
-					if(unique_id_2_res_inst_id.end() == unique_id_2_res_inst_id.find(handle_unique_id))
+					// 各ResourceHandleへの処理順でのアクセス情報.
+					std::cout << "-Access Flow Debug" << std::endl;
+					for(auto res_access_elem : res_access_map)
 					{
-						// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
-						// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
-						unique_id_2_res_inst_id[handle_unique_id] = res_inst_count;
-						++res_inst_count;
+						std::cout << "	-ResourceHandle ID " << res_access_elem.first << std::endl;
+						for(auto res_access : res_access_elem.second.from_node_)
+						{
+							std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
+							std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
+						}
 					}
 				}
-			}
+				// アクセスタイプのValidation. ここで RenderTarget且つDepthStencilTarget等の許可されないアクセスチェック.
+				for(auto res_access_elem : res_access_map)
+				{
+					if(
+						res_access_elem.second.access_pattern_[access_type::RENDER_TARTGET]
+						&&
+						res_access_elem.second.access_pattern_[access_type::DEPTH_TARGET]
+						)
+					{
+						std::cout << u8"RenderTarget と DepthStencilTarget を同時に指定することは不許可." << std::endl;
+						assert(false);
+						return false;
+					}
+				}
+
 			
-			// デバッグ表示.
+			// Sequence上のユニークなハンドル毎にPoolから実リソースを割り当て.
+			std::unordered_map<ResourceHandleDataType, int> unique_id_2_res_inst_id = {};
+			for(auto res_access_elem : res_access_map)
 			{
-				// 各ResourceHandleへの処理順でのアクセス情報.
-				std::cout << "-Access Flow Debug" << std::endl;
-				for(auto res_access_flow_elem : res_access_flow)
+				const ResourceHandle res_handle = ResourceHandle(res_access_elem.first);
+				// SwapChainは外部供給である点に注意. その他外部リソース登録等も考慮が必要.
+				
+				const auto handle_unique_id = res_handle;
+				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
+				if(unique_id_2_res_inst_id.end() == unique_id_2_res_inst_id.find(handle_unique_id))
 				{
-					std::cout << "	-ResourceHandle ID " << res_access_flow_elem.first << std::endl;
-					for(auto res_access : res_access_flow_elem.second)
+					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
+					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
+
+					if(!res_handle.detail.is_swapchain)
 					{
-						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
-						std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
+						// Swapchainではない通常リソース.
+						
+						const auto require_desc = res_desc_map_[res_access_elem.first];
+
+						int concrete_w = res_base_width_;
+						int concrete_h = res_base_height_;
+						// MEMO ここで相対サイズモードの場合はスケールされたサイズになるが, このまま要求して新規生成された場合小さいサイズで作られて使いまわしされにくいものになる懸念が多少ある.
+						require_desc.GetConcreteTextureSize(res_base_width_, res_base_height_, concrete_w, concrete_h);
+
+						ACCESS_TYPE_MASK usage_mask = 0;
+						{
+							if(res_access_elem.second.access_pattern_[access_type::RENDER_TARTGET])
+								usage_mask |= access_type_mask::RENDER_TARTGET;
+							if(res_access_elem.second.access_pattern_[access_type::DEPTH_TARGET])
+								usage_mask |= access_type_mask::DEPTH_TARGET;
+							if(res_access_elem.second.access_pattern_[access_type::UAV])
+								usage_mask |= access_type_mask::UAV;
+							if(res_access_elem.second.access_pattern_[access_type::SHADER_READ])
+								usage_mask |= access_type_mask::SHADER_READ;
+						}
+					
+						ResourceSearchKey search_key = {};
+						search_key.format = require_desc.desc.format;
+						search_key.require_width_ = concrete_w;
+						search_key.require_height_ = concrete_h;
+						search_key.usage_ = usage_mask;
+
+						// リソース割当.
+						int res_inst_id = GetOrCreateResourceFromPool(device, search_key);
+						assert(0 <= res_inst_id);// ありえない.
+
+						// 貸出設定.
+						tex_instance_pool_[res_inst_id].lending_ = true;
+					
+						unique_id_2_res_inst_id[handle_unique_id] = res_inst_id;// ハンドル側のIDから実リソースを引けるように登録.
+					}
+					else
+					{
+						// Swapchainの場合.
+						// 一旦無効にしておく.
+						unique_id_2_res_inst_id[handle_unique_id] = -1;// ハンドル側のIDから実リソースを引けるように登録.
 					}
 				}
 			}
+
+			// TODO.
+			//	Sequenceの時系列に沿って unique_id_2_res_inst_idで割り当てた tex_instance_pool_ のリソースの各Node時点でのステートを計算.
+			//
+
+			return true;
 		}
 
 

@@ -552,7 +552,7 @@ bool AppGame::Initialize()
 	// テストコード
 	ngl_test::TestFunc00(&device_);
 
-	ngl::render::graph::Test();
+	ngl::render::graph::Test(device_);
 
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
