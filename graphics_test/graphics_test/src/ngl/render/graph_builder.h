@@ -338,6 +338,66 @@ namespace ngl
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
 			
 			// ------------------------------------------
+			
+			// ハンドル毎のタイムライン上での位置を示す情報を生成.
+			// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
+			// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
+			struct TaskStage
+			{
+				/*
+				struct Detail
+				{
+					uint32_t step_ = 0;// 下位ビット.
+					uint32_t stage_ = 0;// 上位ビット.
+				};
+				
+				union
+				{
+					Detail	 detail {};
+					uint64_t stage_step_;// 上位ビットにstage.
+				};
+				*/
+
+				constexpr TaskStage() = default;
+
+				int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+				int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+
+				// オペレータ.
+				constexpr bool operator<(const TaskStage arg) const
+				{
+					if(stage_ < arg.stage_)
+						return true;
+					else if(stage_ == arg.stage_)
+						return step_ < arg.step_;
+					return false;
+				}
+				constexpr bool operator>(const TaskStage arg) const
+				{
+					if(stage_ > arg.stage_)
+						return true;
+					else if(stage_ == arg.stage_)
+						return step_ > arg.step_;
+					return false;
+				}
+				constexpr bool operator<=(const TaskStage arg) const
+				{
+					if(stage_ < arg.stage_)
+						return true;
+					else if(stage_ == arg.stage_)
+						return step_ <= arg.step_;
+					return false;
+				}
+				constexpr bool operator>=(const TaskStage arg) const
+				{
+					if(stage_ > arg.stage_)
+						return true;
+					else if(stage_ == arg.stage_)
+						return step_ >= arg.step_;
+					return false;
+				}
+			};
+			
 			// 実リソースの割当.
 			struct ResourceSearchKey
 			{
@@ -346,7 +406,7 @@ namespace ngl
 				int require_height_ = {};
 				ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
 			};
-			// Poolからリソース検索または新規生成.
+			// Poolからリソース検索または新規生成. 戻り血は実リソースID.
 			int GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key);
 		};
 

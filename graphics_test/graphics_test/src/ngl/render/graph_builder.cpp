@@ -142,8 +142,7 @@ namespace ngl
 							desc.bind_flag |= rhi::ResourceBindFlag::ShaderResource;
 					}
 				}
-
-						
+				
 				rhi::RefTextureDep new_tex = {};
 				rhi::RefRtvDep new_rtv = {};
 				rhi::RefDsvDep new_dsv = {};
@@ -303,52 +302,76 @@ namespace ngl
 				std::vector<ResourceHandleAccessFromNode> from_node_ = {};
 			};
 
-			// リソースハンドルへのアクセスを時系列で収集.
-			// ResourceHandle -> このResourceHandleへの{Node, AccessType}のSequenceと同じ順序でのリスト.
-			std::unordered_map<ResourceHandleDataType, ResourceHandleAccessInfo> res_access_map = {};
+
+			std::vector<TaskStage> node_stage_array = {};// Sequence上のインデックスからタスクステージ情報を引く.
+			{
+				int stage_counter = 0;
+				int step_counter = 0;
+				for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
+				{
+					// Fence等でStageが分かれる場合はここ
+					if(false)
+					{
+						++stage_counter;
+						step_counter = 0;
+					}
+					TaskStage node_stage = {};
+					node_stage.stage_ = stage_counter;
+					node_stage.step_ = step_counter;
+					node_stage_array.push_back(node_stage);
+
+					++step_counter;
+				}
+			}
+
+			// 存在するハンドル毎に仮のユニークインデックスを割り振る. ランダムアクセスのため.
+			std::unordered_map<ResourceHandleDataType, int> handle_index_map = {};
+			int handle_counter = 0;
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
 				for(auto& res_access : node_res_usage_map_[p_node])
 				{
-					if(res_access_map.end() == res_access_map.find(res_access.handle))
+					if(handle_index_map.end() == handle_index_map.find(res_access.handle))
 					{
 						// このResourceHandleの要素が未登録なら新規.
-						res_access_map[res_access.handle] = {};
+						handle_index_map[res_access.handle] = handle_counter;
+						++handle_counter;
 					}
+				}
+			}
+
+			
+			// リソースハンドルへのアクセスを時系列で収集.
+			std::vector<ResourceHandleAccessInfo> handle_access_info_array(handle_counter);
+			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
+			{
+				const ITaskNode* p_node = node_sequence_[node_i];
+				// このNodeのリソースアクセス情報を巡回.
+				for(auto& res_access : node_res_usage_map_[p_node])
+				{
+					const auto handle_index = handle_index_map[res_access.handle];
 					
 					// このResourceHandleへのNodeからのアクセスを順にリストアップ.
 					ResourceHandleAccessFromNode access_flow_part = {};
 					access_flow_part.p_node_ = p_node;
 					access_flow_part.access_type = res_access.access;
-					res_access_map[res_access.handle].from_node_.push_back(access_flow_part);
 
+					// ノードからのアクセス情報を追加.
+					handle_access_info_array[handle_index].from_node_.push_back(access_flow_part);
 					// アクセスパターンタイプに追加.
-					res_access_map[res_access.handle].access_pattern_[res_access.access] = true;
+					handle_access_info_array[handle_index].access_pattern_[res_access.access] = true;
+					
 				}
 			}
-				// デバッグ表示.
-				{
-					// 各ResourceHandleへの処理順でのアクセス情報.
-					std::cout << "-Access Flow Debug" << std::endl;
-					for(auto res_access_elem : res_access_map)
-					{
-						std::cout << "	-ResourceHandle ID " << res_access_elem.first << std::endl;
-						for(auto res_access : res_access_elem.second.from_node_)
-						{
-							std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
-							std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
-						}
-					}
-				}
 				// アクセスタイプのValidation. ここで RenderTarget且つDepthStencilTarget等の許可されないアクセスチェック.
-				for(auto res_access_elem : res_access_map)
+				for(auto handle_access : handle_access_info_array)
 				{
 					if(
-						res_access_elem.second.access_pattern_[access_type::RENDER_TARTGET]
+						handle_access.access_pattern_[access_type::RENDER_TARTGET]
 						&&
-						res_access_elem.second.access_pattern_[access_type::DEPTH_TARGET]
+						handle_access.access_pattern_[access_type::DEPTH_TARGET]
 						)
 					{
 						std::cout << u8"RenderTarget と DepthStencilTarget を同時に指定することは不許可." << std::endl;
@@ -358,40 +381,70 @@ namespace ngl
 				}
 
 			
-			// Sequence上のユニークなハンドル毎にPoolから実リソースを割り当て.
-			std::unordered_map<ResourceHandleDataType, int> unique_id_2_res_inst_id = {};
-			for(auto res_access_elem : res_access_map)
+			// リソースハンドル毎のアクセス期間を計算.
+			std::vector<TaskStage> handle_life_first_array(handle_counter);
+			std::vector<TaskStage> handle_life_last_array(handle_counter);
+			for(auto handle_index = 0; handle_index < handle_access_info_array.size(); ++handle_index)
 			{
-				const ResourceHandle res_handle = ResourceHandle(res_access_elem.first);
+				TaskStage stage_first = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};// 最大値初期化.
+				TaskStage stage_last = {std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};// 最小値初期化.
+
+				for(const auto access_node : handle_access_info_array[handle_index].from_node_)
+				{
+					const int node_pos = GetNodeSequencePosition(access_node.p_node_);
+					stage_first = std::min(stage_first, node_stage_array[node_pos]);// operatorオーバーロード解決.
+					stage_last = std::max(stage_last, node_stage_array[node_pos]);
+				}
+
+				handle_life_first_array[handle_index] = stage_first;// このハンドルへの最初のアクセス位置
+				handle_life_last_array[handle_index] = stage_last;// このハンドルへの最後のアクセス位置
+			}
+			
+
+			// TODO. 外部依存ハンドルのアクセス期間の補正.
+			//	外部リソースの開始アクセスをシーケンス先頭に補正したり, 外部出力リソースの終端アクセスをシーケンス末尾に補正するといった処理をする.
+
+			
+
+			
+			// Sequence上のユニークなハンドル毎にPoolから実リソースを割り当て.
+			std::unordered_map<ResourceHandleDataType, int> handle_2_res_inst_id = {};
+			for(auto handle_index : handle_index_map)
+			{
+				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
+				const auto handle_id = handle_index.second;
+				
 				// SwapChainは外部供給である点に注意. その他外部リソース登録等も考慮が必要.
 				
-				const auto handle_unique_id = res_handle;
 				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
-				if(unique_id_2_res_inst_id.end() == unique_id_2_res_inst_id.find(handle_unique_id))
+				if(handle_2_res_inst_id.end() == handle_2_res_inst_id.find(res_handle))
 				{
 					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
 					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
+
+					const ResourceHandleAccessInfo& handle_access = handle_access_info_array[handle_id];
 
 					if(!res_handle.detail.is_swapchain)
 					{
 						// Swapchainではない通常リソース.
 						
-						const auto require_desc = res_desc_map_[res_access_elem.first];
+						const auto require_desc = res_desc_map_[res_handle];
 
 						int concrete_w = res_base_width_;
 						int concrete_h = res_base_height_;
 						// MEMO ここで相対サイズモードの場合はスケールされたサイズになるが, このまま要求して新規生成された場合小さいサイズで作られて使いまわしされにくいものになる懸念が多少ある.
 						require_desc.GetConcreteTextureSize(res_base_width_, res_base_height_, concrete_w, concrete_h);
 
+						// アクセスタイプでUsageを決定. 同時指定が不可能なパターンのチェックはこれ以前に実行している予定.
 						ACCESS_TYPE_MASK usage_mask = 0;
 						{
-							if(res_access_elem.second.access_pattern_[access_type::RENDER_TARTGET])
+							if(handle_access.access_pattern_[access_type::RENDER_TARTGET])
 								usage_mask |= access_type_mask::RENDER_TARTGET;
-							if(res_access_elem.second.access_pattern_[access_type::DEPTH_TARGET])
+							if(handle_access.access_pattern_[access_type::DEPTH_TARGET])
 								usage_mask |= access_type_mask::DEPTH_TARGET;
-							if(res_access_elem.second.access_pattern_[access_type::UAV])
+							if(handle_access.access_pattern_[access_type::UAV])
 								usage_mask |= access_type_mask::UAV;
-							if(res_access_elem.second.access_pattern_[access_type::SHADER_READ])
+							if(handle_access.access_pattern_[access_type::SHADER_READ])
 								usage_mask |= access_type_mask::SHADER_READ;
 						}
 					
@@ -408,13 +461,13 @@ namespace ngl
 						// 貸出設定.
 						tex_instance_pool_[res_inst_id].lending_ = true;
 					
-						unique_id_2_res_inst_id[handle_unique_id] = res_inst_id;// ハンドル側のIDから実リソースを引けるように登録.
+						handle_2_res_inst_id[res_handle] = res_inst_id;// ハンドル側のIDから実リソースを引けるように登録.
 					}
 					else
 					{
 						// Swapchainの場合.
 						// 一旦無効にしておく.
-						unique_id_2_res_inst_id[handle_unique_id] = -1;// ハンドル側のIDから実リソースを引けるように登録.
+						handle_2_res_inst_id[res_handle] = -1;// ハンドル側のIDから実リソースを引けるように登録.
 					}
 				}
 			}
@@ -423,6 +476,27 @@ namespace ngl
 			//	Sequenceの時系列に沿って unique_id_2_res_inst_idで割り当てた tex_instance_pool_ のリソースの各Node時点でのステートを計算.
 			//
 
+			
+			// デバッグ表示.
+			{
+				// 各ResourceHandleへの処理順でのアクセス情報.
+				std::cout << "-Access Flow Debug" << std::endl;
+				for(auto handle_index : handle_index_map)
+				{
+					const auto& lifetime_first = handle_life_first_array[handle_index.second];
+					const auto& lifetime_last = handle_life_last_array[handle_index.second];
+						
+					std::cout << "	-ResourceHandle ID " << handle_index.first << std::endl;
+					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
+					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << "/" << static_cast<int>(lifetime_last.stage_) << std::endl;
+					for(auto res_access : handle_access_info_array[handle_index.second].from_node_)
+					{
+						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
+						std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
+					}
+				}
+			}
+			
 			return true;
 		}
 
