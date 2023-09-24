@@ -81,15 +81,15 @@ namespace ngl
 		{
 			// Node->Handle&AccessTypeのMap登録.
 			{
-				if(node_res_usage_map_.end() == node_res_usage_map_.find(&node))
+				if(node_handle_usage_map_.end() == node_handle_usage_map_.find(&node))
 				{
-					node_res_usage_map_[&node] = {};
+					node_handle_usage_map_[&node] = {};
 				}
 
-				NodeResourceUsageInfo push_info = {};
+				NodeHandleUsageInfo push_info = {};
 				push_info.handle = res_handle;
 				push_info.access = access_type;
-				node_res_usage_map_[&node].push_back(push_info);
+				node_handle_usage_map_[&node].push_back(push_info);
 			}
 
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
@@ -108,7 +108,7 @@ namespace ngl
 			// keyで既存リソースから検索または新規生成.
 					
 			// poolから検索.
-			int res_inst_id = -1;
+			int res_id = -1;
 			for(int i = 0; i < tex_instance_pool_.size(); ++i)
 			{
 				// 要求アクセスステージに対してアクセス期間が終わっていなければ再利用不可能.
@@ -151,12 +151,12 @@ namespace ngl
 				}
 
 				// 再利用可能なリソース発見.
-				res_inst_id = i;
+				res_id = i;
 				break;
 			}
 
 			// 新規生成.
-			if(0 > res_inst_id)
+			if(0 > res_id)
 			{
 				rhi::TextureDep::Desc desc = {};
 				rhi::ResourceState init_state = rhi::ResourceState::General;
@@ -254,7 +254,7 @@ namespace ngl
 					new_pool_elem.global_begin_state_ = init_state;
 					new_pool_elem.global_end_state_ = init_state;
 				}
-				res_inst_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
+				res_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
 				tex_instance_pool_.push_back(new_pool_elem);//登録.
 			}
 
@@ -262,10 +262,10 @@ namespace ngl
 			if(p_access_stage_for_reuse)
 			{
 				// アクセス期間による再利用を有効にしている場合は, 最終アクセスステージリソースは必ず引数のアクセスステージよりも前のもののはず.
-				assert(tex_instance_pool_[res_inst_id].last_access_stage_ < (*p_access_stage_for_reuse));
+				assert(tex_instance_pool_[res_id].last_access_stage_ < (*p_access_stage_for_reuse));
 			}
 
-			return res_inst_id;
+			return res_id;
 		}
 		
 
@@ -325,14 +325,14 @@ namespace ngl
 				for(int sequence_id = 0; sequence_id < node_sequence_.size(); ++sequence_id)
 				{
 					ITaskNode* p_node = node_sequence_[sequence_id];
-					assert(node_res_usage_map_.end() != node_res_usage_map_.find(p_node));// ありえない.
+					assert(node_handle_usage_map_.end() != node_handle_usage_map_.find(p_node));// ありえない.
 
 					// Nodeが同じHandleに対して重複したRegisterを指定ないかチェック.
-					for(int i = 0; i < node_res_usage_map_[p_node].size() - 1; ++i)
+					for(int i = 0; i < node_handle_usage_map_[p_node].size() - 1; ++i)
 					{
-						for(int j = i + 1; j < node_res_usage_map_[p_node].size(); ++j)
+						for(int j = i + 1; j < node_handle_usage_map_[p_node].size(); ++j)
 						{
-							if(node_res_usage_map_[p_node][i].handle == node_res_usage_map_[p_node][j].handle)
+							if(node_handle_usage_map_[p_node][i].handle == node_handle_usage_map_[p_node][j].handle)
 							{
 								std::cout << u8"[RenderTaskGraphBuilder][Validation Error] 同一リソースへの重複アクセス登録." <<std::endl;
 								assert(false);
@@ -367,18 +367,18 @@ namespace ngl
 
 			// 存在するハンドル毎に仮のユニークインデックスを割り振る. ランダムアクセスのため.
 			std::unordered_map<ResourceHandleDataType, int> handle_index_map = {};
-			int handle_counter = 0;
+			int handle_count = 0;
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
-				for(auto& res_access : node_res_usage_map_[p_node])
+				for(auto& res_access : node_handle_usage_map_[p_node])
 				{
 					if(handle_index_map.end() == handle_index_map.find(res_access.handle))
 					{
 						// このResourceHandleの要素が未登録なら新規.
-						handle_index_map[res_access.handle] = handle_counter;
-						++handle_counter;
+						handle_index_map[res_access.handle] = handle_count;
+						++handle_count;
 					}
 				}
 			}
@@ -396,12 +396,12 @@ namespace ngl
 				std::vector<ResourceHandleAccessFromNode> from_node_ = {};
 			};
 			// リソースハンドルへのアクセスを時系列で収集.
-			std::vector<ResourceHandleAccessInfo> handle_access_info_array(handle_counter);
+			std::vector<ResourceHandleAccessInfo> handle_access_info_array(handle_count);
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
-				for(auto& res_access : node_res_usage_map_[p_node])
+				for(auto& res_access : node_handle_usage_map_[p_node])
 				{
 					const auto handle_index = handle_index_map[res_access.handle];
 					
@@ -434,8 +434,8 @@ namespace ngl
 
 			
 			// リソースハンドル毎のアクセス期間を計算.
-			std::vector<TaskStage> handle_life_first_array(handle_counter);
-			std::vector<TaskStage> handle_life_last_array(handle_counter);
+			std::vector<TaskStage> handle_life_first_array(handle_count);
+			std::vector<TaskStage> handle_life_last_array(handle_count);
 			for(auto handle_index = 0; handle_index < handle_access_info_array.size(); ++handle_index)
 			{
 				TaskStage stage_first = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};// 最大値初期化.
@@ -461,7 +461,7 @@ namespace ngl
 			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
-			std::vector<int> handle_res_inst_id_array(handle_counter, -1);// 無効値-1初期化.
+			std::vector<int> handle_res_id_array(handle_count, -1);// 無効値-1初期化.
 			for(auto handle_index : handle_index_map)
 			{
 				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
@@ -470,7 +470,7 @@ namespace ngl
 				// SwapChainは外部供給である点に注意. その他外部リソース登録等も考慮が必要.
 				
 				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
-				if(0 > handle_res_inst_id_array[handle_id])
+				if(0 > handle_res_id_array[handle_id])
 				{
 					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
 					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
@@ -519,28 +519,141 @@ namespace ngl
 #endif
 
 						// 割当可能なリソース検索または新規生成.
-						int res_inst_id = GetOrCreateResourceFromPool(device, search_key, p_request_access_stage);
-						assert(0 <= res_inst_id);// 必ず有効なIDが帰るはず.
+						int res_id = GetOrCreateResourceFromPool(device, search_key, p_request_access_stage);
+						assert(0 <= res_id);// 必ず有効なIDが帰るはず.
 
 						// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
-						tex_instance_pool_[res_inst_id].last_access_stage_ = handle_life_last_array[handle_id];
+						tex_instance_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
 
 						// ハンドルから実リソースを引けるように登録.
-						handle_res_inst_id_array[handle_id] = res_inst_id;
+						handle_res_id_array[handle_id] = res_id;
 					}
 					else
 					{
 						// Swapchainの場合.
 						// 一旦無効にしておく.
-						handle_res_inst_id_array[handle_id] = -1;
+						handle_res_id_array[handle_id] = -1;
 					}
 				}
 			}
 
-			// TODO.
-			//	Sequenceの時系列に沿って unique_id_2_res_inst_idで割り当てた tex_instance_pool_ のリソースの各Node時点でのステートを計算.
-			//
+			// Graph上で割り当てられた有効なリソースIDから密なリニアインデックスへのマップ. 有効リソースID毎の情報をワークバッファ上で操作するため.
+			std::unordered_map<int, int> res_id_2_linear_map = {};
+			// 有効リソースリニアインデックスからリソースIDへのマッピングをする配列.
+			std::vector<int> res_linear_2_id_array = {};
+			// Graph上で有効な実リソース数.
+			int valid_res_count = 0;
+			for(const auto& res_id : handle_res_id_array)
+			{
+				if(res_id_2_linear_map.end() == res_id_2_linear_map.find(res_id))
+				{
+					res_id_2_linear_map[res_id] = valid_res_count;
+					res_linear_2_id_array.push_back(res_id);
+					++valid_res_count;
+				}
+			}
 
+			// TODO.
+			//	各Node時点でのリソースステートを計算.
+			//
+			std::vector<std::vector<const ITaskNode*>> res_access_node_array(valid_res_count);
+			for(const auto* p_node : node_sequence_)
+			{
+				const auto& node_handles = node_handle_usage_map_[p_node];
+				for(const auto& access_info : node_handles)
+				{
+					// access_info.access;
+					const auto handle_id = handle_index_map[access_info.handle];
+					const auto res_id = handle_res_id_array[handle_id];
+
+					const auto res_index = res_id_2_linear_map[res_id];
+
+					// リソースに対して時系列でのアクセスNodeリスト.
+					res_access_node_array[res_index].push_back(p_node);
+				}
+			}
+
+			struct NodeHandleState
+			{
+				rhi::ResourceState prev_ = {};
+				rhi::ResourceState next_ = {};
+			};
+			// 各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報. 多段Map.
+			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleDataType, NodeHandleState>> node_handle_state_ = {};
+			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
+			{
+				const int res_id = res_linear_2_id_array[res_index];
+				rhi::ResourceState begin_state = {};
+				if(0 <= res_id)
+				{
+					begin_state = tex_instance_pool_[res_id].global_begin_state_;
+				}
+				else
+				{
+					// TODO. ここはSwapchain等の外部リソース依存の箇所なので登録時に一緒に指定された開始ステートとなるはず.
+					begin_state = rhi::ResourceState::General;
+				}
+				
+				rhi::ResourceState cur_state = begin_state;
+				for(const auto* p_node : res_access_node_array[res_index])
+				{
+					for(const auto handle : node_handle_usage_map_[p_node])
+					{
+						const int handle_index = handle_index_map[handle.handle];
+						if(res_id == handle_res_id_array[handle_index])
+						{
+							// TODO
+							rhi::ResourceState next_state = {};
+							if(access_type::RENDER_TARTGET == handle.access)
+							{
+								next_state = rhi::ResourceState::RenderTarget;
+							}
+							else if(access_type::DEPTH_TARGET == handle.access)
+							{
+								next_state = rhi::ResourceState::DepthWrite;
+							}
+							else if(access_type::UAV == handle.access)
+							{
+								next_state = rhi::ResourceState::UnorderedAccess;
+							}
+							else if(access_type::SHADER_READ == handle.access)
+							{
+								next_state = rhi::ResourceState::ShaderRead;
+							}
+							else
+							{
+								assert(false);
+							}
+							
+							// このリソースに対してこのnode時点では cur_state -> next_state となる.
+							// TODO.
+							NodeHandleState node_handle_state = {};
+							{
+								node_handle_state.prev_ = cur_state;
+								node_handle_state.next_ = next_state;
+							}
+							node_handle_state_[p_node][handle.handle] = node_handle_state;
+							
+							// 更新.
+							cur_state = next_state;
+							
+							break;
+						}
+					}
+				}
+
+				// 最終ステートを保存.
+				if(0 <= res_id)
+				{
+					tex_instance_pool_[res_id].global_end_state_ = cur_state;
+				}
+				else
+				{
+					// TODO. ここはSwapchain等の外部リソース依存の箇所なので適切な変数に保存する.
+				}
+				
+			}
+			
 			
 			// デバッグ表示.
 			{
@@ -553,17 +666,17 @@ namespace ngl
 					const auto& lifetime_first = handle_life_first_array[handle_id];
 					const auto& lifetime_last = handle_life_last_array[handle_id];
 
-					const auto res_inst_id = handle_res_inst_id_array[handle_id];
-					const auto res_inst = (0 <= res_inst_id)? tex_instance_pool_[res_inst_id] : TextureInstancePoolElement();
+					const auto res_id = handle_res_id_array[handle_id];
+					const auto res = (0 <= res_id)? tex_instance_pool_[res_id] : TextureInstancePoolElement();
 						
 					std::cout << "	-ResourceHandle ID " << handle_index.first << std::endl;
 					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
 					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << "/" << static_cast<int>(lifetime_last.stage_) << std::endl;
 
-					std::cout << "		-ResourceInstance" << std::endl;
-					std::cout << "			-id " << res_inst_id << std::endl;
-					if(res_inst.tex_.IsValid())
-						std::cout << "			-ptr " << res_inst.tex_.Get() << std::endl;
+					std::cout << "		-Resource" << std::endl;
+					std::cout << "			-id " << res_id << std::endl;
+					if(res.tex_.IsValid())
+						std::cout << "			-ptr " << res.tex_.Get() << std::endl;
 					else
 						std::cout << "			-ptr " << nullptr << std::endl;// Swapchain等の外部リソース.
 					

@@ -270,16 +270,10 @@ namespace ngl
 		//  
 		struct RenderTaskGraphBuilder
 		{
-			struct ResourceAccessInfo
+			struct NodeHandleUsageInfo
 			{
-				const ITaskNode*		p_node{};
-				ACCESS_TYPE				access{};
-			};
-			
-			struct NodeResourceUsageInfo
-			{
-				ResourceHandle			handle{};
-				ACCESS_TYPE				access{};
+				ResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
+				ACCESS_TYPE				access{};// あるNodeから上記Handleがどのアクセスタイプで利用されたか.
 			};
 
 			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
@@ -316,7 +310,7 @@ namespace ngl
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
 			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
 			
-			std::unordered_map<const ITaskNode*, std::vector<NodeResourceUsageInfo>> node_res_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
+			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
 			
 			// ハンドル毎のタイムライン上での位置を示す情報を生成.
