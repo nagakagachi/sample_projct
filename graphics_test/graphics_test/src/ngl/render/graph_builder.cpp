@@ -461,7 +461,7 @@ namespace ngl
 			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
-			std::unordered_map<ResourceHandleDataType, int> handle_2_res_inst_id = {};
+			std::vector<int> handle_res_inst_id_array(handle_counter, -1);// 無効値-1初期化.
 			for(auto handle_index : handle_index_map)
 			{
 				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
@@ -470,7 +470,7 @@ namespace ngl
 				// SwapChainは外部供給である点に注意. その他外部リソース登録等も考慮が必要.
 				
 				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
-				if(handle_2_res_inst_id.end() == handle_2_res_inst_id.find(res_handle))
+				if(0 > handle_res_inst_id_array[handle_id])
 				{
 					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
 					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
@@ -526,13 +526,13 @@ namespace ngl
 						tex_instance_pool_[res_inst_id].last_access_stage_ = handle_life_last_array[handle_id];
 
 						// ハンドルから実リソースを引けるように登録.
-						handle_2_res_inst_id[res_handle] = res_inst_id;
+						handle_res_inst_id_array[handle_id] = res_inst_id;
 					}
 					else
 					{
 						// Swapchainの場合.
 						// 一旦無効にしておく.
-						handle_2_res_inst_id[res_handle] = -1;// ハンドル側のIDから実リソースを引けるように登録.
+						handle_res_inst_id_array[handle_id] = -1;
 					}
 				}
 			}
@@ -548,10 +548,12 @@ namespace ngl
 				std::cout << "-Access Flow Debug" << std::endl;
 				for(auto handle_index : handle_index_map)
 				{
-					const auto& lifetime_first = handle_life_first_array[handle_index.second];
-					const auto& lifetime_last = handle_life_last_array[handle_index.second];
+					const auto handle_id = handle_index.second;
+					
+					const auto& lifetime_first = handle_life_first_array[handle_id];
+					const auto& lifetime_last = handle_life_last_array[handle_id];
 
-					const auto res_inst_id = handle_2_res_inst_id[handle_index.first];
+					const auto res_inst_id = handle_res_inst_id_array[handle_id];
 					const auto res_inst = (0 <= res_inst_id)? tex_instance_pool_[res_inst_id] : TextureInstancePoolElement();
 						
 					std::cout << "	-ResourceHandle ID " << handle_index.first << std::endl;
@@ -565,7 +567,7 @@ namespace ngl
 					else
 						std::cout << "			-ptr " << nullptr << std::endl;// Swapchain等の外部リソース.
 					
-					for(auto res_access : handle_access_info_array[handle_index.second].from_node_)
+					for(auto res_access : handle_access_info_array[handle_id].from_node_)
 					{
 						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
 						std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
