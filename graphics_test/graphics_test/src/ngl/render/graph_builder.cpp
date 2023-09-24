@@ -12,6 +12,43 @@ namespace ngl
 	namespace rtg
 	{
 
+		
+		// オペレータ.
+		constexpr bool RenderTaskGraphBuilder::TaskStage::operator<(const TaskStage arg) const
+		{
+			if(stage_ < arg.stage_)
+				return true;
+			else if(stage_ == arg.stage_)
+				return step_ < arg.step_;
+			return false;
+		}
+		constexpr bool RenderTaskGraphBuilder::TaskStage::operator>(const TaskStage arg) const
+		{
+			if(stage_ > arg.stage_)
+				return true;
+			else if(stage_ == arg.stage_)
+				return step_ > arg.step_;
+			return false;
+		}
+		constexpr bool RenderTaskGraphBuilder::TaskStage::operator<=(const TaskStage arg) const
+		{
+			if(stage_ < arg.stage_)
+				return true;
+			else if(stage_ == arg.stage_)
+				return step_ <= arg.step_;
+			return false;
+		}
+		constexpr bool RenderTaskGraphBuilder::TaskStage::operator>=(const TaskStage arg) const
+		{
+			if(stage_ > arg.stage_)
+				return true;
+			else if(stage_ == arg.stage_)
+				return step_ >= arg.step_;
+			return false;
+		}
+
+		
+
 		// リソースハンドルを生成.
 		ResourceHandle RenderTaskGraphBuilder::CreateResource(ResourceDesc2D res_desc)
 		{
@@ -61,18 +98,24 @@ namespace ngl
 
 
 		// Poolからリソース検索または新規生成.
-		int RenderTaskGraphBuilder::GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key)
+		int RenderTaskGraphBuilder::GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse)
 		{
+			constexpr TaskStage k_firstest_stage = {std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
+			
+			//	アクセスステージが引数で渡されなかった場合は未割り当てリソース以外を割り当てないようにk_firstest_stage扱いとする.
+			const TaskStage require_access_stage = (p_access_stage_for_reuse)? ((*p_access_stage_for_reuse)) : k_firstest_stage;
+			
 			// keyで既存リソースから検索または新規生成.
 					
 			// poolから検索.
 			int res_inst_id = -1;
 			for(int i = 0; i < tex_instance_pool_.size(); ++i)
 			{
-				// 貸出可能か.
-				if(tex_instance_pool_[i].lending_)
+				// 要求アクセスステージに対してアクセス期間が終わっていなければ再利用不可能.
+				//	MEMO. 新規生成した実リソースの last_access_stage_ を負のstageで初期化しておくこと.
+				if(tex_instance_pool_[i].last_access_stage_ >= require_access_stage)
 					continue;
-						
+				
 				// フォーマットチェック.
 				if(tex_instance_pool_[i].tex_->GetFormat() != key.format)
 					continue;
@@ -199,6 +242,9 @@ namespace ngl
 
 				TextureInstancePoolElement new_pool_elem = {};
 				{
+					// 新規生成した実リソースは最終アクセスステージを負の最大にしておく(ステージ0のリクエストに割当できるように).
+					new_pool_elem.last_access_stage_ = k_firstest_stage;
+					
 					new_pool_elem.tex_ = new_tex;
 					new_pool_elem.rtv_ = new_rtv;
 					new_pool_elem.dsv_ = new_dsv;
@@ -210,6 +256,13 @@ namespace ngl
 				}
 				res_inst_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
 				tex_instance_pool_.push_back(new_pool_elem);//登録.
+			}
+
+			// チェック
+			if(p_access_stage_for_reuse)
+			{
+				// アクセス期間による再利用を有効にしている場合は, 最終アクセスステージリソースは必ず引数のアクセスステージよりも前のもののはず.
+				assert(tex_instance_pool_[res_inst_id].last_access_stage_ < (*p_access_stage_for_reuse));
 			}
 
 			return res_inst_id;
@@ -290,18 +343,6 @@ namespace ngl
 			}
 
 			
-			// SequenceのNodeを順に処理して実リソースの割当とそのステート遷移確定をしていく.
-			struct ResourceHandleAccessFromNode
-			{
-				const ITaskNode*	p_node_ = {};
-				ACCESS_TYPE			access_type = access_type::INVALID;
-			};
-			struct ResourceHandleAccessInfo
-			{
-				bool access_pattern_[access_type::_MAX] = {};
-				std::vector<ResourceHandleAccessFromNode> from_node_ = {};
-			};
-
 
 			std::vector<TaskStage> node_stage_array = {};// Sequence上のインデックスからタスクステージ情報を引く.
 			{
@@ -343,6 +384,17 @@ namespace ngl
 			}
 
 			
+			// SequenceのNodeを順に処理して実リソースの割当とそのステート遷移確定をしていく.
+			struct ResourceHandleAccessFromNode
+			{
+				const ITaskNode*	p_node_ = {};
+				ACCESS_TYPE			access_type = access_type::INVALID;
+			};
+			struct ResourceHandleAccessInfo
+			{
+				bool access_pattern_[access_type::_MAX] = {};
+				std::vector<ResourceHandleAccessFromNode> from_node_ = {};
+			};
 			// リソースハンドルへのアクセスを時系列で収集.
 			std::vector<ResourceHandleAccessInfo> handle_access_info_array(handle_counter);
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
@@ -403,11 +455,12 @@ namespace ngl
 
 			// TODO. 外部依存ハンドルのアクセス期間の補正.
 			//	外部リソースの開始アクセスをシーケンス先頭に補正したり, 外部出力リソースの終端アクセスをシーケンス末尾に補正するといった処理をする.
-
+			//	ヒストリリソースの解決などをどうするか.
 			
 
 			
-			// Sequence上のユニークなハンドル毎にPoolから実リソースを割り当て.
+			// リソースハンドル毎にPoolから実リソースを割り当てる.
+			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
 			std::unordered_map<ResourceHandleDataType, int> handle_2_res_inst_id = {};
 			for(auto handle_index : handle_index_map)
 			{
@@ -449,19 +502,31 @@ namespace ngl
 						}
 					
 						ResourceSearchKey search_key = {};
-						search_key.format = require_desc.desc.format;
-						search_key.require_width_ = concrete_w;
-						search_key.require_height_ = concrete_h;
-						search_key.usage_ = usage_mask;
+						{
+							search_key.format = require_desc.desc.format;
+							search_key.require_width_ = concrete_w;
+							search_key.require_height_ = concrete_h;
+							search_key.usage_ = usage_mask;
+						}
 
-						// リソース割当.
-						int res_inst_id = GetOrCreateResourceFromPool(device, search_key);
-						assert(0 <= res_inst_id);// ありえない.
+#if 1
+						// このハンドルの開始アクセスステージで再利用可能なものを検索する.
+						const TaskStage first_stage = handle_life_first_array[handle_id];
+						const TaskStage* p_request_access_stage = &first_stage;
+#else
+						// テスト用. 再利用せずに未割り当てのみ許可する場合.
+						const TaskStage* p_request_access_stage = nullptr;
+#endif
 
-						// 貸出設定.
-						tex_instance_pool_[res_inst_id].lending_ = true;
-					
-						handle_2_res_inst_id[res_handle] = res_inst_id;// ハンドル側のIDから実リソースを引けるように登録.
+						// 割当可能なリソース検索または新規生成.
+						int res_inst_id = GetOrCreateResourceFromPool(device, search_key, p_request_access_stage);
+						assert(0 <= res_inst_id);// 必ず有効なIDが帰るはず.
+
+						// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
+						tex_instance_pool_[res_inst_id].last_access_stage_ = handle_life_last_array[handle_id];
+
+						// ハンドルから実リソースを引けるように登録.
+						handle_2_res_inst_id[res_handle] = res_inst_id;
 					}
 					else
 					{
@@ -485,10 +550,21 @@ namespace ngl
 				{
 					const auto& lifetime_first = handle_life_first_array[handle_index.second];
 					const auto& lifetime_last = handle_life_last_array[handle_index.second];
+
+					const auto res_inst_id = handle_2_res_inst_id[handle_index.first];
+					const auto res_inst = (0 <= res_inst_id)? tex_instance_pool_[res_inst_id] : TextureInstancePoolElement();
 						
 					std::cout << "	-ResourceHandle ID " << handle_index.first << std::endl;
 					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
 					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << "/" << static_cast<int>(lifetime_last.stage_) << std::endl;
+
+					std::cout << "		-ResourceInstance" << std::endl;
+					std::cout << "			-id " << res_inst_id << std::endl;
+					if(res_inst.tex_.IsValid())
+						std::cout << "			-ptr " << res_inst.tex_.Get() << std::endl;
+					else
+						std::cout << "			-ptr " << nullptr << std::endl;// Swapchain等の外部リソース.
+					
 					for(auto res_access : handle_access_info_array[handle_index.second].from_node_)
 					{
 						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;

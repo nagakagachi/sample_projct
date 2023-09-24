@@ -318,9 +318,34 @@ namespace ngl
 			
 			std::unordered_map<const ITaskNode*, std::vector<NodeResourceUsageInfo>> node_res_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
+			
+			// ハンドル毎のタイムライン上での位置を示す情報を生成.
+			// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
+			// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
+			struct TaskStage
+			{
+				constexpr TaskStage() = default;
+
+				int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+				int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+
+				// オペレータ.
+				constexpr bool operator<(const TaskStage arg) const;
+				constexpr bool operator>(const TaskStage arg) const;
+				constexpr bool operator<=(const TaskStage arg) const;
+				constexpr bool operator>=(const TaskStage arg) const;
+			};
+			
 			struct TextureInstancePoolElement
 			{
-				bool lending_		= false;// 貸出中の場合true.
+				TextureInstancePoolElement() = default;
+				TextureInstancePoolElement(const TextureInstancePoolElement& arg)
+				{
+					*this = arg;
+				}
+				
+				TaskStage last_access_stage_ = {};
+				
 				rhi::ResourceState	global_begin_state_ = rhi::ResourceState::General;// Graph開始時点のステート.
 				rhi::ResourceState	global_end_state_ = rhi::ResourceState::General;// Graph終了時点のステート.
 				
@@ -339,64 +364,6 @@ namespace ngl
 			
 			// ------------------------------------------
 			
-			// ハンドル毎のタイムライン上での位置を示す情報を生成.
-			// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
-			// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
-			struct TaskStage
-			{
-				/*
-				struct Detail
-				{
-					uint32_t step_ = 0;// 下位ビット.
-					uint32_t stage_ = 0;// 上位ビット.
-				};
-				
-				union
-				{
-					Detail	 detail {};
-					uint64_t stage_step_;// 上位ビットにstage.
-				};
-				*/
-
-				constexpr TaskStage() = default;
-
-				int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
-				int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
-
-				// オペレータ.
-				constexpr bool operator<(const TaskStage arg) const
-				{
-					if(stage_ < arg.stage_)
-						return true;
-					else if(stage_ == arg.stage_)
-						return step_ < arg.step_;
-					return false;
-				}
-				constexpr bool operator>(const TaskStage arg) const
-				{
-					if(stage_ > arg.stage_)
-						return true;
-					else if(stage_ == arg.stage_)
-						return step_ > arg.step_;
-					return false;
-				}
-				constexpr bool operator<=(const TaskStage arg) const
-				{
-					if(stage_ < arg.stage_)
-						return true;
-					else if(stage_ == arg.stage_)
-						return step_ <= arg.step_;
-					return false;
-				}
-				constexpr bool operator>=(const TaskStage arg) const
-				{
-					if(stage_ > arg.stage_)
-						return true;
-					else if(stage_ == arg.stage_)
-						return step_ >= arg.step_;
-					return false;
-				}
-			};
 			
 			// 実リソースの割当.
 			struct ResourceSearchKey
@@ -406,8 +373,10 @@ namespace ngl
 				int require_height_ = {};
 				ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
 			};
-			// Poolからリソース検索または新規生成. 戻り血は実リソースID.
-			int GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key);
+			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
+			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
+			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
+			int GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
 		};
 
 		

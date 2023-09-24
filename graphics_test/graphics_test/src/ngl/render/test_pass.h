@@ -370,6 +370,12 @@ namespace ngl::render
 					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
 					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
 					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);
+
+
+					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
+					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+					
 				}
 
 				// 実際のレンダリング処理.
@@ -404,6 +410,10 @@ namespace ngl::render
 					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::access_type::RENDER_TARTGET);
+					
+					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
+					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 				}
 
 				// 実際のレンダリング処理.
