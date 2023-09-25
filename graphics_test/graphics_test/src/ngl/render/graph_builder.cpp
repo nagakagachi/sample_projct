@@ -251,8 +251,8 @@ namespace ngl
 					new_pool_elem.uav_ = new_uav;
 					new_pool_elem.srv_ = new_srv;
 						
-					new_pool_elem.global_begin_state_ = init_state;
-					new_pool_elem.global_end_state_ = init_state;
+					new_pool_elem.cached_state_ = init_state;// 新規生成したらその初期ステートを保持.
+					new_pool_elem.prev_cached_state_ = init_state;
 				}
 				res_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
 				tex_instance_pool_.push_back(new_pool_elem);//登録.
@@ -553,9 +553,9 @@ namespace ngl
 				}
 			}
 
-			// TODO.
-			//	各Node時点でのリソースステートを計算.
-			//
+			
+			//	各Node時点での保持Handleのリソースステートを計算.
+			// まず時系列順で実リソースへのアクセスNodeをリストアップ.
 			std::vector<std::vector<const ITaskNode*>> res_access_node_array(valid_res_count);
 			for(const auto* p_node : node_sequence_)
 			{
@@ -576,9 +576,9 @@ namespace ngl
 			struct NodeHandleState
 			{
 				rhi::ResourceState prev_ = {};
-				rhi::ResourceState next_ = {};
+				rhi::ResourceState curr_ = {};
 			};
-			// 各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報. 多段Map.
+			// 各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報を構築.
 			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleDataType, NodeHandleState>> node_handle_state_ = {};
 			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
 			{
@@ -586,15 +586,15 @@ namespace ngl
 				rhi::ResourceState begin_state = {};
 				if(0 <= res_id)
 				{
-					begin_state = tex_instance_pool_[res_id].global_begin_state_;
+					begin_state = tex_instance_pool_[res_id].cached_state_;// 実リソースのCompile時点のステートから開始.
 				}
 				else
 				{
 					// TODO. ここはSwapchain等の外部リソース依存の箇所なので登録時に一緒に指定された開始ステートとなるはず.
-					begin_state = rhi::ResourceState::General;
+					begin_state = rhi::ResourceState::General;// 仮でGeneral.
 				}
 				
-				rhi::ResourceState cur_state = begin_state;
+				rhi::ResourceState curr_state = begin_state;
 				for(const auto* p_node : res_access_node_array[res_index])
 				{
 					for(const auto handle : node_handle_usage_map_[p_node])
@@ -602,7 +602,7 @@ namespace ngl
 						const int handle_index = handle_index_map[handle.handle];
 						if(res_id == handle_res_id_array[handle_index])
 						{
-							// TODO
+							// Handleへのアクセスタイプから次のrhiステートを決定.
 							rhi::ResourceState next_state = {};
 							if(access_type::RENDER_TARTGET == handle.access)
 							{
@@ -626,17 +626,16 @@ namespace ngl
 							}
 							
 							// このリソースに対してこのnode時点では cur_state -> next_state となる.
-							// TODO.
 							NodeHandleState node_handle_state = {};
 							{
-								node_handle_state.prev_ = cur_state;
-								node_handle_state.next_ = next_state;
+								node_handle_state.prev_ = curr_state;
+								node_handle_state.curr_ = next_state;
 							}
+							// Node毎のHandle時点での前回ステートと現在ステートを確定.
 							node_handle_state_[p_node][handle.handle] = node_handle_state;
 							
-							// 更新.
-							cur_state = next_state;
-							
+							// 次へ.
+							curr_state = next_state;
 							break;
 						}
 					}
@@ -645,13 +644,15 @@ namespace ngl
 				// 最終ステートを保存.
 				if(0 <= res_id)
 				{
-					tex_instance_pool_[res_id].global_end_state_ = cur_state;
+					tex_instance_pool_[res_id].prev_cached_state_ = tex_instance_pool_[res_id].cached_state_;// Compile前のステートを一応保持.
+
+					// Compile後のステートに更新.
+					tex_instance_pool_[res_id].cached_state_ = curr_state;
 				}
 				else
 				{
 					// TODO. ここはSwapchain等の外部リソース依存の箇所なので適切な変数に保存する.
 				}
-				
 			}
 			
 			
@@ -661,6 +662,7 @@ namespace ngl
 				std::cout << "-Access Flow Debug" << std::endl;
 				for(auto handle_index : handle_index_map)
 				{
+					const auto handle = ResourceHandle(handle_index.first);
 					const auto handle_id = handle_index.second;
 					
 					const auto& lifetime_first = handle_life_first_array[handle_id];
@@ -669,7 +671,7 @@ namespace ngl
 					const auto res_id = handle_res_id_array[handle_id];
 					const auto res = (0 <= res_id)? tex_instance_pool_[res_id] : TextureInstancePoolElement();
 						
-					std::cout << "	-ResourceHandle ID " << handle_index.first << std::endl;
+					std::cout << "	-ResourceHandle ID " << handle << std::endl;
 					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
 					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << "/" << static_cast<int>(lifetime_last.stage_) << std::endl;
 
@@ -682,8 +684,14 @@ namespace ngl
 					
 					for(auto res_access : handle_access_info_array[handle_id].from_node_)
 					{
+						const auto prev_state = node_handle_state_[res_access.p_node_][handle].prev_;
+						const auto curr_state = node_handle_state_[res_access.p_node_][handle].curr_;
+						
 						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
 						std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
+						// 確定したステート遷移.
+						std::cout << "			-PrevState " << static_cast<int>(prev_state) << std::endl;
+						std::cout << "			-CurrState " << static_cast<int>(curr_state) << std::endl;
 					}
 				}
 			}

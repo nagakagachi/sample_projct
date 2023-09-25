@@ -340,8 +340,8 @@ namespace ngl
 				
 				TaskStage last_access_stage_ = {};
 				
-				rhi::ResourceState	global_begin_state_ = rhi::ResourceState::General;// Graph開始時点のステート.
-				rhi::ResourceState	global_end_state_ = rhi::ResourceState::General;// Graph終了時点のステート.
+				rhi::ResourceState	cached_state_ = rhi::ResourceState::General;// GraphのCompile時点のステート.
+				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::General;// Graphの前回Compile時点のステートを一応覚えておく.
 				
 				rhi::RefTextureDep	tex_ = {};
 				rhi::RefRtvDep		rtv_ = {};
