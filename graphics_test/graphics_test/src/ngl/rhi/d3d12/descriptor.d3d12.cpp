@@ -346,7 +346,10 @@ namespace ngl
 
 				handle_increment_size_ = p_device->GetD3D12Device()->GetDescriptorHandleIncrementSize(heap_desc_.Type);
 				cpu_handle_start_ = p_heap_->GetCPUDescriptorHandleForHeapStart();
-				gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();
+				if (desc.shader_visible)
+				{
+					gpu_handle_start_ = p_heap_->GetGPUDescriptorHandleForHeapStart();// D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE指定されていないHeapでGetGPUDescriptorHandleForHeapStart呼び出しはValidationErrorとなる.
+				}
 			}
 			return true;
 		}

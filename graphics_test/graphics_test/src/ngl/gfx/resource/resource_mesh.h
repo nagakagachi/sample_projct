@@ -50,10 +50,13 @@ namespace ngl
 					return;
 
 				auto* p_d3d_commandlist = p_commandlist->GetD3D12GraphicsCommandList();
+
 				// Init Upload Buffer から DefaultHeapのBufferへコピー. StateはGeneral想定.
-				p_commandlist->ResourceBarrier(&rhi_buffer_, rhi::ResourceState::General, rhi::ResourceState::CopyDst);
+				const rhi::ResourceState buffer_state = rhi_init_state_;// 生成時のロジックで指定したステート. Bufferの初期ステートはDefaultHeapの場合?はCommonでないとValidationErrorとされるようになったので注意.
+
+				p_commandlist->ResourceBarrier(&rhi_buffer_, buffer_state, rhi::ResourceState::CopyDst);
 				p_d3d_commandlist->CopyResource(rhi_buffer_.GetD3D12Resource(), ref_upload_rhibuffer_->GetD3D12Resource());
-				p_commandlist->ResourceBarrier(&rhi_buffer_, rhi::ResourceState::CopyDst, rhi::ResourceState::General);
+				p_commandlist->ResourceBarrier(&rhi_buffer_, rhi::ResourceState::CopyDst, buffer_state);
 
 				// upload bufferを解放.
 				ref_upload_rhibuffer_.Reset();
@@ -63,6 +66,7 @@ namespace ngl
 
 			// rhi buffer for gpu.
 			rhi::BufferDep	rhi_buffer_ = {};
+			rhi::ResourceState	rhi_init_state_ = rhi::ResourceState::Common;
 			// rhi srv.
 			rhi::ShaderResourceViewDep rhi_srv = {};
 

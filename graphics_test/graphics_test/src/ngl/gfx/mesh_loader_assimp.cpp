@@ -28,59 +28,65 @@ namespace assimp
 			return ((size + (align - 1)) / align) * align;
 		}
 
-		// 生成用Lambda.
+		// 生成用.
 		auto CreateShapeDataRhiBuffer(
-				ngl::rhi::BufferDep* p_out_buffer,
-				ngl::rhi::ShaderResourceViewDep* p_out_view,
-				ngl::rhi::VertexBufferViewDep* p_out_vbv,
-				ngl::rhi::IndexBufferViewDep* p_out_ibv,
-				ngl::rhi::BufferDep* p_out_upload_buffer,
+			ngl::gfx::MeshShapeGeomBufferBase* p_mesh_geom_buffer,
+			
+			ngl::rhi::ShaderResourceViewDep* p_out_view,
+			ngl::rhi::VertexBufferViewDep* p_out_vbv,
+			ngl::rhi::IndexBufferViewDep* p_out_ibv,
 
-				ngl::rhi::DeviceDep* p_device,
-				uint32_t bind_flag, rhi::ResourceFormat view_format, int element_size_in_byte, int element_count, void* initial_data = nullptr)
+			ngl::rhi::DeviceDep* p_device,
+			uint32_t bind_flag, rhi::ResourceFormat view_format, int element_size_in_byte, int element_count, void* initial_data = nullptr)
 			-> bool
 		{
 			ngl::rhi::BufferDep::Desc buffer_desc = {};
 			// 高速化のため描画用のバッファをDefaultHeapにしてUploadBufferからコピーする対応.
 			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Default;
-			buffer_desc.initial_state = ngl::rhi::ResourceState::General;
-			// RT用のShaderResource.
-			buffer_desc.bind_flag = bind_flag | ngl::rhi::ResourceBindFlag::ShaderResource;
+			buffer_desc.initial_state = ngl::rhi::ResourceState::Common;// DefaultHeapの場合?は初期ステートがGeneralだとValidationErrorとされるようになった.
+			buffer_desc.bind_flag = bind_flag | ngl::rhi::ResourceBindFlag::ShaderResource;// Raytrace用のShaderResource.
 			buffer_desc.element_count = element_count;
 			buffer_desc.element_byte_size = element_size_in_byte;
 
-			// Upload用Bufferが必要な場合は生成.
-			if(p_out_upload_buffer)
-			{
-				auto upload_desc = buffer_desc;
-				upload_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-				upload_desc.initial_state = ngl::rhi::ResourceState::General;
 
-				if (!p_out_upload_buffer->Initialize(p_device, upload_desc))
-				{
-					assert(false);
-					return false;
-				}
-			}
-
-			if (!p_out_buffer->Initialize(p_device, buffer_desc))
+			p_mesh_geom_buffer->rhi_init_state_ = buffer_desc.initial_state;// 初期ステート保存.
+			// GPU側バッファ生成.
+			if (!p_mesh_geom_buffer->rhi_buffer_.Initialize(p_device, buffer_desc))
 			{
 				assert(false);
 				return false;
 			}
-			if (initial_data)
+
+			// Upload用Bufferが必要な場合は生成.
+			if (p_mesh_geom_buffer->ref_upload_rhibuffer_.IsValid())
 			{
-				if (void* mapped = p_out_upload_buffer->Map())
+				auto upload_desc = buffer_desc;
+				upload_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+				upload_desc.initial_state = ngl::rhi::ResourceState::General;// UploadHeapはGenericRead.
+
+				if (!p_mesh_geom_buffer->ref_upload_rhibuffer_->Initialize(p_device, upload_desc))
 				{
-					memcpy(mapped, initial_data, element_size_in_byte * element_count);
-					p_out_upload_buffer->Unmap();
+					assert(false);
+					return false;
+				}
+
+				// 初期データのコピー.
+				if (initial_data)
+				{
+					if (void* mapped = p_mesh_geom_buffer->ref_upload_rhibuffer_->Map())
+					{
+						memcpy(mapped, initial_data, element_size_in_byte * element_count);
+						p_mesh_geom_buffer->ref_upload_rhibuffer_->Unmap();
+					}
 				}
 			}
 
+			rhi::BufferDep* p_buffer = &p_mesh_geom_buffer->rhi_buffer_;
+			// Viewの生成. 引数で生成対象ポインタを指定された要素のみ.
 			bool result = true;
 			if (p_out_view)
 			{
-				if (!p_out_view->InitializeAsTyped(p_device, p_out_buffer, view_format, 0, p_out_buffer->getElementCount()))
+				if (!p_out_view->InitializeAsTyped(p_device, p_buffer, view_format, 0, p_buffer->getElementCount()))
 				{
 					assert(false);
 					result = false;
@@ -89,7 +95,7 @@ namespace assimp
 			if (p_out_vbv)
 			{
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
-				if (!p_out_vbv->Initialize(p_out_buffer, vbv_desc))
+				if (!p_out_vbv->Initialize(p_buffer, vbv_desc))
 				{
 					assert(false);
 					result = false;
@@ -98,7 +104,7 @@ namespace assimp
 			if (p_out_ibv)
 			{
 				rhi::IndexBufferViewDep::Desc ibv_desc = {};
-				if (!p_out_ibv->Initialize(p_out_buffer, ibv_desc))
+				if (!p_out_ibv->Initialize(p_buffer, ibv_desc))
 				{
 					assert(false);
 					result = false;
@@ -352,11 +358,10 @@ namespace assimp
 				mesh.position_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.position_.rhi_buffer_,
+					&mesh.position_,
 					&mesh.position_.rhi_srv,
 					&mesh.position_.rhi_vbv_,
 					nullptr,
-					mesh.position_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.position_.raw_ptr_);
 
@@ -370,11 +375,10 @@ namespace assimp
 				mesh.normal_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.normal_.rhi_buffer_,
+					&mesh.normal_,
 					&mesh.normal_.rhi_srv,
 					&mesh.normal_.rhi_vbv_,
 					nullptr,
-					mesh.normal_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.normal_.raw_ptr_);
 
@@ -390,11 +394,10 @@ namespace assimp
 				mesh.tangent_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.tangent_.rhi_buffer_,
+					&mesh.tangent_,
 					&mesh.tangent_.rhi_srv,
 					&mesh.tangent_.rhi_vbv_,
 					nullptr,
-					mesh.tangent_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.tangent_.raw_ptr_);
 
@@ -410,11 +413,10 @@ namespace assimp
 				mesh.binormal_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.binormal_.rhi_buffer_,
+					&mesh.binormal_,
 					&mesh.binormal_.rhi_srv,
 					&mesh.binormal_.rhi_vbv_,
 					nullptr,
-					mesh.binormal_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.binormal_.raw_ptr_);
 
@@ -431,11 +433,10 @@ namespace assimp
 				mesh.color_[ci].ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.color_[ci].rhi_buffer_,
+					&mesh.color_[ci],
 					&mesh.color_[ci].rhi_srv,
 					&mesh.color_[ci].rhi_vbv_,
 					nullptr,
-					mesh.color_[ci].ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R8G8B8A8_UNORM, sizeof(ngl::gfx::VertexColor), mesh.num_vertex_,
 					mesh.color_[ci].raw_ptr_);
 
@@ -451,11 +452,10 @@ namespace assimp
 				mesh.texcoord_[ci].ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.texcoord_[ci].rhi_buffer_,
+					&mesh.texcoord_[ci],
 					&mesh.texcoord_[ci].rhi_srv,
 					&mesh.texcoord_[ci].rhi_vbv_,
 					nullptr,
-					mesh.texcoord_[ci].ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32_FLOAT, sizeof(ngl::math::Vec2), mesh.num_vertex_,
 					mesh.texcoord_[ci].raw_ptr_);
 
@@ -472,11 +472,10 @@ namespace assimp
 				mesh.index_.ref_upload_rhibuffer_.Reset(new rhi::BufferDep());
 
 				CreateShapeDataRhiBuffer(
-					&mesh.index_.rhi_buffer_,
+					&mesh.index_,
 					&mesh.index_.rhi_srv,
 					nullptr,
 					&mesh.index_.rhi_vbv_,
-					mesh.index_.ref_upload_rhibuffer_.Get(),
 					p_device, ngl::rhi::ResourceBindFlag::IndexBuffer, rhi::ResourceFormat::Format_R32_UINT, sizeof(uint32_t), mesh.num_primitive_ * 3,
 					mesh.index_.raw_ptr_);
 			}

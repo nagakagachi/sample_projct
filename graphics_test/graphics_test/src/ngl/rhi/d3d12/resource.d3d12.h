@@ -35,11 +35,14 @@ namespace ngl
 				ngl::u32			element_count = 0;
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
 				ResourceHeapType	heap_type = ResourceHeapType::Default;
-				ResourceState		initial_state = ResourceState::General;
+				ResourceState		initial_state = ResourceState::Common; // 既定はCommon. Uploadヒープの場合はGeneralとする.
 
 				void SetupAsConstantBuffer(ngl::u32 size) 
 				{
-					heap_type = ngl::rhi::ResourceHeapType::Upload;
+					// CBは大抵CPU書き込みをするため Upload.
+					heap_type = rhi::ResourceHeapType::Upload;
+					initial_state = rhi::ResourceState::ConstatnBuffer;// 初期ステートでConstantBuffer指定. (Generic_Read開始でないといけないかもしれない).
+
 					bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 					element_byte_size = size;
 					element_count = 1;

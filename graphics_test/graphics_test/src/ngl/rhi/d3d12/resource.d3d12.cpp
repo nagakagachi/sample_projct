@@ -172,7 +172,9 @@ namespace ngl
 				*/
 				if (D3D12_HEAP_TYPE_UPLOAD == heap_prop.Type)
 				{
-					if (D3D12_RESOURCE_STATE_GENERIC_READ != initial_state)
+					// UploadヒープはGENERIC_READに含まれる何れかのステートである必要がある(D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFERやD3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCEなど).
+					//if (D3D12_RESOURCE_STATE_GENERIC_READ != initial_state)
+					if (0 == (D3D12_RESOURCE_STATE_GENERIC_READ | initial_state))
 					{
 						std::cout << "[ERROR] State of Upload Buffer must be ResourceState::General" << std::endl;
 						return false;

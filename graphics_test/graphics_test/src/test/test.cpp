@@ -97,18 +97,19 @@ namespace ngl_test
 			buffer_desc0.element_byte_size = sizeof(ngl::u64);
 			buffer_desc0.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 			buffer_desc0.element_count = 1;
-			buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
 			if (is_uav_test)
 			{
 				// UAV用設定.
 				buffer_desc0.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;
 				// UAVはDefaultHeap必須
 				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Default;
+				buffer_desc0.initial_state = ngl::rhi::ResourceState::Common;// 通常はCommon.
 			}
 			else
 			{
 				// CPU->GPU Uploadリソース
 				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;
+				buffer_desc0.initial_state = ngl::rhi::ResourceState::General;// UploadヒープではGeneral.
 			}
 
 			if (!buffer0.Initialize(&device, buffer_desc0))

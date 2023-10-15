@@ -107,7 +107,7 @@ namespace ngl
 			// Scratch Buffer.
 			rhi::BufferDep::Desc scratch_desc = {};
 			scratch_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess;
-			scratch_desc.initial_state = rhi::ResourceState::UnorderedAccess;
+			scratch_desc.initial_state = rhi::ResourceState::Common;// UnorderedAccessだとValidationエラー.
 			scratch_desc.heap_type = rhi::ResourceHeapType::Default;
 			scratch_desc.element_count = 1;
 			scratch_desc.element_byte_size = (u32)build_info.ScratchDataSizeInBytes;
@@ -354,7 +354,7 @@ namespace ngl
 			// Scratch Buffer.
 			rhi::BufferDep::Desc scratch_desc = {};
 			scratch_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess;
-			scratch_desc.initial_state = rhi::ResourceState::UnorderedAccess;
+			scratch_desc.initial_state = rhi::ResourceState::Common;// UnorderedAccessだとValidationエラー.
 			scratch_desc.heap_type = rhi::ResourceHeapType::Default;
 			scratch_desc.element_count = 1;
 			scratch_desc.element_byte_size = (u32)build_info.ScratchDataSizeInBytes;
