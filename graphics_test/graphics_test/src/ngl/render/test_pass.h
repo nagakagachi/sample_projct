@@ -235,12 +235,9 @@ namespace ngl::render
 		};
 
 
-		void Test1(rhi::DeviceDep& device);
-
 		void Test(rhi::DeviceDep& device)
 		{
 			GpuTaskGraphBuilder builder{};
-
 
 			auto p_prez = builder.CreateNode<PassPreZ>();
 
@@ -255,15 +252,13 @@ namespace ngl::render
 			auto p_post = builder.CreateNode<PassPost>();
 			// lighting -> post.
 			p_post->SetupGraph(p_lighting->out_lighting_);
-
-
-			Test1(device);
 			
 			return;
 		}
 
 
-		void Test1(rhi::DeviceDep& device)
+		// RenderTaskGraphのテスト.
+		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist)
 		{
 			struct TaskDepthPass : public rtg::ITaskNode
 			{
@@ -369,13 +364,12 @@ namespace ngl::render
 					h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 					h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
 					h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
-					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);
+					h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
 
 
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
-					
 				}
 
 				// 実際のレンダリング処理.
@@ -425,21 +419,40 @@ namespace ngl::render
 
 
 			rtg::RenderTaskGraphBuilder rtg_builder{};
+			{
+				auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskDepthPass>();
+				task_depth->Setup(rtg_builder);
 
-			auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskDepthPass>();
-			task_depth->Setup(rtg_builder);
+				auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<TaskGBufferPass>();
+				task_gbuffer->Setup(rtg_builder, task_depth->h_depth_);
 
-			auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<TaskGBufferPass>();
-			task_gbuffer->Setup(rtg_builder, task_depth->h_depth_);
+				auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<TaskLightPass>();
+				task_light->Setup(rtg_builder, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
 
-			auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<TaskLightPass>();
-			task_light->Setup(rtg_builder, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
+				auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
+				auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<TaskFinalPass>();
+				task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
+			}
 
-			auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
-			auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<TaskFinalPass>();
-			task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
-
+			// コンパイル.
 			rtg_builder.Compile(device);
+			// 実行.
+			rtg_builder.Execute_ImmediateDebug(cmdlist);
+
+			{
+				// テスト. 前回のExecuteで確定したリソースプールのステートから正しく状態遷移できるかもう一度実行する.
+				// コンパイル.
+				rtg_builder.Compile(device);
+				// 実行.
+				rtg_builder.Execute_ImmediateDebug(cmdlist);
+
+				// さらにもう一度テスト.
+				// コンパイル.
+				rtg_builder.Compile(device);
+				// 実行.
+				rtg_builder.Execute_ImmediateDebug(cmdlist);
+			}
+
 
 			return;
 		}

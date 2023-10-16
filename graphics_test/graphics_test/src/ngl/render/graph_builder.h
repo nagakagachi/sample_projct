@@ -203,6 +203,28 @@ namespace ngl
 
 				rtg::ResourceHandle h_depth_{};// メンバハンドル.
 			}
+
+
+		// 他のNodeのハンドルを参照して利用したり一時リソースの登録が可能.
+
+			// リソースとアクセスを定義するプリプロセス.
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
+			{
+				// リソース定義.
+				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
+
+				// リソースアクセス定義.
+				h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+				h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
+				h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
+				h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
+
+
+				// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
+				rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+				auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+			}
+
 		*/
 		struct ITaskNode
 		{
@@ -227,10 +249,11 @@ namespace ngl
 			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
 			{
 				RefHandle elem = { name , &handle};
-				ref_handle_array_.push_back(elem);
+				persistent_ref_handles_.push_back(elem);
 			}
-			
-			std::vector<RefHandle> ref_handle_array_{};
+			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
+			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
+			std::vector<RefHandle> persistent_ref_handles_{};
 
 		public:
 			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
@@ -253,7 +276,7 @@ namespace ngl
 #define ITASK_NODE_HANDLE_REGISTER(name)\
 					{\
 							RefHandle elem = { #name , &name};\
-							ref_handle_array_.push_back(elem);\
+							persistent_ref_handles_.push_back(elem);\
 					};
 // -------------------------------------------------------------
 
@@ -295,8 +318,12 @@ namespace ngl
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
 
 			// グラフからリソース割当と状態遷移を確定.
+			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
 			bool Compile(rhi::DeviceDep& device);
 
+			// Compileしたグラフを実行しCommandListを構築する, 
+			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
+			void Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist);
 
 			// -------------------------------------------------------------------------------------------
 
@@ -309,10 +336,12 @@ namespace ngl
 			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
 			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
-			
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
-			
+
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+			bool is_compiled_ = false;
+
 			// ハンドル毎のタイムライン上での位置を示す情報を生成.
 			// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
 			// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
@@ -338,10 +367,10 @@ namespace ngl
 					*this = arg;
 				}
 				
-				TaskStage last_access_stage_ = {};
+				TaskStage last_access_stage_ = {};// シーケンス上でのこのリソースへ最後にアクセスしたタスクの情報.
 				
-				rhi::ResourceState	cached_state_ = rhi::ResourceState::General;// GraphのCompile時点のステート.
-				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::General;// Graphの前回Compile時点のステートを一応覚えておく.
+				rhi::ResourceState	cached_state_ = rhi::ResourceState::General;// Compileで確定したGraph終端でのステート.
+				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::General;// 前回情報. Compileで確定したGraph終端でのステート.
 				
 				rhi::RefTextureDep	tex_ = {};
 				rhi::RefRtvDep		rtv_ = {};
@@ -349,8 +378,29 @@ namespace ngl
 				rhi::RefUavDep		uav_ = {};
 				rhi::RefSrvDep		srv_ = {};
 			};
+			// Compileで割り当てられるリソースのPool.
 			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
-			
+		
+
+			// Compileで構築される情報.
+			// HandleからリニアインデックスへのMap.
+			std::unordered_map<ResourceHandleDataType, int> handle_index_map = {};
+
+			// Compileで構築される情報.
+			// Handleに割り当てられたリソースのPool上のIndex.
+			std::vector<int> handle_res_id_array = {};
+
+			struct NodeHandleState
+			{
+				rhi::ResourceState prev_ = {};
+				rhi::ResourceState curr_ = {};
+			};
+			// Compileで構築される情報.
+			// NodeのHandle毎のリソース状態遷移.
+			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleDataType, NodeHandleState>> node_handle_state_ = {};
+
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 			uint32_t s_res_handle_id_counter_{};// リソースハンドルユニークID.
 		private:
 			// Sequence上でのノードの位置を返す.

@@ -274,52 +274,6 @@ namespace ngl
 		{
 			// MEMO 終端に寄与しないノードのカリングは保留.
 			
-			// node_sequence_内で自身より後ろのノードに参照されていないノードを終端ノードとしてリストアップ.
-			// 終端ノードから遡って有効ノードをカリング.
-			// 同時にレンダリングフローとしてのValidationチェック.
-			/*
-			std::vector<ITaskNode*> goal_nodes{};
-			// TODO.
-			for (auto ni = 0; ni < node_sequence_.size(); ++ni)
-			{
-				auto* p_node = node_sequence_[ni];
-
-				// 自身よりも後ろのNodeで参照されているか.
-				bool exist_access_after = false;
-
-				// Nodeのハンドルを検査.
-				for (const auto& ref_h : p_node->ref_handle_array_)
-				{
-					// ハンドルへのアクセス情報を引き出し.
-					assert(res_access_map_.end() != res_access_map_.find(*ref_h.p_handle));
-					const auto& handle_access_list = res_access_map_[*ref_h.p_handle];
-
-
-					// handle_access_list[]のアクセス元ノードに, node_sequence_[]のni+1以降のノードがあれば exist_access_after=true.
-					for (auto& ha : handle_access_list)
-					{
-						// 後ろかどうかはシーケンス上のインデックスから決定.
-						int node_pos = GetNodeSequencePosition(ha.p_node);
-						if (ni < node_pos)
-						{
-							exist_access_after = true;
-							break;
-						}
-					}
-				}
-
-				if (!exist_access_after)
-					goal_nodes.push_back(p_node);
-			}
-
-			// 終端Nodeのリスト.
-			for (auto& n : goal_nodes)
-			{
-				std::cout << n->GetDebugNodeName().Get() << std::endl;
-			}
-			*/
-
-			
 			// 念のためのValidation Check.
 			{
 				for(int sequence_id = 0; sequence_id < node_sequence_.size(); ++sequence_id)
@@ -366,7 +320,7 @@ namespace ngl
 			}
 
 			// 存在するハンドル毎に仮のユニークインデックスを割り振る. ランダムアクセスのため.
-			std::unordered_map<ResourceHandleDataType, int> handle_index_map = {};
+			handle_index_map = {};// クリア.
 			int handle_count = 0;
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
@@ -461,7 +415,7 @@ namespace ngl
 			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
-			std::vector<int> handle_res_id_array(handle_count, -1);// 無効値-1初期化.
+			handle_res_id_array.resize(handle_count, -1);// 無効値-1でHandle個数分初期化.
 			for(auto handle_index : handle_index_map)
 			{
 				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
@@ -510,11 +464,11 @@ namespace ngl
 						}
 
 #if 1
-						// このハンドルの開始アクセスステージで再利用可能なものを検索する.
+						// リソースのアクセス範囲を考慮して再利用可能なら再利用する
 						const TaskStage first_stage = handle_life_first_array[handle_id];
 						const TaskStage* p_request_access_stage = &first_stage;
 #else
-						// テスト用. 再利用せずに未割り当てのみ許可する場合.
+						// 再利用を一切しないデバッグ用.
 						const TaskStage* p_request_access_stage = nullptr;
 #endif
 
@@ -573,13 +527,8 @@ namespace ngl
 				}
 			}
 
-			struct NodeHandleState
-			{
-				rhi::ResourceState prev_ = {};
-				rhi::ResourceState curr_ = {};
-			};
 			// 各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報を構築.
-			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleDataType, NodeHandleState>> node_handle_state_ = {};
+			node_handle_state_ = {};// クリア.
 			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
 			{
 				const int res_id = res_linear_2_id_array[res_index];
@@ -695,8 +644,70 @@ namespace ngl
 					}
 				}
 			}
+
+			// Compile完了して実行準備ができたのでフラグ設定.
+			is_compiled_ = true;
 			
 			return true;
+		}
+
+		// Compileしたグラフを実行しCommandListを生成する. 検証用.
+		void RenderTaskGraphBuilder::Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist)
+		{
+			// Compileされていない.
+			assert(is_compiled_);
+			if (!is_compiled_)
+			{
+				return;
+			}
+
+			// 仮でリソースバリアのみ発行する.
+			for (const auto& e : node_sequence_)
+			{
+				// Nodeがアクセス登録したHandleを全て列挙. Node側のpersistent_ref_handles_には一時ハンドルが含まれないのでこの用途には使えない.
+				const auto& node_handle_access = node_handle_usage_map_[e];
+
+				for (const auto& handle_access : node_handle_access)
+				{
+					if (handle_index_map.end() == handle_index_map.find(handle_access.handle))
+					{
+						assert(false);// 念のためMapに登録されているかチェック.
+					}
+					if (node_handle_state_.end() == node_handle_state_.find(e))
+					{
+						assert(false);// 念のためMapに登録されているかチェック.
+					}
+					if (node_handle_state_[e].end() == node_handle_state_[e].find(handle_access.handle))
+					{
+						assert(false);// 念のためMapに登録されているかチェック.
+					}
+
+					// ステート遷移情報取得.
+					NodeHandleState state_transition = node_handle_state_[e][handle_access.handle];
+
+					const int handle_id = handle_index_map[handle_access.handle];
+					const int handle_res_id = handle_res_id_array[handle_id];
+
+					// MEMO. Swapchain等の外部リソースは負のIDとなるため, 外部リソース未対応の現状ではスキップする.
+					if (0 <= handle_res_id)
+					{
+						// リソースを取得.
+						TextureInstancePoolElement res = (0 <= handle_res_id) ? tex_instance_pool_[handle_res_id] : TextureInstancePoolElement();
+
+						// 状態遷移コマンド発効..
+						if (state_transition.prev_ != state_transition.curr_)
+						{
+							cmdlist->ResourceBarrier(res.tex_.Get(), state_transition.prev_, state_transition.curr_);
+						}
+					}
+				}
+
+				// 実際はここでNodeへリソースを渡して実行をすることでNode側はすでに適切な状態になったリソースへアクセスできる.
+				//
+			}
+
+			// ExecuteしたらCompile結果は無効になる(Poolのリソースのステートなどが変わるため再度Compileする必要がある).
+			is_compiled_ = false;
 		}
 
 

@@ -81,7 +81,7 @@ private:
 	// CommandQueue実行完了待機用オブジェクト
 	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
 
-	ngl::rhi::GraphicsCommandListDep			gfx_command_list_;
+	ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>	gfx_command_list_;
 
 	// SwapChain
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
@@ -168,8 +168,10 @@ AppGame::~AppGame()
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
 
-	gfx_command_list_.Finalize();
+	gfx_command_list_.Reset();
 	swapchain_.Reset();
+
+
 	graphics_queue_.Finalize();
 	device_.Finalize();
 }
@@ -343,7 +345,8 @@ bool AppGame::Initialize()
 	}
 
 	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};
-	if (!gfx_command_list_.Initialize(&device_, gcl_desc))
+	gfx_command_list_ = new ngl::rhi::GraphicsCommandListDep();
+	if (!gfx_command_list_->Initialize(&device_, gcl_desc))
 	{
 		std::cout << "[ERROR] CommandList Initialize" << std::endl;
 		return false;
@@ -818,33 +821,38 @@ bool AppGame::Execute()
 
 		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 		{
-			gfx_command_list_.Begin();
+			gfx_command_list_->Begin();
 
 			// CommandList に最初にResourceManagerの処理を積み込み.
-			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, &gfx_command_list_);
+			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
+
+
+			// RenderTaskGraphのテスト.
+			ngl::render::graph::Test1(device_, gfx_command_list_);
+
 
 			// Rt.
 			{
 				// RtScene更新.
-				rt_st_.UpdateOnRender(&device_, &gfx_command_list_, frame_scene);
+				rt_st_.UpdateOnRender(&device_, gfx_command_list_.Get(), frame_scene);
 				
 				// RtPass 更新.
-				rt_pass_test.PreRenderUpdate(&rt_st_, &gfx_command_list_);
+				rt_pass_test.PreRenderUpdate(&rt_st_, gfx_command_list_.Get());
 				
 				// RtPass Render.
-				rt_pass_test.Render(&gfx_command_list_);
+				rt_pass_test.Render(gfx_command_list_.Get());
 			}
 
 			{
 				// Barrier.
 				{
 					// Dsv State
-					gfx_command_list_.ResourceBarrier(tex_depth_.Get(), tex_depth_state_, ngl::rhi::ResourceState::DepthWrite);
+					gfx_command_list_->ResourceBarrier(tex_depth_.Get(), tex_depth_state_, ngl::rhi::ResourceState::DepthWrite);
 					tex_depth_state_ = ngl::rhi::ResourceState::DepthWrite;
 				}
 
 				// Dsvクリア.
-				gfx_command_list_.ClearDepthTarget(tex_depth_dsv_.Get(), 0.0f, 0, true, false);
+				gfx_command_list_->ClearDepthTarget(tex_depth_dsv_.Get(), 0.0f, 0, true, false);
 				
 				// Mesh Raster Render.
 				// DepthPrepass.
@@ -853,30 +861,30 @@ bool AppGame::Execute()
 					auto* p_depth_view = tex_depth_dsv_.Get();
 						
 					// Set RenderTarget.
-					gfx_command_list_.SetRenderTargets(nullptr, 0, p_depth_view);
+					gfx_command_list_->SetRenderTargets(nullptr, 0, p_depth_view);
 
 					// Set Viewport and Scissor.
-					ngl::gfx::helper::SetFullscreenViewportAndScissor(&gfx_command_list_, p_depth->GetWidth(), p_depth->GetHeight());
+					ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_command_list_.Get(), p_depth->GetWidth(), p_depth->GetHeight());
 
 					// Mesh Rendering.
-					ngl::gfx::RenderMeshSinglePso(gfx_command_list_, pso_mesh_simple_depth, frame_scene.mesh_instance_array_, *cbv_sceneview_[flip_index_sceneview_].Get());
+					ngl::gfx::RenderMeshSinglePso(*gfx_command_list_, pso_mesh_simple_depth, frame_scene.mesh_instance_array_, *cbv_sceneview_[flip_index_sceneview_].Get());
 				}
 
 				// Gen LinearDepth.
 				{
 					// Barrier.
 					{
-						gfx_command_list_.ResourceBarrier(tex_depth_.Get(), ngl::rhi::ResourceState::DepthWrite, ngl::rhi::ResourceState::ShaderRead);
-						gfx_command_list_.ResourceBarrier(tex_lineardepth_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::UnorderedAccess);
+						gfx_command_list_->ResourceBarrier(tex_depth_.Get(), ngl::rhi::ResourceState::DepthWrite, ngl::rhi::ResourceState::ShaderRead);
+						gfx_command_list_->ResourceBarrier(tex_lineardepth_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::UnorderedAccess);
 					}
 
 					// LinearDepth生成Pass実行.
-					pass_gen_linear_depth.Execute(frame_graph_builder, &gfx_command_list_);
+					pass_gen_linear_depth.Execute(frame_graph_builder, gfx_command_list_.Get());
 
 					// Barrier.
 					{
-						gfx_command_list_.ResourceBarrier(tex_depth_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::DepthWrite);
-						gfx_command_list_.ResourceBarrier(tex_lineardepth_.Get(), ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
+						gfx_command_list_->ResourceBarrier(tex_depth_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::DepthWrite);
+						gfx_command_list_->ResourceBarrier(tex_lineardepth_.Get(), ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
 					}
 				}
 
@@ -887,14 +895,14 @@ bool AppGame::Execute()
 					// Barrier.
 					{
 						// WorkRenderTarget Transition to RenderTarget
-						gfx_command_list_.ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::RenderTarget);
+						gfx_command_list_->ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::RenderTarget);
 					}
 
-					pass_final_composite.Execute(frame_graph_builder, &gfx_command_list_);
+					pass_final_composite.Execute(frame_graph_builder, gfx_command_list_.Get());
 
 					// Barrier.
 					{
-						gfx_command_list_.ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::RenderTarget, ngl::rhi::ResourceState::ShaderRead);
+						gfx_command_list_->ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::RenderTarget, ngl::rhi::ResourceState::ShaderRead);
 					}
 				}
 
@@ -903,27 +911,27 @@ bool AppGame::Execute()
 				{
 					// Barrier.
 					{
-						gfx_command_list_.ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
+						gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
 						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 					}
 
-					pass_copy_to_swapchain.Execute(frame_graph_builder, &gfx_command_list_);
+					pass_copy_to_swapchain.Execute(frame_graph_builder, gfx_command_list_.Get());
 
 					{
 						// Swapchain State to Present
-						gfx_command_list_.ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
+						gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
 						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
 					}
 				}
 			}
 
-			gfx_command_list_.End();
+			gfx_command_list_->End();
 		}
 
 		// CommandList Submit
 		ngl::rhi::GraphicsCommandListDep* command_lists[] =
 		{
-			&gfx_command_list_
+			gfx_command_list_.Get()
 		};
 		graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(command_lists)), command_lists);
 
