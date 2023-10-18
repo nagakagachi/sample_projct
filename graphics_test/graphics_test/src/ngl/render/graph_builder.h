@@ -236,7 +236,7 @@ namespace ngl
 			}
 
 
-			virtual void Run(RenderTaskGraphBuilder& builder)
+			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist)
 			{
 			}
 
@@ -293,6 +293,8 @@ namespace ngl
 		//  
 		struct RenderTaskGraphBuilder
 		{
+			~RenderTaskGraphBuilder();
+
 			struct NodeHandleUsageInfo
 			{
 				ResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
@@ -323,11 +325,31 @@ namespace ngl
 
 			// Compileしたグラフを実行しCommandListを構築する, 
 			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
-			void Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist);
+			void Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist);
+
+			// Compileで割り当てられたHandleのリソース情報.
+			struct AllocatedHandleResourceInfo
+			{
+				AllocatedHandleResourceInfo() = default;
+
+				rhi::ResourceState	prev_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
+				rhi::ResourceState	curr_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
+
+				rhi::RefTextureDep	tex_ = {};
+				rhi::RefRtvDep		rtv_ = {};
+				rhi::RefDsvDep		dsv_ = {};
+				rhi::RefUavDep		uav_ = {};
+				rhi::RefSrvDep		srv_ = {};
+			};
+			// NodeのHandleに対して割り当て済みリソースを取得する.
+			// Graphシステム側で必要なBarrierコマンドを発効するため基本的にNode実装側ではBarrierコマンドは不要.
+			AllocatedHandleResourceInfo GetAllocatedHandleResource(const ITaskNode* node, ResourceHandle res_handle);
 
 			// -------------------------------------------------------------------------------------------
 
-			~RenderTaskGraphBuilder();
+
+
+
 
 			// -------------------------------------------------------------------------------------------
 			static constexpr  int k_base_height = 1080;
@@ -358,7 +380,7 @@ namespace ngl
 				constexpr bool operator<=(const TaskStage arg) const;
 				constexpr bool operator>=(const TaskStage arg) const;
 			};
-			
+			// 内部リソースプール用.
 			struct TextureInstancePoolElement
 			{
 				TextureInstancePoolElement() = default;
@@ -369,8 +391,8 @@ namespace ngl
 				
 				TaskStage last_access_stage_ = {};// シーケンス上でのこのリソースへ最後にアクセスしたタスクの情報.
 				
-				rhi::ResourceState	cached_state_ = rhi::ResourceState::General;// Compileで確定したGraph終端でのステート.
-				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::General;// 前回情報. Compileで確定したGraph終端でのステート.
+				rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
+				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
 				
 				rhi::RefTextureDep	tex_ = {};
 				rhi::RefRtvDep		rtv_ = {};

@@ -260,6 +260,7 @@ namespace ngl::render
 		// RenderTaskGraphのテスト.
 		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist)
 		{
+			// PreZパス.
 			struct TaskDepthPass : public rtg::ITaskNode
 			{
 				// ノード定義コンストラクタ記述マクロ.
@@ -287,13 +288,20 @@ namespace ngl::render
 				}
 
 				// 実際のレンダリング処理.
-				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 				{
-					// builder から リソースハンドル h_depth_ で実リソースを取得する.
+					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+					if (!res_depth.tex_.IsValid() || !res_depth.dsv_.IsValid())
+					{
+						assert(false);
+					}
+
+					// TODO.
 				}
 
 			};
-
+			// GBufferパス.
 			struct TaskGBufferPass : public rtg::ITaskNode
 			{
 				// ノード定義コンストラクタ記述マクロ.
@@ -327,12 +335,29 @@ namespace ngl::render
 				}
 
 				// 実際のレンダリング処理.
-				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 				{
-					// builder から リソースハンドル out_depth で実リソースを取得する.
+					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+					auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
+					auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
+
+					if (!res_depth.tex_.IsValid() || !res_depth.dsv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_gb0.tex_.IsValid() || !res_gb0.rtv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_gb1.tex_.IsValid() || !res_gb1.rtv_.IsValid())
+					{
+						assert(false);
+					}
 				}
 
 			};
+			// Lightingパス.
 			struct TaskLightPass : public rtg::ITaskNode
 			{
 				// ノード定義コンストラクタ記述マクロ.
@@ -347,6 +372,7 @@ namespace ngl::render
 				rtg::ResourceHandle h_gb0_{};
 				rtg::ResourceHandle h_gb1_{};
 				rtg::ResourceHandle h_light_{};
+				rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 
 
 				virtual rtg::ETASK_TYPE TaskType() const
@@ -370,14 +396,42 @@ namespace ngl::render
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+					h_tmp_ = temp_res0;
 				}
 
 				// 実際のレンダリング処理.
-				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 				{
-					// builder から リソースハンドル out_depth で実リソースを取得する.
+					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+					auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
+					auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
+					auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
+					auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
+
+					if (!res_depth.tex_.IsValid() || !res_depth.srv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_gb0.tex_.IsValid() || !res_gb0.srv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_gb1.tex_.IsValid() || !res_gb1.srv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_light.tex_.IsValid() || !res_light.rtv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_tmp.tex_.IsValid() || !res_tmp.rtv_.IsValid())
+					{
+						assert(false);
+					}
 				}
 			};
+			// 最終パス.
 			struct TaskFinalPass : public rtg::ITaskNode
 			{
 				// ノード定義コンストラクタ記述マクロ.
@@ -390,6 +444,7 @@ namespace ngl::render
 				rtg::ResourceHandle h_depth_{};
 				rtg::ResourceHandle h_light_{};
 				rtg::ResourceHandle h_final_{};
+				rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 
 
 				virtual rtg::ETASK_TYPE TaskType() const
@@ -408,12 +463,38 @@ namespace ngl::render
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+					h_tmp_ = temp_res0;
 				}
 
 				// 実際のレンダリング処理.
-				void Run(rtg::RenderTaskGraphBuilder& builder) override
+				void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 				{
-					// builder から リソースハンドル out_depth で実リソースを取得する.
+					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+					auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
+					auto res_final = builder.GetAllocatedHandleResource(this, h_final_);
+					auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
+
+					if (!res_depth.tex_.IsValid() || !res_depth.srv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!res_light.tex_.IsValid() || !res_light.srv_.IsValid())
+					{
+						assert(false);
+					}
+					if (!h_final_.detail.is_swapchain)
+					{
+						if (!res_final.tex_.IsValid() || !res_final.rtv_.IsValid())
+						{
+							// Swapchainの場合は今はnullを返すのでチェックスキップ.
+							assert(false);
+						}
+					}
+					if (!res_tmp.tex_.IsValid() || !res_tmp.rtv_.IsValid())
+					{
+						assert(false);
+					}
 				}
 			};
 

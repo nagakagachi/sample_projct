@@ -651,8 +651,57 @@ namespace ngl
 			return true;
 		}
 
+		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedHandleResource(const ITaskNode* node, ResourceHandle res_handle)
+		{
+			// Compileされていない.
+			assert(is_compiled_);
+			if (!is_compiled_)
+			{
+				return {};
+			}
+
+			if (handle_index_map.end() == handle_index_map.find(res_handle))
+			{
+				assert(false);// 念のためMapに登録されているかチェック.
+			}
+			if (node_handle_state_.end() == node_handle_state_.find(node))
+			{
+				assert(false);// 念のためMapに登録されているかチェック.
+			}
+			if (node_handle_state_[node].end() == node_handle_state_[node].find(res_handle))
+			{
+				assert(false);// 念のためMapに登録されているかチェック.
+			}
+			// ステート遷移情報取得.
+			NodeHandleState state_transition = node_handle_state_[node][res_handle];
+
+			const int handle_id = handle_index_map[res_handle];
+			const int handle_res_id = handle_res_id_array[handle_id];
+
+			// MEMO. Swapchain等の外部リソースは負のIDとなるため, 外部リソース未対応の現状ではスキップする.
+			if (0 > handle_res_id)
+			{
+				return {};
+			}
+
+			// リソースを取得.
+			TextureInstancePoolElement res = (0 <= handle_res_id) ? tex_instance_pool_[handle_res_id] : TextureInstancePoolElement();
+
+			// 返却情報構築.
+			AllocatedHandleResourceInfo ret_info = {};
+			ret_info.tex_ = res.tex_;
+			ret_info.prev_state_ = state_transition.prev_;
+			ret_info.curr_state_ = state_transition.curr_;
+			ret_info.rtv_ = res.rtv_;
+			ret_info.dsv_ = res.dsv_;
+			ret_info.uav_ = res.uav_;
+			ret_info.srv_ = res.srv_;
+			
+			return ret_info;
+		}
+
 		// Compileしたグラフを実行しCommandListを生成する. 検証用.
-		void RenderTaskGraphBuilder::Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist)
+		void RenderTaskGraphBuilder::Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist)
 		{
 			// Compileされていない.
 			assert(is_compiled_);
@@ -664,52 +713,30 @@ namespace ngl
 			// 仮でリソースバリアのみ発行する.
 			for (const auto& e : node_sequence_)
 			{
-				// Nodeがアクセス登録したHandleを全て列挙. Node側のpersistent_ref_handles_には一時ハンドルが含まれないのでこの用途には使えない.
+				// Nodeが登録したHandleを全て列挙. Nodeのpersistent_ref_handles_にはメンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
 				const auto& node_handle_access = node_handle_usage_map_[e];
 
 				for (const auto& handle_access : node_handle_access)
 				{
-					if (handle_index_map.end() == handle_index_map.find(handle_access.handle))
+					AllocatedHandleResourceInfo handle_res = GetAllocatedHandleResource(e, handle_access.handle);
+					if (handle_res.tex_.IsValid())
 					{
-						assert(false);// 念のためMapに登録されているかチェック.
-					}
-					if (node_handle_state_.end() == node_handle_state_.find(e))
-					{
-						assert(false);// 念のためMapに登録されているかチェック.
-					}
-					if (node_handle_state_[e].end() == node_handle_state_[e].find(handle_access.handle))
-					{
-						assert(false);// 念のためMapに登録されているかチェック.
-					}
-
-					// ステート遷移情報取得.
-					NodeHandleState state_transition = node_handle_state_[e][handle_access.handle];
-
-					const int handle_id = handle_index_map[handle_access.handle];
-					const int handle_res_id = handle_res_id_array[handle_id];
-
-					// MEMO. Swapchain等の外部リソースは負のIDとなるため, 外部リソース未対応の現状ではスキップする.
-					if (0 <= handle_res_id)
-					{
-						// リソースを取得.
-						TextureInstancePoolElement res = (0 <= handle_res_id) ? tex_instance_pool_[handle_res_id] : TextureInstancePoolElement();
-
 						// 状態遷移コマンド発効..
-						if (state_transition.prev_ != state_transition.curr_)
+						if (handle_res.prev_state_ != handle_res.curr_state_)
 						{
-							cmdlist->ResourceBarrier(res.tex_.Get(), state_transition.prev_, state_transition.curr_);
+							commandlist->ResourceBarrier(handle_res.tex_.Get(), handle_res.prev_state_, handle_res.curr_state_);
 						}
 					}
 				}
 
-				// 実際はここでNodeへリソースを渡して実行をすることでNode側はすでに適切な状態になったリソースへアクセスできる.
-				//
+				// BarrierをCommandListに正しく積んでからNodeを実行.
+				// MEMO. 現状はシーケンス順にシングルスレッド.
+				e->Run(*this, commandlist);
 			}
 
 			// ExecuteしたらCompile結果は無効になる(Poolのリソースのステートなどが変わるため再度Compileする必要がある).
 			is_compiled_ = false;
 		}
-
 
 		// -------------------------------------------------------------------------------------------
 
