@@ -826,11 +826,6 @@ bool AppGame::Execute()
 			// CommandList に最初にResourceManagerの処理を積み込み.
 			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
 
-
-			// RenderTaskGraphのテスト.
-			ngl::render::graph::Test1(device_, gfx_command_list_);
-
-
 			// Rt.
 			{
 				// RtScene更新.
@@ -843,7 +838,10 @@ bool AppGame::Execute()
 				rt_pass_test.Render(gfx_command_list_.Get());
 			}
 
+			if(false)
 			{
+				// 旧テスト描画パスバージョン.
+
 				// Barrier.
 				{
 					// Dsv State
@@ -906,7 +904,6 @@ bool AppGame::Execute()
 					}
 				}
 
-
 				// Swapchainへのコピーパス.
 				{
 					// Barrier.
@@ -922,6 +919,24 @@ bool AppGame::Execute()
 						gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
 						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
 					}
+				}
+			}
+			else
+			{
+				// RenderTaskGraphのテスト.
+
+				// Barrier.
+				{
+					gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
+					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
+				}
+
+				ngl::render::graph::Test1(device_, gfx_command_list_, samp_linear_clamp_, swapchain_->GetDesc().format, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
+
+				{
+					// Swapchain State to Present
+					gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
+					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
 				}
 			}
 

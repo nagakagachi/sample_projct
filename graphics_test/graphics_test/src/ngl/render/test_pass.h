@@ -258,7 +258,7 @@ namespace ngl::render
 
 
 		// RenderTaskGraphのテスト.
-		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist)
+		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist, rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
 		{
 			// PreZパス.
 			struct TaskDepthPass : public rtg::ITaskNode
@@ -277,7 +277,7 @@ namespace ngl::render
 				}
 
 				// リソースとアクセスを定義するプリプロセス.
-				void Setup(rtg::RenderTaskGraphBuilder& builder)
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device)
 				{
 					// リソース定義.
 					//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
@@ -292,10 +292,7 @@ namespace ngl::render
 				{
 					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
-					if (!res_depth.tex_.IsValid() || !res_depth.dsv_.IsValid())
-					{
-						assert(false);
-					}
+					assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 
 					// TODO.
 				}
@@ -322,7 +319,7 @@ namespace ngl::render
 				}
 
 				// リソースとアクセスを定義するプリプロセス.
-				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth)
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth)
 				{
 					// リソース定義.
 					rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
@@ -342,21 +339,59 @@ namespace ngl::render
 					auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
 					auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
 
-					if (!res_depth.tex_.IsValid() || !res_depth.dsv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_gb0.tex_.IsValid() || !res_gb0.rtv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_gb1.tex_.IsValid() || !res_gb1.rtv_.IsValid())
-					{
-						assert(false);
-					}
+					assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
+					assert(res_gb0.tex_.IsValid() && res_gb0.rtv_.IsValid());
+					assert(res_gb1.tex_.IsValid() && res_gb1.rtv_.IsValid());
+
+					// TODO.
+				}
+			};
+
+
+			// LinearDepthパス.
+			struct TaskLinearDepthPass : public rtg::ITaskNode
+			{
+				// ノード定義コンストラクタ記述マクロ.
+				ITASK_NODE_DEF_BEGIN(TaskLinearDepthPass)
+					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+					ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
+					ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_linear_depth_{};
+
+
+				virtual rtg::ETASK_TYPE TaskType() const
+				{
+					return rtg::ETASK_TYPE::GRAPHICS;
+				}
+
+				// リソースとアクセスを定義するプリプロセス.
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth)
+				{
+					// リソース定義.
+					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R32_FLOAT);
+
+					// リソースアクセス定義.
+					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+					h_linear_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::RENDER_TARTGET);
+				}
+
+				// 実際のレンダリング処理.
+				void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+				{
+					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+					auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
+
+					assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
+					assert(res_linear_depth.tex_.IsValid() && res_linear_depth.rtv_.IsValid());
+
+					// TODO.
 				}
 
 			};
+
 			// Lightingパス.
 			struct TaskLightPass : public rtg::ITaskNode
 			{
@@ -381,7 +416,7 @@ namespace ngl::render
 				}
 
 				// リソースとアクセスを定義するプリプロセス.
-				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
 				{
 					// リソース定義.
 					rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
@@ -409,26 +444,13 @@ namespace ngl::render
 					auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
 					auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
 
-					if (!res_depth.tex_.IsValid() || !res_depth.srv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_gb0.tex_.IsValid() || !res_gb0.srv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_gb1.tex_.IsValid() || !res_gb1.srv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_light.tex_.IsValid() || !res_light.rtv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_tmp.tex_.IsValid() || !res_tmp.rtv_.IsValid())
-					{
-						assert(false);
-					}
+					assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
+					assert(res_gb0.tex_.IsValid() && res_gb0.srv_.IsValid());
+					assert(res_gb1.tex_.IsValid() && res_gb1.srv_.IsValid());
+					assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
+					assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
+
+					// TODO.
 				}
 			};
 			// 最終パス.
@@ -437,15 +459,21 @@ namespace ngl::render
 				// ノード定義コンストラクタ記述マクロ.
 				ITASK_NODE_DEF_BEGIN(TaskFinalPass)
 					ITASK_NODE_HANDLE_REGISTER(h_depth_)
+					ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
 					ITASK_NODE_HANDLE_REGISTER(h_light_)
-					ITASK_NODE_HANDLE_REGISTER(h_final_)
 				ITASK_NODE_DEF_END
 
 				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_linear_depth_{};
 				rtg::ResourceHandle h_light_{};
-				rtg::ResourceHandle h_final_{};
 				rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 
+				// 外部指定の出力先バッファ.
+				rhi::RefRtvDep ref_out_target_external_{};
+				rhi::RefSampDep ref_samp_linear_clamp_{};
+
+
+				rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
@@ -453,17 +481,64 @@ namespace ngl::render
 				}
 
 				// リソースとアクセスを定義するプリプロセス.
-				void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_light, rtg::ResourceHandle h_final)
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
+					rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
 				{
 					// リソースアクセス定義.
 					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+					h_linear_depth_ = builder.RegisterResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
-					h_final_ = builder.RegisterResourceAccess(*this, h_final, rtg::access_type::RENDER_TARTGET);
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 					h_tmp_ = temp_res0;
+
+
+					ref_out_target_external_ = ref_out_target;
+
+					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
+
+					{
+						// 初期化. シェーダバイナリの要求とPSO生成.
+
+						auto k_shader_model = "6_3";
+
+						auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+						ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
+						{
+							loaddesc_vs.entry_point_name = "main_vs";
+							loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+							loaddesc_vs.shader_model_version = k_shader_model;
+						}
+						auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl", &loaddesc_vs);
+
+						ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
+						{
+							loaddesc_ps.entry_point_name = "main_ps";
+							loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+							loaddesc_ps.shader_model_version = k_shader_model;
+						}
+						auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/final_screen_pass_ps.hlsl", &loaddesc_ps);
+
+
+						pso_ = new rhi::GraphicsPipelineStateDep();
+						ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+						desc.vs = &res_shader_vs->data_;
+						desc.ps = &res_shader_ps->data_;
+
+						desc.num_render_targets = 1;
+						desc.render_target_formats[0] = out_format;
+
+						desc.blend_state.target_blend_states[0].blend_enable = false;
+						desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
+
+						if (!pso_->Initialize(p_device, desc))
+						{
+							assert(false);
+						}
+					}
 				}
 
 				// 実際のレンダリング処理.
@@ -471,55 +546,54 @@ namespace ngl::render
 				{
 					// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+					auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
 					auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
-					auto res_final = builder.GetAllocatedHandleResource(this, h_final_);
 					auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
 
-					if (!res_depth.tex_.IsValid() || !res_depth.srv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!res_light.tex_.IsValid() || !res_light.srv_.IsValid())
-					{
-						assert(false);
-					}
-					if (!h_final_.detail.is_swapchain)
-					{
-						if (!res_final.tex_.IsValid() || !res_final.rtv_.IsValid())
-						{
-							// Swapchainの場合は今はnullを返すのでチェックスキップ.
-							assert(false);
-						}
-					}
-					if (!res_tmp.tex_.IsValid() || !res_tmp.rtv_.IsValid())
-					{
-						assert(false);
-					}
+					assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
+					assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
+					assert(res_light.tex_.IsValid() && res_light.srv_.IsValid());
+					assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
+
+
+					assert(ref_out_target_external_.IsValid());// 外部出力先.
+
+
+					// TODO.
+					float clear_color[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+					commandlist->ClearRenderTarget(ref_out_target_external_.Get(), clear_color);
 				}
 			};
 
 
+			// タスクグラフ構築.
 			rtg::RenderTaskGraphBuilder rtg_builder{};
 			{
 				auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskDepthPass>();
-				task_depth->Setup(rtg_builder);
+				task_depth->Setup(rtg_builder, &device);
 
 				auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<TaskGBufferPass>();
-				task_gbuffer->Setup(rtg_builder, task_depth->h_depth_);
+				task_gbuffer->Setup(rtg_builder, &device, task_depth->h_depth_);
+
+				auto* task_linear_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskLinearDepthPass>();
+				task_linear_depth->Setup(rtg_builder, &device, task_depth->h_depth_);
 
 				auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<TaskLightPass>();
-				task_light->Setup(rtg_builder, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
+				task_light->Setup(rtg_builder, &device, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
 
-				auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
+				//auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
 				auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<TaskFinalPass>();
-				task_final->Setup(rtg_builder, task_light->h_depth_, task_light->h_light_, h_swapchain);
+				task_final->Setup(rtg_builder, &device, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_, ref_samp_linear_clamp, out_format, ref_out_target);
 			}
 
 			// コンパイル.
 			rtg_builder.Compile(device);
+
 			// 実行.
 			rtg_builder.Execute_ImmediateDebug(cmdlist);
 
+			// グラフのプールリソースの前回実行時のステートから整合性を保って実行可能かのテスト.
+			if(false)
 			{
 				// テスト. 前回のExecuteで確定したリソースプールのステートから正しく状態遷移できるかもう一度実行する.
 				// コンパイル.
