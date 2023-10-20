@@ -931,7 +931,9 @@ bool AppGame::Execute()
 					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 				}
 
-				ngl::render::graph::Test1(device_, gfx_command_list_, samp_linear_clamp_, swapchain_->GetDesc().format, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
+				ngl::render::graph::Test1(device_, gfx_command_list_, 
+					cbv_sceneview_[flip_index_sceneview_],
+					samp_linear_clamp_, swapchain_->GetDesc().format, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
 
 				{
 					// Swapchain State to Present

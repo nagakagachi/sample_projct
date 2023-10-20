@@ -1227,6 +1227,8 @@ namespace rhi
 
 	bool GraphicsPipelineStateDep::Initialize(DeviceDep* p_device, const Desc& desc)
 	{
+		InitializeRhiObject(p_device);
+
 		if (!p_device)
 			return false;
 
@@ -1460,6 +1462,8 @@ namespace rhi
 
 	bool ComputePipelineStateDep::Initialize(DeviceDep* p_device, const Desc& desc)
 	{
+		InitializeRhiObject(p_device);
+
 		if (!p_device)
 			return false;
 

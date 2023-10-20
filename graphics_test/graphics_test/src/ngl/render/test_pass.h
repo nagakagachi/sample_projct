@@ -258,7 +258,9 @@ namespace ngl::render
 
 
 		// RenderTaskGraphのテスト.
-		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist, rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
+		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist,
+			rhi::RefCbvDep ref_scene_cbv,
+			rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
 		{
 			// PreZパス.
 			struct TaskDepthPass : public rtg::ITaskNode
@@ -269,7 +271,6 @@ namespace ngl::render
 				ITASK_NODE_DEF_END
 
 				rtg::ResourceHandle h_depth_{};
-
 
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
@@ -295,6 +296,8 @@ namespace ngl::render
 					assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 
 					// TODO.
+
+					commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
 				}
 
 			};
@@ -360,6 +363,9 @@ namespace ngl::render
 				rtg::ResourceHandle h_depth_{};
 				rtg::ResourceHandle h_linear_depth_{};
 
+				rhi::RefCbvDep ref_scene_cbv_{};
+
+				rhi::RhiRef<rhi::ComputePipelineStateDep> pso_;
 
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
@@ -367,14 +373,40 @@ namespace ngl::render
 				}
 
 				// リソースとアクセスを定義するプリプロセス.
-				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth)
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rhi::RefCbvDep ref_scene_cbv)
 				{
-					// リソース定義.
-					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R32_FLOAT);
+					{
+						// リソース定義.
+						rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R32_FLOAT);
 
-					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
-					h_linear_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::RENDER_TARTGET);
+						// リソースアクセス定義.
+						h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+						h_linear_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::UAV);
+					}
+
+					{
+						ref_scene_cbv_ = ref_scene_cbv;
+					}
+
+					{
+						auto k_shader_model = "6_3";
+
+						auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+						ngl::gfx::ResShader::LoadDesc loaddesc = {};
+						loaddesc.entry_point_name = "main_cs";
+						loaddesc.stage = ngl::rhi::ShaderStage::Compute;
+						loaddesc.shader_model_version = k_shader_model;
+						auto res_shader = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/screen/generate_lineardepth_cs.hlsl", &loaddesc);
+
+						pso_ = new rhi::ComputePipelineStateDep();
+						ngl::rhi::ComputePipelineStateDep::Desc pso_desc = {};
+						pso_desc.cs = &res_shader->data_;
+						if (!pso_->Initialize(p_device, pso_desc))
+						{
+							assert(false);
+						}
+					}
 				}
 
 				// 実際のレンダリング処理.
@@ -385,9 +417,18 @@ namespace ngl::render
 					auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
 
 					assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
-					assert(res_linear_depth.tex_.IsValid() && res_linear_depth.rtv_.IsValid());
+					assert(res_linear_depth.tex_.IsValid() && res_linear_depth.uav_.IsValid());
 
-					// TODO.
+					ngl::rhi::DescriptorSetDep desc_set = {};
+					pso_->SetDescriptorHandle(&desc_set, "TexHardwareDepth", res_depth.srv_->GetView().cpu_handle);
+					pso_->SetDescriptorHandle(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_->GetView().cpu_handle);
+					pso_->SetDescriptorHandle(&desc_set, "cb_sceneview", ref_scene_cbv_->GetView().cpu_handle);
+
+					commandlist->SetPipelineState(pso_.Get());
+					commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+					
+					pso_->DispatchHelper(commandlist.Get(), res_linear_depth.tex_->GetWidth(), res_linear_depth.tex_->GetHeight(), 1);
+					
 				}
 
 			};
@@ -472,7 +513,6 @@ namespace ngl::render
 				rhi::RefRtvDep ref_out_target_external_{};
 				rhi::RefSampDep ref_samp_linear_clamp_{};
 
-
 				rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
 				virtual rtg::ETASK_TYPE TaskType() const
@@ -484,20 +524,24 @@ namespace ngl::render
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
 					rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
 				{
-					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
-					h_linear_depth_ = builder.RegisterResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
-					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
-					
-					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
-					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
-					h_tmp_ = temp_res0;
+					{
+						// リソースアクセス定義.
+						h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+						h_linear_depth_ = builder.RegisterResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
+						h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 
+						// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
+						rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+						auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+						h_tmp_ = temp_res0;
+					}
 
-					ref_out_target_external_ = ref_out_target;
+					{
+						// 外部リソース.
 
-					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
+						ref_out_target_external_ = ref_out_target;
+						ref_samp_linear_clamp_ = ref_samp_linear_clamp;
+					}
 
 					{
 						// 初期化. シェーダバイナリの要求とPSO生成.
@@ -576,7 +620,7 @@ namespace ngl::render
 				task_gbuffer->Setup(rtg_builder, &device, task_depth->h_depth_);
 
 				auto* task_linear_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskLinearDepthPass>();
-				task_linear_depth->Setup(rtg_builder, &device, task_depth->h_depth_);
+				task_linear_depth->Setup(rtg_builder, &device, task_depth->h_depth_, ref_scene_cbv);
 
 				auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<TaskLightPass>();
 				task_light->Setup(rtg_builder, &device, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
