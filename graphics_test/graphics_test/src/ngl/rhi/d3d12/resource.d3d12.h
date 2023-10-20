@@ -41,7 +41,7 @@ namespace ngl
 				{
 					// CBは大抵CPU書き込みをするため Upload.
 					heap_type = rhi::ResourceHeapType::Upload;
-					initial_state = rhi::ResourceState::ConstatnBuffer;// 初期ステートでConstantBuffer指定. (Generic_Read開始でないといけないかもしれない).
+					initial_state = rhi::ResourceState::General;// 初期ステートでConstantBuffer指定. (Generic_Read開始でないといけないかもしれない).
 
 					bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 					element_byte_size = size;

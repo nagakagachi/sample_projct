@@ -297,6 +297,7 @@ namespace ngl
 			const uint32_t num_instance_total = (uint32_t)transform_array_.size();
 			rhi::BufferDep::Desc instance_buffer_desc = {};
 			instance_buffer_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUからアップロードするInstanceDataのため.
+			instance_buffer_desc.initial_state = rhi::ResourceState::General;// UploadヒープのためにGeneral.
 			instance_buffer_desc.element_count = num_instance_total;// Instance数を確保.
 			instance_buffer_desc.element_byte_size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
 			instance_buffer_.Reset(new rhi::BufferDep());
@@ -1284,6 +1285,7 @@ namespace ngl
 			rt_shader_table_desc.element_count = 1;
 			rt_shader_table_desc.element_byte_size = shader_table_byte_size;
 			rt_shader_table_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUから直接書き込むため.
+			rt_shader_table_desc.initial_state = rhi::ResourceState::General;// UploadヒープのためGeneral.
 			out.shader_table_.Reset(new rhi::BufferDep());
 			if (!out.shader_table_->Initialize(p_device, rt_shader_table_desc))
 			{
@@ -1699,10 +1701,7 @@ namespace ngl
 			// SceneView定数バッファ.
 			{
 				rhi::BufferDep::Desc buff_desc = {};
-				buff_desc.heap_type = rhi::ResourceHeapType::Upload;
-				buff_desc.bind_flag = rhi::ResourceBindFlag::ConstantBuffer;
-				buff_desc.element_count = 1;
-				buff_desc.element_byte_size = sizeof(CbSceneView);
+				buff_desc.SetupAsConstantBuffer(sizeof(CbSceneView));
 				for (auto i = 0; i < std::size(cb_scene_view); ++i)
 				{
 					cb_scene_view[i].Reset(new rhi::BufferDep());
