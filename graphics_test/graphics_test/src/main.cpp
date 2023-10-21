@@ -886,8 +886,6 @@ bool AppGame::Execute()
 					}
 				}
 
-
-
 				// 最終レンダリングパス.
 				{
 					// Barrier.
@@ -931,9 +929,12 @@ bool AppGame::Execute()
 					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 				}
 
-				ngl::render::graph::Test1(device_, gfx_command_list_, 
+				ngl::render::graph::Test1(device_, gfx_command_list_,
 					cbv_sceneview_[flip_index_sceneview_],
-					samp_linear_clamp_, swapchain_->GetDesc().format, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
+					frame_scene.mesh_instance_array_,
+					rt_pass_test.ray_result_srv_,
+					samp_linear_clamp_,
+					swapchain_->GetDesc().format, swapchain_->GetWidth(), swapchain_->GetHeight(), swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
 
 				{
 					// Swapchain State to Present

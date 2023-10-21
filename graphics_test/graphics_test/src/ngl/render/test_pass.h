@@ -260,7 +260,10 @@ namespace ngl::render
 		// RenderTaskGraphのテスト.
 		void Test1(rhi::DeviceDep& device, rhi::RhiRef<rhi::GraphicsCommandListDep> cmdlist,
 			rhi::RefCbvDep ref_scene_cbv,
-			rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
+			std::vector<gfx::StaticMeshComponent*>& ref_mesh_list,
+			rhi::RefSrvDep ref_raytrace_result_srv,
+			rhi::RefSampDep ref_samp_linear_clamp, 
+			rhi::ResourceFormat out_format, int out_width, int out_height, rhi::RefRtvDep ref_out_target)
 		{
 			// PreZパス.
 			struct TaskDepthPass : public rtg::ITaskNode
@@ -272,13 +275,18 @@ namespace ngl::render
 
 				rtg::ResourceHandle h_depth_{};
 
+				rhi::RefCbvDep ref_scene_cbv_{};
+				std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
+
+				rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
+
 				virtual rtg::ETASK_TYPE TaskType() const
 				{
 					return rtg::ETASK_TYPE::GRAPHICS;
 				}
 
 				// リソースとアクセスを定義するプリプロセス.
-				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device)
+				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rhi::RefCbvDep ref_scene_cbv, std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
 				{
 					// リソース定義.
 					//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
@@ -286,6 +294,69 @@ namespace ngl::render
 
 					// リソースアクセス定義.
 					h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+
+					{
+						ref_scene_cbv_ = ref_scene_cbv;
+						p_mesh_list_ = &ref_mesh_list;
+					}
+
+					{
+						auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+						static const char* k_shader_model = "6_3";
+
+						ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
+						loaddesc_vs.entry_point_name = "main_vs";
+						loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+						loaddesc_vs.shader_model_version = k_shader_model;
+						auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl", &loaddesc_vs);
+						
+						ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
+						loaddesc_ps.entry_point_name = "main_ps";
+						loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+						loaddesc_ps.shader_model_version = k_shader_model;
+						auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl", &loaddesc_ps);
+
+
+						ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+						desc.vs = &res_shader_vs->data_;
+						desc.ps = &res_shader_ps->data_;
+
+						desc.depth_stencil_state.depth_enable = true;
+						desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater; // ReverseZ.
+						desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
+						desc.depth_stencil_state.stencil_enable = false;
+						desc.depth_stencil_format = depth_desc.desc.format;
+
+						// 入力レイアウト
+						std::array<ngl::rhi::InputElement, 3> input_elem_data;
+						desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
+						desc.input_layout.p_input_elements = input_elem_data.data();
+						{
+							input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
+							input_elem_data[0].semantic_index = 0;
+							input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+							input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
+							input_elem_data[0].element_offset = 0;
+
+							input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
+							input_elem_data[1].semantic_index = 0;
+							input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+							input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
+							input_elem_data[1].element_offset = 0;
+
+							input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+							input_elem_data[2].semantic_index = 0;
+							input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
+							input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+							input_elem_data[2].element_offset = 0;
+						}
+						pso_ = new rhi::GraphicsPipelineStateDep();
+						if (!pso_->Initialize(p_device, desc))
+						{
+							assert(false);
+						}
+					}
 				}
 
 				// 実際のレンダリング処理.
@@ -295,9 +366,17 @@ namespace ngl::render
 					auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
 					assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 
-					// TODO.
 
 					commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
+
+					// Set RenderTarget.
+					commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
+
+					// Set Viewport and Scissor.
+					ngl::gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
+
+					// Mesh Rendering.
+					ngl::gfx::RenderMeshSinglePso(*commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
 				}
 
 			};
@@ -399,9 +478,9 @@ namespace ngl::render
 						loaddesc.shader_model_version = k_shader_model;
 						auto res_shader = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/screen/generate_lineardepth_cs.hlsl", &loaddesc);
 
-						pso_ = new rhi::ComputePipelineStateDep();
 						ngl::rhi::ComputePipelineStateDep::Desc pso_desc = {};
 						pso_desc.cs = &res_shader->data_;
+						pso_ = new rhi::ComputePipelineStateDep();
 						if (!pso_->Initialize(p_device, pso_desc))
 						{
 							assert(false);
@@ -511,7 +590,10 @@ namespace ngl::render
 
 				// 外部指定の出力先バッファ.
 				rhi::RefRtvDep ref_out_target_external_{};
+				int out_width_ = 0;
+				int out_height_ = 0;
 				rhi::RefSampDep ref_samp_linear_clamp_{};
+				rhi::RefSrvDep ref_raytrace_result_srv_;
 
 				rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
@@ -522,7 +604,9 @@ namespace ngl::render
 
 				// リソースとアクセスを定義するプリプロセス.
 				void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
-					rhi::RefSampDep ref_samp_linear_clamp, rhi::ResourceFormat out_format, rhi::RefRtvDep ref_out_target)
+					rhi::RefSampDep ref_samp_linear_clamp,
+					rhi::RefSrvDep ref_raytrace_result_srv,
+					rhi::ResourceFormat out_format, int out_width, int out_height, rhi::RefRtvDep ref_out_target)
 				{
 					{
 						// リソースアクセス定義.
@@ -540,6 +624,11 @@ namespace ngl::render
 						// 外部リソース.
 
 						ref_out_target_external_ = ref_out_target;
+						out_width_ = out_width;
+						out_height_ = out_height;
+
+						ref_raytrace_result_srv_ = ref_raytrace_result_srv;
+
 						ref_samp_linear_clamp_ = ref_samp_linear_clamp;
 					}
 
@@ -567,7 +656,6 @@ namespace ngl::render
 						auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/final_screen_pass_ps.hlsl", &loaddesc_ps);
 
 
-						pso_ = new rhi::GraphicsPipelineStateDep();
 						ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
 						desc.vs = &res_shader_vs->data_;
 						desc.ps = &res_shader_ps->data_;
@@ -578,6 +666,7 @@ namespace ngl::render
 						desc.blend_state.target_blend_states[0].blend_enable = false;
 						desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
 
+						pso_ = new rhi::GraphicsPipelineStateDep();
 						if (!pso_->Initialize(p_device, desc))
 						{
 							assert(false);
@@ -599,13 +688,24 @@ namespace ngl::render
 					assert(res_light.tex_.IsValid() && res_light.srv_.IsValid());
 					assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
-
 					assert(ref_out_target_external_.IsValid());// 外部出力先.
 
+					gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), out_width_, out_height_);
 
-					// TODO.
-					float clear_color[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-					commandlist->ClearRenderTarget(ref_out_target_external_.Get(), clear_color);
+					// Rtv, Dsv セット.
+					{
+						const auto* p_rtv = ref_out_target_external_.Get();
+						commandlist->SetRenderTargets(&p_rtv, 1, nullptr);
+					}
+
+					commandlist->SetPipelineState(pso_.Get());
+					ngl::rhi::DescriptorSetDep desc_set = {};
+					pso_->SetDescriptorHandle(&desc_set, "tex_lineardepth", res_linear_depth.srv_->GetView().cpu_handle);
+					pso_->SetDescriptorHandle(&desc_set, "tex_rt", ref_raytrace_result_srv_->GetView().cpu_handle);
+					pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
+					commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+
+					commandlist->DrawInstanced(3, 1, 0, 0);
 				}
 			};
 
@@ -614,7 +714,7 @@ namespace ngl::render
 			rtg::RenderTaskGraphBuilder rtg_builder{};
 			{
 				auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<TaskDepthPass>();
-				task_depth->Setup(rtg_builder, &device);
+				task_depth->Setup(rtg_builder, &device, ref_scene_cbv, ref_mesh_list);
 
 				auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<TaskGBufferPass>();
 				task_gbuffer->Setup(rtg_builder, &device, task_depth->h_depth_);
@@ -627,7 +727,7 @@ namespace ngl::render
 
 				//auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
 				auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<TaskFinalPass>();
-				task_final->Setup(rtg_builder, &device, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_, ref_samp_linear_clamp, out_format, ref_out_target);
+				task_final->Setup(rtg_builder, &device, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_, ref_samp_linear_clamp, ref_raytrace_result_srv, out_format, out_width, out_height, ref_out_target);
 			}
 
 			// コンパイル.

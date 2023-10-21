@@ -606,7 +606,9 @@ namespace ngl
 			
 			
 			// デバッグ表示.
+			if(true)
 			{
+#if defined(_DEBUG)
 				// 各ResourceHandleへの処理順でのアクセス情報.
 				std::cout << "-Access Flow Debug" << std::endl;
 				for(auto handle_index : handle_index_map)
@@ -643,6 +645,7 @@ namespace ngl
 						std::cout << "			-CurrState " << static_cast<int>(curr_state) << std::endl;
 					}
 				}
+#endif
 			}
 
 			// Compile完了して実行準備ができたのでフラグ設定.

@@ -619,20 +619,26 @@ namespace rhi
 
 				// Input Output
 				{
+#if defined(_DEBUG)
 					std::cout << "Shader Input Param" << std::endl;
 					std::cout << "	Num Param = " << shader_desc.InputParameters << std::endl;
+#endif
 					input_param_.resize(shader_desc.InputParameters);
 					for (auto i = 0u; i < shader_desc.InputParameters; ++i)
 					{
 						auto& tar = input_param_[i];
 
+#if defined(_DEBUG)
 						std::cout << "	Param " << i << std::endl;
+#endif
 						D3D12_SIGNATURE_PARAMETER_DESC input_desc;
 						if (SUCCEEDED(shader_reflect->GetInputParameterDesc(i, &input_desc)))
 						{
+#if defined(_DEBUG)
 							std::cout << "		SemanticName = " << input_desc.SemanticName << std::endl;
 							std::cout << "		SemanticIndex = " << input_desc.SemanticIndex << std::endl;
 							std::cout << "		ComponentType = " << input_desc.ComponentType << std::endl;
+#endif
 
 							tar.semantic_index = input_desc.SemanticIndex;
 
