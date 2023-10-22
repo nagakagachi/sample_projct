@@ -108,33 +108,18 @@ private:
 	ngl::rhi::RefSrvDep							tex_rw_srv_;
 	ngl::rhi::RefUavDep							tex_rw_uav_;
 
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_vs_mesh_simple_depth;
-	ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_ps_mesh_simple_depth;
-
 
 	ngl::rhi::RefSampDep						samp_linear_clamp_;
-
 
 	std::array<ngl::rhi::RefBufferDep, 2>		cb_sceneview_;
 	std::array<ngl::rhi::RefCbvDep, 2>			cbv_sceneview_;
 	int											flip_index_sceneview_ = 0;
-
-
-	ngl::rhi::GraphicsPipelineStateDep			pso_mesh_simple_depth;
 
 	// RtScene.
 	ngl::gfx::RtSceneManager					rt_st_;
 	// RtPass.
 	ngl::gfx::RtPassTest						rt_pass_test;
 	
-	// -----------------------------------------------------------------------------------
-	// Pass
-
-	ngl::render::PassGenLinearDepth				pass_gen_linear_depth;
-	ngl::render::PassFinalComposite				pass_final_composite;
-	ngl::render::PassCopyFullscreen				pass_copy_to_swapchain;
-	// -----------------------------------------------------------------------------------
-
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 	std::vector<ngl::gfx::StaticMeshComponent*>	test_move_mesh_comp_array_;
 };
@@ -358,29 +343,6 @@ bool AppGame::Initialize()
 		return false;
 	}
 
-	
-
-	// Shader Load.
-	{
-		auto& ResourceMan = ngl::res::ResourceManager::Instance();
-
-		static const char* k_shader_model = "6_3";
-
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_vs";
-			loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_vs_mesh_simple_depth= ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl", &loaddesc);
-		}
-		{
-			ngl::gfx::ResShader::LoadDesc loaddesc = {};
-			loaddesc.entry_point_name = "main_ps";
-			loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
-			loaddesc.shader_model_version = k_shader_model;
-			res_shader_ps_mesh_simple_depth = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl", &loaddesc);
-		}
-	}
 
 	{
 		// Sampler.
@@ -397,7 +359,7 @@ bool AppGame::Initialize()
 		}
 	}
 
-	// MeshRendering Shader.
+
 	{
 		// SceneView Constant.
 		for (int i = 0; i < cb_sceneview_.size(); ++i)
@@ -411,68 +373,6 @@ bool AppGame::Initialize()
 
 			ngl::rhi::ConstantBufferViewDep::Desc cbv_desc = {};
 			cbv_sceneview_[i]->Initialize(cb_sceneview_[i].Get(), cbv_desc);
-		}
-
-		// Depth Prepass.
-		{
-			ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-			desc.vs = &res_shader_vs_mesh_simple_depth->data_;
-			desc.ps = &res_shader_ps_mesh_simple_depth->data_;
-
-			desc.depth_stencil_state.depth_enable = true;
-			desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater; // ReverseZ.
-			desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
-			desc.depth_stencil_state.stencil_enable = false;
-			desc.depth_stencil_format = tex_depth_->GetFormat();
-
-
-			// 入力レイアウト
-			std::array<ngl::rhi::InputElement, 3> input_elem_data;
-			desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-			desc.input_layout.p_input_elements = input_elem_data.data();
-			{
-				input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
-				input_elem_data[0].semantic_index = 0;
-				input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-				input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
-				input_elem_data[0].element_offset = 0;
-
-				input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
-				input_elem_data[1].semantic_index = 0;
-				input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-				input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
-				input_elem_data[1].element_offset = 0;
-
-				input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
-				input_elem_data[2].semantic_index = 0;
-				input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
-				input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
-				input_elem_data[2].element_offset = 0;
-			}
-			if (!pso_mesh_simple_depth.Initialize(&device_, desc))
-			{
-				assert(false);
-			}
-		}
-	}
-
-	{
-		// LinearDepth生成パス.
-		if (!pass_gen_linear_depth.Initialize(&device_))
-		{
-			assert(false);
-		}
-
-		// 最終画面生成パス.
-		if (!pass_final_composite.Initialize(&device_, tex_work_->GetFormat()))
-		{
-			assert(false);
-		}
-
-		// Swapchainへのコピーパス.
-		if (!pass_copy_to_swapchain.Initialize(&device_, swapchain_->GetDesc().format, "swapchain", "tex_work"))
-		{
-			assert(false);
 		}
 	}
 
@@ -554,8 +454,6 @@ bool AppGame::Initialize()
 
 	// テストコード
 	ngl_test::TestFunc00(&device_);
-
-	ngl::render::graph::Test(device_);
 
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
@@ -775,46 +673,7 @@ bool AppGame::Execute()
 	}
 
 
-	// Frame Graph Builder.
-	ngl::render::GraphBuilder frame_graph_builder(&device_);
-	{
-		// リソース登録.
-		{
-			frame_graph_builder.SetSwapchain(swapchain_);
-			frame_graph_builder.AddFrameResource("swapchain", swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
-
-
-			frame_graph_builder.AddFrameResource("hardware_depth", tex_depth_);
-			frame_graph_builder.AddFrameResource("hardware_depth", tex_depth_srv_);
-			frame_graph_builder.AddFrameResource("hardware_depth", tex_depth_dsv_);
-
-
-			frame_graph_builder.AddFrameResource("linear_depth", tex_lineardepth_);
-			frame_graph_builder.AddFrameResource("linear_depth", tex_lineardepth_srv_);
-			frame_graph_builder.AddFrameResource("linear_depth", tex_lineardepth_uav_);
-
-
-			frame_graph_builder.AddFrameResource("tex_work", tex_work_);
-			frame_graph_builder.AddFrameResource("tex_work", tex_work_rtv_);
-			frame_graph_builder.AddFrameResource("tex_work", tex_work_srv_);
-
-			frame_graph_builder.AddFrameResource("rt_test_buffer", rt_pass_test.ray_result_srv_);
-
-
-			frame_graph_builder.AddFrameResource("samp_linear", samp_linear_clamp_);
-
-
-			frame_graph_builder.AddFrameResource("scene_view", cbv_sceneview_[flip_index_sceneview_]);
-		}
-
-		// Passセットアップ.
-		pass_gen_linear_depth.Setup(frame_graph_builder);
-		pass_final_composite.Setup(frame_graph_builder);
-		pass_copy_to_swapchain.Setup(frame_graph_builder);
-	}
-
-
-	// Render Loop
+	// Render Frame.
 	{
 		// Deviceのフレーム準備
 		device_.ReadyToNewFrame();
@@ -838,103 +697,44 @@ bool AppGame::Execute()
 				rt_pass_test.Render(gfx_command_list_.Get());
 			}
 
-			if(false)
+			// RenderTaskGraphによるレンダリングパス.
 			{
-				// 旧テスト描画パスバージョン.
 
-				// Barrier.
+				// RTG構築.
+				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};
 				{
-					// Dsv State
-					gfx_command_list_->ResourceBarrier(tex_depth_.Get(), tex_depth_state_, ngl::rhi::ResourceState::DepthWrite);
-					tex_depth_state_ = ngl::rhi::ResourceState::DepthWrite;
+					auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskDepthPass>();
+					task_depth->Setup(rtg_builder, &device_, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
+
+					auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskGBufferPass>();
+					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_);
+
+					auto* task_linear_depth = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLinearDepthPass>();
+					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_, cbv_sceneview_[flip_index_sceneview_]);
+
+					auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLightPass>();
+					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
+
+					//auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
+					auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskFinalPass>();
+					task_final->Setup(rtg_builder, &device_, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
+						samp_linear_clamp_, rt_pass_test.ray_result_srv_,
+						swapchain_->GetDesc().format, swapchain_->GetWidth(), swapchain_->GetHeight(), swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
 				}
+				// RTGコンパイル.
+				rtg_builder.Compile(device_);
 
-				// Dsvクリア.
-				gfx_command_list_->ClearDepthTarget(tex_depth_dsv_.Get(), 0.0f, 0, true, false);
-				
-				// Mesh Raster Render.
-				// DepthPrepass.
-				{
-					auto* p_depth = tex_depth_.Get();
-					auto* p_depth_view = tex_depth_dsv_.Get();
-						
-					// Set RenderTarget.
-					gfx_command_list_->SetRenderTargets(nullptr, 0, p_depth_view);
 
-					// Set Viewport and Scissor.
-					ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_command_list_.Get(), p_depth->GetWidth(), p_depth->GetHeight());
-
-					// Mesh Rendering.
-					ngl::gfx::RenderMeshSinglePso(*gfx_command_list_, pso_mesh_simple_depth, frame_scene.mesh_instance_array_, *cbv_sceneview_[flip_index_sceneview_].Get());
-				}
-
-				// Gen LinearDepth.
-				{
-					// Barrier.
-					{
-						gfx_command_list_->ResourceBarrier(tex_depth_.Get(), ngl::rhi::ResourceState::DepthWrite, ngl::rhi::ResourceState::ShaderRead);
-						gfx_command_list_->ResourceBarrier(tex_lineardepth_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::UnorderedAccess);
-					}
-
-					// LinearDepth生成Pass実行.
-					pass_gen_linear_depth.Execute(frame_graph_builder, gfx_command_list_.Get());
-
-					// Barrier.
-					{
-						gfx_command_list_->ResourceBarrier(tex_depth_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::DepthWrite);
-						gfx_command_list_->ResourceBarrier(tex_lineardepth_.Get(), ngl::rhi::ResourceState::UnorderedAccess, ngl::rhi::ResourceState::ShaderRead);
-					}
-				}
-
-				// 最終レンダリングパス.
-				{
-					// Barrier.
-					{
-						// WorkRenderTarget Transition to RenderTarget
-						gfx_command_list_->ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::ShaderRead, ngl::rhi::ResourceState::RenderTarget);
-					}
-
-					pass_final_composite.Execute(frame_graph_builder, gfx_command_list_.Get());
-
-					// Barrier.
-					{
-						gfx_command_list_->ResourceBarrier(tex_work_.Get(), ngl::rhi::ResourceState::RenderTarget, ngl::rhi::ResourceState::ShaderRead);
-					}
-				}
-
-				// Swapchainへのコピーパス.
-				{
-					// Barrier.
-					{
-						gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
-						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
-					}
-
-					pass_copy_to_swapchain.Execute(frame_graph_builder, gfx_command_list_.Get());
-
-					{
-						// Swapchain State to Present
-						gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
-						swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
-					}
-				}
-			}
-			else
-			{
-				// RenderTaskGraphのテスト.
-
-				// Barrier.
+				// Swapchain Barrier.
 				{
 					gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
 					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
 				}
 
-				ngl::render::graph::Test1(device_, gfx_command_list_,
-					cbv_sceneview_[flip_index_sceneview_],
-					frame_scene.mesh_instance_array_,
-					rt_pass_test.ray_result_srv_,
-					samp_linear_clamp_,
-					swapchain_->GetDesc().format, swapchain_->GetWidth(), swapchain_->GetHeight(), swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
+
+				// RTG実行.
+				rtg_builder.Execute_ImmediateDebug(gfx_command_list_);
+
 
 				{
 					// Swapchain State to Present

@@ -16,18 +16,4 @@
 
 namespace ngl::render
 {
-	/*
-	class IPass
-	{
-	public:
-		IPass() = default;
-		virtual ~IPass() = 0;
-
-		virtual void Setup();
-
-		virtual void Execute(rhi::GraphicsCommandListDep* p_command_list) = 0;
-
-	protected:
-	};
-	*/
 }
