@@ -700,47 +700,48 @@ bool AppGame::Execute()
 			// RenderTaskGraphによるレンダリングパス.
 			{
 
-				// RTG構築.
+				// RTG Build.
+
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};
+				
+				// Register External.
 				{
+					constexpr ngl::rhi::ResourceState swapchain_final_state = ngl::rhi::ResourceState::Present;// Execute後のステート指定.
+					// 外部リソース登録.
+					rtg_builder.RegisterExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
+					// 状態追跡更新.
+					swapchain_resource_state_[swapchain_index] = swapchain_final_state;
+				}
+
+				// Build Rendering Pass.
+				{
+					// Depth Only.
 					auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskDepthPass>();
 					task_depth->Setup(rtg_builder, &device_, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
 
+					// GBuffer.
 					auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskGBufferPass>();
 					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_);
 
+					// Linear Depth.
 					auto* task_linear_depth = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLinearDepthPass>();
 					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_, cbv_sceneview_[flip_index_sceneview_]);
 
+					// Deferred Lighting.
 					auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLightPass>();
 					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
 
-					//auto h_swapchain = rtg_builder.GetSwapchainResourceHandle();// Swapchain.
+					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskFinalPass>();
 					task_final->Setup(rtg_builder, &device_, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-						samp_linear_clamp_, rt_pass_test.ray_result_srv_,
-						swapchain_->GetDesc().format, swapchain_->GetWidth(), swapchain_->GetHeight(), swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()]);
+						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 				}
-				// RTGコンパイル.
+
+				// Compile.
 				rtg_builder.Compile(device_);
 
-
-				// Swapchain Barrier.
-				{
-					gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::RenderTarget);
-					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::RenderTarget;
-				}
-
-
-				// RTG実行.
+				// Execute.
 				rtg_builder.Execute_ImmediateDebug(gfx_command_list_);
-
-
-				{
-					// Swapchain State to Present
-					gfx_command_list_->ResourceBarrier(swapchain_.Get(), swapchain_index, swapchain_resource_state_[swapchain_index], ngl::rhi::ResourceState::Present);
-					swapchain_resource_state_[swapchain_index] = ngl::rhi::ResourceState::Present;
-				}
 			}
 
 			gfx_command_list_->End();

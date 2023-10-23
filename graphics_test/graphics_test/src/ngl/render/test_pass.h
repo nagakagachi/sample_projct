@@ -336,12 +336,9 @@ namespace ngl::render
 				rtg::ResourceHandle h_depth_{};
 			rtg::ResourceHandle h_linear_depth_{};
 			rtg::ResourceHandle h_light_{};
-			rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
+			rtg::ResourceHandle h_swapchain_{}; // 一時リソーステスト. マクロにも登録しない.
 
 			// 外部指定の出力先バッファ.
-			rhi::RefRtvDep ref_out_target_external_{};
-			int out_width_ = 0;
-			int out_height_ = 0;
 			rhi::RefSampDep ref_samp_linear_clamp_{};
 			rhi::RefSrvDep ref_raytrace_result_srv_;
 
@@ -355,8 +352,7 @@ namespace ngl::render
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
 				rhi::RefSampDep ref_samp_linear_clamp,
-				rhi::RefSrvDep ref_raytrace_result_srv,
-				rhi::ResourceFormat out_format, int out_width, int out_height, rhi::RefRtvDep ref_out_target)
+				rhi::RefSrvDep ref_raytrace_result_srv)
 			{
 				{
 					// リソースアクセス定義.
@@ -364,23 +360,20 @@ namespace ngl::render
 					h_linear_depth_ = builder.RegisterResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 
-					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
-					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
-					h_tmp_ = temp_res0;
+					// SwapchainをRenderTargetとして要求.
+					h_swapchain_ = builder.RegisterResourceAccess(*this, builder.GetSwapchainResourceHandle(), rtg::access_type::RENDER_TARTGET);
 				}
 
 				{
 					// 外部リソース.
 
-					ref_out_target_external_ = ref_out_target;
-					out_width_ = out_width;
-					out_height_ = out_height;
-
 					ref_raytrace_result_srv_ = ref_raytrace_result_srv;
 
 					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
 				}
+
+				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
+				const auto render_target_desc = builder.res_desc_map_[h_swapchain_];
 
 				{
 					// 初期化. シェーダバイナリの要求とPSO生成.
@@ -411,7 +404,7 @@ namespace ngl::render
 					desc.ps = &res_shader_ps->data_;
 
 					desc.num_render_targets = 1;
-					desc.render_target_formats[0] = out_format;
+					desc.render_target_formats[0] = render_target_desc.desc.format;
 
 					desc.blend_state.target_blend_states[0].blend_enable = false;
 					desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
@@ -431,20 +424,19 @@ namespace ngl::render
 				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
 				auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
 				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
-				auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
+				auto res_swapchain = builder.GetAllocatedHandleResource(this, h_swapchain_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.srv_.IsValid());
-				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
+				assert(res_swapchain.swapchain_.IsValid() && res_swapchain.rtv_.IsValid());
 
-				assert(ref_out_target_external_.IsValid());// 外部出力先.
 
-				gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), out_width_, out_height_);
+				gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
 
 				// Rtv, Dsv セット.
 				{
-					const auto* p_rtv = ref_out_target_external_.Get();
+					const auto* p_rtv = res_swapchain.rtv_.Get();
 					commandlist->SetRenderTargets(&p_rtv, 1, nullptr);
 				}
 

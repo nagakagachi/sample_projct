@@ -65,9 +65,35 @@ namespace ngl
 
 			return handle;
 		}
+
+		// 外部リソースの登録. Swapchain.
+		void RenderTaskGraphBuilder::RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+		{
+			ex_swapchain_ = swapchain;
+			ex_swapchain_rtv_ = swapchain_rtv;
+			ex_swapchain_begin_state_ = curr_state;
+			ex_swapchain_required_end_state_ = nesesary_end_state;
+
+			ex_swapchain_executed_end_state_ = ex_swapchain_begin_state_;
+
+
+			// SwapchianもDescからFormat等を引けるようにしておく.
+			ResourceDesc2D res_desc = {};
+			res_desc = ResourceDesc2D::CreateAsAbsoluteSize(swapchain->GetWidth(), swapchain->GetHeight(), swapchain->GetDesc().format);
+		
+			res_desc_map_[GetSwapchainResourceHandle().data] = res_desc;// desc記録.
+		}
+
 		// Swapchainリソースハンドルを取得.
 		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle()
 		{
+			// SwapchainをNodeで利用する場合はBuilderに外部リソースとしてSwapchainを登録しておく必要がある.
+			if (!ex_swapchain_.IsValid())
+			{
+				std::cout << u8"[RenderTaskGraphBuilder][Error] 外部リソースとしてSwapchainが未登録です. Setupの前にRegisterExternalResourceでBuilderに登録が必要です." << std::endl;
+				assert(false);
+			}
+
 			ResourceHandle handle{};
 
 			handle.detail.is_swapchain = 1;// swapchain.
@@ -540,7 +566,9 @@ namespace ngl
 				else
 				{
 					// TODO. ここはSwapchain等の外部リソース依存の箇所なので登録時に一緒に指定された開始ステートとなるはず.
-					begin_state = rhi::ResourceState::General;// 仮でGeneral.
+					
+					// TODO. resouceId=-1は一旦Swapchainということにする. 汎用で任意のリソースを外部から登録できるようにする際に修正する.
+					begin_state = ex_swapchain_begin_state_;
 				}
 				
 				rhi::ResourceState curr_state = begin_state;
@@ -600,7 +628,10 @@ namespace ngl
 				}
 				else
 				{
-					// TODO. ここはSwapchain等の外部リソース依存の箇所なので適切な変数に保存する.
+					// TODO. ここはSwapchain等の外部リソース依存の箇所なので内部で変更しない(今のところはすべて外部から最初と最後のステートを指示する).
+					// 
+					// TODO. resouceId=-1は一旦Swapchainということにする. 汎用で任意のリソースを外部から登録できるようにする際に修正する.
+					ex_swapchain_executed_end_state_ = curr_state;
 				}
 			}
 			
@@ -681,25 +712,28 @@ namespace ngl
 			const int handle_id = handle_index_map[res_handle];
 			const int handle_res_id = handle_res_id_array[handle_id];
 
-			// MEMO. Swapchain等の外部リソースは負のIDとなるため, 外部リソース未対応の現状ではスキップする.
-			if (0 > handle_res_id)
-			{
-				return {};
-			}
-
-			// リソースを取得.
-			TextureInstancePoolElement res = (0 <= handle_res_id) ? tex_instance_pool_[handle_res_id] : TextureInstancePoolElement();
 
 			// 返却情報構築.
 			AllocatedHandleResourceInfo ret_info = {};
-			ret_info.tex_ = res.tex_;
 			ret_info.prev_state_ = state_transition.prev_;
 			ret_info.curr_state_ = state_transition.curr_;
-			ret_info.rtv_ = res.rtv_;
-			ret_info.dsv_ = res.dsv_;
-			ret_info.uav_ = res.uav_;
-			ret_info.srv_ = res.srv_;
-			
+
+			if (0 <= handle_res_id)
+			{
+				TextureInstancePoolElement res = tex_instance_pool_[handle_res_id];
+				ret_info.tex_ = res.tex_;
+				ret_info.rtv_ = res.rtv_;
+				ret_info.dsv_ = res.dsv_;
+				ret_info.uav_ = res.uav_;
+				ret_info.srv_ = res.srv_;
+			}
+			else
+			{
+				// res_id=-1の場合は一旦Swapchain扱いとしている.
+				ret_info.swapchain_ = ex_swapchain_;
+				ret_info.rtv_ = ex_swapchain_rtv_;
+			}
+
 			return ret_info;
 		}
 
@@ -713,7 +747,7 @@ namespace ngl
 				return;
 			}
 
-			// 仮でリソースバリアのみ発行する.
+			// TaskNodeをシーケンス順に評価.
 			for (const auto& e : node_sequence_)
 			{
 				// Nodeが登録したHandleを全て列挙. Nodeのpersistent_ref_handles_にはメンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
@@ -724,10 +758,22 @@ namespace ngl
 					AllocatedHandleResourceInfo handle_res = GetAllocatedHandleResource(e, handle_access.handle);
 					if (handle_res.tex_.IsValid())
 					{
+						// 通常テクスチャリソースの場合.
+
 						// 状態遷移コマンド発効..
 						if (handle_res.prev_state_ != handle_res.curr_state_)
 						{
 							commandlist->ResourceBarrier(handle_res.tex_.Get(), handle_res.prev_state_, handle_res.curr_state_);
+						}
+					}
+					else if (handle_res.swapchain_.IsValid())
+					{
+						// Swapchain(外部)の場合.
+						
+						// 状態遷移コマンド発効..
+						if (handle_res.prev_state_ != handle_res.curr_state_)
+						{
+							commandlist->ResourceBarrier(handle_res.swapchain_.Get(), handle_res.swapchain_->GetCurrentBufferIndex(), handle_res.prev_state_, handle_res.curr_state_);
 						}
 					}
 				}
@@ -735,6 +781,18 @@ namespace ngl
 				// BarrierをCommandListに正しく積んでからNodeを実行.
 				// MEMO. 現状はシーケンス順にシングルスレッド.
 				e->Run(*this, commandlist);
+			}
+
+			// 外部リソースの必須最終ステートの解決.
+			{
+				// 現状はSwapchainのみ.
+				if(ex_swapchain_.IsValid())
+				{
+					if (ex_swapchain_executed_end_state_ != ex_swapchain_required_end_state_)
+					{
+						commandlist->ResourceBarrier(ex_swapchain_.Get(), ex_swapchain_->GetCurrentBufferIndex(), ex_swapchain_executed_end_state_, ex_swapchain_required_end_state_);
+					}
+				}
 			}
 
 			// ExecuteしたらCompile結果は無効になる(Poolのリソースのステートなどが変わるため再度Compileする必要がある).

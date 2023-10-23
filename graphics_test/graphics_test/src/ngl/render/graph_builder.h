@@ -312,6 +312,12 @@ namespace ngl
 
 			// リソースハンドルを生成.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
+
+			// 外部リソースの登録. Swapchain.
+			// curr_state			: 外部リソースのGraph開始時点のステート.
+			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
+			void RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+
 			// Swapchainリソースハンドルを取得.
 			ResourceHandle GetSwapchainResourceHandle();
 
@@ -336,7 +342,9 @@ namespace ngl
 				rhi::ResourceState	prev_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
 				rhi::ResourceState	curr_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
 
-				rhi::RefTextureDep	tex_ = {};
+				rhi::RefTextureDep				tex_ = {};
+				rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};// 現状のインターフェイス的に統合が難しいのでSwapchainの場合はこちらに入る.
+
 				rhi::RefRtvDep		rtv_ = {};
 				rhi::RefDsvDep		dsv_ = {};
 				rhi::RefUavDep		uav_ = {};
@@ -403,8 +411,17 @@ namespace ngl
 			};
 			// Compileで割り当てられるリソースのPool.
 			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
-		
 
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+			// 外部リソース
+			rhi::RhiRef<rhi::SwapChainDep> ex_swapchain_ = {};
+			rhi::RefRtvDep ex_swapchain_rtv_ = {};
+			rhi::ResourceState ex_swapchain_begin_state_ = {};			// 外部リソース登録時に通知されるリソースのGraph実行前のステート.
+			rhi::ResourceState ex_swapchain_required_end_state_ = {};	// 外部リソース登録時に通知されるリソースのGraph実行後に遷移しているべきステート.
+			rhi::ResourceState ex_swapchain_executed_end_state_ = {};	// 外部リソースのGraphコンパイル時に確定した最終ステート. 最終必須ステートになっていなければ遷移コマンドが挿入される.
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
 			// HandleからリニアインデックスへのMap.
 			std::unordered_map<ResourceHandleDataType, int> handle_index_map = {};
@@ -421,7 +438,6 @@ namespace ngl
 			// Compileで構築される情報.
 			// NodeのHandle毎のリソース状態遷移.
 			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleDataType, NodeHandleState>> node_handle_state_ = {};
-
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			uint32_t s_res_handle_id_counter_{};// リソースハンドルユニークID.
