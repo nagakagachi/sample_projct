@@ -249,11 +249,13 @@ namespace ngl
 			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
 			{
 				RefHandle elem = { name , &handle};
-				persistent_ref_handles_.push_back(elem);
+				debug_ref_handles_.push_back(elem);
 			}
+			
+			// Debug用途でメンバとしてHandleを持つ. 名前などを付けたい場合はResourceHandle経由でアクセスできる場所に登録すべきか.
 			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
 			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
-			std::vector<RefHandle> persistent_ref_handles_{};
+			std::vector<RefHandle> debug_ref_handles_{};
 
 		public:
 			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
@@ -276,7 +278,7 @@ namespace ngl
 #define ITASK_NODE_HANDLE_REGISTER(name)\
 					{\
 							RefHandle elem = { #name , &name};\
-							persistent_ref_handles_.push_back(elem);\
+							debug_ref_handles_.push_back(elem);\
 					};
 // -------------------------------------------------------------
 

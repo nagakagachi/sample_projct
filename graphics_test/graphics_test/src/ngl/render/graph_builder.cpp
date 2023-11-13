@@ -750,7 +750,7 @@ namespace ngl
 			// TaskNodeをシーケンス順に評価.
 			for (const auto& e : node_sequence_)
 			{
-				// Nodeが登録したHandleを全て列挙. Nodeのpersistent_ref_handles_にはメンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
+				// Nodeが登録したHandleを全て列挙. Nodeのdebug_ref_handles_はデバッグ用とであることと, メンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
 				const auto& node_handle_access = node_handle_usage_map_[e];
 
 				for (const auto& handle_access : node_handle_access)
