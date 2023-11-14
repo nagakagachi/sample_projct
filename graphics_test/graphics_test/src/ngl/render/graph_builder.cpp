@@ -14,7 +14,7 @@ namespace ngl
 
 		
 		// オペレータ.
-		constexpr bool RenderTaskGraphBuilder::TaskStage::operator<(const TaskStage arg) const
+		constexpr bool TaskStage::operator<(const TaskStage arg) const
 		{
 			if(stage_ < arg.stage_)
 				return true;
@@ -22,7 +22,7 @@ namespace ngl
 				return step_ < arg.step_;
 			return false;
 		}
-		constexpr bool RenderTaskGraphBuilder::TaskStage::operator>(const TaskStage arg) const
+		constexpr bool TaskStage::operator>(const TaskStage arg) const
 		{
 			if(stage_ > arg.stage_)
 				return true;
@@ -30,7 +30,7 @@ namespace ngl
 				return step_ > arg.step_;
 			return false;
 		}
-		constexpr bool RenderTaskGraphBuilder::TaskStage::operator<=(const TaskStage arg) const
+		constexpr bool TaskStage::operator<=(const TaskStage arg) const
 		{
 			if(stage_ < arg.stage_)
 				return true;
@@ -38,7 +38,7 @@ namespace ngl
 				return step_ <= arg.step_;
 			return false;
 		}
-		constexpr bool RenderTaskGraphBuilder::TaskStage::operator>=(const TaskStage arg) const
+		constexpr bool TaskStage::operator>=(const TaskStage arg) const
 		{
 			if(stage_ > arg.stage_)
 				return true;
@@ -121,183 +121,12 @@ namespace ngl
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
 			return res_handle;
 		}
-
-
-		// Poolからリソース検索または新規生成.
-		int RenderTaskGraphBuilder::GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse)
-		{
-			constexpr TaskStage k_firstest_stage = {std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
-			
-			//	アクセスステージが引数で渡されなかった場合は未割り当てリソース以外を割り当てないようにk_firstest_stage扱いとする.
-			const TaskStage require_access_stage = (p_access_stage_for_reuse)? ((*p_access_stage_for_reuse)) : k_firstest_stage;
-			
-			// keyで既存リソースから検索または新規生成.
-					
-			// poolから検索.
-			int res_id = -1;
-			for(int i = 0; i < tex_instance_pool_.size(); ++i)
-			{
-				// 要求アクセスステージに対してアクセス期間が終わっていなければ再利用不可能.
-				//	MEMO. 新規生成した実リソースの last_access_stage_ を負のstageで初期化しておくこと.
-				if(tex_instance_pool_[i].last_access_stage_ >= require_access_stage)
-					continue;
-				
-				// フォーマットチェック.
-				if(tex_instance_pool_[i].tex_->GetFormat() != key.format)
-					continue;
-				// 要求サイズを格納できるならOK.
-				if(tex_instance_pool_[i].tex_->GetWidth() < static_cast<uint32_t>(key.require_width_))
-					continue;
-				// 要求サイズを格納できるならOK.
-				if(tex_instance_pool_[i].tex_->GetHeight() < static_cast<uint32_t>(key.require_height_))
-					continue;
-				// RTV要求している場合.
-				if(key.usage_ & access_type_mask::RENDER_TARTGET)
-				{
-					if(!tex_instance_pool_[i].rtv_.IsValid())
-						continue;
-				}
-				// DSV要求している場合.
-				if(key.usage_ & access_type_mask::DEPTH_TARGET)
-				{
-					if(!tex_instance_pool_[i].dsv_.IsValid())
-						continue;
-				}
-				// UAV要求している場合.
-				if(key.usage_ & access_type_mask::UAV)
-				{
-					if(!tex_instance_pool_[i].uav_.IsValid())
-						continue;
-				}
-				// SRV要求している場合.
-				if(key.usage_ & access_type_mask::SHADER_READ)
-				{
-					if(!tex_instance_pool_[i].srv_.IsValid())
-						continue;
-				}
-
-				// 再利用可能なリソース発見.
-				res_id = i;
-				break;
-			}
-
-			// 新規生成.
-			if(0 > res_id)
-			{
-				rhi::TextureDep::Desc desc = {};
-				rhi::ResourceState init_state = rhi::ResourceState::General;
-				{
-					desc.type = rhi::TextureType::Texture2D;// 現状2D固定.
-					desc.initial_state = init_state;
-					desc.array_size = 1;
-					desc.mip_count = 1;
-					desc.sample_count = 1;
-					desc.heap_type = rhi::ResourceHeapType::Default;
-						
-					desc.format = key.format;
-					desc.width = key.require_width_;	// MEMO 相対サイズの場合はここには縮小サイズ等が来てしまうので無駄がありそう.
-					desc.height = key.require_height_;
-					desc.depth = 1;
-							
-					desc.bind_flag = 0;
-					{
-						if(key.usage_ & access_type_mask::RENDER_TARTGET)
-							desc.bind_flag |= rhi::ResourceBindFlag::RenderTarget;
-						if(key.usage_ & access_type_mask::DEPTH_TARGET)
-							desc.bind_flag |= rhi::ResourceBindFlag::DepthStencil;
-						if(key.usage_ & access_type_mask::UAV)
-							desc.bind_flag |= rhi::ResourceBindFlag::UnorderedAccess;
-						if(key.usage_ & access_type_mask::SHADER_READ)
-							desc.bind_flag |= rhi::ResourceBindFlag::ShaderResource;
-					}
-				}
-				
-				rhi::RefTextureDep new_tex = {};
-				rhi::RefRtvDep new_rtv = {};
-				rhi::RefDsvDep new_dsv = {};
-				rhi::RefUavDep new_uav = {};
-				rhi::RefSrvDep new_srv = {};
-
-				// Texture.
-				new_tex = new rhi::TextureDep();
-				if (!new_tex->Initialize(&device, desc))
-				{
-					assert(false);
-					return -1;
-				}
-				// Rtv.
-				if(key.usage_ & access_type_mask::RENDER_TARTGET)
-				{
-					new_rtv = new rhi::RenderTargetViewDep();
-					if (!new_rtv->Initialize(&device, new_tex.Get(), 0, 0, 1))
-					{
-						assert(false);
-						return -1;
-					}
-				}
-				// Dsv.
-				if(key.usage_ & access_type_mask::DEPTH_TARGET)
-				{
-					new_dsv = new rhi::DepthStencilViewDep();
-					if (!new_dsv->Initialize(&device, new_tex.Get(), 0, 0, 1))
-					{
-						assert(false);
-						return -1;
-					}
-				}
-				// Uav.
-				if(key.usage_ & access_type_mask::UAV)
-				{
-					new_uav = new rhi::UnorderedAccessViewDep();
-					if (!new_uav->Initialize(&device, new_tex.Get(), 0, 0, 1))
-					{
-						assert(false);
-						return -1;
-					}
-				}
-				// Srv.
-				if(key.usage_ & access_type_mask::SHADER_READ)
-				{
-					new_srv = new rhi::ShaderResourceViewDep();
-					if (!new_srv->InitializeAsTexture(&device, new_tex.Get(), 0, 1, 0, 1))
-					{
-						assert(false);
-						return -1;
-					}
-				}
-
-				TextureInstancePoolElement new_pool_elem = {};
-				{
-					// 新規生成した実リソースは最終アクセスステージを負の最大にしておく(ステージ0のリクエストに割当できるように).
-					new_pool_elem.last_access_stage_ = k_firstest_stage;
-					
-					new_pool_elem.tex_ = new_tex;
-					new_pool_elem.rtv_ = new_rtv;
-					new_pool_elem.dsv_ = new_dsv;
-					new_pool_elem.uav_ = new_uav;
-					new_pool_elem.srv_ = new_srv;
-						
-					new_pool_elem.cached_state_ = init_state;// 新規生成したらその初期ステートを保持.
-					new_pool_elem.prev_cached_state_ = init_state;
-				}
-				res_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
-				tex_instance_pool_.push_back(new_pool_elem);//登録.
-			}
-
-			// チェック
-			if(p_access_stage_for_reuse)
-			{
-				// アクセス期間による再利用を有効にしている場合は, 最終アクセスステージリソースは必ず引数のアクセスステージよりも前のもののはず.
-				assert(tex_instance_pool_[res_id].last_access_stage_ < (*p_access_stage_for_reuse));
-			}
-
-			return res_id;
-		}
 		
-
 		// グラフからリソース割当と状態遷移を確定.
-		bool RenderTaskGraphBuilder::Compile(rhi::DeviceDep& device)
+		bool RenderTaskGraphBuilder::Compile(RenderTaskGraphManager& manager)
 		{
+			p_compiled_manager_ = &manager;
+			
 			// MEMO 終端に寄与しないノードのカリングは保留.
 			
 			// 念のためのValidation Check.
@@ -323,7 +152,6 @@ namespace ngl
 			}
 
 			
-
 			std::vector<TaskStage> node_stage_array = {};// Sequence上のインデックスからタスクステージ情報を引く.
 			{
 				int stage_counter = 0;
@@ -499,11 +327,11 @@ namespace ngl
 #endif
 
 						// 割当可能なリソース検索または新規生成.
-						int res_id = GetOrCreateResourceFromPool(device, search_key, p_request_access_stage);
+						int res_id = p_compiled_manager_->GetOrCreateResourceFromPool(search_key, p_request_access_stage);
 						assert(0 <= res_id);// 必ず有効なIDが帰るはず.
 
 						// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
-						tex_instance_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
+						p_compiled_manager_->tex_instance_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
 
 						// ハンドルから実リソースを引けるように登録.
 						handle_res_id_array[handle_id] = res_id;
@@ -561,7 +389,7 @@ namespace ngl
 				rhi::ResourceState begin_state = {};
 				if(0 <= res_id)
 				{
-					begin_state = tex_instance_pool_[res_id].cached_state_;// 実リソースのCompile時点のステートから開始.
+					begin_state = p_compiled_manager_->tex_instance_pool_[res_id].cached_state_;// 実リソースのCompile時点のステートから開始.
 				}
 				else
 				{
@@ -621,10 +449,10 @@ namespace ngl
 				// 最終ステートを保存.
 				if(0 <= res_id)
 				{
-					tex_instance_pool_[res_id].prev_cached_state_ = tex_instance_pool_[res_id].cached_state_;// Compile前のステートを一応保持.
+					p_compiled_manager_->tex_instance_pool_[res_id].prev_cached_state_ = p_compiled_manager_->tex_instance_pool_[res_id].cached_state_;// Compile前のステートを一応保持.
 
 					// Compile後のステートに更新.
-					tex_instance_pool_[res_id].cached_state_ = curr_state;
+					p_compiled_manager_->tex_instance_pool_[res_id].cached_state_ = curr_state;
 				}
 				else
 				{
@@ -651,7 +479,7 @@ namespace ngl
 					const auto& lifetime_last = handle_life_last_array[handle_id];
 
 					const auto res_id = handle_res_id_array[handle_id];
-					const auto res = (0 <= res_id)? tex_instance_pool_[res_id] : TextureInstancePoolElement();
+					const auto res = (0 <= res_id)? p_compiled_manager_->tex_instance_pool_[res_id] : RenderTaskGraphManager::TextureInstancePoolElement();
 						
 					std::cout << "	-ResourceHandle ID " << handle << std::endl;
 					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
@@ -689,7 +517,9 @@ namespace ngl
 		{
 			// Compileされていない.
 			assert(is_compiled_);
-			if (!is_compiled_)
+			assert(nullptr != p_compiled_manager_);
+			
+			if (!is_compiled_ || nullptr == p_compiled_manager_)
 			{
 				return {};
 			}
@@ -720,7 +550,7 @@ namespace ngl
 
 			if (0 <= handle_res_id)
 			{
-				TextureInstancePoolElement res = tex_instance_pool_[handle_res_id];
+				RenderTaskGraphManager::TextureInstancePoolElement res = p_compiled_manager_->tex_instance_pool_[handle_res_id];
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
 				ret_info.dsv_ = res.dsv_;
@@ -742,7 +572,8 @@ namespace ngl
 		{
 			// Compileされていない.
 			assert(is_compiled_);
-			if (!is_compiled_)
+			assert(nullptr != p_compiled_manager_);
+			if (!is_compiled_ || nullptr == p_compiled_manager_)
 			{
 				return;
 			}
@@ -797,6 +628,8 @@ namespace ngl
 
 			// ExecuteしたらCompile結果は無効になる(Poolのリソースのステートなどが変わるため再度Compileする必要がある).
 			is_compiled_ = false;
+			p_compiled_manager_ = nullptr;
+			// その他色々クリアしたい.
 		}
 
 		// -------------------------------------------------------------------------------------------
@@ -826,5 +659,194 @@ namespace ngl
 				return -1;
 			return static_cast<int>(std::distance(node_sequence_.begin(), find_pos));
 		}
+
+
+		// --------------------------------------------------------------------------------------------------------------------
+		// Poolからリソース検索または新規生成.
+		int RenderTaskGraphManager::GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse)
+		{
+			constexpr TaskStage k_firstest_stage = {std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
+			
+			//	アクセスステージが引数で渡されなかった場合は未割り当てリソース以外を割り当てないようにk_firstest_stage扱いとする.
+			const TaskStage require_access_stage = (p_access_stage_for_reuse)? ((*p_access_stage_for_reuse)) : k_firstest_stage;
+
+			assert(nullptr != p_device_);
+			
+			// keyで既存リソースから検索または新規生成.
+					
+			// poolから検索.
+			int res_id = -1;
+			for(int i = 0; i < tex_instance_pool_.size(); ++i)
+			{
+				// 要求アクセスステージに対してアクセス期間が終わっていなければ再利用不可能.
+				//	MEMO. 新規生成した実リソースの last_access_stage_ を負のstageで初期化しておくこと.
+				if(tex_instance_pool_[i].last_access_stage_ >= require_access_stage)
+					continue;
+				
+				// フォーマットチェック.
+				if(tex_instance_pool_[i].tex_->GetFormat() != key.format)
+					continue;
+				// 要求サイズを格納できるならOK.
+				if(tex_instance_pool_[i].tex_->GetWidth() < static_cast<uint32_t>(key.require_width_))
+					continue;
+				// 要求サイズを格納できるならOK.
+				if(tex_instance_pool_[i].tex_->GetHeight() < static_cast<uint32_t>(key.require_height_))
+					continue;
+				// RTV要求している場合.
+				if(key.usage_ & access_type_mask::RENDER_TARTGET)
+				{
+					if(!tex_instance_pool_[i].rtv_.IsValid())
+						continue;
+				}
+				// DSV要求している場合.
+				if(key.usage_ & access_type_mask::DEPTH_TARGET)
+				{
+					if(!tex_instance_pool_[i].dsv_.IsValid())
+						continue;
+				}
+				// UAV要求している場合.
+				if(key.usage_ & access_type_mask::UAV)
+				{
+					if(!tex_instance_pool_[i].uav_.IsValid())
+						continue;
+				}
+				// SRV要求している場合.
+				if(key.usage_ & access_type_mask::SHADER_READ)
+				{
+					if(!tex_instance_pool_[i].srv_.IsValid())
+						continue;
+				}
+
+				// 再利用可能なリソース発見.
+				res_id = i;
+				break;
+			}
+
+			// 新規生成.
+			if(0 > res_id)
+			{
+				rhi::TextureDep::Desc desc = {};
+				rhi::ResourceState init_state = rhi::ResourceState::General;
+				{
+					desc.type = rhi::TextureType::Texture2D;// 現状2D固定.
+					desc.initial_state = init_state;
+					desc.array_size = 1;
+					desc.mip_count = 1;
+					desc.sample_count = 1;
+					desc.heap_type = rhi::ResourceHeapType::Default;
+						
+					desc.format = key.format;
+					desc.width = key.require_width_;	// MEMO 相対サイズの場合はここには縮小サイズ等が来てしまうので無駄がありそう.
+					desc.height = key.require_height_;
+					desc.depth = 1;
+							
+					desc.bind_flag = 0;
+					{
+						if(key.usage_ & access_type_mask::RENDER_TARTGET)
+							desc.bind_flag |= rhi::ResourceBindFlag::RenderTarget;
+						if(key.usage_ & access_type_mask::DEPTH_TARGET)
+							desc.bind_flag |= rhi::ResourceBindFlag::DepthStencil;
+						if(key.usage_ & access_type_mask::UAV)
+							desc.bind_flag |= rhi::ResourceBindFlag::UnorderedAccess;
+						if(key.usage_ & access_type_mask::SHADER_READ)
+							desc.bind_flag |= rhi::ResourceBindFlag::ShaderResource;
+					}
+				}
+				
+				rhi::RefTextureDep new_tex = {};
+				rhi::RefRtvDep new_rtv = {};
+				rhi::RefDsvDep new_dsv = {};
+				rhi::RefUavDep new_uav = {};
+				rhi::RefSrvDep new_srv = {};
+
+				// Texture.
+				new_tex = new rhi::TextureDep();
+				if (!new_tex->Initialize(p_device_, desc))
+				{
+					assert(false);
+					return -1;
+				}
+				// Rtv.
+				if(key.usage_ & access_type_mask::RENDER_TARTGET)
+				{
+					new_rtv = new rhi::RenderTargetViewDep();
+					if (!new_rtv->Initialize(p_device_, new_tex.Get(), 0, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+				// Dsv.
+				if(key.usage_ & access_type_mask::DEPTH_TARGET)
+				{
+					new_dsv = new rhi::DepthStencilViewDep();
+					if (!new_dsv->Initialize(p_device_, new_tex.Get(), 0, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+				// Uav.
+				if(key.usage_ & access_type_mask::UAV)
+				{
+					new_uav = new rhi::UnorderedAccessViewDep();
+					if (!new_uav->Initialize(p_device_, new_tex.Get(), 0, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+				// Srv.
+				if(key.usage_ & access_type_mask::SHADER_READ)
+				{
+					new_srv = new rhi::ShaderResourceViewDep();
+					if (!new_srv->InitializeAsTexture(p_device_, new_tex.Get(), 0, 1, 0, 1))
+					{
+						assert(false);
+						return -1;
+					}
+				}
+
+				TextureInstancePoolElement new_pool_elem = {};
+				{
+					// 新規生成した実リソースは最終アクセスステージを負の最大にしておく(ステージ0のリクエストに割当できるように).
+					new_pool_elem.last_access_stage_ = k_firstest_stage;
+					
+					new_pool_elem.tex_ = new_tex;
+					new_pool_elem.rtv_ = new_rtv;
+					new_pool_elem.dsv_ = new_dsv;
+					new_pool_elem.uav_ = new_uav;
+					new_pool_elem.srv_ = new_srv;
+						
+					new_pool_elem.cached_state_ = init_state;// 新規生成したらその初期ステートを保持.
+					new_pool_elem.prev_cached_state_ = init_state;
+				}
+				res_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
+				tex_instance_pool_.push_back(new_pool_elem);//登録.
+			}
+
+			// チェック
+			if(p_access_stage_for_reuse)
+			{
+				// アクセス期間による再利用を有効にしている場合は, 最終アクセスステージリソースは必ず引数のアクセスステージよりも前のもののはず.
+				assert(tex_instance_pool_[res_id].last_access_stage_ < (*p_access_stage_for_reuse));
+			}
+
+			return res_id;
+		}
+		
+		// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.
+		// Compileしたbuilderは必ずExecuteする必要がある.
+		// また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
+		bool RenderTaskGraphManager::Compile(RenderTaskGraphBuilder& builder)
+		{
+			assert(nullptr != p_device_);
+			
+			const bool result = builder.Compile(*this);
+
+			return result;
+		}
+		
+		
 	}
 }

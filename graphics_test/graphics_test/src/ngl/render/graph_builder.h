@@ -52,7 +52,7 @@ namespace ngl
 		};
 		
 
-		struct RenderTaskGraphBuilder;
+		class RenderTaskGraphBuilder;
 		// Passが必要とするリソースの定義.
 		struct ResourceDesc2D
 		{
@@ -192,7 +192,7 @@ namespace ngl
 
 		/*
 		// 生成はRenderTaskGraphBuilder経由.
-		// 派生クラスではメンバハンドルや基本情報の簡易定義のために専用のマクロを利用する.
+		// 派生クラスでは基本情報の簡易定義とハンドルのデバッグ情報登録のために専用のマクロを利用する.
 
 			struct TaskSamplePass : public rtg::ITaskNode
 			{
@@ -289,12 +289,38 @@ namespace ngl
 // -------------------------------------------------------------
 
 
+		// ハンドル毎のタイムライン上での位置を示す情報を生成.
+		// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
+		// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
+		struct TaskStage
+		{
+			constexpr TaskStage() = default;
+
+			int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+			int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+
+			// オペレータ.
+			constexpr bool operator<(const TaskStage arg) const;
+			constexpr bool operator>(const TaskStage arg) const;
+			constexpr bool operator<=(const TaskStage arg) const;
+			constexpr bool operator>=(const TaskStage arg) const;
+		};
+		// 実リソースの割当.
+		struct ResourceSearchKey
+		{
+			rhi::ResourceFormat format = {};
+			int require_width_ = {};
+			int require_height_ = {};
+			ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
+		};
 
 		// Taskノードのリソースアロケーションやノード間リソース状態遷移を計算する.
 		// GPU実行順はCreateされたTaskノードの順序.
 		//  
-		struct RenderTaskGraphBuilder
+		class RenderTaskGraphBuilder
 		{
+			friend class RenderTaskGraphManager;
+		public:
 			~RenderTaskGraphBuilder();
 
 			struct NodeHandleUsageInfo
@@ -327,15 +353,13 @@ namespace ngl
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
 
-			// グラフからリソース割当と状態遷移を確定.
-			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
-			bool Compile(rhi::DeviceDep& device);
 
-			// Compileしたグラフを実行しCommandListを構築する, 
+			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
 			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
 			void Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist);
 
 
+			// -------------------------------------------------------------------------------------------
 			// Compileで割り当てられたHandleのリソース情報.
 			struct AllocatedHandleResourceInfo
 			{
@@ -355,64 +379,21 @@ namespace ngl
 			// NodeのHandleに対して割り当て済みリソースを取得する.
 			// Graphシステム側で必要なBarrierコマンドを発効するため基本的にNode実装側ではBarrierコマンドは不要.
 			AllocatedHandleResourceInfo GetAllocatedHandleResource(const ITaskNode* node, ResourceHandle res_handle);
-
 			// -------------------------------------------------------------------------------------------
-
-
-
-
-
+			
 			// -------------------------------------------------------------------------------------------
 			static constexpr  int k_base_height = 1080;
 			int res_base_height_ = k_base_height;
 			int res_base_width_ = static_cast<int>( static_cast<float>(k_base_height) * 16.0f/9.0f);
 			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
-			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// リソースユニークIDからその定義のMap.
+			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// Handleからその定義のMap.
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			bool is_compiled_ = false;
-
-			// ハンドル毎のタイムライン上での位置を示す情報を生成.
-			// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
-			// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
-			struct TaskStage
-			{
-				constexpr TaskStage() = default;
-
-				int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
-				int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
-
-				// オペレータ.
-				constexpr bool operator<(const TaskStage arg) const;
-				constexpr bool operator>(const TaskStage arg) const;
-				constexpr bool operator<=(const TaskStage arg) const;
-				constexpr bool operator>=(const TaskStage arg) const;
-			};
-			// 内部リソースプール用.
-			struct TextureInstancePoolElement
-			{
-				TextureInstancePoolElement() = default;
-				TextureInstancePoolElement(const TextureInstancePoolElement& arg)
-				{
-					*this = arg;
-				}
-				
-				TaskStage last_access_stage_ = {};// シーケンス上でのこのリソースへ最後にアクセスしたタスクの情報.
-				
-				rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
-				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
-				
-				rhi::RefTextureDep	tex_ = {};
-				rhi::RefRtvDep		rtv_ = {};
-				rhi::RefDsvDep		dsv_ = {};
-				rhi::RefUavDep		uav_ = {};
-				rhi::RefSrvDep		srv_ = {};
-			};
-			// Compileで割り当てられるリソースのPool.
-			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
+			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// 外部リソース
@@ -444,26 +425,68 @@ namespace ngl
 
 			uint32_t s_res_handle_id_counter_{};// リソースハンドルユニークID.
 		private:
+			// グラフからリソース割当と状態遷移を確定.
+			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
+			bool Compile(class RenderTaskGraphManager& manager);
+			
 			// Sequence上でのノードの位置を返す.
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
 			
 			// ------------------------------------------
 			
+		};
+
+		// RenderTaskGraphBuilderのCompileや, それらが利用するリソースの永続的なプール管理.
+		class RenderTaskGraphManager
+		{
+			friend class RenderTaskGraphBuilder;
 			
-			// 実リソースの割当.
-			struct ResourceSearchKey
+		public:
+			RenderTaskGraphManager() = default;
+			~RenderTaskGraphManager() = default;
+		public:
+			bool Init(rhi::DeviceDep& p_device)
 			{
-				rhi::ResourceFormat format = {};
-				int require_width_ = {};
-				int require_height_ = {};
-				ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
+				p_device_ = &p_device;
+				return (nullptr != p_device_);
+			}
+
+			// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.
+			// Compileしたbuilderは必ずExecuteする必要がある.
+			// また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
+			bool Compile(RenderTaskGraphBuilder& builder);
+			
+		private:
+			rhi::DeviceDep* p_device_ = nullptr;
+			
+			// 内部リソースプール用.
+			struct TextureInstancePoolElement
+			{
+				TextureInstancePoolElement() = default;
+				TextureInstancePoolElement(const TextureInstancePoolElement& arg)
+				{
+					*this = arg;
+				}
+				
+				TaskStage last_access_stage_ = {};// シーケンス上でのこのリソースへ最後にアクセスしたタスクの情報.
+				
+				rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
+				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
+				
+				rhi::RefTextureDep	tex_ = {};
+				rhi::RefRtvDep		rtv_ = {};
+				rhi::RefDsvDep		dsv_ = {};
+				rhi::RefUavDep		uav_ = {};
+				rhi::RefSrvDep		srv_ = {};
 			};
+			// Compileで割り当てられるリソースのPool.
+			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
+			
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
-			int GetOrCreateResourceFromPool(rhi::DeviceDep& device, ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
+			int GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
 		};
-
 		
 	}
 }

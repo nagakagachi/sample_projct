@@ -702,7 +702,10 @@ bool AppGame::Execute()
 
 				// RTG Build.
 
-				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};
+				ngl::rtg::RenderTaskGraphManager rtg_manager{};// Graphやフレームを跨いだリソースのプール管理など. 実際はグローバルやアプリインスタンス側で保持する予定.
+				rtg_manager.Init(device_);
+				
+				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
 				
 				// Register External.
 				{
@@ -737,10 +740,11 @@ bool AppGame::Execute()
 						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 				}
 
-				// Compile.
-				rtg_builder.Compile(device_);
+				// Compile. ManagerでCompileを実行する.
+				rtg_manager.Compile(rtg_builder);
 
-				// Execute.
+				// Execute. CompileしたGraphは必ずExecuteする必要がある. またその順序もCompileした順のGraphで実行する必要がある.
+				//	これらはCompileで確定したリソース状態遷移等を適切な順序でCommandListに積む必要があるため.
 				rtg_builder.Execute_ImmediateDebug(gfx_command_list_);
 			}
 
