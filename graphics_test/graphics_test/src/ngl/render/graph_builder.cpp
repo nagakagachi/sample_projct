@@ -475,7 +475,7 @@ namespace ngl
 			
 			
 			// デバッグ表示.
-			if(true)
+			if(false)
 			{
 #if defined(_DEBUG)
 				// 各ResourceHandleへの処理順でのアクセス情報.

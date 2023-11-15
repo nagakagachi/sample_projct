@@ -18,6 +18,10 @@
 #include "command_list.d3d12.h"
 #include "descriptor.d3d12.h"
 
+#if defined _DEBUG
+	#define NGL_SHADER_DEBUG_LOG 0
+#endif
+
 namespace ngl
 {
 namespace rhi
@@ -619,7 +623,7 @@ namespace rhi
 
 				// Input Output
 				{
-#if defined(_DEBUG)
+#if NGL_SHADER_DEBUG_LOG
 					std::cout << "Shader Input Param" << std::endl;
 					std::cout << "	Num Param = " << shader_desc.InputParameters << std::endl;
 #endif
@@ -628,13 +632,13 @@ namespace rhi
 					{
 						auto& tar = input_param_[i];
 
-#if defined(_DEBUG)
+#if NGL_SHADER_DEBUG_LOG
 						std::cout << "	Param " << i << std::endl;
 #endif
 						D3D12_SIGNATURE_PARAMETER_DESC input_desc;
 						if (SUCCEEDED(shader_reflect->GetInputParameterDesc(i, &input_desc)))
 						{
-#if defined(_DEBUG)
+#if NGL_SHADER_DEBUG_LOG
 							std::cout << "		SemanticName = " << input_desc.SemanticName << std::endl;
 							std::cout << "		SemanticIndex = " << input_desc.SemanticIndex << std::endl;
 							std::cout << "		ComponentType = " << input_desc.ComponentType << std::endl;
@@ -1240,6 +1244,8 @@ namespace rhi
 
 		// よくやるミスのチェック
 #if defined(_DEBUG)
+		// RenderTargetが一つ以上指定されているにも関わらずWriteMaskがゼロであるような場合はミスの場合があるため警告.
+		if(0 != desc.num_render_targets)
 		{
 			bool any_writemask_nonzero = false;
 			for (auto&& bs_target : desc.blend_state.target_blend_states)
