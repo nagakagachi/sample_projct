@@ -295,10 +295,16 @@ namespace ngl
 		struct TaskStage
 		{
 			constexpr TaskStage() = default;
-
+			
 			int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
 			int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
 
+			// Stage 0 に対して常に前となるようなStage. リソースプール側リソースのリセットや新規生成リソースのステージとして利用.
+			static constexpr TaskStage k_frontmost_stage()
+			{
+				return TaskStage{std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
+			};
+			
 			// オペレータ.
 			constexpr bool operator<(const TaskStage arg) const;
 			constexpr bool operator>(const TaskStage arg) const;
@@ -468,7 +474,7 @@ namespace ngl
 					*this = arg;
 				}
 				
-				TaskStage last_access_stage_ = {};// シーケンス上でのこのリソースへ最後にアクセスしたタスクの情報.
+				TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
 				
 				rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
 				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
@@ -482,6 +488,7 @@ namespace ngl
 			// Compileで割り当てられるリソースのPool.
 			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
 			
+		private:
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.

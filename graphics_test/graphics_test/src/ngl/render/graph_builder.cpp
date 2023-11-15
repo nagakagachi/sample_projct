@@ -125,7 +125,17 @@ namespace ngl
 		// グラフからリソース割当と状態遷移を確定.
 		bool RenderTaskGraphBuilder::Compile(RenderTaskGraphManager& manager)
 		{
+			// CompileされたGraphは必ずExecuteが必要.
+			// 多重Compileは禁止.
+			assert(!is_compiled_);
+			if (is_compiled_)
+			{
+				return false;
+			}
+			
+			// Compileでリソース割当をするマネージャを保持.
 			p_compiled_manager_ = &manager;
+
 			
 			// MEMO 終端に寄与しないノードのカリングは保留.
 			
@@ -665,10 +675,8 @@ namespace ngl
 		// Poolからリソース検索または新規生成.
 		int RenderTaskGraphManager::GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse)
 		{
-			constexpr TaskStage k_firstest_stage = {std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
-			
-			//	アクセスステージが引数で渡されなかった場合は未割り当てリソース以外を割り当てないようにk_firstest_stage扱いとする.
-			const TaskStage require_access_stage = (p_access_stage_for_reuse)? ((*p_access_stage_for_reuse)) : k_firstest_stage;
+			//	アクセスステージが引数で渡されなかった場合は未割り当てリソース以外を割り当てないようにTaskStage::k_frontmost_stage(負の最大)扱いとする.
+			const TaskStage require_access_stage = (p_access_stage_for_reuse)? ((*p_access_stage_for_reuse)) : TaskStage::k_frontmost_stage();
 
 			assert(nullptr != p_device_);
 			
@@ -810,7 +818,7 @@ namespace ngl
 				TextureInstancePoolElement new_pool_elem = {};
 				{
 					// 新規生成した実リソースは最終アクセスステージを負の最大にしておく(ステージ0のリクエストに割当できるように).
-					new_pool_elem.last_access_stage_ = k_firstest_stage;
+					new_pool_elem.last_access_stage_ = TaskStage::k_frontmost_stage();
 					
 					new_pool_elem.tex_ = new_tex;
 					new_pool_elem.rtv_ = new_rtv;
@@ -841,8 +849,16 @@ namespace ngl
 		bool RenderTaskGraphManager::Compile(RenderTaskGraphBuilder& builder)
 		{
 			assert(nullptr != p_device_);
-			
+
+			// Compile実行.
 			const bool result = builder.Compile(*this);
+
+			// Compile完了したのでシーケンス上でのリソース利用情報をクリアする.
+			//	Stateは継続するので維持.
+			for(auto& e : tex_instance_pool_)
+			{
+				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
+			}
 
 			return result;
 		}

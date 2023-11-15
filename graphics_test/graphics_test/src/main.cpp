@@ -72,6 +72,9 @@ private:
 
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
+
+	// RenderTaskGraphのCompileやそれらが利用するリソースプール管理.
+	ngl::rtg::RenderTaskGraphManager rtg_manager_{};
 	
 
 	// CommandQueue実行完了待機用Fence
@@ -212,6 +215,11 @@ bool AppGame::Initialize()
 			swapchain_rtvs_[i]->Initialize(&device_, swapchain_.Get(), i);
 			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
+	}
+
+	// RTGマネージャ初期化.
+	{
+		rtg_manager_.Init(device_);
 	}
 
 	// DepthBuffer
@@ -699,12 +707,7 @@ bool AppGame::Execute()
 
 			// RenderTaskGraphによるレンダリングパス.
 			{
-
 				// RTG Build.
-
-				ngl::rtg::RenderTaskGraphManager rtg_manager{};// Graphやフレームを跨いだリソースのプール管理など. 実際はグローバルやアプリインスタンス側で保持する予定.
-				rtg_manager.Init(device_);
-				
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
 				
 				// Register External.
@@ -741,7 +744,7 @@ bool AppGame::Execute()
 				}
 
 				// Compile. ManagerでCompileを実行する.
-				rtg_manager.Compile(rtg_builder);
+				rtg_manager_.Compile(rtg_builder);
 
 				// Execute. CompileしたGraphは必ずExecuteする必要がある. またその順序もCompileした順のGraphで実行する必要がある.
 				//	これらはCompileで確定したリソース状態遷移等を適切な順序でCommandListに積む必要があるため.
