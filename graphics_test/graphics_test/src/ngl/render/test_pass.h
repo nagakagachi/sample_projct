@@ -372,7 +372,7 @@ namespace ngl::render
 				}
 
 				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
-				const auto render_target_desc = builder.res_desc_map_[h_swapchain_];
+				const auto render_target_desc = builder.GetRegisteredResouceHandleDesc(h_swapchain);
 
 				{
 					// 初期化. シェーダバイナリの要求とPSO生成.

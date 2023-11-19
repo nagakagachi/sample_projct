@@ -255,6 +255,10 @@
     <setting file="mock:///Dummy.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/include/unordered_map" root0="SKIP_HIGHLIGHTING" />
   </component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 4
+}</component>
   <component name="ProjectId" id="2SuezuKgYwtkC3DvLaAk0ZyZSvI" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -274,8 +278,8 @@
   },
   &quot;keyToStringList&quot;: {
     &quot;rider.external.source.directories&quot;: [
-      &quot;C:\\Users\\nagak\\AppData\\Roaming\\JetBrains\\Rider2023.1\\resharper-host\\DecompilerCache&quot;,
-      &quot;C:\\Users\\nagak\\AppData\\Roaming\\JetBrains\\Rider2023.1\\resharper-host\\SourcesCache&quot;,
+      &quot;C:\\Users\\nagak\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\DecompilerCache&quot;,
+      &quot;C:\\Users\\nagak\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\SourcesCache&quot;,
       &quot;C:\\Users\\nagak\\AppData\\Local\\Symbols\\src&quot;
     ]
   }
@@ -286,6 +290,7 @@
         <option name="CONFIGURATION" value="Debug" />
         <option name="PLATFORM" value="x64" />
         <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/graphics_test/graphics_test.vcxproj" />
+        <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
@@ -296,6 +301,7 @@
         <option name="CONFIGURATION" value="Debug" />
         <option name="PLATFORM" value="x86" />
         <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/graphics_test/graphics_test.vcxproj" />
+        <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
@@ -306,6 +312,7 @@
         <option name="CONFIGURATION" value="Release" />
         <option name="PLATFORM" value="x64" />
         <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/graphics_test/graphics_test.vcxproj" />
+        <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
@@ -316,6 +323,7 @@
         <option name="CONFIGURATION" value="Release" />
         <option name="PLATFORM" value="x86" />
         <option name="PROJECT_FILE_PATH" value="$PROJECT_DIR$/graphics_test/graphics_test.vcxproj" />
+        <option name="CURRENT_LAUNCH_PROFILE" value="Local" />
         <option name="EXE_PATH" value="$(LocalDebuggerCommand)" />
         <option name="PROGRAM_PARAMETERS" value="$(LocalDebuggerCommandArguments)" />
         <option name="WORKING_DIRECTORY" value="$(LocalDebuggerWorkingDirectory)" />
@@ -339,6 +347,8 @@
       <workItem from="1690001162092" duration="122000" />
       <workItem from="1694332269549" duration="2406000" />
       <workItem from="1694521767984" duration="7917000" />
+      <workItem from="1700408055178" duration="124000" />
+      <workItem from="1700409465497" duration="524000" />
     </task>
     <servers />
   </component>
@@ -347,5 +357,16 @@
   </component>
   <component name="VcsManagerConfiguration">
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/graphics_test/src/ngl/render/test_pass.h</url>
+          <line>374</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

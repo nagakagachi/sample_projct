@@ -64,7 +64,7 @@ namespace ngl
 
 			// Desc登録.
 			{
-				res_desc_map_[handle.data] = res_desc;// desc記録.
+				handle_2_desc_[handle] = res_desc;// desc記録.
 			}
 			
 			return handle;
@@ -108,7 +108,7 @@ namespace ngl
 				{
 					res_desc = ResourceDesc2D::CreateAsAbsoluteSize(tex->GetWidth(), tex->GetHeight(), tex->GetDesc().format);
 				}
-				res_desc_map_[new_handle.data] = res_desc;// desc記録.
+				handle_2_desc_[new_handle] = res_desc;// desc記録.
 			}
 
 			// 外部リソース情報.
@@ -121,7 +121,7 @@ namespace ngl
 				ex_handle_2_index_[new_handle] = res_index;
 
 				// 外部リソース用Indexで情報登録.
-				ExResourceRegisterElement& ex_res_info = ex_resource_[res_index];
+				ExternalResourceRegisterInfo& ex_res_info = ex_resource_[res_index];
 				{
 					ex_res_info.swapchain_ = swapchain;
 					ex_res_info.tex_ = tex;
@@ -138,7 +138,7 @@ namespace ngl
 					ex_res_info.last_access_stage_ = TaskStage::k_frontmost_stage();
 				}
 			}
-
+			
 			return new_handle;
 		}
 
@@ -159,9 +159,22 @@ namespace ngl
 		}
 
 		// Swapchainリソースハンドルを取得. RegisterExternalResourceで登録しておく必要がある.
-		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle()
+		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle() const
 		{
 			return handle_ex_swapchain_;
+		}
+		
+		// Descを取得.
+		ResourceDesc2D RenderTaskGraphBuilder::GetRegisteredResouceHandleDesc(ResourceHandle handle) const
+		{
+			const auto find_it = handle_2_desc_.find(handle);
+			if(handle_2_desc_.end() == find_it)
+			{
+				// 未登録のHandleの定義取得は不正.
+				assert(false);
+				return {};// 一応空を返しておく.
+			}
+			return find_it->second;
 		}
 
 		// Nodeからのリソースアクセスを記録.
@@ -170,15 +183,15 @@ namespace ngl
 		{
 			// Node->Handle&AccessTypeのMap登録.
 			{
-				if(node_handle_usage_map_.end() == node_handle_usage_map_.find(&node))
+				if(node_handle_usage_list_.end() == node_handle_usage_list_.find(&node))
 				{
-					node_handle_usage_map_[&node] = {};
+					node_handle_usage_list_[&node] = {};
 				}
 
 				NodeHandleUsageInfo push_info = {};
 				push_info.handle = res_handle;
 				push_info.access = access_type;
-				node_handle_usage_map_[&node].push_back(push_info);
+				node_handle_usage_list_[&node].push_back(push_info);
 			}
 
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
@@ -207,14 +220,14 @@ namespace ngl
 				for(int sequence_id = 0; sequence_id < node_sequence_.size(); ++sequence_id)
 				{
 					ITaskNode* p_node = node_sequence_[sequence_id];
-					assert(node_handle_usage_map_.end() != node_handle_usage_map_.find(p_node));// ありえない.
+					assert(node_handle_usage_list_.end() != node_handle_usage_list_.find(p_node));// ありえない.
 
 					// Nodeが同じHandleに対して重複したRegisterを指定ないかチェック.
-					for(int i = 0; i < node_handle_usage_map_[p_node].size() - 1; ++i)
+					for(int i = 0; i < node_handle_usage_list_[p_node].size() - 1; ++i)
 					{
-						for(int j = i + 1; j < node_handle_usage_map_[p_node].size(); ++j)
+						for(int j = i + 1; j < node_handle_usage_list_[p_node].size(); ++j)
 						{
-							if(node_handle_usage_map_[p_node][i].handle == node_handle_usage_map_[p_node][j].handle)
+							if(node_handle_usage_list_[p_node][i].handle == node_handle_usage_list_[p_node][j].handle)
 							{
 								std::cout << u8"[RenderTaskGraphBuilder][Validation Error] 同一リソースへの重複アクセス登録." <<std::endl;
 								assert(false);
@@ -247,18 +260,18 @@ namespace ngl
 			}
 
 			// 存在するハンドル毎に仮のユニークインデックスを割り振る. ランダムアクセスのため.
-			handle_index_map = {};// クリア.
+			handle_2_compiled_index_ = {};// クリア.
 			int handle_count = 0;
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
-				for(auto& res_access : node_handle_usage_map_[p_node])
+				for(auto& res_access : node_handle_usage_list_[p_node])
 				{
-					if(handle_index_map.end() == handle_index_map.find(res_access.handle))
+					if(handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_access.handle))
 					{
 						// このResourceHandleの要素が未登録なら新規.
-						handle_index_map[res_access.handle] = handle_count;
+						handle_2_compiled_index_[res_access.handle] = handle_count;
 						++handle_count;
 					}
 				}
@@ -282,9 +295,9 @@ namespace ngl
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
-				for(auto& res_access : node_handle_usage_map_[p_node])
+				for(auto& res_access : node_handle_usage_list_[p_node])
 				{
-					const auto handle_index = handle_index_map[res_access.handle];
+					const auto handle_index = handle_2_compiled_index_[res_access.handle];
 					
 					// このResourceHandleへのNodeからのアクセスを順にリストアップ.
 					ResourceHandleAccessFromNode access_flow_part = {};
@@ -335,15 +348,15 @@ namespace ngl
 			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
-			handle_res_id_array.clear();
-			handle_res_id_array.resize(handle_count, CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
-			for(auto handle_index : handle_index_map)
+			handle_compiled_resource_id_.clear();
+			handle_compiled_resource_id_.resize(handle_count, CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
+			for(auto handle_index : handle_2_compiled_index_)
 			{
 				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
 				const auto handle_id = handle_index.second;
 				
 				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
-				if(0 > handle_res_id_array[handle_id].detail.res_id)
+				if(0 > handle_compiled_resource_id_[handle_id].detail.resource_id)
 				{
 					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
 					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
@@ -363,15 +376,15 @@ namespace ngl
 						}
 						// 割当情報.
 						{
-							handle_res_id_array[handle_id].detail.res_id = ex_res_index;
-							handle_res_id_array[handle_id].detail.is_external = true;// 外部リソースマーク.
+							handle_compiled_resource_id_[handle_id].detail.resource_id = ex_res_index;
+							handle_compiled_resource_id_[handle_id].detail.is_external = true;// 外部リソースマーク.
 						}
 					}
 					else
 					{
 						// 内部リソースの場合.
 						
-						const auto require_desc = res_desc_map_[res_handle];
+						const auto require_desc = handle_2_desc_[res_handle];
 
 						int concrete_w = res_base_width_;
 						int concrete_h = res_base_height_;
@@ -414,12 +427,12 @@ namespace ngl
 
 						// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
 						{
-							p_compiled_manager_->tex_instance_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
+							p_compiled_manager_->internal_resource_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
 						}
 						// 割当情報.
 						{
-							handle_res_id_array[handle_id].detail.res_id = res_id;
-							handle_res_id_array[handle_id].detail.is_external = false;
+							handle_compiled_resource_id_[handle_id].detail.resource_id = res_id;
+							handle_compiled_resource_id_[handle_id].detail.is_external = false;
 						}
 					}
 				}
@@ -431,7 +444,7 @@ namespace ngl
 			std::vector<CompiledResourceInfo> res_linear_2_id_array = {};
 			// Graph上で有効な実リソース数.
 			int valid_res_count = 0;
-			for(const auto& res_id : handle_res_id_array)
+			for(const auto& res_id : handle_compiled_resource_id_)
 			{
 				if(res_id_2_linear_map.end() == res_id_2_linear_map.find(res_id))
 				{
@@ -447,12 +460,12 @@ namespace ngl
 			std::vector<std::vector<const ITaskNode*>> res_access_node_array(valid_res_count);
 			for(const auto* p_node : node_sequence_)
 			{
-				const auto& node_handles = node_handle_usage_map_[p_node];
+				const auto& node_handles = node_handle_usage_list_[p_node];
 				for(const auto& access_info : node_handles)
 				{
 					// access_info.access;
-					const auto handle_id = handle_index_map[access_info.handle];
-					const auto res_id = handle_res_id_array[handle_id];
+					const auto handle_id = handle_2_compiled_index_[access_info.handle];
+					const auto res_id = handle_compiled_resource_id_[handle_id];
 
 					const auto res_index = res_id_2_linear_map[res_id];
 
@@ -467,25 +480,25 @@ namespace ngl
 			{
 				const CompiledResourceInfo res_id = res_linear_2_id_array[res_index];
 				
-				assert(0 <= res_id.detail.res_id);
+				assert(0 <= res_id.detail.resource_id);
 				
 				rhi::ResourceState begin_state = {};
 				if(!res_id.detail.is_external)
 				{
-					begin_state = p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].cached_state_;// 実リソースのCompile時点のステートから開始.
+					begin_state = p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;// 実リソースのCompile時点のステートから開始.
 				}
 				else
 				{
-					begin_state = ex_resource_[res_id.detail.res_id].cached_state_;
+					begin_state = ex_resource_[res_id.detail.resource_id].cached_state_;
 				}
 				
 				rhi::ResourceState curr_state = begin_state;
 				for(const auto* p_node : res_access_node_array[res_index])
 				{
-					for(const auto handle : node_handle_usage_map_[p_node])
+					for(const auto handle : node_handle_usage_list_[p_node])
 					{
-						const int handle_index = handle_index_map[handle.handle];
-						if(res_id == handle_res_id_array[handle_index])
+						const int handle_index = handle_2_compiled_index_[handle.handle];
+						if(res_id == handle_compiled_resource_id_[handle_index])
 						{
 							// Handleへのアクセスタイプから次のrhiステートを決定.
 							rhi::ResourceState next_state = {};
@@ -530,19 +543,19 @@ namespace ngl
 				if(!res_id.detail.is_external)
 				{
 					// Compile前のステートを一応保持.
-					p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].prev_cached_state_
-					= p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].cached_state_;
+					p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].prev_cached_state_
+					= p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;
 
 					// Compile後のステートに更新.
-					p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].cached_state_ = curr_state;
+					p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_ = curr_state;
 				}
 				else
 				{
-					ex_resource_[res_id.detail.res_id].prev_cached_state_
-					= ex_resource_[res_id.detail.res_id].cached_state_;
+					ex_resource_[res_id.detail.resource_id].prev_cached_state_
+					= ex_resource_[res_id.detail.resource_id].cached_state_;
 					
 					// Compile後のステートに更新.
-					ex_resource_[res_id.detail.res_id].cached_state_ = curr_state;
+					ex_resource_[res_id.detail.resource_id].cached_state_ = curr_state;
 				}
 			}
 			
@@ -553,7 +566,7 @@ namespace ngl
 #if defined(_DEBUG)
 				// 各ResourceHandleへの処理順でのアクセス情報.
 				std::cout << "-Access Flow Debug" << std::endl;
-				for(auto handle_index : handle_index_map)
+				for(auto handle_index : handle_2_compiled_index_)
 				{
 					const auto handle = ResourceHandle(handle_index.first);
 					const auto handle_id = handle_index.second;
@@ -567,21 +580,21 @@ namespace ngl
 
 					std::cout << "		-Resource" << std::endl;
 					
-					const auto res_id = handle_res_id_array[handle_id];
+					const auto res_id = handle_compiled_resource_id_[handle_id];
 					if(!res_id.detail.is_external)
 					{
 						std::cout << "			-Internal" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.res_id)? p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id] : ResourceInstancePoolElement();
-						std::cout << "				-id " << res_id.detail.res_id << std::endl;
+						const auto res = (0 <= res_id.detail.resource_id)? p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id] : InternalResourceInstanceInfo();
+						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
 					}
 					else
 					{
 						std::cout << "			-External" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.res_id)? ex_resource_[res_id.detail.res_id] : ExResourceRegisterElement();
-						std::cout << "				-id " << res_id.detail.res_id << std::endl;
+						const auto res = (0 <= res_id.detail.resource_id)? ex_resource_[res_id.detail.resource_id] : ExternalResourceRegisterInfo();
+						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						if(res.tex_.IsValid())
 							std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
 						else if(res.swapchain_.IsValid())
@@ -620,7 +633,7 @@ namespace ngl
 				return {};
 			}
 
-			if (handle_index_map.end() == handle_index_map.find(res_handle))
+			if (handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_handle))
 			{
 				assert(false);// 念のためMapに登録されているかチェック.
 			}
@@ -635,8 +648,8 @@ namespace ngl
 			// ステート遷移情報取得.
 			NodeHandleState state_transition = node_handle_state_[node][res_handle];
 
-			const int handle_id = handle_index_map[res_handle];
-			const CompiledResourceInfo handle_res_id = handle_res_id_array[handle_id];
+			const int handle_id = handle_2_compiled_index_[res_handle];
+			const CompiledResourceInfo handle_res_id = handle_compiled_resource_id_[handle_id];
 
 
 			// 返却情報構築.
@@ -646,7 +659,7 @@ namespace ngl
 
 			if (!handle_res_id.detail.is_external)
 			{
-				const ResourceInstancePoolElement res = p_compiled_manager_->tex_instance_pool_[handle_res_id.detail.res_id];
+				const InternalResourceInstanceInfo res = p_compiled_manager_->internal_resource_pool_[handle_res_id.detail.resource_id];
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
 				ret_info.dsv_ = res.dsv_;
@@ -656,7 +669,7 @@ namespace ngl
 			else
 			{
 				// 外部リソース.
-				const ExResourceRegisterElement res = ex_resource_[handle_res_id.detail.res_id];
+				const ExternalResourceRegisterInfo res = ex_resource_[handle_res_id.detail.resource_id];
 				ret_info.swapchain_ = res.swapchain_;// 外部リソースはSwapchainの場合もある.
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
@@ -688,7 +701,7 @@ namespace ngl
 			for (const auto& e : node_sequence_)
 			{
 				// Nodeが登録したHandleを全て列挙. Nodeのdebug_ref_handles_はデバッグ用とであることと, メンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
-				const auto& node_handle_access = node_handle_usage_map_[e];
+				const auto& node_handle_access = node_handle_usage_list_[e];
 
 				for (const auto& handle_access : node_handle_access)
 				{
@@ -797,44 +810,44 @@ namespace ngl
 					
 			// poolから検索.
 			int res_id = -1;
-			for(int i = 0; i < tex_instance_pool_.size(); ++i)
+			for(int i = 0; i < internal_resource_pool_.size(); ++i)
 			{
 				// 要求アクセスステージに対してアクセス期間が終わっていなければ再利用不可能.
 				//	MEMO. 新規生成した実リソースの last_access_stage_ を負のstageで初期化しておくこと.
-				if(tex_instance_pool_[i].last_access_stage_ >= require_access_stage)
+				if(internal_resource_pool_[i].last_access_stage_ >= require_access_stage)
 					continue;
 				
 				// フォーマットチェック.
-				if(tex_instance_pool_[i].tex_->GetFormat() != key.format)
+				if(internal_resource_pool_[i].tex_->GetFormat() != key.format)
 					continue;
 				// 要求サイズを格納できるならOK.
-				if(tex_instance_pool_[i].tex_->GetWidth() < static_cast<uint32_t>(key.require_width_))
+				if(internal_resource_pool_[i].tex_->GetWidth() < static_cast<uint32_t>(key.require_width_))
 					continue;
 				// 要求サイズを格納できるならOK.
-				if(tex_instance_pool_[i].tex_->GetHeight() < static_cast<uint32_t>(key.require_height_))
+				if(internal_resource_pool_[i].tex_->GetHeight() < static_cast<uint32_t>(key.require_height_))
 					continue;
 				// RTV要求している場合.
 				if(key.usage_ & access_type_mask::RENDER_TARTGET)
 				{
-					if(!tex_instance_pool_[i].rtv_.IsValid())
+					if(!internal_resource_pool_[i].rtv_.IsValid())
 						continue;
 				}
 				// DSV要求している場合.
 				if(key.usage_ & access_type_mask::DEPTH_TARGET)
 				{
-					if(!tex_instance_pool_[i].dsv_.IsValid())
+					if(!internal_resource_pool_[i].dsv_.IsValid())
 						continue;
 				}
 				// UAV要求している場合.
 				if(key.usage_ & access_type_mask::UAV)
 				{
-					if(!tex_instance_pool_[i].uav_.IsValid())
+					if(!internal_resource_pool_[i].uav_.IsValid())
 						continue;
 				}
 				// SRV要求している場合.
 				if(key.usage_ & access_type_mask::SHADER_READ)
 				{
-					if(!tex_instance_pool_[i].srv_.IsValid())
+					if(!internal_resource_pool_[i].srv_.IsValid())
 						continue;
 				}
 
@@ -928,7 +941,7 @@ namespace ngl
 					}
 				}
 
-				ResourceInstancePoolElement new_pool_elem = {};
+				InternalResourceInstanceInfo new_pool_elem = {};
 				{
 					// 新規生成した実リソースは最終アクセスステージを負の最大にしておく(ステージ0のリクエストに割当できるように).
 					new_pool_elem.last_access_stage_ = TaskStage::k_frontmost_stage();
@@ -942,15 +955,15 @@ namespace ngl
 					new_pool_elem.cached_state_ = init_state;// 新規生成したらその初期ステートを保持.
 					new_pool_elem.prev_cached_state_ = init_state;
 				}
-				res_id = static_cast<int>(tex_instance_pool_.size());// 新規要素ID.
-				tex_instance_pool_.push_back(new_pool_elem);//登録.
+				res_id = static_cast<int>(internal_resource_pool_.size());// 新規要素ID.
+				internal_resource_pool_.push_back(new_pool_elem);//登録.
 			}
 
 			// チェック
 			if(p_access_stage_for_reuse)
 			{
 				// アクセス期間による再利用を有効にしている場合は, 最終アクセスステージリソースは必ず引数のアクセスステージよりも前のもののはず.
-				assert(tex_instance_pool_[res_id].last_access_stage_ < (*p_access_stage_for_reuse));
+				assert(internal_resource_pool_[res_id].last_access_stage_ < (*p_access_stage_for_reuse));
 			}
 
 			return res_id;
@@ -968,7 +981,7 @@ namespace ngl
 
 			// Compile完了したのでシーケンス上でのリソース利用情報をクリアする.
 			//	Stateは継続するので維持.
-			for(auto& e : tex_instance_pool_)
+			for(auto& e : internal_resource_pool_)
 			{
 				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
 			}

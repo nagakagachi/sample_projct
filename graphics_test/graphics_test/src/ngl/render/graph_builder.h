@@ -155,6 +155,12 @@ namespace ngl
 		using ResourceHandleDataType = uint64_t;
 		struct ResourceHandle
 		{
+			constexpr ResourceHandle() = default;
+			constexpr ResourceHandle(ResourceHandleDataType data)
+			{
+				this->data = data;
+			}
+			
 			union
 			{
 				// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
@@ -177,13 +183,6 @@ namespace ngl
 			{
 				return detail.unique_id == InvalidHandle().detail.unique_id;
 			}
-
-			constexpr ResourceHandle() = default;
-			constexpr ResourceHandle(ResourceHandleDataType data)
-			{
-				this->data = data;
-			}
-			
 			operator ResourceHandleDataType() const
 			{
 				return data;
@@ -242,7 +241,7 @@ namespace ngl
 			{
 			}
 
-			struct RefHandle
+			struct DebugHandleRef
 			{
 				RtgNameType name{};
 				ResourceHandle* p_handle{};
@@ -250,14 +249,14 @@ namespace ngl
 
 			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
 			{
-				RefHandle elem = { name , &handle};
+				DebugHandleRef elem = { name , &handle};
 				debug_ref_handles_.push_back(elem);
 			}
 			
 			// Debug用途でメンバとしてHandleを持つ. 名前などを付けたい場合はResourceHandle経由でアクセスできる場所に登録すべきか.
 			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
 			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
-			std::vector<RefHandle> debug_ref_handles_{};
+			std::vector<DebugHandleRef> debug_ref_handles_{};
 
 		public:
 			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
@@ -279,7 +278,7 @@ namespace ngl
 		// マクロで登録処理などを隠蔽.
 #define ITASK_NODE_HANDLE_REGISTER(name)\
 					{\
-							RefHandle elem = { #name , &name};\
+							DebugHandleRef elem = { #name , &name};\
 							debug_ref_handles_.push_back(elem);\
 					};
 // -------------------------------------------------------------
@@ -313,7 +312,8 @@ namespace ngl
 			constexpr bool operator<=(const TaskStage arg) const;
 			constexpr bool operator>=(const TaskStage arg) const;
 		};
-		// 実リソースの割当.
+		
+		// リソースの検索キー.
 		struct ResourceSearchKey
 		{
 			rhi::ResourceFormat format = {};
@@ -321,13 +321,12 @@ namespace ngl
 			int require_height_ = {};
 			ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
 		};
-
 		
 		// 内部リソースプール用.
-		struct ResourceInstancePoolElement
+		struct InternalResourceInstanceInfo
 		{
-			ResourceInstancePoolElement() = default;
-			ResourceInstancePoolElement(const ResourceInstancePoolElement& arg)
+			InternalResourceInstanceInfo() = default;
+			InternalResourceInstanceInfo(const InternalResourceInstanceInfo& arg)
 			{
 				*this = arg;
 			}
@@ -343,31 +342,19 @@ namespace ngl
 			rhi::RefUavDep		uav_ = {};
 			rhi::RefSrvDep		srv_ = {};
 		};
-		// 外部リソース登録用.
-		struct ExResourceRegisterElement
+		// 外部リソース登録用. 内部リソース管理クラスを継承して追加情報.
+		struct ExternalResourceRegisterInfo : public InternalResourceInstanceInfo
 		{
-			ExResourceRegisterElement() = default;
-			ExResourceRegisterElement(const ExResourceRegisterElement& arg)
+			ExternalResourceRegisterInfo() = default;
+			ExternalResourceRegisterInfo(const ExternalResourceRegisterInfo& arg)
 			{
 				*this = arg;
 			}
-				
-			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
-				
-			rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
-			rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
-
+			
+			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {}; // 外部リソースの場合はSwapchainもあり得るため追加.
 			
 			rhi::ResourceState	require_begin_state_ = rhi::ResourceState::Common;// 外部登録で指定された開始ステート.
 			rhi::ResourceState	require_end_state_ = rhi::ResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
-			
-			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};
-			rhi::RefTextureDep	tex_ = {};
-			
-			rhi::RefRtvDep		rtv_ = {};
-			rhi::RefDsvDep		dsv_ = {};
-			rhi::RefUavDep		uav_ = {};
-			rhi::RefSrvDep		srv_ = {};
 		};
 		
 
@@ -396,6 +383,7 @@ namespace ngl
 			}
 
 			// リソースハンドルを生成.
+			//	Graph内リソースを確保してハンドルを取得する.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
 
 			// 外部リソースを登録してハンドルを生成. 一般.
@@ -410,15 +398,20 @@ namespace ngl
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
 			ResourceHandle RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
 				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+			
 			// Swapchainリソースハンドルを取得. 外部リソースとしてSwapchainは特別扱い.
-			ResourceHandle GetSwapchainResourceHandle();
+			ResourceHandle GetSwapchainResourceHandle() const;
+			
+			// Descを取得.
+			ResourceDesc2D GetRegisteredResouceHandleDesc(ResourceHandle handle) const;
 
 			
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
 
-
+			
+			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
 			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
 			void Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist);
@@ -430,11 +423,11 @@ namespace ngl
 			{
 				AllocatedHandleResourceInfo() = default;
 
-				rhi::ResourceState	prev_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
-				rhi::ResourceState	curr_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
+				rhi::ResourceState	prev_state_ = rhi::ResourceState::Common;// NodeからResourceHandleでアクセスした際の直前のリソースステート.
+				rhi::ResourceState	curr_state_ = rhi::ResourceState::Common;// NodeからResourceHandleでアクセスした際の現在のリソースステート. RTGによって自動的にステート遷移コマンドが発行される.
 
 				rhi::RefTextureDep				tex_ = {};
-				rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};// 現状のインターフェイス的に統合が難しいのでSwapchainの場合はこちらに入る.
+				rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};// Swapchainの場合はこちらに参照が設定される.
 
 				rhi::RefRtvDep		rtv_ = {};
 				rhi::RefDsvDep		dsv_ = {};
@@ -452,20 +445,19 @@ namespace ngl
 			int res_base_width_ = static_cast<int>( static_cast<float>(k_base_height) * 16.0f/9.0f);
 			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
-			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> res_desc_map_{};// Handleからその定義のMap.
-			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_map_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
+			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> handle_2_desc_{};// Handleからその定義のMap.
+			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_list_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			bool is_compiled_ = false;
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
 
-			
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// 外部リソース用.
-			std::vector<ExResourceRegisterElement> ex_resource_ = {};
+			std::vector<ExternalResourceRegisterInfo> ex_resource_ = {};
 			std::unordered_map<ResourceHandleDataType, int> ex_handle_2_index_ = {};
-			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 			// 外部リソースSwapchainは何かとアクセスするためHandle保持.
 			ResourceHandle	handle_ex_swapchain_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -473,7 +465,7 @@ namespace ngl
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
 			// HandleからリニアインデックスへのMap.
-			std::unordered_map<ResourceHandleDataType, int> handle_index_map = {};
+			std::unordered_map<ResourceHandleDataType, int> handle_2_compiled_index_ = {};
 
 			// Compileで構築される情報.
 			// Handleに割り当てられたリソースのPool上のIndex.
@@ -481,38 +473,34 @@ namespace ngl
 			using CompiledResourceInfoKeyType = uint64_t;  
 			struct CompiledResourceInfo
 			{
-				CompiledResourceInfo() = default;
-				constexpr CompiledResourceInfo(CompiledResourceInfoKeyType data)
-				{
-					this->data = data;
-				}
-				
 				union
 				{
 					// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
 					CompiledResourceInfoKeyType data = {};
 					struct Detail
 					{
-						int32_t	 res_id;		// 内部リソースプール又は外部リソースリストへの参照.
-
+						int32_t	 resource_id;		// 内部リソースプール又は外部リソースリストへの参照.
 						uint32_t is_external	: 1; // 外部リソースマーク.
 						uint32_t dummy			: 31;
 					}detail;
 				};
 				
-				operator CompiledResourceInfoKeyType() const
-				{
-					return data;
-				}
+				CompiledResourceInfo() = default;
+				constexpr CompiledResourceInfo(CompiledResourceInfoKeyType data)
+				{ this->data = data; }
 				
+				operator CompiledResourceInfoKeyType() const
+				{ return data; }
+
+				// 無効値.
 				static constexpr CompiledResourceInfo k_invalid()
 				{
 					CompiledResourceInfo tmp = {};
-					tmp.detail.res_id = -1;
+					tmp.detail.resource_id = -1;// 無効値.
 					return tmp;
 				}
 			};
-			std::vector<CompiledResourceInfo> handle_res_id_array = {};
+			std::vector<CompiledResourceInfo> handle_compiled_resource_id_ = {};
 			
 			struct NodeHandleState
 			{
@@ -538,10 +526,9 @@ namespace ngl
 			ResourceHandle RegisterExternalResourceCommon(
 				rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
-			
-			
 		};
 
+		// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		// RenderTaskGraphBuilderのCompileや, それらが利用するリソースの永続的なプール管理.
 		class RenderTaskGraphManager
 		{
@@ -566,7 +553,7 @@ namespace ngl
 			rhi::DeviceDep* p_device_ = nullptr;
 			
 			// Compileで割り当てられるリソースのPool.
-			std::vector<ResourceInstancePoolElement> tex_instance_pool_ = {};
+			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
 			
 		private:
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
@@ -574,6 +561,7 @@ namespace ngl
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
 			int GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
 		};
+		// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		
 	}
 }
