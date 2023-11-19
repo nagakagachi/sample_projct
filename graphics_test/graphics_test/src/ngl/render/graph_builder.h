@@ -151,6 +151,7 @@ namespace ngl
 
 		// RTGのノードが利用するリソースハンドル.
 		// 識別IDやSwapchain識別等の情報を保持.
+		// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
 		using ResourceHandleDataType = uint64_t;
 		struct ResourceHandle
 		{
@@ -158,12 +159,13 @@ namespace ngl
 			{
 				// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
 				ResourceHandleDataType data = 0;
-				struct detail
+				struct Detail
 				{
 					uint32_t unique_id;
 
-					uint32_t is_swapchain : 1;
-					uint32_t dummy : 31;
+					uint32_t is_external	: 1; // 一般の外部リソース.
+					uint32_t is_swapchain	: 1; // 外部リソースとしてSwapchainを特別扱い. とりあえず簡易にアクセスするため.
+					uint32_t dummy			: 30;
 				}detail;
 			};
 
@@ -177,9 +179,9 @@ namespace ngl
 			}
 
 			constexpr ResourceHandle() = default;
-			constexpr ResourceHandle(ResourceHandleDataType handle_data)
+			constexpr ResourceHandle(ResourceHandleDataType data)
 			{
-				this->data = handle_data;
+				this->data = data;
 			}
 			
 			operator ResourceHandleDataType() const
@@ -320,6 +322,55 @@ namespace ngl
 			ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
 		};
 
+		
+		// 内部リソースプール用.
+		struct ResourceInstancePoolElement
+		{
+			ResourceInstancePoolElement() = default;
+			ResourceInstancePoolElement(const ResourceInstancePoolElement& arg)
+			{
+				*this = arg;
+			}
+				
+			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
+				
+			rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
+			rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
+				
+			rhi::RefTextureDep	tex_ = {};
+			rhi::RefRtvDep		rtv_ = {};
+			rhi::RefDsvDep		dsv_ = {};
+			rhi::RefUavDep		uav_ = {};
+			rhi::RefSrvDep		srv_ = {};
+		};
+		// 外部リソース登録用.
+		struct ExResourceRegisterElement
+		{
+			ExResourceRegisterElement() = default;
+			ExResourceRegisterElement(const ExResourceRegisterElement& arg)
+			{
+				*this = arg;
+			}
+				
+			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
+				
+			rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
+			rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
+
+			
+			rhi::ResourceState	require_begin_state_ = rhi::ResourceState::Common;// 外部登録で指定された開始ステート.
+			rhi::ResourceState	require_end_state_ = rhi::ResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
+			
+			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};
+			rhi::RefTextureDep	tex_ = {};
+			
+			rhi::RefRtvDep		rtv_ = {};
+			rhi::RefDsvDep		dsv_ = {};
+			rhi::RefUavDep		uav_ = {};
+			rhi::RefSrvDep		srv_ = {};
+		};
+		
+
 		// Taskノードのリソースアロケーションやノード間リソース状態遷移を計算する.
 		// GPU実行順はCreateされたTaskノードの順序.
 		//  
@@ -347,14 +398,22 @@ namespace ngl
 			// リソースハンドルを生成.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
 
-			// 外部リソースの登録. Swapchain.
+			// 外部リソースを登録してハンドルを生成. 一般.
+			//	rtv,dsv,srv,uavはそれぞれ登録するものだけ有効な参照を指定する.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
-			void RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
-
-			// Swapchainリソースハンドルを取得.
+			ResourceHandle RegisterExternalResource(rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
+				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+			
+			// 外部リソースを登録してハンドルを生成. Swapchain用.
+			// curr_state			: 外部リソースのGraph開始時点のステート.
+			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
+			ResourceHandle RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
+				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+			// Swapchainリソースハンドルを取得. 外部リソースとしてSwapchainは特別扱い.
 			ResourceHandle GetSwapchainResourceHandle();
 
+			
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
@@ -401,13 +460,14 @@ namespace ngl
 			bool is_compiled_ = false;
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
 
+			
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
-			// 外部リソース
-			rhi::RhiRef<rhi::SwapChainDep> ex_swapchain_ = {};
-			rhi::RefRtvDep ex_swapchain_rtv_ = {};
-			rhi::ResourceState ex_swapchain_begin_state_ = {};			// 外部リソース登録時に通知されるリソースのGraph実行前のステート.
-			rhi::ResourceState ex_swapchain_required_end_state_ = {};	// 外部リソース登録時に通知されるリソースのGraph実行後に遷移しているべきステート.
-			rhi::ResourceState ex_swapchain_executed_end_state_ = {};	// 外部リソースのGraphコンパイル時に確定した最終ステート. 最終必須ステートになっていなければ遷移コマンドが挿入される.
+			// 外部リソース用.
+			std::vector<ExResourceRegisterElement> ex_resource_ = {};
+			std::unordered_map<ResourceHandleDataType, int> ex_handle_2_index_ = {};
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+			// 外部リソースSwapchainは何かとアクセスするためHandle保持.
+			ResourceHandle	handle_ex_swapchain_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -417,8 +477,43 @@ namespace ngl
 
 			// Compileで構築される情報.
 			// Handleに割り当てられたリソースのPool上のIndex.
-			std::vector<int> handle_res_id_array = {};
+			// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
+			using CompiledResourceInfoKeyType = uint64_t;  
+			struct CompiledResourceInfo
+			{
+				CompiledResourceInfo() = default;
+				constexpr CompiledResourceInfo(CompiledResourceInfoKeyType data)
+				{
+					this->data = data;
+				}
+				
+				union
+				{
+					// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
+					CompiledResourceInfoKeyType data = {};
+					struct Detail
+					{
+						int32_t	 res_id;		// 内部リソースプール又は外部リソースリストへの参照.
 
+						uint32_t is_external	: 1; // 外部リソースマーク.
+						uint32_t dummy			: 31;
+					}detail;
+				};
+				
+				operator CompiledResourceInfoKeyType() const
+				{
+					return data;
+				}
+				
+				static constexpr CompiledResourceInfo k_invalid()
+				{
+					CompiledResourceInfo tmp = {};
+					tmp.detail.res_id = -1;
+					return tmp;
+				}
+			};
+			std::vector<CompiledResourceInfo> handle_res_id_array = {};
+			
 			struct NodeHandleState
 			{
 				rhi::ResourceState prev_ = {};
@@ -439,6 +534,11 @@ namespace ngl
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
 			
 			// ------------------------------------------
+			// 外部リソースを登録共通部.
+			ResourceHandle RegisterExternalResourceCommon(
+				rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
+				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+			
 			
 		};
 
@@ -465,28 +565,8 @@ namespace ngl
 		private:
 			rhi::DeviceDep* p_device_ = nullptr;
 			
-			// 内部リソースプール用.
-			struct TextureInstancePoolElement
-			{
-				TextureInstancePoolElement() = default;
-				TextureInstancePoolElement(const TextureInstancePoolElement& arg)
-				{
-					*this = arg;
-				}
-				
-				TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
-				
-				rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
-				rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
-				
-				rhi::RefTextureDep	tex_ = {};
-				rhi::RefRtvDep		rtv_ = {};
-				rhi::RefDsvDep		dsv_ = {};
-				rhi::RefUavDep		uav_ = {};
-				rhi::RefSrvDep		srv_ = {};
-			};
 			// Compileで割り当てられるリソースのPool.
-			std::vector<TextureInstancePoolElement> tex_instance_pool_ = {};
+			std::vector<ResourceInstancePoolElement> tex_instance_pool_ = {};
 			
 		private:
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.

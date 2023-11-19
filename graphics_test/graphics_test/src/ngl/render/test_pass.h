@@ -350,7 +350,7 @@ namespace ngl::render
 			}
 
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
 				rhi::RefSampDep ref_samp_linear_clamp,
 				rhi::RefSrvDep ref_raytrace_result_srv)
 			{
@@ -361,7 +361,8 @@ namespace ngl::render
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 
 					// SwapchainをRenderTargetとして要求.
-					h_swapchain_ = builder.RegisterResourceAccess(*this, builder.GetSwapchainResourceHandle(), rtg::access_type::RENDER_TARTGET);
+					//h_swapchain_ = builder.RegisterResourceAccess(*this, builder.GetSwapchainResourceHandle(), rtg::access_type::RENDER_TARTGET);
+					h_swapchain_ = builder.RegisterResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
 				}
 
 				{

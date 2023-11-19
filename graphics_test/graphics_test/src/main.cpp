@@ -711,10 +711,12 @@ bool AppGame::Execute()
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
 				
 				// Register External.
+				ngl::rtg::ResourceHandle rtgh_swapchain = {};
 				{
 					constexpr ngl::rhi::ResourceState swapchain_final_state = ngl::rhi::ResourceState::Present;// Execute後のステート指定.
 					// 外部リソース登録.
-					rtg_builder.RegisterExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
+					rtgh_swapchain =
+						rtg_builder.RegisterExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
 					// 状態追跡更新.
 					swapchain_resource_state_[swapchain_index] = swapchain_final_state;
 				}
@@ -739,7 +741,7 @@ bool AppGame::Execute()
 
 					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskFinalPass>();
-					task_final->Setup(rtg_builder, &device_, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
+					task_final->Setup(rtg_builder, &device_, rtgh_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
 						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 				}
 

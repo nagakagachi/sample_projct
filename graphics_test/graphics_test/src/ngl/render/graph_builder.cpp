@@ -52,53 +52,116 @@ namespace ngl
 		// リソースハンドルを生成.
 		ResourceHandle RenderTaskGraphBuilder::CreateResource(ResourceDesc2D res_desc)
 		{
-			++s_res_handle_id_counter_;
-			if (0 == s_res_handle_id_counter_)
-				++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
-
-
+			// ID確保.
+			{
+				++s_res_handle_id_counter_;
+				if (0 == s_res_handle_id_counter_)
+					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+			}
+			
 			ResourceHandle handle{};
-
 			handle.detail.unique_id = s_res_handle_id_counter_;// ユニークID割当.
 
-			res_desc_map_[handle.data] = res_desc;// desc記録.
-
+			// Desc登録.
+			{
+				res_desc_map_[handle.data] = res_desc;// desc記録.
+			}
+			
 			return handle;
 		}
 
-		// 外部リソースの登録. Swapchain.
-		void RenderTaskGraphBuilder::RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+		// 外部リソースを登録共通部.
+		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResourceCommon(
+			rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
+			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
 		{
-			ex_swapchain_ = swapchain;
-			ex_swapchain_rtv_ = swapchain_rtv;
-			ex_swapchain_begin_state_ = curr_state;
-			ex_swapchain_required_end_state_ = nesesary_end_state;
+			// TODO. リソースポインタのMapで二重登録チェックもした方が良い.
 
-			ex_swapchain_executed_end_state_ = ex_swapchain_begin_state_;
-
-
-			// SwapchianもDescからFormat等を引けるようにしておく.
-			ResourceDesc2D res_desc = {};
-			res_desc = ResourceDesc2D::CreateAsAbsoluteSize(swapchain->GetWidth(), swapchain->GetHeight(), swapchain->GetDesc().format);
-		
-			res_desc_map_[GetSwapchainResourceHandle().data] = res_desc;// desc記録.
-		}
-
-		// Swapchainリソースハンドルを取得.
-		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle()
-		{
-			// SwapchainをNodeで利用する場合はBuilderに外部リソースとしてSwapchainを登録しておく必要がある.
-			if (!ex_swapchain_.IsValid())
+			// 無効なリソースチェック.
+			if (!swapchain.IsValid() && !tex.IsValid())
 			{
-				std::cout << u8"[RenderTaskGraphBuilder][Error] 外部リソースとしてSwapchainが未登録です. Setupの前にRegisterExternalResourceでBuilderに登録が必要です." << std::endl;
+				std::cout << u8"[RenderTaskGraphBuilder][RegisterExternalResource] 外部リソース登録のResourceが不正です." << std::endl;
 				assert(false);
 			}
+			// ID確保.
+			{
+				++s_res_handle_id_counter_;
+				if(0 == s_res_handle_id_counter_)
+					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+			}
+			// ハンドルセットアップ.
+			ResourceHandle new_handle = {};
+			{
+				new_handle.detail.is_external = 1;// 外部リソースマーク.
+				new_handle.detail.is_swapchain = (swapchain.IsValid())? 1 : 0;// Swapchainマーク.
+				new_handle.detail.unique_id = s_res_handle_id_counter_;
+			}
+			
+			// ResourceのDescをHandleから引ける用に登録.
+			ResourceDesc2D res_desc = {};
+			{
+				if(swapchain.IsValid())
+				{
+					res_desc = ResourceDesc2D::CreateAsAbsoluteSize(swapchain->GetWidth(), swapchain->GetHeight(), swapchain->GetDesc().format);
+				}
+				else
+				{
+					res_desc = ResourceDesc2D::CreateAsAbsoluteSize(tex->GetWidth(), tex->GetHeight(), tex->GetDesc().format);
+				}
+				res_desc_map_[new_handle.data] = res_desc;// desc記録.
+			}
 
-			ResourceHandle handle{};
+			// 外部リソース情報.
+			{
+				// 外部リソース用Index.
+				const int res_index = (int)ex_resource_.size();
+				ex_resource_.push_back({});
 
-			handle.detail.is_swapchain = 1;// swapchain.
+				// 外部リソースハンドルから外部リソース用IndexへのMap.
+				ex_handle_2_index_[new_handle] = res_index;
 
-			return handle;
+				// 外部リソース用Indexで情報登録.
+				ExResourceRegisterElement& ex_res_info = ex_resource_[res_index];
+				{
+					ex_res_info.swapchain_ = swapchain;
+					ex_res_info.tex_ = tex;
+					ex_res_info.rtv_ = rtv;
+					ex_res_info.dsv_ = dsv;
+					ex_res_info.srv_ = srv;
+					ex_res_info.uav_ = uav;
+				
+					ex_res_info.require_begin_state_ = curr_state;
+					ex_res_info.require_end_state_ = nesesary_end_state;
+				
+					ex_res_info.cached_state_ = curr_state;
+					ex_res_info.prev_cached_state_ = curr_state;
+					ex_res_info.last_access_stage_ = TaskStage::k_frontmost_stage();
+				}
+			}
+
+			return new_handle;
+		}
+
+		// 外部リソースの登録. 一般.
+		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResource(
+			rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
+			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+		{
+			handle_ex_swapchain_ = RegisterExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			return handle_ex_swapchain_;
+		}
+		
+		// 外部リソースの登録. Swapchain.
+		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+		{
+			handle_ex_swapchain_ = RegisterExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			return handle_ex_swapchain_;
+		}
+
+		// Swapchainリソースハンドルを取得. RegisterExternalResourceで登録しておく必要がある.
+		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle()
+		{
+			return handle_ex_swapchain_;
 		}
 
 		// Nodeからのリソースアクセスを記録.
@@ -270,34 +333,43 @@ namespace ngl
 				handle_life_last_array[handle_index] = stage_last;// このハンドルへの最後のアクセス位置
 			}
 			
-
-			// TODO. 外部依存ハンドルのアクセス期間の補正.
-			//	外部リソースの開始アクセスをシーケンス先頭に補正したり, 外部出力リソースの終端アクセスをシーケンス末尾に補正するといった処理をする.
-			//	ヒストリリソースの解決などをどうするか.
-			
-
-			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
-			handle_res_id_array.resize(handle_count, -1);// 無効値-1でHandle個数分初期化.
+			handle_res_id_array.clear();
+			handle_res_id_array.resize(handle_count, CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
 			for(auto handle_index : handle_index_map)
 			{
 				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
 				const auto handle_id = handle_index.second;
 				
-				// SwapChainは外部供給である点に注意. その他外部リソース登録等も考慮が必要.
-				
 				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
-				if(0 > handle_res_id_array[handle_id])
+				if(0 > handle_res_id_array[handle_id].detail.res_id)
 				{
 					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
 					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
 
 					const ResourceHandleAccessInfo& handle_access = handle_access_info_array[handle_id];
 
-					if(!res_handle.detail.is_swapchain)
+					if(res_handle.detail.is_external || res_handle.detail.is_swapchain)
 					{
-						// Swapchainではない通常リソース.
+						// 外部リソースの場合.
+						
+						assert(ex_handle_2_index_.end() != ex_handle_2_index_.find(res_handle));// 登録済み外部リソースかチェック.
+
+						const int ex_res_index = ex_handle_2_index_[res_handle];
+						// リソースの最終アクセスステージを更新.
+						{
+							ex_resource_[ex_res_index].last_access_stage_ = handle_life_last_array[handle_id];
+						}
+						// 割当情報.
+						{
+							handle_res_id_array[handle_id].detail.res_id = ex_res_index;
+							handle_res_id_array[handle_id].detail.is_external = true;// 外部リソースマーク.
+						}
+					}
+					else
+					{
+						// 内部リソースの場合.
 						
 						const auto require_desc = res_desc_map_[res_handle];
 
@@ -336,29 +408,27 @@ namespace ngl
 						const TaskStage* p_request_access_stage = nullptr;
 #endif
 
-						// 割当可能なリソース検索または新規生成.
+						// 内部リソースプールからリソース取得.
 						int res_id = p_compiled_manager_->GetOrCreateResourceFromPool(search_key, p_request_access_stage);
 						assert(0 <= res_id);// 必ず有効なIDが帰るはず.
 
 						// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
-						p_compiled_manager_->tex_instance_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
-
-						// ハンドルから実リソースを引けるように登録.
-						handle_res_id_array[handle_id] = res_id;
-					}
-					else
-					{
-						// Swapchainの場合.
-						// 一旦無効にしておく.
-						handle_res_id_array[handle_id] = -1;
+						{
+							p_compiled_manager_->tex_instance_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
+						}
+						// 割当情報.
+						{
+							handle_res_id_array[handle_id].detail.res_id = res_id;
+							handle_res_id_array[handle_id].detail.is_external = false;
+						}
 					}
 				}
 			}
 
 			// Graph上で割り当てられた有効なリソースIDから密なリニアインデックスへのマップ. 有効リソースID毎の情報をワークバッファ上で操作するため.
-			std::unordered_map<int, int> res_id_2_linear_map = {};
+			std::unordered_map<CompiledResourceInfoKeyType, int> res_id_2_linear_map = {};
 			// 有効リソースリニアインデックスからリソースIDへのマッピングをする配列.
-			std::vector<int> res_linear_2_id_array = {};
+			std::vector<CompiledResourceInfo> res_linear_2_id_array = {};
 			// Graph上で有効な実リソース数.
 			int valid_res_count = 0;
 			for(const auto& res_id : handle_res_id_array)
@@ -395,18 +465,18 @@ namespace ngl
 			node_handle_state_ = {};// クリア.
 			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
 			{
-				const int res_id = res_linear_2_id_array[res_index];
+				const CompiledResourceInfo res_id = res_linear_2_id_array[res_index];
+				
+				assert(0 <= res_id.detail.res_id);
+				
 				rhi::ResourceState begin_state = {};
-				if(0 <= res_id)
+				if(!res_id.detail.is_external)
 				{
-					begin_state = p_compiled_manager_->tex_instance_pool_[res_id].cached_state_;// 実リソースのCompile時点のステートから開始.
+					begin_state = p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].cached_state_;// 実リソースのCompile時点のステートから開始.
 				}
 				else
 				{
-					// TODO. ここはSwapchain等の外部リソース依存の箇所なので登録時に一緒に指定された開始ステートとなるはず.
-					
-					// TODO. resouceId=-1は一旦Swapchainということにする. 汎用で任意のリソースを外部から登録できるようにする際に修正する.
-					begin_state = ex_swapchain_begin_state_;
+					begin_state = ex_resource_[res_id.detail.res_id].cached_state_;
 				}
 				
 				rhi::ResourceState curr_state = begin_state;
@@ -457,19 +527,22 @@ namespace ngl
 				}
 
 				// 最終ステートを保存.
-				if(0 <= res_id)
+				if(!res_id.detail.is_external)
 				{
-					p_compiled_manager_->tex_instance_pool_[res_id].prev_cached_state_ = p_compiled_manager_->tex_instance_pool_[res_id].cached_state_;// Compile前のステートを一応保持.
+					// Compile前のステートを一応保持.
+					p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].prev_cached_state_
+					= p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].cached_state_;
 
 					// Compile後のステートに更新.
-					p_compiled_manager_->tex_instance_pool_[res_id].cached_state_ = curr_state;
+					p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id].cached_state_ = curr_state;
 				}
 				else
 				{
-					// TODO. ここはSwapchain等の外部リソース依存の箇所なので内部で変更しない(今のところはすべて外部から最初と最後のステートを指示する).
-					// 
-					// TODO. resouceId=-1は一旦Swapchainということにする. 汎用で任意のリソースを外部から登録できるようにする際に修正する.
-					ex_swapchain_executed_end_state_ = curr_state;
+					ex_resource_[res_id.detail.res_id].prev_cached_state_
+					= ex_resource_[res_id.detail.res_id].cached_state_;
+					
+					// Compile後のステートに更新.
+					ex_resource_[res_id.detail.res_id].cached_state_ = curr_state;
 				}
 			}
 			
@@ -488,19 +561,32 @@ namespace ngl
 					const auto& lifetime_first = handle_life_first_array[handle_id];
 					const auto& lifetime_last = handle_life_last_array[handle_id];
 
-					const auto res_id = handle_res_id_array[handle_id];
-					const auto res = (0 <= res_id)? p_compiled_manager_->tex_instance_pool_[res_id] : RenderTaskGraphManager::TextureInstancePoolElement();
-						
 					std::cout << "	-ResourceHandle ID " << handle << std::endl;
 					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
 					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << "/" << static_cast<int>(lifetime_last.stage_) << std::endl;
 
 					std::cout << "		-Resource" << std::endl;
-					std::cout << "			-id " << res_id << std::endl;
-					if(res.tex_.IsValid())
-						std::cout << "			-ptr " << res.tex_.Get() << std::endl;
+					
+					const auto res_id = handle_res_id_array[handle_id];
+					if(!res_id.detail.is_external)
+					{
+						std::cout << "			-Internal" << std::endl;
+						
+						const auto res = (0 <= res_id.detail.res_id)? p_compiled_manager_->tex_instance_pool_[res_id.detail.res_id] : ResourceInstancePoolElement();
+						std::cout << "				-id " << res_id.detail.res_id << std::endl;
+						std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
+					}
 					else
-						std::cout << "			-ptr " << nullptr << std::endl;// Swapchain等の外部リソース.
+					{
+						std::cout << "			-External" << std::endl;
+						
+						const auto res = (0 <= res_id.detail.res_id)? ex_resource_[res_id.detail.res_id] : ExResourceRegisterElement();
+						std::cout << "				-id " << res_id.detail.res_id << std::endl;
+						if(res.tex_.IsValid())
+							std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
+						else if(res.swapchain_.IsValid())
+							std::cout << "				-swapchain_ptr " << res.swapchain_.Get() << std::endl;
+					}
 					
 					for(auto res_access : handle_access_info_array[handle_id].from_node_)
 					{
@@ -550,7 +636,7 @@ namespace ngl
 			NodeHandleState state_transition = node_handle_state_[node][res_handle];
 
 			const int handle_id = handle_index_map[res_handle];
-			const int handle_res_id = handle_res_id_array[handle_id];
+			const CompiledResourceInfo handle_res_id = handle_res_id_array[handle_id];
 
 
 			// 返却情報構築.
@@ -558,9 +644,9 @@ namespace ngl
 			ret_info.prev_state_ = state_transition.prev_;
 			ret_info.curr_state_ = state_transition.curr_;
 
-			if (0 <= handle_res_id)
+			if (!handle_res_id.detail.is_external)
 			{
-				RenderTaskGraphManager::TextureInstancePoolElement res = p_compiled_manager_->tex_instance_pool_[handle_res_id];
+				const ResourceInstancePoolElement res = p_compiled_manager_->tex_instance_pool_[handle_res_id.detail.res_id];
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
 				ret_info.dsv_ = res.dsv_;
@@ -569,9 +655,19 @@ namespace ngl
 			}
 			else
 			{
+				// 外部リソース.
+				const ExResourceRegisterElement res = ex_resource_[handle_res_id.detail.res_id];
+				ret_info.swapchain_ = res.swapchain_;// 外部リソースはSwapchainの場合もある.
+				ret_info.tex_ = res.tex_;
+				ret_info.rtv_ = res.rtv_;
+				ret_info.dsv_ = res.dsv_;
+				ret_info.uav_ = res.uav_;
+				ret_info.srv_ = res.srv_;
+
+				
 				// res_id=-1の場合は一旦Swapchain扱いとしている.
-				ret_info.swapchain_ = ex_swapchain_;
-				ret_info.rtv_ = ex_swapchain_rtv_;
+				//ret_info.swapchain_ = ex_swapchain_;
+				//ret_info.rtv_ = ex_swapchain_rtv_;
 			}
 
 			return ret_info;
@@ -626,20 +722,37 @@ namespace ngl
 
 			// 外部リソースの必須最終ステートの解決.
 			{
-				// 現状はSwapchainのみ.
-				if(ex_swapchain_.IsValid())
+				for(auto& ex_res : ex_resource_)
 				{
-					if (ex_swapchain_executed_end_state_ != ex_swapchain_required_end_state_)
+					// CompileされたGraph内で最終的に遷移したステートが, 登録時に指定された最終ステートと異なる場合は追加で遷移コマンド.
+					if(ex_res.require_end_state_ != ex_res.cached_state_)
 					{
-						commandlist->ResourceBarrier(ex_swapchain_.Get(), ex_swapchain_->GetCurrentBufferIndex(), ex_swapchain_executed_end_state_, ex_swapchain_required_end_state_);
+						if(ex_res.swapchain_.IsValid())
+						{
+							// Swapchainの場合.
+							commandlist->ResourceBarrier(ex_res.swapchain_.Get(), ex_res.swapchain_->GetCurrentBufferIndex(), ex_res.cached_state_, ex_res.require_end_state_);
+						}
+						else
+						{
+							commandlist->ResourceBarrier(ex_res.tex_.Get(), ex_res.cached_state_, ex_res.require_end_state_);
+						}
 					}
 				}
 			}
 
 			// ExecuteしたらCompile結果は無効になる(Poolのリソースのステートなどが変わるため再度Compileする必要がある).
-			is_compiled_ = false;
-			p_compiled_manager_ = nullptr;
-			// その他色々クリアしたい.
+			{
+				is_compiled_ = false;
+				p_compiled_manager_ = nullptr;
+
+				// 外部リソースクリア.
+				{
+					ex_resource_ = {};
+					ex_handle_2_index_ = {};
+
+					handle_ex_swapchain_ = {};
+				}
+			}
 		}
 
 		// -------------------------------------------------------------------------------------------
@@ -815,7 +928,7 @@ namespace ngl
 					}
 				}
 
-				TextureInstancePoolElement new_pool_elem = {};
+				ResourceInstancePoolElement new_pool_elem = {};
 				{
 					// 新規生成した実リソースは最終アクセスステージを負の最大にしておく(ステージ0のリクエストに割当できるように).
 					new_pool_elem.last_access_stage_ = TaskStage::k_frontmost_stage();
