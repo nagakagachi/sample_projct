@@ -360,8 +360,6 @@ namespace ngl::render
 					h_linear_depth_ = builder.RegisterResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 
-					// SwapchainをRenderTargetとして要求.
-					//h_swapchain_ = builder.RegisterResourceAccess(*this, builder.GetSwapchainResourceHandle(), rtg::access_type::RENDER_TARTGET);
 					h_swapchain_ = builder.RegisterResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
 				}
 
