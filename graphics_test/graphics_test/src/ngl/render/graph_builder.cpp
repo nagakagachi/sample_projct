@@ -197,11 +197,24 @@ namespace ngl
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
 			return res_handle;
 		}
+		// 指定したHandleのリソースを外部へエクスポートできるようにする.
+		//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
+		//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
+		ResourceHandle RenderTaskGraphBuilder::ExportResource(ResourceHandle handle)
+		{
+			handle_2_is_export_[handle] = true;
+
+			// TODO.
+			// エクスポートしたリソースは強制的にGraphの最後まで生存期間が伸ばされることになる(再利用で別用途で書き換えられないように)
+			// そのほか内部プールから外部へ参照を移譲する必要がある.
+
+			return handle;// とりあえずそのまま返す.
+		}
 		
 		// グラフからリソース割当と状態遷移を確定.
+		// CompileされたGraphは必ずExecuteが必要.
 		bool RenderTaskGraphBuilder::Compile(RenderTaskGraphManager& manager)
 		{
-			// CompileされたGraphは必ずExecuteが必要.
 			// 多重Compileは禁止.
 			assert(!is_compiled_);
 			if (is_compiled_)
@@ -676,11 +689,6 @@ namespace ngl
 				ret_info.dsv_ = res.dsv_;
 				ret_info.uav_ = res.uav_;
 				ret_info.srv_ = res.srv_;
-
-				
-				// res_id=-1の場合は一旦Swapchain扱いとしている.
-				//ret_info.swapchain_ = ex_swapchain_;
-				//ret_info.rtv_ = ex_swapchain_rtv_;
 			}
 
 			return ret_info;
@@ -967,6 +975,12 @@ namespace ngl
 			}
 
 			return res_id;
+		}
+		
+		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
+		void RenderTaskGraphManager::BeginFrame()
+		{
+			// TODO. 未実装!.
 		}
 		
 		// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.

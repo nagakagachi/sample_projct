@@ -414,7 +414,7 @@ namespace ngl
 			Finalize();
 		}
 
-		// TODO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
+		// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
 		bool GraphicsCommandQueueDep::Initialize(DeviceDep* p_device)
 		{
 			if (!p_device)

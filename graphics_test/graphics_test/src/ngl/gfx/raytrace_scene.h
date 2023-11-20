@@ -94,7 +94,7 @@ namespace ngl
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
-			// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
+			// MEMO. RenderDocでのLaunchはクラッシュするのでNsight推奨.
 			bool Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
 
 			bool IsSetuped() const;
@@ -157,7 +157,7 @@ namespace ngl
 
 			// SetupAs... の情報を元に構造構築コマンドを発行する.
 			// Buildタイミングをコントロールするために分離している.
-			// TODO RenderDocでのLaunchはクラッシュするのでNsight推奨.
+			// MEMO. RenderDocでのLaunchはクラッシュするのでNsight推奨.
 			bool Build(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list);
 
 			bool IsSetuped() const;

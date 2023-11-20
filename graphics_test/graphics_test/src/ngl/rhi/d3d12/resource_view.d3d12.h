@@ -115,7 +115,6 @@ namespace ngl
 		public:
 			struct Desc
 			{
-				// TODO. あとで自前定義に置き換える.
 				TextureFilterMode	Filter		= TextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
 				TextureAddressMode	AddressU	= TextureAddressMode::Repeat;
 				TextureAddressMode	AddressV	= TextureAddressMode::Repeat;
@@ -126,22 +125,6 @@ namespace ngl
 				float				BorderColor[4]	= { 0.0f,0.0f,0.0f,0.0f };
 				float				MinLOD			= 0.0f;
 				float				MaxLOD			= 128.0f;
-
-				/*
-				Filter mMagFilter = Filter::Linear;
-				Filter mMinFilter = Filter::Linear;
-				Filter mMipFilter = Filter::Linear;
-				uint32_t mMaxAnisotropy = 1;
-				float mMaxLod = 1000;
-				float mMinLod = -1000;
-				float mLodBias = 0;
-				ComparisonMode mComparisonMode = ComparisonMode::Disabled;
-				ReductionMode mReductionMode = ReductionMode::Standard;
-				AddressMode mModeU = AddressMode::Wrap;
-				AddressMode mModeV = AddressMode::Wrap;
-				AddressMode mModeW = AddressMode::Wrap;
-				float4 mBorderColor = float4(0, 0, 0, 0);
-				*/
 			};
 			SamplerDep();
 			~SamplerDep();

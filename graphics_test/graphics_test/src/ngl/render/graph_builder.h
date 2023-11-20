@@ -152,11 +152,11 @@ namespace ngl
 		// RTGのノードが利用するリソースハンドル.
 		// 識別IDやSwapchain識別等の情報を保持.
 		// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
-		using ResourceHandleDataType = uint64_t;
+		using ResourceHandleKeyType = uint64_t;
 		struct ResourceHandle
 		{
 			constexpr ResourceHandle() = default;
-			constexpr ResourceHandle(ResourceHandleDataType data)
+			constexpr ResourceHandle(ResourceHandleKeyType data)
 			{
 				this->data = data;
 			}
@@ -164,7 +164,7 @@ namespace ngl
 			union
 			{
 				// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
-				ResourceHandleDataType data = 0;
+				ResourceHandleKeyType data = 0;
 				struct Detail
 				{
 					uint32_t unique_id;
@@ -183,7 +183,7 @@ namespace ngl
 			{
 				return detail.unique_id == InvalidHandle().detail.unique_id;
 			}
-			operator ResourceHandleDataType() const
+			operator ResourceHandleKeyType() const
 			{
 				return data;
 			}
@@ -325,11 +325,7 @@ namespace ngl
 		// 内部リソースプール用.
 		struct InternalResourceInstanceInfo
 		{
-			InternalResourceInstanceInfo() = default;
-			InternalResourceInstanceInfo(const InternalResourceInstanceInfo& arg)
-			{
-				*this = arg;
-			}
+			//InternalResourceInstanceInfo() = default;
 				
 			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
 				
@@ -345,11 +341,7 @@ namespace ngl
 		// 外部リソース登録用. 内部リソース管理クラスを継承して追加情報.
 		struct ExternalResourceRegisterInfo : public InternalResourceInstanceInfo
 		{
-			ExternalResourceRegisterInfo() = default;
-			ExternalResourceRegisterInfo(const ExternalResourceRegisterInfo& arg)
-			{
-				*this = arg;
-			}
+			//ExternalResourceRegisterInfo() = default;
 			
 			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {}; // 外部リソースの場合はSwapchainもあり得るため追加.
 			
@@ -410,6 +402,10 @@ namespace ngl
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
 
+			// 指定したHandleのリソースを外部へエクスポートできるようにする.
+			//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
+			//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
+			ResourceHandle ExportResource(ResourceHandle handle);
 			
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
@@ -445,7 +441,7 @@ namespace ngl
 			int res_base_width_ = static_cast<int>( static_cast<float>(k_base_height) * 16.0f/9.0f);
 			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
-			std::unordered_map<ResourceHandleDataType, ResourceDesc2D> handle_2_desc_{};// Handleからその定義のMap.
+			std::unordered_map<ResourceHandleKeyType, ResourceDesc2D> handle_2_desc_{};// Handleからその定義のMap.
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_list_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 
 
@@ -456,16 +452,20 @@ namespace ngl
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// 外部リソース用.
 			std::vector<ExternalResourceRegisterInfo> ex_resource_ = {};
-			std::unordered_map<ResourceHandleDataType, int> ex_handle_2_index_ = {};
+			std::unordered_map<ResourceHandleKeyType, int> ex_handle_2_index_ = {};
 
 			// 外部リソースSwapchainは何かとアクセスするためHandle保持.
 			ResourceHandle	handle_ex_swapchain_ = {};
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+			// エクスポートリソース.
+			// Handleがエクスポート対象かどうかのMap.
+			std::unordered_map<ResourceHandleKeyType, bool> handle_2_is_export_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
 			// HandleからリニアインデックスへのMap.
-			std::unordered_map<ResourceHandleDataType, int> handle_2_compiled_index_ = {};
+			std::unordered_map<ResourceHandleKeyType, int> handle_2_compiled_index_ = {};
 
 			// Compileで構築される情報.
 			// Handleに割り当てられたリソースのPool上のIndex.
@@ -500,6 +500,7 @@ namespace ngl
 					return tmp;
 				}
 			};
+			// Handleのリニアインデックスから割り当て済みリソースID.
 			std::vector<CompiledResourceInfo> handle_compiled_resource_id_ = {};
 			
 			struct NodeHandleState
@@ -509,7 +510,7 @@ namespace ngl
 			};
 			// Compileで構築される情報.
 			// NodeのHandle毎のリソース状態遷移.
-			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleDataType, NodeHandleState>> node_handle_state_ = {};
+			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			uint32_t s_res_handle_id_counter_{};// リソースハンドルユニークID.
@@ -544,9 +545,12 @@ namespace ngl
 				return (nullptr != p_device_);
 			}
 
-			// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.
-			// Compileしたbuilderは必ずExecuteする必要がある.
-			// また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
+			//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
+			void BeginFrame();
+
+			// builderをCompileしてリソース割当を確定する.
+			//	Compileしたbuilderは必ずExecuteする必要がある.
+			//	また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
 			bool Compile(RenderTaskGraphBuilder& builder);
 			
 		private:
