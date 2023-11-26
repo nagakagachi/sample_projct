@@ -324,9 +324,7 @@ namespace ngl
 		
 		// 内部リソースプール用.
 		struct InternalResourceInstanceInfo
-		{
-			//InternalResourceInstanceInfo() = default;
-				
+		{		
 			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
 				
 			rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
@@ -341,8 +339,6 @@ namespace ngl
 		// 外部リソース登録用. 内部リソース管理クラスを継承して追加情報.
 		struct ExternalResourceRegisterInfo : public InternalResourceInstanceInfo
 		{
-			//ExternalResourceRegisterInfo() = default;
-			
 			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {}; // 外部リソースの場合はSwapchainもあり得るため追加.
 			
 			rhi::ResourceState	require_begin_state_ = rhi::ResourceState::Common;// 外部登録で指定された開始ステート.
@@ -378,6 +374,11 @@ namespace ngl
 			//	Graph内リソースを確保してハンドルを取得する.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
 
+			// 指定したHandleのリソースを外部へエクスポートできるようにする.
+			//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
+			//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
+			ResourceHandle ExportResource(ResourceHandle handle);
+
 			// 外部リソースを登録してハンドルを生成. 一般.
 			//	rtv,dsv,srv,uavはそれぞれ登録するものだけ有効な参照を指定する.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
@@ -401,11 +402,6 @@ namespace ngl
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
 			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
-
-			// 指定したHandleのリソースを外部へエクスポートできるようにする.
-			//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
-			//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
-			ResourceHandle ExportResource(ResourceHandle handle);
 			
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
@@ -450,12 +446,12 @@ namespace ngl
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
-			// 外部リソース用.
-			std::vector<ExternalResourceRegisterInfo> ex_resource_ = {};
-			std::unordered_map<ResourceHandleKeyType, int> ex_handle_2_index_ = {};
+			// Importリソース用.
+			std::vector<ExternalResourceRegisterInfo> imported_resource_ = {};
+			std::unordered_map<ResourceHandleKeyType, int> imported_handle_2_index_ = {};
 
-			// 外部リソースSwapchainは何かとアクセスするためHandle保持.
-			ResourceHandle	handle_ex_swapchain_ = {};
+			// ImportしたSwapchainは何かとアクセスするためHandle保持.
+			ResourceHandle	handle_imported_swapchain_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// エクスポートリソース.
 			// Handleがエクスポート対象かどうかのMap.
@@ -521,6 +517,9 @@ namespace ngl
 			
 			// Sequence上でのノードの位置を返す.
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
+
+			// HandleがExport対象かチェックする.
+			bool IsExportResource(ResourceHandle handle) const;
 			
 			// ------------------------------------------
 			// 外部リソースを登録共通部.

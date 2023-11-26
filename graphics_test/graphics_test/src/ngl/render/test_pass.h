@@ -275,7 +275,6 @@ namespace ngl::render
 			rtg::ResourceHandle h_gb0_{};
 			rtg::ResourceHandle h_gb1_{};
 			rtg::ResourceHandle h_light_{};
-			rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 
 
 			virtual rtg::ETASK_TYPE TaskType() const
@@ -294,12 +293,6 @@ namespace ngl::render
 				h_gb0_ = builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
 				h_gb1_ = builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
 				h_light_ = builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
-
-
-				// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-				rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
-				auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
-				h_tmp_ = temp_res0;
 			}
 
 			// 実際のレンダリング処理.
@@ -310,13 +303,11 @@ namespace ngl::render
 				auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
 				auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
 				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
-				auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_gb0.tex_.IsValid() && res_gb0.srv_.IsValid());
 				assert(res_gb1.tex_.IsValid() && res_gb1.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
-				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
 				// TODO.
 			}
@@ -337,6 +328,8 @@ namespace ngl::render
 			rtg::ResourceHandle h_linear_depth_{};
 			rtg::ResourceHandle h_light_{};
 			rtg::ResourceHandle h_swapchain_{}; // 一時リソーステスト. マクロにも登録しない.
+			
+			rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 
 			// 外部指定の出力先バッファ.
 			rhi::RefSampDep ref_samp_linear_clamp_{};
@@ -361,6 +354,12 @@ namespace ngl::render
 					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 
 					h_swapchain_ = builder.RegisterResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
+
+					
+					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
+					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+					h_tmp_ = temp_res0;
 				}
 
 				{
@@ -424,11 +423,13 @@ namespace ngl::render
 				auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
 				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
 				auto res_swapchain = builder.GetAllocatedHandleResource(this, h_swapchain_);
+				auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.srv_.IsValid());
 				assert(res_swapchain.swapchain_.IsValid() && res_swapchain.rtv_.IsValid());
+				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
 
 				gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());

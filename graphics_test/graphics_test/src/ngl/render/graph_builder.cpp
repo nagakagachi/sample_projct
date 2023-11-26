@@ -69,6 +69,23 @@ namespace ngl
 			
 			return handle;
 		}
+		
+		// 指定したHandleのリソースを外部へエクスポートできるようにする.
+		//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
+		//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
+		ResourceHandle RenderTaskGraphBuilder::ExportResource(ResourceHandle handle)
+		{
+			handle_2_is_export_[handle] = true;
+
+			// TODO.
+			// エクスポートしたリソースは強制的にGraphの最後まで生存期間が伸ばされることになる(再利用で別用途で書き換えられないように)
+			// そのほか内部プールから外部へ参照を移譲する必要がある.
+
+			// 既存の外部リソースと同じフローを取るなら, 外部リソース側に移譲するのがよいか.
+			
+
+			return handle;// とりあえずそのまま返す.
+		}
 
 		// 外部リソースを登録共通部.
 		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResourceCommon(
@@ -114,14 +131,14 @@ namespace ngl
 			// 外部リソース情報.
 			{
 				// 外部リソース用Index.
-				const int res_index = (int)ex_resource_.size();
-				ex_resource_.push_back({});
+				const int res_index = (int)imported_resource_.size();
+				imported_resource_.push_back({});
 
 				// 外部リソースハンドルから外部リソース用IndexへのMap.
-				ex_handle_2_index_[new_handle] = res_index;
+				imported_handle_2_index_[new_handle] = res_index;
 
 				// 外部リソース用Indexで情報登録.
-				ExternalResourceRegisterInfo& ex_res_info = ex_resource_[res_index];
+				ExternalResourceRegisterInfo& ex_res_info = imported_resource_[res_index];
 				{
 					ex_res_info.swapchain_ = swapchain;
 					ex_res_info.tex_ = tex;
@@ -147,21 +164,21 @@ namespace ngl
 			rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
 		{
-			handle_ex_swapchain_ = RegisterExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
-			return handle_ex_swapchain_;
+			handle_imported_swapchain_ = RegisterExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			return handle_imported_swapchain_;
 		}
 		
 		// 外部リソースの登録. Swapchain.
 		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
 		{
-			handle_ex_swapchain_ = RegisterExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
-			return handle_ex_swapchain_;
+			handle_imported_swapchain_ = RegisterExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			return handle_imported_swapchain_;
 		}
 
 		// Swapchainリソースハンドルを取得. RegisterExternalResourceで登録しておく必要がある.
 		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle() const
 		{
-			return handle_ex_swapchain_;
+			return handle_imported_swapchain_;
 		}
 		
 		// Descを取得.
@@ -196,19 +213,6 @@ namespace ngl
 
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
 			return res_handle;
-		}
-		// 指定したHandleのリソースを外部へエクスポートできるようにする.
-		//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
-		//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
-		ResourceHandle RenderTaskGraphBuilder::ExportResource(ResourceHandle handle)
-		{
-			handle_2_is_export_[handle] = true;
-
-			// TODO.
-			// エクスポートしたリソースは強制的にGraphの最後まで生存期間が伸ばされることになる(再利用で別用途で書き換えられないように)
-			// そのほか内部プールから外部へ参照を移譲する必要がある.
-
-			return handle;// とりあえずそのまま返す.
 		}
 		
 		// グラフからリソース割当と状態遷移を確定.
@@ -272,7 +276,7 @@ namespace ngl
 				}
 			}
 
-			// 存在するハンドル毎に仮のユニークインデックスを割り振る. ランダムアクセスのため.
+			// 存在するハンドル毎に仮の線形インデックスを割り振る. ランダムアクセスのため.
 			handle_2_compiled_index_ = {};// クリア.
 			int handle_count = 0;
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
@@ -302,7 +306,7 @@ namespace ngl
 				bool access_pattern_[access_type::_MAX] = {};
 				std::vector<ResourceHandleAccessFromNode> from_node_ = {};
 			};
-			// リソースハンドルへのアクセスを時系列で収集.
+			// リソースハンドルへの各ノードからのアクセスタイプ収集.
 			std::vector<ResourceHandleAccessInfo> handle_access_info_array(handle_count);
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
@@ -324,7 +328,7 @@ namespace ngl
 					
 				}
 			}
-				// アクセスタイプのValidation. ここで RenderTarget且つDepthStencilTarget等の許可されないアクセスチェック.
+				// Validation. ここで RenderTarget且つDepthStencilTarget等の許可されないアクセスチェック.
 				for(auto handle_access : handle_access_info_array)
 				{
 					if(
@@ -358,6 +362,22 @@ namespace ngl
 				handle_life_first_array[handle_index] = stage_first;// このハンドルへの最初のアクセス位置
 				handle_life_last_array[handle_index] = stage_last;// このハンドルへの最後のアクセス位置
 			}
+
+			// Export Resourceのアクセス期間を修正してグラフ終端まで延長する.
+			//	Compileによって内部リソースプールに生成されたリソースが最後までハンドルに割り当てられることを強制する.
+			//	その後内部リソースプールから管理を外部に移譲する予定.
+			{
+				for(auto e : handle_2_is_export_)
+				{
+					if(!e.second)
+						continue;
+					
+					const int handle_index = handle_2_compiled_index_[e.first];
+					// グラフ終端までアクセスがあるものとする.
+					constexpr TaskStage stage_end = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+					handle_life_last_array[handle_index] = stage_end;
+				}
+			}
 			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
@@ -371,21 +391,18 @@ namespace ngl
 				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
 				if(0 > handle_compiled_resource_id_[handle_id].detail.resource_id)
 				{
-					// 実際はここでPool等から実リソースを割り当て, 以前のステートを引き継いで遷移を確定させる.
-					// 理想的には unique_id は違うが寿命がオーバーラップしていない再利用可能実リソースを使い回す.
-
 					const ResourceHandleAccessInfo& handle_access = handle_access_info_array[handle_id];
 
 					if(res_handle.detail.is_external || res_handle.detail.is_swapchain)
 					{
 						// 外部リソースの場合.
 						
-						assert(ex_handle_2_index_.end() != ex_handle_2_index_.find(res_handle));// 登録済み外部リソースかチェック.
+						assert(imported_handle_2_index_.end() != imported_handle_2_index_.find(res_handle));// 登録済み外部リソースかチェック.
 
-						const int ex_res_index = ex_handle_2_index_[res_handle];
+						const int ex_res_index = imported_handle_2_index_[res_handle];
 						// リソースの最終アクセスステージを更新.
 						{
-							ex_resource_[ex_res_index].last_access_stage_ = handle_life_last_array[handle_id];
+							imported_resource_[ex_res_index].last_access_stage_ = handle_life_last_array[handle_id];
 						}
 						// 割当情報.
 						{
@@ -427,11 +444,10 @@ namespace ngl
 
 #if 1
 						// リソースのアクセス範囲を考慮して再利用可能なら再利用する
-						const TaskStage first_stage = handle_life_first_array[handle_id];
-						const TaskStage* p_request_access_stage = &first_stage;
+						TaskStage* p_request_access_stage = &handle_life_first_array[handle_id];
 #else
 						// 再利用を一切しないデバッグ用.
-						const TaskStage* p_request_access_stage = nullptr;
+						TaskStage* p_request_access_stage = nullptr;
 #endif
 
 						// 内部リソースプールからリソース取得.
@@ -467,7 +483,6 @@ namespace ngl
 				}
 			}
 
-			
 			//	各Node時点での保持Handleのリソースステートを計算.
 			// まず時系列順で実リソースへのアクセスNodeをリストアップ.
 			std::vector<std::vector<const ITaskNode*>> res_access_node_array(valid_res_count);
@@ -487,7 +502,8 @@ namespace ngl
 				}
 			}
 
-			// 各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報を構築.
+			// リソース割当を確定したのでステート遷移を決定する.
+			//	各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報を構築.
 			node_handle_state_ = {};// クリア.
 			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
 			{
@@ -502,7 +518,7 @@ namespace ngl
 				}
 				else
 				{
-					begin_state = ex_resource_[res_id.detail.resource_id].cached_state_;
+					begin_state = imported_resource_[res_id.detail.resource_id].cached_state_;
 				}
 				
 				rhi::ResourceState curr_state = begin_state;
@@ -564,11 +580,11 @@ namespace ngl
 				}
 				else
 				{
-					ex_resource_[res_id.detail.resource_id].prev_cached_state_
-					= ex_resource_[res_id.detail.resource_id].cached_state_;
+					imported_resource_[res_id.detail.resource_id].prev_cached_state_
+					= imported_resource_[res_id.detail.resource_id].cached_state_;
 					
 					// Compile後のステートに更新.
-					ex_resource_[res_id.detail.resource_id].cached_state_ = curr_state;
+					imported_resource_[res_id.detail.resource_id].cached_state_ = curr_state;
 				}
 			}
 			
@@ -606,7 +622,7 @@ namespace ngl
 					{
 						std::cout << "			-External" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.resource_id)? ex_resource_[res_id.detail.resource_id] : ExternalResourceRegisterInfo();
+						const auto res = (0 <= res_id.detail.resource_id)? imported_resource_[res_id.detail.resource_id] : ExternalResourceRegisterInfo();
 						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						if(res.tex_.IsValid())
 							std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
@@ -672,6 +688,7 @@ namespace ngl
 
 			if (!handle_res_id.detail.is_external)
 			{
+				// 内部リソースプール.
 				const InternalResourceInstanceInfo res = p_compiled_manager_->internal_resource_pool_[handle_res_id.detail.resource_id];
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
@@ -682,7 +699,7 @@ namespace ngl
 			else
 			{
 				// 外部リソース.
-				const ExternalResourceRegisterInfo res = ex_resource_[handle_res_id.detail.resource_id];
+				const ExternalResourceRegisterInfo res = imported_resource_[handle_res_id.detail.resource_id];
 				ret_info.swapchain_ = res.swapchain_;// 外部リソースはSwapchainの場合もある.
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
@@ -743,7 +760,7 @@ namespace ngl
 
 			// 外部リソースの必須最終ステートの解決.
 			{
-				for(auto& ex_res : ex_resource_)
+				for(auto& ex_res : imported_resource_)
 				{
 					// CompileされたGraph内で最終的に遷移したステートが, 登録時に指定された最終ステートと異なる場合は追加で遷移コマンド.
 					if(ex_res.require_end_state_ != ex_res.cached_state_)
@@ -768,10 +785,10 @@ namespace ngl
 
 				// 外部リソースクリア.
 				{
-					ex_resource_ = {};
-					ex_handle_2_index_ = {};
+					imported_resource_ = {};
+					imported_handle_2_index_ = {};
 
-					handle_ex_swapchain_ = {};
+					handle_imported_swapchain_ = {};
 				}
 			}
 		}
@@ -804,6 +821,12 @@ namespace ngl
 			return static_cast<int>(std::distance(node_sequence_.begin(), find_pos));
 		}
 
+		// HandleがExport対象かチェックする.
+		bool RenderTaskGraphBuilder::IsExportResource(ResourceHandle handle) const
+		{
+			const auto find_it = handle_2_is_export_.find(handle);
+			return handle_2_is_export_.end() != find_it && find_it->second;
+		}
 
 		// --------------------------------------------------------------------------------------------------------------------
 		// Poolからリソース検索または新規生成.

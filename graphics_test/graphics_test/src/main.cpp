@@ -753,7 +753,7 @@ bool AppGame::Execute()
 						// 指定したハンドルのリソースをエクスポートする. エクスポートできるのは内部リソースのみ. 外部登録リソースは不可能.
 						// エクスポートで取得したハンドルはCompile後のBuilderからリソース実体を取得ために利用できる.
 						// ExecuteによってBuilderがエクスポートリソース参照をクリアするため, エクスポートリソース取得はCompile後かつExecute前のタイミングのみ許可される.
-						h_export_light = rtg_builder.ExportResource(task_light->h_light_);
+						h_export_light = rtg_builder.ExportResource(task_light->h_gb1_);
 					}
 				}
 
