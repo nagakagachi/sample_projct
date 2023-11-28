@@ -1013,6 +1013,9 @@ namespace ngl
 		{
 			assert(nullptr != p_device_);
 
+			// Compileは排他処理.
+			std::scoped_lock<std::mutex> lock(compile_mutex_);
+
 			// Compile実行.
 			const bool result = builder.Compile(*this);
 

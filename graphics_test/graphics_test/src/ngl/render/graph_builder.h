@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <unordered_map>
+#include <mutex>
 
 #include "ngl/text/hash_text.h"
 
@@ -557,6 +558,8 @@ namespace ngl
 			
 			// Compileで割り当てられるリソースのPool.
 			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
+
+			std::mutex	compile_mutex_ = {};
 			
 		private:
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
