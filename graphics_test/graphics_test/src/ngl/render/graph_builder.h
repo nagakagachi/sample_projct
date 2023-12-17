@@ -375,10 +375,15 @@ namespace ngl
 			//	Graph内リソースを確保してハンドルを取得する.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
 
+			// 一旦非推奨.
 			// 指定したHandleのリソースを外部へエクスポートできるようにする.
 			//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
 			//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
 			ResourceHandle ExportResource(ResourceHandle handle);
+
+			// 次のフレームへ寿命を延長する.
+			//	前回フレームのハンドルのリソースを利用する場合に, この関数で寿命を延長した上で次フレームで同じハンドルを使うことでアクセス可能にする予定.
+			ResourceHandle PropagateResouceToNextFrame(ResourceHandle handle);
 
 			// 外部リソースを登録してハンドルを生成. 一般.
 			//	rtv,dsv,srv,uavはそれぞれ登録するものだけ有効な参照を指定する.
@@ -458,6 +463,9 @@ namespace ngl
 			// Handleがエクスポート対象かどうかのMap.
 			std::unordered_map<ResourceHandleKeyType, bool> handle_2_is_export_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+			// 次フレームまで寿命を延長するハンドル.
+			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_ = {};
+			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
@@ -510,7 +518,6 @@ namespace ngl
 			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-			uint32_t s_res_handle_id_counter_{};// リソースハンドルユニークID.
 		private:
 			// グラフからリソース割当と状態遷移を確定.
 			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
@@ -558,14 +565,25 @@ namespace ngl
 			
 			// Compileで割り当てられるリソースのPool.
 			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
-
+			
 			std::mutex	compile_mutex_ = {};
 			
+			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_[2] = {};
+			int flip_propagate_next_handle_next_ = 0;
+			int flip_propagate_next_handle_curr_ = 1;
+			
 		private:
+			// ユニークなハンドルIDを取得.
+			//	64bitにするかもしれない.
+			static uint32_t GetNewHandleId();
+			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID.
+			
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
 			int GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
+
+			void PropagateResourceToNextFrame(ResourceHandle handle, int resource_id);
 		};
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		

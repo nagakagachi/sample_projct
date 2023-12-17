@@ -53,14 +53,18 @@ namespace ngl
 		ResourceHandle RenderTaskGraphBuilder::CreateResource(ResourceDesc2D res_desc)
 		{
 			// ID確保.
+			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
+			/*
 			{
 				++s_res_handle_id_counter_;
 				if (0 == s_res_handle_id_counter_)
 					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+				new_handle_id = s_res_handle_id_counter_;
 			}
+			*/
 			
 			ResourceHandle handle{};
-			handle.detail.unique_id = s_res_handle_id_counter_;// ユニークID割当.
+			handle.detail.unique_id = new_handle_id;// ユニークID割当.
 
 			// Desc登録.
 			{
@@ -70,23 +74,30 @@ namespace ngl
 			return handle;
 		}
 		
-		// 指定したHandleのリソースを外部へエクスポートできるようにする.
-		//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
+		// 指定したHandleのリソースを外部へExportできるようにする.
+		//	Exportされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
 		//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
 		ResourceHandle RenderTaskGraphBuilder::ExportResource(ResourceHandle handle)
 		{
 			handle_2_is_export_[handle] = true;
 
 			// TODO.
-			// エクスポートしたリソースは強制的にGraphの最後まで生存期間が伸ばされることになる(再利用で別用途で書き換えられないように)
+			// Exportしたリソースは強制的にGraphの最後まで生存期間が伸ばされることになる(再利用で別用途で書き換えられないように)
 			// そのほか内部プールから外部へ参照を移譲する必要がある.
 
 			// 既存の外部リソースと同じフローを取るなら, 外部リソース側に移譲するのがよいか.
-			
-
 			return handle;// とりあえずそのまま返す.
 		}
 
+		// 次のフレームへ寿命を延長する.
+		//	前回フレームのハンドルのリソースを利用する場合に, この関数で寿命を延長した上で次フレームで同じハンドルを使うことでアクセス可能にする予定.
+		ResourceHandle RenderTaskGraphBuilder::PropagateResouceToNextFrame(ResourceHandle handle)
+		{
+			propagate_next_handle_[handle] = 0;
+
+			return handle;
+		}
+		
 		// 外部リソースを登録共通部.
 		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResourceCommon(
 			rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
@@ -101,17 +112,21 @@ namespace ngl
 				assert(false);
 			}
 			// ID確保.
+			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
+			/*
 			{
 				++s_res_handle_id_counter_;
 				if(0 == s_res_handle_id_counter_)
 					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+				new_handle_id = s_res_handle_id_counter_;
 			}
+			*/
 			// ハンドルセットアップ.
 			ResourceHandle new_handle = {};
 			{
 				new_handle.detail.is_external = 1;// 外部リソースマーク.
 				new_handle.detail.is_swapchain = (swapchain.IsValid())? 1 : 0;// Swapchainマーク.
-				new_handle.detail.unique_id = s_res_handle_id_counter_;
+				new_handle.detail.unique_id = new_handle_id;
 			}
 			
 			// ResourceのDescをHandleから引ける用に登録.
@@ -363,17 +378,13 @@ namespace ngl
 				handle_life_last_array[handle_index] = stage_last;// このハンドルへの最後のアクセス位置
 			}
 
-			// Export Resourceのアクセス期間を修正してグラフ終端まで延長する.
-			//	Compileによって内部リソースプールに生成されたリソースが最後までハンドルに割り当てられることを強制する.
-			//	その後内部リソースプールから管理を外部に移譲する予定.
+			// 次のフレームまで伝搬するハンドルの寿命を終端まで延長してこのハンドルのリソースがこのGraphの最後まで生存することを保証する.
+			//	更に後段でManagerに対して次フレームのヒストリリソースとしてハンドルと関連付けるように指示をする.
 			{
-				for(auto e : handle_2_is_export_)
+				for(auto e : propagate_next_handle_)
 				{
-					if(!e.second)
-						continue;
-					
 					const int handle_index = handle_2_compiled_index_[e.first];
-					// グラフ終端までアクセスがあるものとする.
+					// グラフ終端までアクセスがあるものとして延長.
 					constexpr TaskStage stage_end = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
 					handle_life_last_array[handle_index] = stage_end;
 				}
@@ -387,86 +398,85 @@ namespace ngl
 			{
 				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
 				const auto handle_id = handle_index.second;
-				
-				// ユニーク割当IDでまだ未割り当ての場合は新規割当.
-				if(0 > handle_compiled_resource_id_[handle_id].detail.resource_id)
-				{
-					const ResourceHandleAccessInfo& handle_access = handle_access_info_array[handle_id];
 
-					if(res_handle.detail.is_external || res_handle.detail.is_swapchain)
-					{
-						// 外部リソースの場合.
-						
-						assert(imported_handle_2_index_.end() != imported_handle_2_index_.find(res_handle));// 登録済み外部リソースかチェック.
-
-						const int ex_res_index = imported_handle_2_index_[res_handle];
-						// リソースの最終アクセスステージを更新.
-						{
-							imported_resource_[ex_res_index].last_access_stage_ = handle_life_last_array[handle_id];
-						}
-						// 割当情報.
-						{
-							handle_compiled_resource_id_[handle_id].detail.resource_id = ex_res_index;
-							handle_compiled_resource_id_[handle_id].detail.is_external = true;// 外部リソースマーク.
-						}
-					}
-					else
-					{
-						// 内部リソースの場合.
-						
-						const auto require_desc = handle_2_desc_[res_handle];
-
-						int concrete_w = res_base_width_;
-						int concrete_h = res_base_height_;
-						// MEMO ここで相対サイズモードの場合はスケールされたサイズになるが, このまま要求して新規生成された場合小さいサイズで作られて使いまわしされにくいものになる懸念が多少ある.
-						require_desc.GetConcreteTextureSize(res_base_width_, res_base_height_, concrete_w, concrete_h);
-
-						// アクセスタイプでUsageを決定. 同時指定が不可能なパターンのチェックはこれ以前に実行している予定.
-						ACCESS_TYPE_MASK usage_mask = 0;
-						{
-							if(handle_access.access_pattern_[access_type::RENDER_TARTGET])
-								usage_mask |= access_type_mask::RENDER_TARTGET;
-							if(handle_access.access_pattern_[access_type::DEPTH_TARGET])
-								usage_mask |= access_type_mask::DEPTH_TARGET;
-							if(handle_access.access_pattern_[access_type::UAV])
-								usage_mask |= access_type_mask::UAV;
-							if(handle_access.access_pattern_[access_type::SHADER_READ])
-								usage_mask |= access_type_mask::SHADER_READ;
-						}
 					
-						ResourceSearchKey search_key = {};
-						{
-							search_key.format = require_desc.desc.format;
-							search_key.require_width_ = concrete_w;
-							search_key.require_height_ = concrete_h;
-							search_key.usage_ = usage_mask;
-						}
+				// シーケンス上の順序で再利用を考慮してリソースを割り当て.
+				
+				const ResourceHandleAccessInfo& handle_access = handle_access_info_array[handle_id];
+
+				if(res_handle.detail.is_external || res_handle.detail.is_swapchain)
+				{
+					// 外部リソースの場合.
+					
+					assert(imported_handle_2_index_.end() != imported_handle_2_index_.find(res_handle));// 登録済み外部リソースかチェック.
+
+					const int ex_res_index = imported_handle_2_index_[res_handle];
+					// リソースの最終アクセスステージを更新.
+					{
+						imported_resource_[ex_res_index].last_access_stage_ = handle_life_last_array[handle_id];
+					}
+					// 割当情報.
+					{
+						handle_compiled_resource_id_[handle_id].detail.resource_id = ex_res_index;
+						handle_compiled_resource_id_[handle_id].detail.is_external = true;// 外部リソースマーク.
+					}
+				}
+				else
+				{
+					// 内部リソースの場合.
+					
+					const auto require_desc = handle_2_desc_[res_handle];
+
+					int concrete_w = res_base_width_;
+					int concrete_h = res_base_height_;
+					// MEMO ここで相対サイズモードの場合はスケールされたサイズになるが, このまま要求して新規生成された場合小さいサイズで作られて使いまわしされにくいものになる懸念が多少ある.
+					require_desc.GetConcreteTextureSize(res_base_width_, res_base_height_, concrete_w, concrete_h);
+
+					// アクセスタイプでUsageを決定. 同時指定が不可能なパターンのチェックはこれ以前に実行している予定.
+					ACCESS_TYPE_MASK usage_mask = 0;
+					{
+						if(handle_access.access_pattern_[access_type::RENDER_TARTGET])
+							usage_mask |= access_type_mask::RENDER_TARTGET;
+						if(handle_access.access_pattern_[access_type::DEPTH_TARGET])
+							usage_mask |= access_type_mask::DEPTH_TARGET;
+						if(handle_access.access_pattern_[access_type::UAV])
+							usage_mask |= access_type_mask::UAV;
+						if(handle_access.access_pattern_[access_type::SHADER_READ])
+							usage_mask |= access_type_mask::SHADER_READ;
+					}
+				
+					ResourceSearchKey search_key = {};
+					{
+						search_key.format = require_desc.desc.format;
+						search_key.require_width_ = concrete_w;
+						search_key.require_height_ = concrete_h;
+						search_key.usage_ = usage_mask;
+					}
 
 #if 1
-						// リソースのアクセス範囲を考慮して再利用可能なら再利用する
-						TaskStage* p_request_access_stage = &handle_life_first_array[handle_id];
+					// リソースのアクセス範囲を考慮して再利用可能なら再利用する
+					TaskStage* p_request_access_stage = &handle_life_first_array[handle_id];
 #else
-						// 再利用を一切しないデバッグ用.
-						TaskStage* p_request_access_stage = nullptr;
+					// 再利用を一切しないデバッグ用.
+					TaskStage* p_request_access_stage = nullptr;
 #endif
 
-						// 内部リソースプールからリソース取得.
-						int res_id = p_compiled_manager_->GetOrCreateResourceFromPool(search_key, p_request_access_stage);
-						assert(0 <= res_id);// 必ず有効なIDが帰るはず.
+					// 内部リソースプールからリソース取得.
+					int res_id = p_compiled_manager_->GetOrCreateResourceFromPool(search_key, p_request_access_stage);
+					assert(0 <= res_id);// 必ず有効なIDが帰るはず.
 
-						// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
-						{
-							p_compiled_manager_->internal_resource_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
-						}
-						// 割当情報.
-						{
-							handle_compiled_resource_id_[handle_id].detail.resource_id = res_id;
-							handle_compiled_resource_id_[handle_id].detail.is_external = false;
-						}
+					// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
+					{
+						p_compiled_manager_->internal_resource_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
+					}
+					// 割当情報.
+					{
+						handle_compiled_resource_id_[handle_id].detail.resource_id = res_id;
+						handle_compiled_resource_id_[handle_id].detail.is_external = false;
 					}
 				}
 			}
-
+			
 			// Graph上で割り当てられた有効なリソースIDから密なリニアインデックスへのマップ. 有効リソースID毎の情報をワークバッファ上で操作するため.
 			std::unordered_map<CompiledResourceInfoKeyType, int> res_id_2_linear_map = {};
 			// 有効リソースリニアインデックスからリソースIDへのマッピングをする配列.
@@ -482,8 +492,7 @@ namespace ngl
 					++valid_res_count;
 				}
 			}
-
-			//	各Node時点での保持Handleのリソースステートを計算.
+			
 			// まず時系列順で実リソースへのアクセスNodeをリストアップ.
 			std::vector<std::vector<const ITaskNode*>> res_access_node_array(valid_res_count);
 			for(const auto* p_node : node_sequence_)
@@ -587,7 +596,27 @@ namespace ngl
 					imported_resource_[res_id.detail.resource_id].cached_state_ = curr_state;
 				}
 			}
-			
+
+			// Managerに次フレームへ伝搬するリソースを指示する.
+			for(auto e : propagate_next_handle_)
+			{
+				const ResourceHandle handle(e.first);
+				if(handle_2_compiled_index_.end() == handle_2_compiled_index_.find(handle))
+				{
+					// ありえないのでassert.
+					assert(false);
+					continue;
+				}
+				const int handle_id = handle_2_compiled_index_[handle];
+				if(handle_compiled_resource_id_[handle_id].detail.is_external)
+				{
+					// フレーム伝搬は内部リソースのみ許可.
+					assert(false);
+					continue;
+				}
+				// Handleと割当リソースIDをマネージャにフレーム伝搬指示.
+				p_compiled_manager_->PropagateResourceToNextFrame(handle, handle_compiled_resource_id_[handle_id].detail.resource_id);
+			}
 			
 			// デバッグ表示.
 			if(false)
@@ -808,7 +837,6 @@ namespace ngl
 			node_sequence_.clear();
 		}
 
-
 		// Sequence上でのノードの位置を返す.
 		// シンプルに直列なリスト上での位置.
 		int RenderTaskGraphBuilder::GetNodeSequencePosition(const ITaskNode* p_node) const
@@ -829,6 +857,21 @@ namespace ngl
 		}
 
 		// --------------------------------------------------------------------------------------------------------------------
+		uint32_t RenderTaskGraphManager::s_res_handle_id_counter_ = 0;
+		
+		uint32_t RenderTaskGraphManager::GetNewHandleId()
+		{
+			++s_res_handle_id_counter_;
+			if (0 == s_res_handle_id_counter_)
+			{
+				// IDが一周したことを一応チェックする.
+				std::cout << u8"[RenderTaskGraphManager] HandleIDが一周." << std::endl;
+				
+				++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
+			}
+			
+			return s_res_handle_id_counter_;
+		}
 		// Poolからリソース検索または新規生成.
 		int RenderTaskGraphManager::GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse)
 		{
@@ -1000,10 +1043,20 @@ namespace ngl
 			return res_id;
 		}
 		
+		void RenderTaskGraphManager::PropagateResourceToNextFrame(ResourceHandle handle, int resource_id)
+		{
+			propagate_next_handle_[flip_propagate_next_handle_next_][handle] = resource_id;
+		}
+		
 		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 		void RenderTaskGraphManager::BeginFrame()
 		{
 			// TODO. 未実装!.
+
+			// フレーム開始でフレーム伝搬リソースのMapフリップとクリア.
+			flip_propagate_next_handle_curr_ = flip_propagate_next_handle_next_;// このフレームでアクセス可能な, 前回フレームから伝搬されたハンドル用.
+			flip_propagate_next_handle_next_ = 1 - flip_propagate_next_handle_next_;// このフレームから伝搬するハンドル用.
+			propagate_next_handle_[flip_propagate_next_handle_next_].clear();
 		}
 		
 		// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.

@@ -711,7 +711,6 @@ bool AppGame::Execute()
 			{
 				// RTG Build.
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
-				ngl::rtg::ResourceHandle h_export_light = {};// RTGリソースの外部化テスト.
 				
 				// Register External.
 				ngl::rtg::ResourceHandle h_swapchain = {};
@@ -723,6 +722,9 @@ bool AppGame::Execute()
 					// 状態追跡更新.
 					swapchain_resource_state_[swapchain_index] = swapchain_final_state;
 				}
+
+				// 前回フレームハンドルのテスト.
+				static ngl::rtg::ResourceHandle h_prev_light = {};
 
 				// Build Rendering Pass.
 				{
@@ -747,13 +749,9 @@ bool AppGame::Execute()
 					task_final->Setup(rtg_builder, &device_, h_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
 						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 
-					// TODO.
-					// 一部RTGリソースのエクスポートテスト.
+					// 次回フレームへの伝搬テスト.
 					{
-						// 指定したハンドルのリソースをエクスポートする. エクスポートできるのは内部リソースのみ. 外部登録リソースは不可能.
-						// エクスポートで取得したハンドルはCompile後のBuilderからリソース実体を取得ために利用できる.
-						// ExecuteによってBuilderがエクスポートリソース参照をクリアするため, エクスポートリソース取得はCompile後かつExecute前のタイミングのみ許可される.
-						h_export_light = rtg_builder.ExportResource(task_light->h_gb1_);
+						h_prev_light = rtg_builder.PropagateResouceToNextFrame(task_light->h_light_);
 					}
 				}
 
