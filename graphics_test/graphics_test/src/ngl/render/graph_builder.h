@@ -306,6 +306,11 @@ namespace ngl
 			{
 				return TaskStage{std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
 			};
+			// 最終端のStage.
+			static constexpr TaskStage k_endmost_stage()
+			{
+				return TaskStage{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+			};
 			
 			// オペレータ.
 			constexpr bool operator<(const TaskStage arg) const;
@@ -584,6 +589,7 @@ namespace ngl
 			int GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
 
 			void PropagateResourceToNextFrame(ResourceHandle handle, int resource_id);
+			int FindPropagatedResourceId(ResourceHandle handle);
 		};
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		

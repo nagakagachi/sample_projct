@@ -424,54 +424,87 @@ namespace ngl
 				else
 				{
 					// 内部リソースの場合.
-					
-					const auto require_desc = handle_2_desc_[res_handle];
 
-					int concrete_w = res_base_width_;
-					int concrete_h = res_base_height_;
-					// MEMO ここで相対サイズモードの場合はスケールされたサイズになるが, このまま要求して新規生成された場合小さいサイズで作られて使いまわしされにくいものになる懸念が多少ある.
-					require_desc.GetConcreteTextureSize(res_base_width_, res_base_height_, concrete_w, concrete_h);
+					int allocated_resource_id = -1;// 無効値.
 
-					// アクセスタイプでUsageを決定. 同時指定が不可能なパターンのチェックはこれ以前に実行している予定.
-					ACCESS_TYPE_MASK usage_mask = 0;
+					// 前フレームから伝搬されたハンドルかチェック
+					const int propagated_resource_id = p_compiled_manager_->FindPropagatedResourceId(res_handle);
+					if(0 <= propagated_resource_id)
 					{
-						if(handle_access.access_pattern_[access_type::RENDER_TARTGET])
-							usage_mask |= access_type_mask::RENDER_TARTGET;
-						if(handle_access.access_pattern_[access_type::DEPTH_TARGET])
-							usage_mask |= access_type_mask::DEPTH_TARGET;
-						if(handle_access.access_pattern_[access_type::UAV])
-							usage_mask |= access_type_mask::UAV;
-						if(handle_access.access_pattern_[access_type::SHADER_READ])
-							usage_mask |= access_type_mask::SHADER_READ;
+						// 伝搬リソースがある場合は利用.
+						// ここでSRVやUAVなどのアクセスタイプを充足するかや, 前回使用時のサイズ情報(動的解像度)を取り出して使うのがいいかもしれない.
+						
+						allocated_resource_id = propagated_resource_id;
 					}
+					else
+					{
+						// 伝搬リソースではない場合は通常の内部プールからの割当.
+
+						// TODO.
+						// 問題点として, 初回フレーム等で前回フレーム自体が存在せず, 伝搬リソースが存在しない場合にどう対応すべきか.
+						// FindPropagatedResourceId()が無効値を返してきて且つ, handle_2_desc_に未登録であるようなパターンになる.
+						// その場合は割当失敗として処理を続けて, GetAllocatedHandleResource()が無効値を返すようにするのが良さそう. それ以降は描画Pass実装側の責任にする.
+
+						auto find_handle_res_desc = handle_2_desc_.find(res_handle);
+						if(handle_2_desc_.end() != find_handle_res_desc)
+						{
+							// 初回フレーム等で前回からの伝搬ができていない伝搬リソースハンドルは handle_2_desc_ に定義登録されていないため, それらはスキップして無効なリソースIDを割り当てておく.
+							
+							const auto require_desc = find_handle_res_desc->second;
+							int concrete_w = res_base_width_;
+							int concrete_h = res_base_height_;
+							// MEMO ここで相対サイズモードの場合はスケールされたサイズになるが, このまま要求して新規生成された場合小さいサイズで作られて使いまわしされにくいものになる懸念が多少ある.
+							require_desc.GetConcreteTextureSize(res_base_width_, res_base_height_, concrete_w, concrete_h);
+
+							// アクセスタイプでUsageを決定. 同時指定が不可能なパターンのチェックはこれ以前に実行している予定.
+							ACCESS_TYPE_MASK usage_mask = 0;
+							{
+								if(handle_access.access_pattern_[access_type::RENDER_TARTGET])
+									usage_mask |= access_type_mask::RENDER_TARTGET;
+								if(handle_access.access_pattern_[access_type::DEPTH_TARGET])
+									usage_mask |= access_type_mask::DEPTH_TARGET;
+								if(handle_access.access_pattern_[access_type::UAV])
+									usage_mask |= access_type_mask::UAV;
+								if(handle_access.access_pattern_[access_type::SHADER_READ])
+									usage_mask |= access_type_mask::SHADER_READ;
+							}
 				
-					ResourceSearchKey search_key = {};
-					{
-						search_key.format = require_desc.desc.format;
-						search_key.require_width_ = concrete_w;
-						search_key.require_height_ = concrete_h;
-						search_key.usage_ = usage_mask;
-					}
+							ResourceSearchKey search_key = {};
+							{
+								search_key.format = require_desc.desc.format;
+								search_key.require_width_ = concrete_w;
+								search_key.require_height_ = concrete_h;
+								search_key.usage_ = usage_mask;
+							}
 
 #if 1
-					// リソースのアクセス範囲を考慮して再利用可能なら再利用する
-					TaskStage* p_request_access_stage = &handle_life_first_array[handle_id];
+							// リソースのアクセス範囲を考慮して再利用可能なら再利用する
+							TaskStage* p_request_access_stage = &handle_life_first_array[handle_id];
 #else
-					// 再利用を一切しないデバッグ用.
-					TaskStage* p_request_access_stage = nullptr;
+							// 再利用を一切しないデバッグ用.
+							TaskStage* p_request_access_stage = nullptr;
 #endif
 
-					// 内部リソースプールからリソース取得.
-					int res_id = p_compiled_manager_->GetOrCreateResourceFromPool(search_key, p_request_access_stage);
-					assert(0 <= res_id);// 必ず有効なIDが帰るはず.
-
-					// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
-					{
-						p_compiled_manager_->internal_resource_pool_[res_id].last_access_stage_ = handle_life_last_array[handle_id];
+							// 内部リソースプールからリソース取得. 伝搬リソースに該当するものは選択されない.
+							allocated_resource_id = p_compiled_manager_->GetOrCreateResourceFromPool(search_key, p_request_access_stage);
+							assert(0 <= allocated_resource_id);// 必ず有効なIDが帰るはず.
+						
+							// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
+							// 伝搬リソースの場合は事前に最終端まで引き伸ばされているため更新しない.
+							p_compiled_manager_->internal_resource_pool_[allocated_resource_id].last_access_stage_ = handle_life_last_array[handle_id];
+						}
+						else
+						{
+							// 初回フレーム等で前回からの伝搬ができていない伝搬リソースハンドルの可能性がある.
+							// それらはリソース割当失敗として -1 のまま処理を進める.
+							std::cout << u8"リソース割当に失敗したため無効リソースIDを設定 " << u8"(handle unique_id = " << res_handle.detail.unique_id << u8")" << std::endl;
+						}
 					}
+
 					// 割当情報.
 					{
-						handle_compiled_resource_id_[handle_id].detail.resource_id = res_id;
+						// allocated_resource_id は初回フレームの伝搬リソース等では無効値-1の可能性がある.
+						handle_compiled_resource_id_[handle_id].detail.resource_id = allocated_resource_id;
 						handle_compiled_resource_id_[handle_id].detail.is_external = false;
 					}
 				}
@@ -517,83 +550,85 @@ namespace ngl
 			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
 			{
 				const CompiledResourceInfo res_id = res_linear_2_id_array[res_index];
-				
-				assert(0 <= res_id.detail.resource_id);
-				
-				rhi::ResourceState begin_state = {};
-				if(!res_id.detail.is_external)
+
+				// 初回フレームの伝搬リソース等は無効なリソースIDとなっているためチェック.
+				if(0 <= res_id.detail.resource_id)
 				{
-					begin_state = p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;// 実リソースのCompile時点のステートから開始.
-				}
-				else
-				{
-					begin_state = imported_resource_[res_id.detail.resource_id].cached_state_;
-				}
-				
-				rhi::ResourceState curr_state = begin_state;
-				for(const auto* p_node : res_access_node_array[res_index])
-				{
-					for(const auto handle : node_handle_usage_list_[p_node])
+					rhi::ResourceState begin_state = {};
+					if(!res_id.detail.is_external)
 					{
-						const int handle_index = handle_2_compiled_index_[handle.handle];
-						if(res_id == handle_compiled_resource_id_[handle_index])
+						begin_state = p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;// 実リソースのCompile時点のステートから開始.
+					}
+					else
+					{
+						begin_state = imported_resource_[res_id.detail.resource_id].cached_state_;
+					}
+				
+					rhi::ResourceState curr_state = begin_state;
+					for(const auto* p_node : res_access_node_array[res_index])
+					{
+						for(const auto handle : node_handle_usage_list_[p_node])
 						{
-							// Handleへのアクセスタイプから次のrhiステートを決定.
-							rhi::ResourceState next_state = {};
-							if(access_type::RENDER_TARTGET == handle.access)
+							const int handle_index = handle_2_compiled_index_[handle.handle];
+							if(res_id == handle_compiled_resource_id_[handle_index])
 							{
-								next_state = rhi::ResourceState::RenderTarget;
-							}
-							else if(access_type::DEPTH_TARGET == handle.access)
-							{
-								next_state = rhi::ResourceState::DepthWrite;
-							}
-							else if(access_type::UAV == handle.access)
-							{
-								next_state = rhi::ResourceState::UnorderedAccess;
-							}
-							else if(access_type::SHADER_READ == handle.access)
-							{
-								next_state = rhi::ResourceState::ShaderRead;
-							}
-							else
-							{
-								assert(false);
-							}
+								// Handleへのアクセスタイプから次のrhiステートを決定.
+								rhi::ResourceState next_state = {};
+								if(access_type::RENDER_TARTGET == handle.access)
+								{
+									next_state = rhi::ResourceState::RenderTarget;
+								}
+								else if(access_type::DEPTH_TARGET == handle.access)
+								{
+									next_state = rhi::ResourceState::DepthWrite;
+								}
+								else if(access_type::UAV == handle.access)
+								{
+									next_state = rhi::ResourceState::UnorderedAccess;
+								}
+								else if(access_type::SHADER_READ == handle.access)
+								{
+									next_state = rhi::ResourceState::ShaderRead;
+								}
+								else
+								{
+									assert(false);
+								}
 							
-							// このリソースに対してこのnode時点では cur_state -> next_state となる.
-							NodeHandleState node_handle_state = {};
-							{
-								node_handle_state.prev_ = curr_state;
-								node_handle_state.curr_ = next_state;
-							}
-							// Node毎のHandle時点での前回ステートと現在ステートを確定.
-							node_handle_state_[p_node][handle.handle] = node_handle_state;
+								// このリソースに対してこのnode時点では cur_state -> next_state となる.
+								NodeHandleState node_handle_state = {};
+								{
+									node_handle_state.prev_ = curr_state;
+									node_handle_state.curr_ = next_state;
+								}
+								// Node毎のHandle時点での前回ステートと現在ステートを確定.
+								node_handle_state_[p_node][handle.handle] = node_handle_state;
 							
-							// 次へ.
-							curr_state = next_state;
-							break;
+								// 次へ.
+								curr_state = next_state;
+								break;
+							}
 						}
 					}
-				}
 
-				// 最終ステートを保存.
-				if(!res_id.detail.is_external)
-				{
-					// Compile前のステートを一応保持.
-					p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].prev_cached_state_
-					= p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;
+					// 最終ステートを保存.
+					if(!res_id.detail.is_external)
+					{
+						// Compile前のステートを一応保持.
+						p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].prev_cached_state_
+						= p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;
 
-					// Compile後のステートに更新.
-					p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_ = curr_state;
-				}
-				else
-				{
-					imported_resource_[res_id.detail.resource_id].prev_cached_state_
-					= imported_resource_[res_id.detail.resource_id].cached_state_;
+						// Compile後のステートに更新.
+						p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_ = curr_state;
+					}
+					else
+					{
+						imported_resource_[res_id.detail.resource_id].prev_cached_state_
+						= imported_resource_[res_id.detail.resource_id].cached_state_;
 					
-					// Compile後のステートに更新.
-					imported_resource_[res_id.detail.resource_id].cached_state_ = curr_state;
+						// Compile後のステートに更新.
+						imported_resource_[res_id.detail.resource_id].cached_state_ = curr_state;
+					}
 				}
 			}
 
@@ -691,23 +726,42 @@ namespace ngl
 				return {};
 			}
 
+			// 初回フレームの伝搬リソース等はこのパターンなので無効値を返す.
+			if(res_handle.IsInvalid())
+			{
+				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
+				return {};
+			}
+
 			if (handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_handle))
 			{
+				// 初回フレームの伝搬リソースであってもハンドル自体は登録されるはずなので, それがない場合はassert.　
 				assert(false);// 念のためMapに登録されているかチェック.
 			}
 			if (node_handle_state_.end() == node_handle_state_.find(node))
 			{
-				assert(false);// 念のためMapに登録されているかチェック.
+				//assert(false);// 念のためMapに登録されているかチェック.
+				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
+				return {};
 			}
 			if (node_handle_state_[node].end() == node_handle_state_[node].find(res_handle))
 			{
-				assert(false);// 念のためMapに登録されているかチェック.
+				//assert(false);// 念のためMapに登録されているかチェック.
+				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
+				return {};
 			}
+			
+			const int handle_id = handle_2_compiled_index_[res_handle];
+			const CompiledResourceInfo handle_res_id = handle_compiled_resource_id_[handle_id];
+			if(0 > handle_res_id.detail.resource_id)
+			{
+				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
+				return {};
+			}
+			
 			// ステート遷移情報取得.
 			NodeHandleState state_transition = node_handle_state_[node][res_handle];
 
-			const int handle_id = handle_2_compiled_index_[res_handle];
-			const CompiledResourceInfo handle_res_id = handle_compiled_resource_id_[handle_id];
 
 
 			// 返却情報構築.
@@ -1045,7 +1099,20 @@ namespace ngl
 		
 		void RenderTaskGraphManager::PropagateResourceToNextFrame(ResourceHandle handle, int resource_id)
 		{
-			propagate_next_handle_[flip_propagate_next_handle_next_][handle] = resource_id;
+			const int flip_index_next = flip_propagate_next_handle_next_;
+			propagate_next_handle_[flip_index_next][handle] = resource_id;
+		}
+		int RenderTaskGraphManager::FindPropagatedResourceId(ResourceHandle handle)
+		{
+			const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
+			const auto find_it = propagate_next_handle_[flip_index_propagated].find(handle);
+			if(propagate_next_handle_[flip_index_propagated].end() != find_it)
+			{
+				// 前フレームで伝搬指定されたものが発見できた.
+				return find_it->second;
+			}
+			// 未登録のため無効値.
+			return -1;
 		}
 		
 		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
@@ -1069,15 +1136,27 @@ namespace ngl
 			// Compileは排他処理.
 			std::scoped_lock<std::mutex> lock(compile_mutex_);
 
-			// Compile実行.
-			const bool result = builder.Compile(*this);
 
-			// Compile完了したのでシーケンス上でのリソース利用情報をクリアする.
+			// Compile前に内部リソースプールの情報をクリア,更新する.
+			// 通常のリソースはCompileで割当が可能なように最終アクセスステージをリセット.
+			// 前回フレームからの伝搬リソースについては、 GetOrCreateResourceFromPool() で割当られないように最終アクセスステージを修正する.
 			//	Stateは継続するので維持.
 			for(auto& e : internal_resource_pool_)
 			{
 				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
 			}
+			{
+				// 伝搬リソースの最終アクセスステージを最終端に書き換えて通常の割当から除外.
+				const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
+				for(auto e : propagate_next_handle_[flip_index_propagated])
+				{
+					assert(internal_resource_pool_[e.second].tex_.IsValid());// 伝搬しているなら存在するはず.
+					internal_resource_pool_[e.second].last_access_stage_ = TaskStage::k_endmost_stage();// 最終端.
+				}
+			}
+			
+			// Compile実行.
+			const bool result = builder.Compile(*this);
 
 			return result;
 		}
