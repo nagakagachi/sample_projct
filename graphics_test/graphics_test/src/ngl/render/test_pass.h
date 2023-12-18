@@ -268,12 +268,14 @@ namespace ngl::render
 				ITASK_NODE_HANDLE_REGISTER(h_depth_)
 				ITASK_NODE_HANDLE_REGISTER(h_gb0_)
 				ITASK_NODE_HANDLE_REGISTER(h_gb1_)
+				ITASK_NODE_HANDLE_REGISTER(h_prev_light_)
 				ITASK_NODE_HANDLE_REGISTER(h_light_)
 				ITASK_NODE_DEF_END
 
-				rtg::ResourceHandle h_depth_{};
+			rtg::ResourceHandle h_depth_{};
 			rtg::ResourceHandle h_gb0_{};
 			rtg::ResourceHandle h_gb1_{};
+			rtg::ResourceHandle h_prev_light_{};
 			rtg::ResourceHandle h_light_{};
 
 
@@ -283,7 +285,7 @@ namespace ngl::render
 			}
 
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_prev_light)
 			{
 				// リソース定義.
 				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
@@ -292,6 +294,8 @@ namespace ngl::render
 				h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 				h_gb0_ = builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
 				h_gb1_ = builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
+				h_prev_light_ = builder.RegisterResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
+				
 				h_light_ = builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
 			}
 
@@ -302,8 +306,19 @@ namespace ngl::render
 				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
 				auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
 				auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
+				auto res_prev_light = builder.GetAllocatedHandleResource(this, h_prev_light_);// 前回フレームリソースのテスト.
 				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
 
+				// 前回フレームリソースは初回フレームで無効な場合がある.
+				if(res_prev_light.tex_.IsValid())
+				{
+					
+				}
+				else
+				{
+					std::cout << u8"Invalid Prev Resource : " << h_prev_light_.detail.unique_id << std::endl;
+				}
+				
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_gb0.tex_.IsValid() && res_gb0.srv_.IsValid());
 				assert(res_gb1.tex_.IsValid() && res_gb1.srv_.IsValid());

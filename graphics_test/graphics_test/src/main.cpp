@@ -742,7 +742,7 @@ bool AppGame::Execute()
 
 					// Deferred Lighting.
 					auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLightPass>();
-					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_);
+					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, h_prev_light);
 
 					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskFinalPass>();
