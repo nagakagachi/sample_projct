@@ -294,6 +294,13 @@ namespace ngl::render
 				h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 				h_gb0_ = builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
 				h_gb1_ = builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
+				if(h_prev_light.IsInvalid())
+				{
+					// If the previous Frame handle is invalid, it is the first frame,
+					// so a temporary resource is generated and allocated.
+					// Proper previous frame handle retention and supply is an outside responsibility.
+					h_prev_light = builder.CreateResource(light_desc);
+				}
 				h_prev_light_ = builder.RegisterResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
 				
 				h_light_ = builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
@@ -309,12 +316,8 @@ namespace ngl::render
 				auto res_prev_light = builder.GetAllocatedHandleResource(this, h_prev_light_);// 前回フレームリソースのテスト.
 				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
 
-				// 前回フレームリソースは初回フレームで無効な場合がある.
-				if(res_prev_light.tex_.IsValid())
-				{
-					
-				}
-				else
+				// 本当の前回リソースがまだ無い初回フレームでも適切に仮リソースを登録していれば無効なリソース取得になることはない.
+				if(!res_prev_light.tex_.IsValid())
 				{
 					std::cout << u8"Invalid Prev Resource : " << h_prev_light_.detail.unique_id << std::endl;
 				}
