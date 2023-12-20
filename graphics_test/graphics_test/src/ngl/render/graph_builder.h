@@ -330,17 +330,26 @@ namespace ngl
 		
 		// 内部リソースプール用.
 		struct InternalResourceInstanceInfo
-		{		
+		{
+			// 未使用フレームカウンタ. 一定フレーム未使用だった内部リソースはPoolからの破棄をする.
+			int			unused_frame_counter_ = 0;
+			
 			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
 				
 			rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
 			rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
 				
 			rhi::RefTextureDep	tex_ = {};
+			
 			rhi::RefRtvDep		rtv_ = {};
 			rhi::RefDsvDep		dsv_ = {};
 			rhi::RefUavDep		uav_ = {};
 			rhi::RefSrvDep		srv_ = {};
+
+			bool IsValid() const
+			{
+				return tex_.IsValid();// 元リソースがあれば有効.
+			}
 		};
 		// 外部リソース登録用. 内部リソース管理クラスを継承して追加情報.
 		struct ExternalResourceRegisterInfo : public InternalResourceInstanceInfo
@@ -379,12 +388,6 @@ namespace ngl
 			// リソースハンドルを生成.
 			//	Graph内リソースを確保してハンドルを取得する.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
-
-			// 一旦非推奨.
-			// 指定したHandleのリソースを外部へエクスポートできるようにする.
-			//	エクスポートされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
-			//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
-			ResourceHandle ExportResource(ResourceHandle handle);
 
 			// 次のフレームへ寿命を延長する.
 			//	前回フレームのハンドルのリソースを利用する場合に, この関数で寿命を延長した上で次フレームで同じハンドルを使うことでアクセス可能にする予定.
@@ -464,10 +467,7 @@ namespace ngl
 			// ImportしたSwapchainは何かとアクセスするためHandle保持.
 			ResourceHandle	handle_imported_swapchain_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
-			// エクスポートリソース.
-			// Handleがエクスポート対象かどうかのMap.
-			std::unordered_map<ResourceHandleKeyType, bool> handle_2_is_export_ = {};
-			// ------------------------------------------------------------------------------------------------------------------------------------------------------
+			
 			// 次フレームまで寿命を延長するハンドル.
 			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -476,6 +476,8 @@ namespace ngl
 			// Compileで構築される情報.
 			// HandleからリニアインデックスへのMap.
 			std::unordered_map<ResourceHandleKeyType, int> handle_2_compiled_index_ = {};
+			// NodeSequenceの順序に沿ったHandle配列.
+			std::vector<ResourceHandle>						compiled_index_handle_ = {};
 
 			// Compileで構築される情報.
 			// Handleに割り当てられたリソースのPool上のIndex.
@@ -530,9 +532,6 @@ namespace ngl
 			
 			// Sequence上でのノードの位置を返す.
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
-
-			// HandleがExport対象かチェックする.
-			bool IsExportResource(ResourceHandle handle) const;
 			
 			// ------------------------------------------
 			// 外部リソースを登録共通部.
@@ -570,25 +569,33 @@ namespace ngl
 			
 			// Compileで割り当てられるリソースのPool.
 			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
-			
+
+			// 同一Manager下のBuilderのCompileは排他処理.
 			std::mutex	compile_mutex_ = {};
-			
+
+			// 次のフレームへ伝搬するハンドルとリソースIDのMap.
 			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_[2] = {};
+			// 次のフレームへ伝搬するハンドル登録用FlipIndex. 前回フレームから伝搬されたハンドルは 1-flip_propagate_next_handle_next_ のMapが対応.
 			int flip_propagate_next_handle_next_ = 0;
-			int flip_propagate_next_handle_curr_ = 1;
 			
 		private:
 			// ユニークなハンドルIDを取得.
 			//	64bitにするかもしれない.
 			static uint32_t GetNewHandleId();
-			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID.
+			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID. 生成のたびに加算しユニーク識別.
 			
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
 			int GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
+			
+			void SetInternalResouceLastAccess(int resource_id, TaskStage last_access_stage);
+			
+			InternalResourceInstanceInfo* GetInternalResourcePtr(int resource_id);
 
+			// BuilderからハンドルとリソースIDを紐づけて次のフレームへ伝搬する.
 			void PropagateResourceToNextFrame(ResourceHandle handle, int resource_id);
+			// 伝搬されたハンドルに紐付けられたリソースIDを検索.
 			int FindPropagatedResourceId(ResourceHandle handle);
 		};
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------

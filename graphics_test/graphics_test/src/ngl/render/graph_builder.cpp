@@ -66,27 +66,17 @@ namespace ngl
 			ResourceHandle handle{};
 			handle.detail.unique_id = new_handle_id;// ユニークID割当.
 
+			if(handle_2_desc_.end() != handle_2_desc_.find(handle))
+			{
+				assert(false);
+			}
+			
 			// Desc登録.
 			{
 				handle_2_desc_[handle] = res_desc;// desc記録.
 			}
 			
 			return handle;
-		}
-		
-		// 指定したHandleのリソースを外部へExportできるようにする.
-		//	Exportされたリソースは内部プールから外部リソースへ移行し, Compile後かつExecute前の期間で取得できるようになる.
-		//	なおExecuteによってBuilder内での外部リソース参照はクリアされる(参照カウント減少).
-		ResourceHandle RenderTaskGraphBuilder::ExportResource(ResourceHandle handle)
-		{
-			handle_2_is_export_[handle] = true;
-
-			// TODO.
-			// Exportしたリソースは強制的にGraphの最後まで生存期間が伸ばされることになる(再利用で別用途で書き換えられないように)
-			// そのほか内部プールから外部へ参照を移譲する必要がある.
-
-			// 既存の外部リソースと同じフローを取るなら, 外部リソース側に移譲するのがよいか.
-			return handle;// とりあえずそのまま返す.
 		}
 
 		// 次のフレームへ寿命を延長する.
@@ -292,8 +282,8 @@ namespace ngl
 			}
 
 			// 存在するハンドル毎に仮の線形インデックスを割り振る. ランダムアクセスのため.
-			handle_2_compiled_index_ = {};// クリア.
-			int handle_count = 0;
+			handle_2_compiled_index_.clear();// = {};// クリア.
+			compiled_index_handle_.clear();
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
@@ -303,11 +293,12 @@ namespace ngl
 					if(handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_access.handle))
 					{
 						// このResourceHandleの要素が未登録なら新規.
-						handle_2_compiled_index_[res_access.handle] = handle_count;
-						++handle_count;
+						handle_2_compiled_index_[res_access.handle] = static_cast<int>(compiled_index_handle_.size());
+						compiled_index_handle_.push_back(res_access.handle);
 					}
 				}
 			}
+			int handle_count = static_cast<int>(compiled_index_handle_.size());
 
 			
 			// SequenceのNodeを順に処理して実リソースの割当とそのステート遷移確定をしていく.
@@ -394,10 +385,13 @@ namespace ngl
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
 			handle_compiled_resource_id_.clear();
 			handle_compiled_resource_id_.resize(handle_count, CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
-			for(auto handle_index : handle_2_compiled_index_)
+
+			// MEMO. handle_2_compiled_index_はunordered_mapのためイテレートに使うと順序がNodeSequence順にならずにいきなり終端の最終アクセスPassへの割当が発生して正しい再利用が働かない!.
+			///for(auto handle_index : handle_2_compiled_index_)
+			for(int handle_index = 0; handle_index < compiled_index_handle_.size(); ++handle_index)
 			{
-				const ResourceHandle res_handle = ResourceHandle(handle_index.first);
-				const auto handle_id = handle_index.second;
+				const ResourceHandle res_handle = compiled_index_handle_[handle_index];
+				const auto handle_id = handle_index;
 
 					
 				// シーケンス上の順序で再利用を考慮してリソースを割り当て.
@@ -491,7 +485,7 @@ namespace ngl
 						
 							// 割当決定したリソースの最終アクセスステージを更新 (このハンドルの最終アクセスステージ).
 							// 伝搬リソースの場合は事前に最終端まで引き伸ばされているため更新しない.
-							p_compiled_manager_->internal_resource_pool_[allocated_resource_id].last_access_stage_ = handle_life_last_array[handle_id];
+							p_compiled_manager_->SetInternalResouceLastAccess(allocated_resource_id, handle_life_last_array[handle_id]);
 						}
 						else
 						{
@@ -557,10 +551,13 @@ namespace ngl
 					rhi::ResourceState begin_state = {};
 					if(!res_id.detail.is_external)
 					{
-						begin_state = p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;// 実リソースのCompile時点のステートから開始.
+						// 内部リソースの場合はキャッシュされたステートから開始.
+						auto* p_resource = p_compiled_manager_->GetInternalResourcePtr(res_id.detail.resource_id);
+						begin_state = p_resource->cached_state_;// 実リソースのCompile時点のステートから開始.
 					}
 					else
 					{
+						// 外部リソースの場合は登録された開始ステートから開始.
 						begin_state = imported_resource_[res_id.detail.resource_id].cached_state_;
 					}
 				
@@ -614,12 +611,11 @@ namespace ngl
 					// 最終ステートを保存.
 					if(!res_id.detail.is_external)
 					{
-						// Compile前のステートを一応保持.
-						p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].prev_cached_state_
-						= p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_;
-
+						auto* p_resource = p_compiled_manager_->GetInternalResourcePtr(res_id.detail.resource_id);
+						// Compile前のステートを保持.
+						p_resource->prev_cached_state_ = p_resource->cached_state_;
 						// Compile後のステートに更新.
-						p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id].cached_state_ = curr_state;
+						p_resource->cached_state_ = curr_state;
 					}
 					else
 					{
@@ -903,13 +899,6 @@ namespace ngl
 			return static_cast<int>(std::distance(node_sequence_.begin(), find_pos));
 		}
 
-		// HandleがExport対象かチェックする.
-		bool RenderTaskGraphBuilder::IsExportResource(ResourceHandle handle) const
-		{
-			const auto find_it = handle_2_is_export_.find(handle);
-			return handle_2_is_export_.end() != find_it && find_it->second;
-		}
-
 		// --------------------------------------------------------------------------------------------------------------------
 		uint32_t RenderTaskGraphManager::s_res_handle_id_counter_ = 0;
 		
@@ -926,7 +915,7 @@ namespace ngl
 			
 			return s_res_handle_id_counter_;
 		}
-		// Poolからリソース検索または新規生成.
+		// Poolからリソース検索または新規生成. この関数はCompileから呼ばれるため排他.
 		int RenderTaskGraphManager::GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse)
 		{
 			//	アクセスステージが引数で渡されなかった場合は未割り当てリソース以外を割り当てないようにTaskStage::k_frontmost_stage(負の最大)扱いとする.
@@ -938,8 +927,19 @@ namespace ngl
 					
 			// poolから検索.
 			int res_id = -1;
+			int empty_index = -1;
 			for(int i = 0; i < internal_resource_pool_.size(); ++i)
 			{
+				// 内部リソースが未登録スロットはスキップ.
+				if(!internal_resource_pool_[i].IsValid())
+				{
+					// 後段で生成した新規リソースの登録先として空のインデックスを保持.
+					if(0 > empty_index)
+						empty_index = i;
+					
+					continue;
+				}
+				
 				// 要求アクセスステージに対してアクセス期間が終わっていなければ再利用不可能.
 				//	MEMO. 新規生成した実リソースの last_access_stage_ を負のstageで初期化しておくこと.
 				if(internal_resource_pool_[i].last_access_stage_ >= require_access_stage)
@@ -1083,8 +1083,18 @@ namespace ngl
 					new_pool_elem.cached_state_ = init_state;// 新規生成したらその初期ステートを保持.
 					new_pool_elem.prev_cached_state_ = init_state;
 				}
-				res_id = static_cast<int>(internal_resource_pool_.size());// 新規要素ID.
-				internal_resource_pool_.push_back(new_pool_elem);//登録.
+				
+				if(0 <= empty_index)
+				{
+					res_id = empty_index;// 空きインデックスがあるためそこを利用.
+				}
+				else
+				{
+					res_id = static_cast<int>(internal_resource_pool_.size());// 新規要素ID.
+					internal_resource_pool_.push_back({});// 要素増加.
+				}
+				// 登録.
+				internal_resource_pool_[res_id] = new_pool_elem;
 			}
 
 			// チェック
@@ -1095,6 +1105,32 @@ namespace ngl
 			}
 
 			return res_id;
+		}
+		void RenderTaskGraphManager::SetInternalResouceLastAccess(int resource_id, TaskStage last_access_stage)
+		{
+			if(0 > resource_id || internal_resource_pool_.size() <= resource_id)
+			{
+				// 範囲外.
+				assert(false);
+				return;
+			}
+			if(!internal_resource_pool_[resource_id].IsValid())
+			{
+				// 空きスロットに対する操作はロジックミス.
+				assert(false);
+				return;
+			}	
+			// 更新.
+			internal_resource_pool_[resource_id].last_access_stage_ = last_access_stage;
+		}
+		InternalResourceInstanceInfo* RenderTaskGraphManager::GetInternalResourcePtr(int resource_id)
+		{
+			if(0 > resource_id || internal_resource_pool_.size() <= resource_id)
+			{
+				return nullptr;
+			}
+			// 更新.
+			return &internal_resource_pool_[resource_id];
 		}
 		
 		void RenderTaskGraphManager::PropagateResourceToNextFrame(ResourceHandle handle, int resource_id)
@@ -1118,12 +1154,30 @@ namespace ngl
 		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 		void RenderTaskGraphManager::BeginFrame()
 		{
-			// TODO. 未実装!.
-
 			// フレーム開始でフレーム伝搬リソースのMapフリップとクリア.
-			flip_propagate_next_handle_curr_ = flip_propagate_next_handle_next_;// このフレームでアクセス可能な, 前回フレームから伝搬されたハンドル用.
 			flip_propagate_next_handle_next_ = 1 - flip_propagate_next_handle_next_;// このフレームから伝搬するハンドル用.
 			propagate_next_handle_[flip_propagate_next_handle_next_].clear();
+
+			// 未使用リソースの破棄.
+			{
+				// 破棄する未使用フレーム数. 1以上. 数フレームは猶予を持たせたほうが良い場合もある.
+				constexpr int unused_internal_resource_delete_frame = 1;
+				for(auto& e : internal_resource_pool_)
+				{
+					if(!e.IsValid())
+						continue;
+
+					// カウンタ加算.
+					++e.unused_frame_counter_;
+
+					// 使用されずに一定フレーム経過したリソースは破棄.
+					if(unused_internal_resource_delete_frame < e.unused_frame_counter_)
+					{
+						// 参照カウンタをクリアして解放.
+						e = {};
+					}
+				}
+			}
 		}
 		
 		// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.
@@ -1132,25 +1186,26 @@ namespace ngl
 		bool RenderTaskGraphManager::Compile(RenderTaskGraphBuilder& builder)
 		{
 			assert(nullptr != p_device_);
-
+			
 			// Compileは排他処理.
 			std::scoped_lock<std::mutex> lock(compile_mutex_);
-
-
+			
 			// Compile前に内部リソースプールの情報をクリア,更新する.
 			// 通常のリソースはCompileで割当が可能なように最終アクセスステージをリセット.
 			// 前回フレームからの伝搬リソースについては、 GetOrCreateResourceFromPool() で割当られないように最終アクセスステージを修正する.
 			//	Stateは継続するので維持.
 			for(auto& e : internal_resource_pool_)
 			{
+				if(!e.IsValid())
+					continue;
 				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
 			}
+			// 伝搬リソースの最終アクセスステージを最終端に書き換えて通常の割当から除外.
 			{
-				// 伝搬リソースの最終アクセスステージを最終端に書き換えて通常の割当から除外.
 				const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
 				for(auto e : propagate_next_handle_[flip_index_propagated])
 				{
-					assert(internal_resource_pool_[e.second].tex_.IsValid());// 伝搬しているなら存在するはず.
+					assert(internal_resource_pool_[e.second].IsValid());// 伝搬しているなら存在するはず.
 					internal_resource_pool_[e.second].last_access_stage_ = TaskStage::k_endmost_stage();// 最終端.
 				}
 			}
@@ -1158,6 +1213,18 @@ namespace ngl
 			// Compile実行.
 			const bool result = builder.Compile(*this);
 
+			// Compileで割り当てられた内部リソースの未使用カウンタをリセット. 外部リソースは無視すること.
+			{
+				for(auto& e : builder.handle_compiled_resource_id_)
+				{
+					if(false == e.detail.is_external)
+					{
+						auto* p_resource = GetInternalResourcePtr(e.detail.resource_id);
+						assert(p_resource);
+						p_resource->unused_frame_counter_ = 0;// リセット.
+					}
+				}
+			}
 			return result;
 		}
 		
