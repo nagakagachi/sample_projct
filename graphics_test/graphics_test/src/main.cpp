@@ -749,7 +749,7 @@ bool AppGame::Execute()
 					task_final->Setup(rtg_builder, &device_, h_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
 						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 
-					// 次回フレームへの伝搬テスト.
+					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
 					{
 						h_prev_light = rtg_builder.PropagateResouceToNextFrame(task_light->h_light_);
 					}

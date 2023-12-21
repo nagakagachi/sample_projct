@@ -768,7 +768,7 @@ namespace ngl
 			if (!handle_res_id.detail.is_external)
 			{
 				// 内部リソースプール.
-				const InternalResourceInstanceInfo res = p_compiled_manager_->internal_resource_pool_[handle_res_id.detail.resource_id];
+				const InternalResourceInstanceInfo& res = p_compiled_manager_->internal_resource_pool_[handle_res_id.detail.resource_id];
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
 				ret_info.dsv_ = res.dsv_;
@@ -778,7 +778,7 @@ namespace ngl
 			else
 			{
 				// 外部リソース.
-				const ExternalResourceRegisterInfo res = imported_resource_[handle_res_id.detail.resource_id];
+				const ExternalResourceRegisterInfo& res = imported_resource_[handle_res_id.detail.resource_id];
 				ret_info.swapchain_ = res.swapchain_;// 外部リソースはSwapchainの場合もある.
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
@@ -1151,6 +1151,13 @@ namespace ngl
 			return -1;
 		}
 		
+		// 初期化.
+		bool RenderTaskGraphManager::Init(rhi::DeviceDep& p_device)
+		{
+			p_device_ = &p_device;
+			return (nullptr != p_device_);
+		}
+		
 		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 		void RenderTaskGraphManager::BeginFrame()
 		{
@@ -1217,7 +1224,7 @@ namespace ngl
 			{
 				for(auto& e : builder.handle_compiled_resource_id_)
 				{
-					if(false == e.detail.is_external)
+					if(!e.detail.is_external)
 					{
 						auto* p_resource = GetInternalResourcePtr(e.detail.resource_id);
 						assert(p_resource);

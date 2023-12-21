@@ -20,6 +20,7 @@ namespace ngl
 	// Render Task Graph 検証実装.
 	namespace rtg
 	{
+		class RenderTaskGraphBuilder;
 		using RtgNameType = text::HashCharPtr<64>;
 
 		enum class ETASK_TYPE : int
@@ -53,7 +54,6 @@ namespace ngl
 		};
 		
 
-		class RenderTaskGraphBuilder;
 		// Passが必要とするリソースの定義.
 		struct ResourceDesc2D
 		{
@@ -102,8 +102,7 @@ namespace ngl
 				uint64_t a{};
 				uint64_t b{};
 			};
-
-
+			
 			// データ部.
 			union
 			{
@@ -150,6 +149,7 @@ namespace ngl
 		static constexpr auto sizeof_ResourceDesc2D_Storage = sizeof(ResourceDesc2D::Storage);
 		static constexpr auto sizeof_ResourceDesc2D = sizeof(ResourceDesc2D);
 
+		
 		// RTGのノードが利用するリソースハンドル.
 		// 識別IDやSwapchain識別等の情報を保持.
 		// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
@@ -231,29 +231,28 @@ namespace ngl
 		struct ITaskNode
 		{
 			virtual ~ITaskNode() = default;
-			
+
+			// Graphics or Computeの識別.
 			virtual ETASK_TYPE TaskType() const
 			{
 				return ETASK_TYPE::GRAPHICS;// 基底はGraphics.
 			}
 
-
+			// レンダリングの実装部.
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist)
-			{
-			}
+			{}
 
+			
 			struct DebugHandleRef
 			{
 				RtgNameType name{};
 				ResourceHandle* p_handle{};
 			};
-
 			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
 			{
 				DebugHandleRef elem = { name , &handle};
 				debug_ref_handles_.push_back(elem);
 			}
-			
 			// Debug用途でメンバとしてHandleを持つ. 名前などを付けたい場合はResourceHandle経由でアクセスできる場所に登録すべきか.
 			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
 			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
@@ -369,13 +368,7 @@ namespace ngl
 			friend class RenderTaskGraphManager;
 		public:
 			~RenderTaskGraphBuilder();
-
-			struct NodeHandleUsageInfo
-			{
-				ResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
-				ACCESS_TYPE				access{};// あるNodeから上記Handleがどのアクセスタイプで利用されたか.
-			};
-
+			
 			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
 			template<typename TPassNode>
 			TPassNode* CreateNewNodeInSequenceTail()
@@ -452,9 +445,13 @@ namespace ngl
 			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
 			std::unordered_map<ResourceHandleKeyType, ResourceDesc2D> handle_2_desc_{};// Handleからその定義のMap.
+			
+			struct NodeHandleUsageInfo
+			{
+				ResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
+				ACCESS_TYPE				access{};// あるNodeから上記Handleがどのアクセスタイプで利用されたか.
+			};
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_list_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
-
-
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			bool is_compiled_ = false;
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
@@ -550,11 +547,8 @@ namespace ngl
 			RenderTaskGraphManager() = default;
 			~RenderTaskGraphManager() = default;
 		public:
-			bool Init(rhi::DeviceDep& p_device)
-			{
-				p_device_ = &p_device;
-				return (nullptr != p_device_);
-			}
+			// 初期化.
+			bool Init(rhi::DeviceDep& p_device);
 
 			//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 			void BeginFrame();
@@ -579,24 +573,25 @@ namespace ngl
 			int flip_propagate_next_handle_next_ = 0;
 			
 		private:
-			// ユニークなハンドルIDを取得.
-			//	64bitにするかもしれない.
-			static uint32_t GetNewHandleId();
-			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID. 生成のたびに加算しユニーク識別.
-			
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
 			int GetOrCreateResourceFromPool(ResourceSearchKey key, const TaskStage* p_access_stage_for_reuse = nullptr);
-			
+			// プールリソースの最終アクセス情報を書き換え. BuilderのCompile時の一時的な用途.
 			void SetInternalResouceLastAccess(int resource_id, TaskStage last_access_stage);
-			
+			// 割り当て済みリソース番号から内部リソースポインタ取得.
 			InternalResourceInstanceInfo* GetInternalResourcePtr(int resource_id);
 
 			// BuilderからハンドルとリソースIDを紐づけて次のフレームへ伝搬する.
 			void PropagateResourceToNextFrame(ResourceHandle handle, int resource_id);
 			// 伝搬されたハンドルに紐付けられたリソースIDを検索.
 			int FindPropagatedResourceId(ResourceHandle handle);
+
+		private:
+			// ユニークなハンドルIDを取得.
+			//	64bitにするかもしれない.
+			static uint32_t GetNewHandleId();
+			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID. 生成のたびに加算しユニーク識別.
 		};
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		
