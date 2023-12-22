@@ -39,7 +39,7 @@ namespace ngl::render
 				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT);
 
 				// リソースアクセス定義.
-				h_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
 
 				{
 					ref_scene_cbv_ = ref_scene_cbv;
@@ -109,7 +109,7 @@ namespace ngl::render
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
+				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 
 
@@ -155,18 +155,18 @@ namespace ngl::render
 				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 
 				// リソースアクセス定義.
-				h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
-				h_gb0_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
-				h_gb1_ = builder.RegisterResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
+				h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
+				h_gb0_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
+				h_gb1_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
 			}
 
 			// 実際のレンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
-				auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
-				auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
+				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+				auto res_gb0 = builder.GetAllocatedResource(this, h_gb0_);
+				auto res_gb1 = builder.GetAllocatedResource(this, h_gb1_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 				assert(res_gb0.tex_.IsValid() && res_gb0.rtv_.IsValid());
@@ -206,8 +206,8 @@ namespace ngl::render
 					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R32_FLOAT);
 
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
-					h_linear_depth_ = builder.RegisterResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::UAV);
+					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+					h_linear_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::UAV);
 				}
 
 				{
@@ -239,8 +239,8 @@ namespace ngl::render
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
-				auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
+				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.uav_.IsValid());
@@ -291,9 +291,9 @@ namespace ngl::render
 				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
 
 				// リソースアクセス定義.
-				h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
-				h_gb0_ = builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
-				h_gb1_ = builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
+				h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+				h_gb0_ = builder.RecordResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
+				h_gb1_ = builder.RecordResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
 				if(h_prev_light.IsInvalid())
 				{
 					// If the previous Frame handle is invalid, it is the first frame,
@@ -301,20 +301,20 @@ namespace ngl::render
 					// Proper previous frame handle retention and supply is an outside responsibility.
 					h_prev_light = builder.CreateResource(light_desc);
 				}
-				h_prev_light_ = builder.RegisterResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
+				h_prev_light_ = builder.RecordResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
 				
-				h_light_ = builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
+				h_light_ = builder.RecordResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
 			}
 
 			// 実際のレンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
-				auto res_gb0 = builder.GetAllocatedHandleResource(this, h_gb0_);
-				auto res_gb1 = builder.GetAllocatedHandleResource(this, h_gb1_);
-				auto res_prev_light = builder.GetAllocatedHandleResource(this, h_prev_light_);// 前回フレームリソースのテスト.
-				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
+				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+				auto res_gb0 = builder.GetAllocatedResource(this, h_gb0_);
+				auto res_gb1 = builder.GetAllocatedResource(this, h_gb1_);
+				auto res_prev_light = builder.GetAllocatedResource(this, h_prev_light_);// 前回フレームリソースのテスト.
+				auto res_light = builder.GetAllocatedResource(this, h_light_);
 
 				// 本当の前回リソースがまだ無い初回フレームでも適切に仮リソースを登録していれば無効なリソース取得になることはない.
 				if(!res_prev_light.tex_.IsValid())
@@ -367,16 +367,16 @@ namespace ngl::render
 			{
 				{
 					// リソースアクセス定義.
-					h_depth_ = builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
-					h_linear_depth_ = builder.RegisterResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
-					h_light_ = builder.RegisterResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
+					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
+					h_light_ = builder.RecordResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
 
-					h_swapchain_ = builder.RegisterResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
+					h_swapchain_ = builder.RecordResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
 
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
-					auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
+					auto temp_res0 = builder.RecordResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 					h_tmp_ = temp_res0;
 				}
 
@@ -389,7 +389,7 @@ namespace ngl::render
 				}
 
 				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
-				const auto render_target_desc = builder.GetRegisteredResouceHandleDesc(h_swapchain);
+				const auto render_target_desc = builder.GetResourceHandleDesc(h_swapchain);
 
 				{
 					// 初期化. シェーダバイナリの要求とPSO生成.
@@ -437,11 +437,11 @@ namespace ngl::render
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedHandleResource(this, h_depth_);
-				auto res_linear_depth = builder.GetAllocatedHandleResource(this, h_linear_depth_);
-				auto res_light = builder.GetAllocatedHandleResource(this, h_light_);
-				auto res_swapchain = builder.GetAllocatedHandleResource(this, h_swapchain_);
-				auto res_tmp = builder.GetAllocatedHandleResource(this, h_tmp_);
+				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
+				auto res_light = builder.GetAllocatedResource(this, h_light_);
+				auto res_swapchain = builder.GetAllocatedResource(this, h_swapchain_);
+				auto res_tmp = builder.GetAllocatedResource(this, h_tmp_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());

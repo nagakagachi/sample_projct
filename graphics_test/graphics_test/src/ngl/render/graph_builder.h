@@ -351,7 +351,7 @@ namespace ngl
 			}
 		};
 		// 外部リソース登録用. 内部リソース管理クラスを継承して追加情報.
-		struct ExternalResourceRegisterInfo : public InternalResourceInstanceInfo
+		struct ExternalResourceInfo : public InternalResourceInstanceInfo
 		{
 			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {}; // 外部リソースの場合はSwapchainもあり得るため追加.
 			
@@ -359,16 +359,17 @@ namespace ngl
 			rhi::ResourceState	require_end_state_ = rhi::ResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
 		};
 		
-
-		// Taskノードのリソースアロケーションやノード間リソース状態遷移を計算する.
-		// GPU実行順はCreateされたTaskノードの順序.
-		//  
+		// レンダリング処理をもつTaskNode列を記録し, リソースの割当やリソース状態遷移を解決してTaskNodeの並列CommandList構築を実現する.
+		//	このクラスのインスタンスは　TaskNodeのRecord, Compile, Execute の一連の処理の後に使い捨てとなる. これは使いまわしのための状態リセットの実装ミスを避けるため.
+		//	
+		//  TaskNode内部の一時リソースやTaskNode間のリソースフローはHandleを介して記録し, Compileによって実際のリソース割当や状態遷移の解決をする.
+		// 	CommandListはCreateされたTaskNodeの順序となる.
+		//	AsyncComputeのTaskNodeもサポート予定で, Fence風のSignalとWeightによってGPU側での同期を記述することを検討中.
 		class RenderTaskGraphBuilder
 		{
 			friend class RenderTaskGraphManager;
 		public:
 			~RenderTaskGraphBuilder();
-			
 			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
 			template<typename TPassNode>
 			TPassNode* CreateNewNodeInSequenceTail()
@@ -377,7 +378,8 @@ namespace ngl
 				node_sequence_.push_back(new_node);
 				return new_node;
 			}
-
+			
+		public:
 			// リソースハンドルを生成.
 			//	Graph内リソースを確保してハンドルを取得する.
 			ResourceHandle CreateResource(ResourceDesc2D res_desc);
@@ -390,30 +392,30 @@ namespace ngl
 			//	rtv,dsv,srv,uavはそれぞれ登録するものだけ有効な参照を指定する.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
-			ResourceHandle RegisterExternalResource(rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
+			ResourceHandle AppendExternalResource(rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
 			
 			// 外部リソースを登録してハンドルを生成. Swapchain用.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
-			ResourceHandle RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
+			ResourceHandle AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
 				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
 			
 			// Swapchainリソースハンドルを取得. 外部リソースとしてSwapchainは特別扱い.
 			ResourceHandle GetSwapchainResourceHandle() const;
 			
-			// Descを取得.
-			ResourceDesc2D GetRegisteredResouceHandleDesc(ResourceHandle handle) const;
+			// Handleのリソース定義情報を取得.
+			ResourceDesc2D GetResourceHandleDesc(ResourceHandle handle) const;
 
 			
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-			ResourceHandle RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
+			ResourceHandle RecordResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
 			
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
 			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
-			void Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist);
+			void ExecuteSerial(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist);
 
 
 			// -------------------------------------------------------------------------------------------
@@ -435,8 +437,14 @@ namespace ngl
 			};
 			// NodeのHandleに対して割り当て済みリソースを取得する.
 			// Graphシステム側で必要なBarrierコマンドを発効するため基本的にNode実装側ではBarrierコマンドは不要.
-			AllocatedHandleResourceInfo GetAllocatedHandleResource(const ITaskNode* node, ResourceHandle res_handle);
+			AllocatedHandleResourceInfo GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle);
 			// -------------------------------------------------------------------------------------------
+			
+		private:
+			bool is_compiled_ = false;// Compileが完了して, Execute可能な状態.
+			bool is_executed_ = false;// Executeが完了して, 使用不可となった状態. 内部ステートのリセット等はミスが発生し易いため, BuilderはExecuteのたびに使い捨てとする.
+			
+			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
 			
 			// -------------------------------------------------------------------------------------------
 			static constexpr  int k_base_height = 1080;
@@ -453,12 +461,8 @@ namespace ngl
 			};
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_list_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
-			bool is_compiled_ = false;
-			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
-
-			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Importリソース用.
-			std::vector<ExternalResourceRegisterInfo> imported_resource_ = {};
+			std::vector<ExternalResourceInfo> imported_resource_ = {};
 			std::unordered_map<ResourceHandleKeyType, int> imported_handle_2_index_ = {};
 
 			// ImportしたSwapchainは何かとアクセスするためHandle保持.
@@ -469,6 +473,7 @@ namespace ngl
 			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+			
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
 			// HandleからリニアインデックスへのMap.
@@ -529,10 +534,15 @@ namespace ngl
 			
 			// Sequence上でのノードの位置を返す.
 			int GetNodeSequencePosition(const ITaskNode* p_node) const;
+
+			// Builderの状態取得用.
+			bool IsRecordable() const;
+			bool IsCompilable() const;
+			bool IsExecutable() const;
 			
 			// ------------------------------------------
 			// 外部リソースを登録共通部.
-			ResourceHandle RegisterExternalResourceCommon(
+			ResourceHandle AppendExternalResourceCommon(
 				rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
 		};
@@ -545,7 +555,7 @@ namespace ngl
 			
 		public:
 			RenderTaskGraphManager() = default;
-			~RenderTaskGraphManager() = default;
+			~RenderTaskGraphManager();
 		public:
 			// 初期化.
 			bool Init(rhi::DeviceDep& p_device);

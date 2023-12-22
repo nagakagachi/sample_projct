@@ -54,14 +54,6 @@ namespace ngl
 		{
 			// ID確保.
 			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
-			/*
-			{
-				++s_res_handle_id_counter_;
-				if (0 == s_res_handle_id_counter_)
-					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
-				new_handle_id = s_res_handle_id_counter_;
-			}
-			*/
 			
 			ResourceHandle handle{};
 			handle.detail.unique_id = new_handle_id;// ユニークID割当.
@@ -89,28 +81,50 @@ namespace ngl
 		}
 		
 		// 外部リソースを登録共通部.
-		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResourceCommon(
+		ResourceHandle RenderTaskGraphBuilder::AppendExternalResourceCommon(
 			rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
-		{
-			// TODO. リソースポインタのMapで二重登録チェックもした方が良い.
-
+		{	
 			// 無効なリソースチェック.
 			if (!swapchain.IsValid() && !tex.IsValid())
 			{
 				std::cout << u8"[RenderTaskGraphBuilder][RegisterExternalResource] 外部リソース登録のResourceが不正です." << std::endl;
 				assert(false);
 			}
+
+			// Debugでは二重登録チェック.
+#if defined(_DEBUG)
+			if(tex.IsValid())
+			{
+				for(const auto& e : imported_resource_)
+				{
+					if(e.tex_.Get() == tex.Get())
+					{
+						// 二重登録されているのでERROR.
+						std::cout << u8"[RenderTaskGraphBuilder][RegisterExternalResource] 外部リソースの二重登録が検出されました(texture). " << tex.Get() << std::endl;
+						assert(false);
+						return {};
+					}
+				}
+			}
+			else
+			{
+				for(const auto& e : imported_resource_)
+				{
+					if(e.swapchain_.Get() == swapchain.Get())
+					{
+						// 二重登録されているのでERROR.
+						std::cout << u8"[RenderTaskGraphBuilder][RegisterExternalResource] 外部リソースの二重登録が検出されました(swapchain). " << swapchain.Get() << std::endl;
+						assert(false);
+						return {};
+					}
+				}
+			}
+#endif
+			
 			// ID確保.
 			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
-			/*
-			{
-				++s_res_handle_id_counter_;
-				if(0 == s_res_handle_id_counter_)
-					++s_res_handle_id_counter_;// 0は無効ID扱いのためスキップ.
-				new_handle_id = s_res_handle_id_counter_;
-			}
-			*/
+			
 			// ハンドルセットアップ.
 			ResourceHandle new_handle = {};
 			{
@@ -143,7 +157,7 @@ namespace ngl
 				imported_handle_2_index_[new_handle] = res_index;
 
 				// 外部リソース用Indexで情報登録.
-				ExternalResourceRegisterInfo& ex_res_info = imported_resource_[res_index];
+				ExternalResourceInfo& ex_res_info = imported_resource_[res_index];
 				{
 					ex_res_info.swapchain_ = swapchain;
 					ex_res_info.tex_ = tex;
@@ -165,18 +179,18 @@ namespace ngl
 		}
 
 		// 外部リソースの登録. 一般.
-		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResource(
+		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(
 			rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
 		{
-			handle_imported_swapchain_ = RegisterExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			handle_imported_swapchain_ = AppendExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
 			return handle_imported_swapchain_;
 		}
 		
 		// 外部リソースの登録. Swapchain.
-		ResourceHandle RenderTaskGraphBuilder::RegisterExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
 		{
-			handle_imported_swapchain_ = RegisterExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			handle_imported_swapchain_ = AppendExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
 			return handle_imported_swapchain_;
 		}
 
@@ -187,7 +201,7 @@ namespace ngl
 		}
 		
 		// Descを取得.
-		ResourceDesc2D RenderTaskGraphBuilder::GetRegisteredResouceHandleDesc(ResourceHandle handle) const
+		ResourceDesc2D RenderTaskGraphBuilder::GetResourceHandleDesc(ResourceHandle handle) const
 		{
 			const auto find_it = handle_2_desc_.find(handle);
 			if(handle_2_desc_.end() == find_it)
@@ -201,19 +215,26 @@ namespace ngl
 
 		// Nodeからのリソースアクセスを記録.
 		// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-		ResourceHandle RenderTaskGraphBuilder::RegisterResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type)
+		ResourceHandle RenderTaskGraphBuilder::RecordResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type)
 		{
+			if(!IsRecordable())
+			{
+				std::cout <<  u8"[ERROR] このBuilderはRecordできません. すでにCompile済み, 又はExecute済みのBuilderは破棄して新規Builderを利用してください." << std::endl;
+				assert(false);
+				return {};
+			}
+				
 			// Node->Handle&AccessTypeのMap登録.
 			{
 				if(node_handle_usage_list_.end() == node_handle_usage_list_.find(&node))
 				{
-					node_handle_usage_list_[&node] = {};
+					node_handle_usage_list_[&node] = {};// Node用のMap要素追加.
 				}
 
 				NodeHandleUsageInfo push_info = {};
 				push_info.handle = res_handle;
 				push_info.access = access_type;
-				node_handle_usage_list_[&node].push_back(push_info);
+				node_handle_usage_list_[&node].push_back(push_info);// NodeからHandleへのアクセス情報を記録.
 			}
 
 			// Passメンバに保持するコードを短縮するためHandleをそのままリターン.
@@ -224,19 +245,20 @@ namespace ngl
 		// CompileされたGraphは必ずExecuteが必要.
 		bool RenderTaskGraphBuilder::Compile(RenderTaskGraphManager& manager)
 		{
-			// 多重Compileは禁止.
-			assert(!is_compiled_);
-			if (is_compiled_)
+			// Compile可能チェック.
+			if(!IsCompilable())
 			{
+				std::cout <<  u8"[ERROR] このBuilderはCompileできません. すでにCompile済み, 又はExecute済みの可能性があります." << std::endl;
+				assert(false);
 				return false;
 			}
 			
+			// 状態遷移.
+			is_compiled_ = true;
 			// Compileでリソース割当をするマネージャを保持.
 			p_compiled_manager_ = &manager;
 
-			
 			// MEMO 終端に寄与しないノードのカリングは保留.
-			
 			// 念のためのValidation Check.
 			{
 				for(int sequence_id = 0; sequence_id < node_sequence_.size(); ++sequence_id)
@@ -491,7 +513,7 @@ namespace ngl
 						{
 							// 初回フレーム等で前回からの伝搬ができていない伝搬リソースハンドルの可能性がある.
 							// それらはリソース割当失敗として -1 のまま処理を進める.
-							std::cout << u8"リソース割当に失敗したため無効リソースIDを設定 " << u8"(handle unique_id = " << res_handle.detail.unique_id << u8")" << std::endl;
+							std::cout << u8"ハンドルへのリソース割当に失敗. 無効なHandleや伝搬指定をしていない前回フレームのハンドルの可能性があります. " << u8"(handle unique_id = " << res_handle.detail.unique_id << u8")" << std::endl;
 						}
 					}
 
@@ -520,7 +542,7 @@ namespace ngl
 				}
 			}
 			
-			// まず時系列順で実リソースへのアクセスNodeをリストアップ.
+			// 時系列順で実リソースへのアクセスNodeをリストアップ.
 			std::vector<std::vector<const ITaskNode*>> res_access_node_array(valid_res_count);
 			for(const auto* p_node : node_sequence_)
 			{
@@ -682,7 +704,7 @@ namespace ngl
 					{
 						std::cout << "			-External" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.resource_id)? imported_resource_[res_id.detail.resource_id] : ExternalResourceRegisterInfo();
+						const auto res = (0 <= res_id.detail.resource_id)? imported_resource_[res_id.detail.resource_id] : ExternalResourceInfo();
 						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						if(res.tex_.IsValid())
 							std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
@@ -704,21 +726,17 @@ namespace ngl
 				}
 #endif
 			}
-
-			// Compile完了して実行準備ができたのでフラグ設定.
-			is_compiled_ = true;
 			
 			return true;
 		}
 
-		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedHandleResource(const ITaskNode* node, ResourceHandle res_handle)
-		{
-			// Compileされていない.
-			assert(is_compiled_);
-			assert(nullptr != p_compiled_manager_);
-			
+		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle)
+		{	
+			// Compileされていないかチェック.
 			if (!is_compiled_ || nullptr == p_compiled_manager_)
 			{
+				std::cout <<  u8"[ERROR] このBuilderはCompileされていません." << std::endl;
+				assert(false);
 				return {};
 			}
 
@@ -757,9 +775,7 @@ namespace ngl
 			
 			// ステート遷移情報取得.
 			NodeHandleState state_transition = node_handle_state_[node][res_handle];
-
-
-
+			
 			// 返却情報構築.
 			AllocatedHandleResourceInfo ret_info = {};
 			ret_info.prev_state_ = state_transition.prev_;
@@ -778,7 +794,7 @@ namespace ngl
 			else
 			{
 				// 外部リソース.
-				const ExternalResourceRegisterInfo& res = imported_resource_[handle_res_id.detail.resource_id];
+				const ExternalResourceInfo& res = imported_resource_[handle_res_id.detail.resource_id];
 				ret_info.swapchain_ = res.swapchain_;// 外部リソースはSwapchainの場合もある.
 				ret_info.tex_ = res.tex_;
 				ret_info.rtv_ = res.rtv_;
@@ -791,16 +807,20 @@ namespace ngl
 		}
 
 		// Compileしたグラフを実行しCommandListを生成する. 検証用.
-		void RenderTaskGraphBuilder::Execute_ImmediateDebug(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist)
+		void RenderTaskGraphBuilder::ExecuteSerial(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist)
 		{
-			// Compileされていない.
-			assert(is_compiled_);
-			assert(nullptr != p_compiled_manager_);
-			if (!is_compiled_ || nullptr == p_compiled_manager_)
+			// Compileされていないチェック.
+			if(!IsExecutable())
 			{
+				std::cout <<  u8"[ERROR] このBuilderはExecuteできません. Record, Compileしてください." << std::endl;
+				assert(false);
 				return;
 			}
 
+			// 状態遷移.
+			is_executed_ = true;
+
+			
 			// TaskNodeをシーケンス順に評価.
 			for (const auto& e : node_sequence_)
 			{
@@ -809,7 +829,7 @@ namespace ngl
 
 				for (const auto& handle_access : node_handle_access)
 				{
-					AllocatedHandleResourceInfo handle_res = GetAllocatedHandleResource(e, handle_access.handle);
+					AllocatedHandleResourceInfo handle_res = GetAllocatedResource(e, handle_access.handle);
 					if (handle_res.tex_.IsValid())
 					{
 						// 通常テクスチャリソースの場合.
@@ -857,22 +877,19 @@ namespace ngl
 				}
 			}
 
-			// ExecuteしたらCompile結果は無効になる(Poolのリソースのステートなどが変わるため再度Compileする必要がある).
-			{
-				is_compiled_ = false;
+			// ExecuteしたBuilderは使い捨てとすることで状態リセットの実装ミス等を回避する.
+			// is_compiled_やis_executed_などのフラグはリセットせず, 内部リソースだけ解放して破棄を待つようにする.
+			{	
 				p_compiled_manager_ = nullptr;
 
 				// 外部リソースクリア.
 				{
 					imported_resource_ = {};
 					imported_handle_2_index_ = {};
-
 					handle_imported_swapchain_ = {};
 				}
 			}
 		}
-
-		// -------------------------------------------------------------------------------------------
 
 		RenderTaskGraphBuilder::~RenderTaskGraphBuilder()
 		{
@@ -899,8 +916,129 @@ namespace ngl
 			return static_cast<int>(std::distance(node_sequence_.begin(), find_pos));
 		}
 
+		// Builderの状態取得用.
+		bool RenderTaskGraphBuilder::IsRecordable() const
+		{
+			return (!is_compiled_) && (!is_executed_);
+		}
+		bool RenderTaskGraphBuilder::IsCompilable() const
+		{
+			return (!is_compiled_) && (!is_executed_);// 実質Recordableと同じ.
+		}
+		bool RenderTaskGraphBuilder::IsExecutable() const
+		{
+			return (is_compiled_) && (!is_executed_);
+		}
+		
 		// --------------------------------------------------------------------------------------------------------------------
 		uint32_t RenderTaskGraphManager::s_res_handle_id_counter_ = 0;
+
+		// 破棄.
+		RenderTaskGraphManager::~RenderTaskGraphManager()
+		{
+			int valid_resource_count = 0;
+			for(auto&& e : internal_resource_pool_)
+			{
+				if(e.IsValid())
+				{
+					++valid_resource_count;
+				}
+			}
+			// 終了時にPoolのサイズと有効なリソース数のデバッグ表示.
+			std::cout << u8"<RenderTaskGraphManager>" << std::endl;
+			std::cout << u8"	valid internal resource count / resource pool size = " << valid_resource_count << u8" / " << internal_resource_pool_.size() << std::endl;
+			std::cout << u8"</RenderTaskGraphManager>" << std::endl;
+		}
+		// 初期化.
+		bool RenderTaskGraphManager::Init(rhi::DeviceDep& p_device)
+		{
+			p_device_ = &p_device;
+			return (nullptr != p_device_);
+		}
+		
+		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
+		void RenderTaskGraphManager::BeginFrame()
+		{
+			// フレーム開始でフレーム伝搬リソースのMapフリップとクリア.
+			flip_propagate_next_handle_next_ = 1 - flip_propagate_next_handle_next_;// このフレームから伝搬するハンドル用.
+			propagate_next_handle_[flip_propagate_next_handle_next_].clear();
+
+			// 未使用リソースの破棄.
+			{
+				// 破棄する未使用フレーム数. 1以上. 数フレームは猶予を持たせたほうが良い場合もある.
+				constexpr int unused_internal_resource_delete_frame = 1;
+				for(auto& e : internal_resource_pool_)
+				{
+					if(!e.IsValid())
+						continue;
+
+					// カウンタ加算.
+					++e.unused_frame_counter_;
+
+					// 使用されずに一定フレーム経過したリソースは破棄.
+					if(unused_internal_resource_delete_frame < e.unused_frame_counter_)
+					{
+						// 参照カウンタをクリアして解放.
+						e = {};
+					}
+				}
+			}
+		}
+		
+		// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.
+		// Compileしたbuilderは必ずExecuteする必要がある.
+		// また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
+		bool RenderTaskGraphManager::Compile(RenderTaskGraphBuilder& builder)
+		{
+			assert(nullptr != p_device_);
+			// Compile可能チェック.
+			if(!builder.IsCompilable())
+			{
+				std::cout <<  u8"[ERROR] このBuilderはCompileできません. すでにCompile済み, 又はExecute済みの可能性があります." << std::endl;
+				assert(false);
+				return false;
+			}
+			
+			// Compileは排他処理.
+			std::scoped_lock<std::mutex> lock(compile_mutex_);
+			
+			// Compile前に内部リソースプールの情報をクリア,更新する.
+			// 通常のリソースはCompileで割当が可能なように最終アクセスステージをリセット.
+			// 前回フレームからの伝搬リソースについては、 GetOrCreateResourceFromPool() で割当られないように最終アクセスステージを修正する.
+			//	Stateは継続するので維持.
+			for(auto& e : internal_resource_pool_)
+			{
+				if(!e.IsValid())
+					continue;
+				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
+			}
+			// 伝搬リソースの最終アクセスステージを最終端に書き換えて通常の割当から除外.
+			{
+				const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
+				for(auto e : propagate_next_handle_[flip_index_propagated])
+				{
+					assert(internal_resource_pool_[e.second].IsValid());// 伝搬しているなら存在するはず.
+					internal_resource_pool_[e.second].last_access_stage_ = TaskStage::k_endmost_stage();// 最終端.
+				}
+			}
+			
+			// Compile実行.
+			const bool result = builder.Compile(*this);
+
+			// Compileで割り当てられた内部リソースの未使用カウンタをリセット. 外部リソースは無視すること.
+			{
+				for(auto& e : builder.handle_compiled_resource_id_)
+				{
+					if(!e.detail.is_external)
+					{
+						auto* p_resource = GetInternalResourcePtr(e.detail.resource_id);
+						assert(p_resource);
+						p_resource->unused_frame_counter_ = 0;// リセット.
+					}
+				}
+			}
+			return result;
+		}
 		
 		uint32_t RenderTaskGraphManager::GetNewHandleId()
 		{
@@ -1150,91 +1288,6 @@ namespace ngl
 			// 未登録のため無効値.
 			return -1;
 		}
-		
-		// 初期化.
-		bool RenderTaskGraphManager::Init(rhi::DeviceDep& p_device)
-		{
-			p_device_ = &p_device;
-			return (nullptr != p_device_);
-		}
-		
-		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
-		void RenderTaskGraphManager::BeginFrame()
-		{
-			// フレーム開始でフレーム伝搬リソースのMapフリップとクリア.
-			flip_propagate_next_handle_next_ = 1 - flip_propagate_next_handle_next_;// このフレームから伝搬するハンドル用.
-			propagate_next_handle_[flip_propagate_next_handle_next_].clear();
-
-			// 未使用リソースの破棄.
-			{
-				// 破棄する未使用フレーム数. 1以上. 数フレームは猶予を持たせたほうが良い場合もある.
-				constexpr int unused_internal_resource_delete_frame = 1;
-				for(auto& e : internal_resource_pool_)
-				{
-					if(!e.IsValid())
-						continue;
-
-					// カウンタ加算.
-					++e.unused_frame_counter_;
-
-					// 使用されずに一定フレーム経過したリソースは破棄.
-					if(unused_internal_resource_delete_frame < e.unused_frame_counter_)
-					{
-						// 参照カウンタをクリアして解放.
-						e = {};
-					}
-				}
-			}
-		}
-		
-		// タスクグラフを構築したbuilderをCompileしてリソース割当を確定する.
-		// Compileしたbuilderは必ずExecuteする必要がある.
-		// また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
-		bool RenderTaskGraphManager::Compile(RenderTaskGraphBuilder& builder)
-		{
-			assert(nullptr != p_device_);
-			
-			// Compileは排他処理.
-			std::scoped_lock<std::mutex> lock(compile_mutex_);
-			
-			// Compile前に内部リソースプールの情報をクリア,更新する.
-			// 通常のリソースはCompileで割当が可能なように最終アクセスステージをリセット.
-			// 前回フレームからの伝搬リソースについては、 GetOrCreateResourceFromPool() で割当られないように最終アクセスステージを修正する.
-			//	Stateは継続するので維持.
-			for(auto& e : internal_resource_pool_)
-			{
-				if(!e.IsValid())
-					continue;
-				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
-			}
-			// 伝搬リソースの最終アクセスステージを最終端に書き換えて通常の割当から除外.
-			{
-				const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
-				for(auto e : propagate_next_handle_[flip_index_propagated])
-				{
-					assert(internal_resource_pool_[e.second].IsValid());// 伝搬しているなら存在するはず.
-					internal_resource_pool_[e.second].last_access_stage_ = TaskStage::k_endmost_stage();// 最終端.
-				}
-			}
-			
-			// Compile実行.
-			const bool result = builder.Compile(*this);
-
-			// Compileで割り当てられた内部リソースの未使用カウンタをリセット. 外部リソースは無視すること.
-			{
-				for(auto& e : builder.handle_compiled_resource_id_)
-				{
-					if(!e.detail.is_external)
-					{
-						auto* p_resource = GetInternalResourcePtr(e.detail.resource_id);
-						assert(p_resource);
-						p_resource->unused_frame_counter_ = 0;// リセット.
-					}
-				}
-			}
-			return result;
-		}
-		
 		
 	}
 }

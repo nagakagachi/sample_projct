@@ -712,13 +712,16 @@ bool AppGame::Execute()
 				// RTG Build.
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
 				
-				// Register External.
+				// Append External Resource Info.
 				ngl::rtg::ResourceHandle h_swapchain = {};
 				{
 					constexpr ngl::rhi::ResourceState swapchain_final_state = ngl::rhi::ResourceState::Present;// Execute後のステート指定.
 					// 外部リソース登録.
-					h_swapchain =
-						rtg_builder.RegisterExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
+					h_swapchain = rtg_builder.AppendExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
+
+					// 二重登録エラーチェック.
+					// h_swapchain = rtg_builder.AppendExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
+
 					// 状態追跡更新.
 					swapchain_resource_state_[swapchain_index] = swapchain_final_state;
 				}
@@ -757,10 +760,11 @@ bool AppGame::Execute()
 
 				// Compile. ManagerでCompileを実行する.
 				rtg_manager_.Compile(rtg_builder);
-
+				
 				// Execute. CompileしたGraphは必ずExecuteする必要がある. またその順序もCompileした順のGraphで実行する必要がある.
-				//	これらはCompileで確定したリソース状態遷移等を適切な順序でCommandListに積む必要があるため.
-				rtg_builder.Execute_ImmediateDebug(gfx_command_list_);
+				//	Compileで確定したリソース状態遷移等を適切な順序でCommandListに積む必要があるためExcute順も適切な順序とする必要がある.
+				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
+				rtg_builder.ExecuteSerial(gfx_command_list_);
 			}
 
 			gfx_command_list_->End();
