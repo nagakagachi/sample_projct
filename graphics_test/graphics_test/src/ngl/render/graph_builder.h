@@ -372,7 +372,7 @@ namespace ngl
 			~RenderTaskGraphBuilder();
 			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
 			template<typename TPassNode>
-			TPassNode* CreateNewNodeInSequenceTail()
+			TPassNode* AppendNodeToSequence()
 			{
 				auto new_node = new TPassNode();
 				node_sequence_.push_back(new_node);

@@ -732,23 +732,23 @@ bool AppGame::Execute()
 				// Build Rendering Pass.
 				{
 					// Depth Only.
-					auto* task_depth = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskDepthPass>();
+					auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
 					task_depth->Setup(rtg_builder, &device_, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
 
 					// GBuffer.
-					auto* task_gbuffer = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskGBufferPass>();
+					auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
 					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_);
 
 					// Linear Depth.
-					auto* task_linear_depth = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLinearDepthPass>();
+					auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
 					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_, cbv_sceneview_[flip_index_sceneview_]);
 
 					// Deferred Lighting.
-					auto* task_light = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskLightPass>();
+					auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
 					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, h_prev_light);
 
 					// Final Composite to Swapchain.
-					auto* task_final = rtg_builder.CreateNewNodeInSequenceTail<ngl::render::task::TaskFinalPass>();
+					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
 					task_final->Setup(rtg_builder, &device_, h_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
 						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 
@@ -761,8 +761,10 @@ bool AppGame::Execute()
 				// Compile. ManagerでCompileを実行する.
 				rtg_manager_.Compile(rtg_builder);
 				
-				// Execute. CompileしたGraphは必ずExecuteする必要がある. またその順序もCompileした順のGraphで実行する必要がある.
-				//	Compileで確定したリソース状態遷移等を適切な順序でCommandListに積む必要があるためExcute順も適切な順序とする必要がある.
+				// Execute. GraphのCommandListを生成する.
+				//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
+				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
+				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
 				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
 				rtg_builder.ExecuteSerial(gfx_command_list_);
 			}
