@@ -718,10 +718,7 @@ bool AppGame::Execute()
 					constexpr ngl::rhi::ResourceState swapchain_final_state = ngl::rhi::ResourceState::Present;// Execute後のステート指定.
 					// 外部リソース登録.
 					h_swapchain = rtg_builder.AppendExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
-
-					// 二重登録エラーチェック.
-					// h_swapchain = rtg_builder.AppendExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
-
+					
 					// 状態追跡更新.
 					swapchain_resource_state_[swapchain_index] = swapchain_final_state;
 				}
@@ -745,12 +742,11 @@ bool AppGame::Execute()
 
 					// Deferred Lighting.
 					auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
-					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, h_prev_light);
+					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_linear_depth->h_linear_depth_, h_prev_light, samp_linear_clamp_);
 
 					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
-					task_final->Setup(rtg_builder, &device_, h_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
+					task_final->Setup(rtg_builder, &device_, h_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_, samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 
 					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
 					{
