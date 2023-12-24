@@ -569,7 +569,6 @@ namespace ngl
 
 		private:
 			Desc								desc_ = {};
-			uint32_t									alloc_frame_index_ = 0;
 			DynamicDescriptorStackAllocatorInterface	alloc_interface_ = {};
 		};
 

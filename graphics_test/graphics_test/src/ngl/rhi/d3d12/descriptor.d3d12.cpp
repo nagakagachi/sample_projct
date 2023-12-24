@@ -874,8 +874,6 @@ namespace ngl
 			alloc_interface_desc.stack_size = desc.stack_size;
 			alloc_interface_.Initialize(p_manager, alloc_interface_desc);
 
-			alloc_frame_index_ = 0;
-
 			return true;
 		}
 		void FrameCommandListDynamicDescriptorAllocatorInterface::Finalize()
@@ -888,7 +886,6 @@ namespace ngl
 		// 新しいフレームの準備
 		void FrameCommandListDynamicDescriptorAllocatorInterface::ReadyToNewFrame(u32 frame_index)
 		{
-			alloc_frame_index_ = frame_index;
 			alloc_interface_.DeallocateDeferred(frame_index);
 		}
 		bool FrameCommandListDynamicDescriptorAllocatorInterface::Allocate(u32 count, D3D12_CPU_DESCRIPTOR_HANDLE& alloc_cpu_handle_head, D3D12_GPU_DESCRIPTOR_HANDLE& alloc_gpu_handle_head)

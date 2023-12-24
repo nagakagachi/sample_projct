@@ -72,6 +72,7 @@ private:
 
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
+	ngl::rhi::ComputeCommandQueueDep			compute_queue_;
 
 	// RenderTaskGraphのCompileやそれらが利用するリソースプール管理.
 	ngl::rtg::RenderTaskGraphManager rtg_manager_{};
@@ -95,12 +96,6 @@ private:
 	ngl::rhi::RefTextureDep						tex_work_;
 	ngl::rhi::RefRtvDep							tex_work_rtv_;
 	ngl::rhi::RefSrvDep							tex_work_srv_;
-
-	ngl::rhi::RefTextureDep						tex_depth_;
-	ngl::rhi::RefDsvDep							tex_depth_dsv_;
-	ngl::rhi::RefSrvDep							tex_depth_srv_;
-	ngl::rhi::ResourceState						tex_depth_state_;
-
 
 	ngl::rhi::RefTextureDep						tex_lineardepth_;
 	ngl::rhi::RefSrvDep							tex_lineardepth_srv_;
@@ -161,6 +156,7 @@ AppGame::~AppGame()
 
 
 	graphics_queue_.Finalize();
+	compute_queue_.Finalize();
 	device_.Finalize();
 }
 
@@ -194,7 +190,12 @@ bool AppGame::Initialize()
 
 	if (!graphics_queue_.Initialize(&device_))
 	{
-		std::cout << "[ERROR] Command Queue Initialize" << std::endl;
+		std::cout << "[ERROR] Graphics Command Queue Initialize" << std::endl;
+		return false;
+	}
+	if(!compute_queue_.Initialize(&device_))
+	{
+		std::cout << "[ERROR] Compute Command Queue Initialize" << std::endl;
 		return false;
 	}
 	{
@@ -220,37 +221,6 @@ bool AppGame::Initialize()
 	// RTGマネージャ初期化.
 	{
 		rtg_manager_.Init(device_);
-	}
-
-	// DepthBuffer
-	{
-		ngl::rhi::TextureDep::Desc desc = {};
-		desc.bind_flag = ngl::rhi::ResourceBindFlag::DepthStencil | ngl::rhi::ResourceBindFlag::ShaderResource;
-		desc.format = ngl::rhi::ResourceFormat::Format_D32_FLOAT;
-		desc.type = ngl::rhi::TextureType::Texture2D;
-		desc.width = scree_w;
-		desc.height = scree_h;
-		desc.depth_stencil.clear_value = 0.0f;// DepthBufferクリア既定値. ReverseZ.
-
-		tex_depth_ = new ngl::rhi::TextureDep();
-		if (!tex_depth_->Initialize(&device_, desc))
-		{
-			std::cout << "[ERROR] Create DepthTexture Initialize" << std::endl;
-			assert(false);
-		}
-		tex_depth_dsv_ = new ngl::rhi::DepthStencilViewDep();
-		if (!tex_depth_dsv_->Initialize(&device_, tex_depth_.Get(), 0, 0, 1))
-		{
-			std::cout << "[ERROR] Create Dsv Initialize" << std::endl;
-			assert(false);
-		}
-		tex_depth_srv_ = new ngl::rhi::ShaderResourceViewDep();
-		if (!tex_depth_srv_->InitializeAsTexture(&device_, tex_depth_.Get(), 0, 1, 0, 1))
-		{
-			assert(false);
-		}
-
-		tex_depth_state_ = desc.initial_state;
 	}
 
 	// Work RenderBuffer.
@@ -337,9 +307,8 @@ bool AppGame::Initialize()
 		}
 	}
 
-	ngl::rhi::GraphicsCommandListDep::Desc gcl_desc = {};
 	gfx_command_list_ = new ngl::rhi::GraphicsCommandListDep();
-	if (!gfx_command_list_->Initialize(&device_, gcl_desc))
+	if (!gfx_command_list_->Initialize(&device_))
 	{
 		std::cout << "[ERROR] CommandList Initialize" << std::endl;
 		return false;

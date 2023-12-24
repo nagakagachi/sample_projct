@@ -35,7 +35,9 @@ namespace ngl
 		class FenceDep;
 
 		class GraphicsCommandListDep;
+		class ComputeCommandListDep;
 		class GraphicsCommandQueueDep;
+		class ComputeCommandQueueDep;
 
 		class DeviceDep;
 
@@ -158,8 +160,29 @@ namespace ngl
 		};
 
 
-		// Graphics Command Queue
-		class GraphicsCommandQueueDep : public RhiObjectBase
+
+		// Command Queue Base. 基本ロジックのみ.
+		class CommandQueueBaseDep : public RhiObjectBase
+		{
+		public:
+			CommandQueueBaseDep();
+			virtual ~CommandQueueBaseDep();
+			
+			// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
+			bool Initialize(DeviceDep* p_device, D3D12_COMMAND_LIST_TYPE type);
+
+			// Fenceに対してSignal発行.
+			void Signal(FenceDep* p_fence, ngl::types::u64 fence_value);
+			// FenceでWait.
+			void Wait(FenceDep* p_fence, ngl::types::u64 fence_value);
+			
+			ID3D12CommandQueue* GetD3D12CommandQueue();
+		protected:
+			CComPtr<ID3D12CommandQueue> p_command_queue_;
+		};
+		
+		// Graphics Command Queue.
+		class GraphicsCommandQueueDep : public CommandQueueBaseDep
 		{
 		public:
 			GraphicsCommandQueueDep();
@@ -170,15 +193,26 @@ namespace ngl
 			void Finalize();
 
 			void ExecuteCommandLists(unsigned int num_command_list, GraphicsCommandListDep** p_command_lists);
-			void Signal(FenceDep* p_fence, ngl::types::u64 fence_value);
-
-
-			ID3D12CommandQueue* GetD3D12CommandQueue();
 		private:
-			CComPtr<ID3D12CommandQueue> p_command_queue_;
-			std::vector<ID3D12CommandList*> p_command_list_array_;
 		};
+		
+		// Compute Command Queue.
+		// for AsyncCompute.
+		class ComputeCommandQueueDep : public CommandQueueBaseDep
+		{
+		public:
+			ComputeCommandQueueDep();
+			~ComputeCommandQueueDep();
 
+			// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
+			bool Initialize(DeviceDep* p_device);
+			void Finalize();
+
+			void ExecuteCommandLists(unsigned int num_command_list, ComputeCommandListDep** p_command_lists);
+		private:
+		};
+		
+		
 		// フェンス
 		class FenceDep : public RhiObjectBase
 		{

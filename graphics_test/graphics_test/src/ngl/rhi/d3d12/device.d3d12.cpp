@@ -404,26 +404,24 @@ namespace ngl
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
-		GraphicsCommandQueueDep::GraphicsCommandQueueDep()
-		{
-		}
-		GraphicsCommandQueueDep::~GraphicsCommandQueueDep()
-		{
-			Finalize();
-		}
 
+
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		CommandQueueBaseDep::CommandQueueBaseDep()
+		{
+		}
+		CommandQueueBaseDep::~CommandQueueBaseDep()
+		{
+		}
+		
 		// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
-		bool GraphicsCommandQueueDep::Initialize(DeviceDep* p_device)
+		bool CommandQueueBaseDep::Initialize(DeviceDep* p_device, D3D12_COMMAND_LIST_TYPE type)
 		{
 			if (!p_device)
 				return false;
 
 			D3D12_COMMAND_QUEUE_DESC desc = {};
-			// Graphics用
-			desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-
+			desc.Type = type;
 			desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 			desc.NodeMask = 0;
 			desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
@@ -437,22 +435,56 @@ namespace ngl
 			return true;
 		}
 
+		void CommandQueueBaseDep::Signal(FenceDep* p_fence, ngl::types::u64 fence_value)
+		{
+			if (!p_fence)
+				return;
+			p_command_queue_->Signal( p_fence->GetD3D12Fence(), fence_value);
+		}
+		// FenceでWait.
+		void CommandQueueBaseDep::Wait(FenceDep* p_fence, ngl::types::u64 fence_value)
+		{
+			if (!p_fence)
+				return;
+			p_command_queue_->Wait( p_fence->GetD3D12Fence(), fence_value);
+		}
+
+		ID3D12CommandQueue* CommandQueueBaseDep::GetD3D12CommandQueue()
+		{
+			return p_command_queue_;
+		}
+		
+		
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		GraphicsCommandQueueDep::GraphicsCommandQueueDep()
+		{
+		}
+		GraphicsCommandQueueDep::~GraphicsCommandQueueDep()
+		{
+			Finalize();
+		}
+
+		// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
+		bool GraphicsCommandQueueDep::Initialize(DeviceDep* p_device)
+		{
+			return CommandQueueBaseDep::Initialize(p_device, D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT);
+		}
+
 		void GraphicsCommandQueueDep::Finalize()
 		{
-			p_command_queue_ = nullptr;
 		}
 
 		void GraphicsCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, GraphicsCommandListDep** p_command_lists)
 		{
 			// 一時バッファに詰める
-			p_command_list_array_.clear();
+			std::vector<ID3D12CommandList*> p_command_list_array = {};
 			for (auto i = 0u; i < num_command_list; ++i)
 			{
-				p_command_list_array_.push_back(p_command_lists[i]->GetD3D12GraphicsCommandList());
+				p_command_list_array.push_back(p_command_lists[i]->GetD3D12GraphicsCommandList());
 			}
 			try
 			{
-				p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array_[0]));
+				p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array[0]));
 			}
 			catch (...)
 			{
@@ -460,24 +492,48 @@ namespace ngl
 				std::cout << "[ngl][GraphicsCommandQueueDep] ExecuteCommandLists: catch exception." << std::endl;
 				OutputDebugString(_T("[ngl][GraphicsCommandQueueDep] ExecuteCommandLists: catch exception."));
 			}
-
-			p_command_list_array_.clear();
+		}
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		// -------------------------------------------------------------------------------------------------------------------------------------------------
+		ComputeCommandQueueDep::ComputeCommandQueueDep()
+		{
+		}
+		ComputeCommandQueueDep::~ComputeCommandQueueDep()
+		{
+			Finalize();
 		}
 
-		void GraphicsCommandQueueDep::Signal(FenceDep* p_fence, ngl::types::u64 fence_value)
+		// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
+		bool ComputeCommandQueueDep::Initialize(DeviceDep* p_device)
 		{
-			if (!p_fence)
-				return;
-			p_command_queue_->Signal( p_fence->GetD3D12Fence(), fence_value);
+			return CommandQueueBaseDep::Initialize(p_device, D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_COMPUTE);
 		}
 
-		ID3D12CommandQueue* GraphicsCommandQueueDep::GetD3D12CommandQueue()
+		void ComputeCommandQueueDep::Finalize()
 		{
-			return p_command_queue_;
+		}
+
+		void ComputeCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, ComputeCommandListDep** p_command_lists)
+		{
+			// 一時バッファに詰める
+			std::vector<ID3D12CommandList*> p_command_list_array = {};
+			for (auto i = 0u; i < num_command_list; ++i)
+			{
+				p_command_list_array.push_back(p_command_lists[i]->GetD3D12GraphicsCommandList());
+			}
+			try
+			{
+				p_command_queue_->ExecuteCommandLists(num_command_list, &(p_command_list_array[0]));
+			}
+			catch (...)
+			{
+				// D3D12で稀に発生するcom_errorをキャッチ
+				std::cout << "[ngl][ComputeCommandQueueDep] ExecuteCommandLists: catch exception." << std::endl;
+				OutputDebugString(_T("[ngl][ComputeCommandQueueDep] ExecuteCommandLists: catch exception."));
+			}
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
-		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 		FenceDep::FenceDep()
 		{
