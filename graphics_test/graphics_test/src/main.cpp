@@ -80,12 +80,13 @@ private:
 
 	// CommandQueue実行完了待機用Fence
 	ngl::rhi::FenceDep							wait_fence_;
-	// Fenceの初期値がゼロであるため待機用の値は1から開始.
-	ngl::types::u64								wait_fence_value_ = 1;
 	// CommandQueue実行完了待機用オブジェクト
 	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
-
+	
+	ngl::rhi::FenceDep							test_compute_to_gfx_fence_;
+	
 	ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>	gfx_command_list_;
+	ngl::rhi::RhiRef<ngl::rhi::ComputeCommandListDep>	compute_command_list_;
 
 	// SwapChain
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
@@ -152,6 +153,7 @@ AppGame::~AppGame()
 
 
 	gfx_command_list_.Reset();
+	compute_command_list_.Reset();
 	swapchain_.Reset();
 
 
@@ -281,7 +283,7 @@ bool AppGame::Initialize()
 	{
 		ngl::rhi::TextureDep::Desc desc = {};
 		desc.bind_flag = ngl::rhi::ResourceBindFlag::UnorderedAccess | ngl::rhi::ResourceBindFlag::ShaderResource;
-		desc.format = ngl::rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
+		desc.format = ngl::rhi::ResourceFormat::Format_R16G16B16A16_FLOAT;
 		desc.type = ngl::rhi::TextureType::Texture2D;
 		desc.width = scree_w;
 		desc.height = scree_h;
@@ -310,7 +312,15 @@ bool AppGame::Initialize()
 	gfx_command_list_ = new ngl::rhi::GraphicsCommandListDep();
 	if (!gfx_command_list_->Initialize(&device_))
 	{
-		std::cout << "[ERROR] CommandList Initialize" << std::endl;
+		std::cout << "[ERROR] Graphics CommandList Initialize" << std::endl;
+		assert(false);
+		return false;
+	}
+	compute_command_list_ = new ngl::rhi::ComputeCommandListDep();
+	if(!compute_command_list_->Initialize(&device_))
+	{
+		std::cout << "[ERROR] Compute CommandList Initialize" << std::endl;
+		assert(false);
 		return false;
 	}
 
@@ -319,7 +329,11 @@ bool AppGame::Initialize()
 		std::cout << "[ERROR] Fence Initialize" << std::endl;
 		return false;
 	}
-
+	if(!test_compute_to_gfx_fence_.Initialize((&device_)))
+	{
+		assert(false);
+		return false;
+	}
 
 	{
 		// Sampler.
@@ -737,22 +751,76 @@ bool AppGame::Execute()
 			gfx_command_list_->End();
 		}
 
-		// CommandList Submit
-		ngl::rhi::GraphicsCommandListDep* command_lists[] =
+		// AsyncComputeテスト.
 		{
-			gfx_command_list_.Get()
-		};
-		graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(command_lists)), command_lists);
+			compute_command_list_->Begin();
 
+			// 仮で適当なAsyncComputeタスクを生成.
+			// GraphicsQueueがComputeQueueをWaitする状況のテスト用.
+			{
+				auto ref_cpso = ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep>(new ngl::rhi::ComputePipelineStateDep());
+				{
+					ngl::rhi::ComputePipelineStateDep::Desc cpso_desc = {};
+					{
+						ngl::gfx::ResShader::LoadDesc cs_load_desc = {};
+						cs_load_desc.stage = ngl::rhi::ShaderStage::Compute;
+						cs_load_desc.shader_model_version = "6_3";
+						cs_load_desc.entry_point_name = "main_cs";
+						auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/debug/async_task_test_cs.hlsl", &cs_load_desc);
+					
+						cpso_desc.cs = &cs_load_handle->data_;
+					}
+					// CsPso初期化.
+					ref_cpso->Initialize(&device_, cpso_desc);
+				}
+					
+				ngl::rhi::DescriptorSetDep desc_set = {};
+				ref_cpso->SetDescriptorHandle(&desc_set, "rwtex_out", tex_rw_uav_->GetView().cpu_handle);
+				compute_command_list_->SetPipelineState(ref_cpso.Get());
+				compute_command_list_->SetDescriptorSet(ref_cpso.Get(), &desc_set);
+				ref_cpso->DispatchHelper(compute_command_list_.Get(), tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
+			}
+
+			
+			compute_command_list_->End();
+		}
+
+		// CommandList Submit
+		{
+			// Compute.
+			ngl::u64 compute_end_fence_value = {};
+			{
+				ngl::rhi::ComputeCommandListDep* p_command_lists[] =
+				{
+					compute_command_list_.Get()
+				};
+				compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
+				
+				// ComputeのCommandListの末尾からSignal発行.
+				compute_end_fence_value = compute_queue_.SignalAndIncrement(&test_compute_to_gfx_fence_);
+			}
+			
+			// Graphics.
+			{
+				ngl::rhi::GraphicsCommandListDep* p_command_lists[] =
+				{
+					gfx_command_list_.Get()
+				};
+				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
+				
+				// ComputeQueueのFenceを待つWait.
+				graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
+			}
+
+		}
 		// Present
 		swapchain_->GetDxgiSwapChain()->Present(1, 0);
 
-		// 完了シグナル
-		graphics_queue_.Signal(&wait_fence_, wait_fence_value_);
+		// CPUへの完了シグナル. Wait用のFenceValueを取得.
+		const auto wait_gpu_fence_value = graphics_queue_.SignalAndIncrement(&wait_fence_);
 		// 待機
 		{
-			wait_signal_.Wait(&wait_fence_, wait_fence_value_);
-			++wait_fence_value_;
+			wait_signal_.Wait(&wait_fence_, wait_gpu_fence_value);
 		}
 
 	}

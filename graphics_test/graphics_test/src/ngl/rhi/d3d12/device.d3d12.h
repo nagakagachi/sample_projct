@@ -171,10 +171,13 @@ namespace ngl
 			// MEMO. ここでCommandQueue生成時に IGIESW .exe found in whitelist: NO というメッセージがVSログに出力される. 意味と副作用は現状不明.
 			bool Initialize(DeviceDep* p_device, D3D12_COMMAND_LIST_TYPE type);
 
-			// Fenceに対してSignal発行.
+			// Fenceに対してSignal発行..
 			void Signal(FenceDep* p_fence, ngl::types::u64 fence_value);
-			// FenceでWait.
-			void Wait(FenceDep* p_fence, ngl::types::u64 fence_value);
+			// Fenceに対してSignal発行.
+			// 内部でp_fenceのFenceValueでSignalを発行してからFenceValueを加算し, wait対象のFenceValue(加算前野値)を返す.
+			ngl::types::u64 SignalAndIncrement(FenceDep* p_fence);
+			// FenceでWait. 待機するFenceValueを指定する.
+			void Wait(FenceDep* p_fence, ngl::types::u64 wait_value);
 			
 			ID3D12CommandQueue* GetD3D12CommandQueue();
 		protected:
@@ -224,8 +227,20 @@ namespace ngl
 			void Finalize();
 
 			ID3D12Fence* GetD3D12Fence();
+
+			ngl::types::u64 GetFenceValue() const {return fence_value_;}
+			
+			// Increment
+			// return prev FenceValue.
+			ngl::types::u64 IncrementFenceValue()
+			{
+				const auto tmp = fence_value_;
+				++fence_value_;
+				return tmp;
+			}
 		private:
 			CComPtr<ID3D12Fence> p_fence_;
+			ngl::types::u64 fence_value_ = 1;// FenceValue初期値が0であるため意図通りにSignalWaitするために1開始.
 		};
 
 
