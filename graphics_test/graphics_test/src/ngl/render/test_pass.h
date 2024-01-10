@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "render_pass.h"
+#include "rtg_command_list_pool.h"
 
 #include<variant>
 
@@ -539,6 +539,79 @@ namespace ngl::render
 				commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
+
+		class TaskCopmuteTest : public  rtg::ITaskNode
+		{
+		public:
+			
+			// ノード定義コンストラクタ記述マクロ.
+			ITASK_NODE_DEF_BEGIN(TaskCopmuteTest)
+				ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
+				ITASK_NODE_HANDLE_REGISTER(h_work_tex_)
+			ITASK_NODE_DEF_END
+
+			rtg::ResourceHandle h_linear_depth_{};
+			rtg::ResourceHandle h_work_tex_{};
+
+			ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_ = {};
+
+			virtual rtg::ETASK_TYPE TaskType() const
+			{
+				return rtg::ETASK_TYPE::ASYNC_COMPUTE;
+			}
+
+			// リソースとアクセスを定義するプリプロセス.
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_linear_depth)
+			{
+				{
+					// リソース定義.
+					rtg::ResourceDesc2D work_tex_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
+
+					// リソースアクセス定義.
+					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
+					h_work_tex_ = builder.RecordResourceAccess(*this, builder.CreateResource(work_tex_desc), rtg::access_type::UAV);
+				}
+
+				{
+					pso_ = ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep>(new ngl::rhi::ComputePipelineStateDep());
+					{
+						ngl::rhi::ComputePipelineStateDep::Desc cpso_desc = {};
+						{
+							ngl::gfx::ResShader::LoadDesc cs_load_desc = {};
+							cs_load_desc.stage = ngl::rhi::ShaderStage::Compute;
+							cs_load_desc.shader_model_version = "6_3";
+							cs_load_desc.entry_point_name = "main_cs";
+							auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(
+								p_device, "./src/ngl/data/shader/debug/async_task_test_cs.hlsl", &cs_load_desc
+							);
+							cpso_desc.cs = &cs_load_handle->data_;
+						}
+						pso_->Initialize(p_device, cpso_desc);
+					}
+				}
+			}
+
+			// 実際のレンダリング処理.
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			{
+				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
+				auto res_work_tex = builder.GetAllocatedResource(this, h_work_tex_);
+
+				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
+				assert(res_work_tex.tex_.IsValid() && res_work_tex.uav_.IsValid());
+
+				/*
+				ngl::rhi::DescriptorSetDep desc_set = {};
+				pso_->SetDescriptorHandle(&desc_set, "rwtex_out", res_work_tex.uav_->GetView().cpu_handle);
+				commandlist->SetPipelineState(pso_->Get());
+				commandlist->SetDescriptorSet(pso_->Get(), &desc_set);
+				pso_->DispatchHelper(commandlist.Get(), res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
+				*/
+			}
+		};
+
+		
 	}
 }
 

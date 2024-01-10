@@ -13,6 +13,7 @@
 #include "ngl/resource/resource_manager.h"
 #include "ngl/gfx/resource/resource_shader.h"
 
+#include "ngl/render/rtg_command_list_pool.h"
 
 namespace ngl
 {
@@ -26,8 +27,7 @@ namespace ngl
 		enum class ETASK_TYPE : int
 		{
 			GRAPHICS,
-			COMPUTE,
-			ALLOW_ASYNC_COMPUTE,
+			ASYNC_COMPUTE,
 		};
 
 		// リソースアクセス時のリソース解釈.
@@ -571,18 +571,17 @@ namespace ngl
 		private:
 			rhi::DeviceDep* p_device_ = nullptr;
 			
-			// Compileで割り当てられるリソースのPool.
-			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
-
 			// 同一Manager下のBuilderのCompileは排他処理.
 			std::mutex	compile_mutex_ = {};
-
+			
+			// Compileで割り当てられるリソースのPool.
+			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
+			
 			// 次のフレームへ伝搬するハンドルとリソースIDのMap.
 			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_[2] = {};
 			// 次のフレームへ伝搬するハンドル登録用FlipIndex. 前回フレームから伝搬されたハンドルは 1-flip_propagate_next_handle_next_ のMapが対応.
 			int flip_propagate_next_handle_next_ = 0;
-			
-		private:
+
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
@@ -596,13 +595,25 @@ namespace ngl
 			void PropagateResourceToNextFrame(ResourceHandle handle, int resource_id);
 			// 伝搬されたハンドルに紐付けられたリソースIDを検索.
 			int FindPropagatedResourceId(ResourceHandle handle);
-
+			
+		private:
+			pool::CommandListPool commandlist_pool_ = {};
+			void GetOrCreateCommandListFromPool(rhi::RhiRef<rhi::GraphicsCommandListDep>& out_ref)
+			{
+				commandlist_pool_.GetCommandList(out_ref);
+			}
+			void GetOrCreateCommandListFromPool(rhi::RhiRef<rhi::ComputeCommandListDep>& out_ref)
+			{
+				commandlist_pool_.GetCommandList(out_ref);
+			}
+			
 		private:
 			// ユニークなハンドルIDを取得.
 			//	64bitにするかもしれない.
 			static uint32_t GetNewHandleId();
 			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID. 生成のたびに加算しユニーク識別.
 		};
+		
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		
 	}
