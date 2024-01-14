@@ -558,7 +558,7 @@ namespace ngl
 			~RenderTaskGraphManager();
 		public:
 			// 初期化.
-			bool Init(rhi::DeviceDep& p_device);
+			bool Init(rhi::DeviceDep* p_device);
 
 			//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 			void BeginFrame();
@@ -597,14 +597,17 @@ namespace ngl
 			int FindPropagatedResourceId(ResourceHandle handle);
 			
 		private:
+			
 			pool::CommandListPool commandlist_pool_ = {};
-			void GetOrCreateCommandListFromPool(rhi::RhiRef<rhi::GraphicsCommandListDep>& out_ref)
+			// Builderが利用するCommandListの新規取得.
+			void GetNewFrameCommandList(rhi::RhiRef<rhi::GraphicsCommandListDep>& out_ref)
 			{
-				commandlist_pool_.GetCommandList(out_ref);
+				commandlist_pool_.GetFrameCommandList(out_ref);
 			}
-			void GetOrCreateCommandListFromPool(rhi::RhiRef<rhi::ComputeCommandListDep>& out_ref)
+			// Builderが利用するCommandListの新規取得.
+			void GetNewFrameCommandList(rhi::RhiRef<rhi::ComputeCommandListDep>& out_ref)
 			{
-				commandlist_pool_.GetCommandList(out_ref);
+				commandlist_pool_.GetFrameCommandList(out_ref);
 			}
 			
 		private:

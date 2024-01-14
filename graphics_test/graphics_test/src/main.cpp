@@ -222,7 +222,7 @@ bool AppGame::Initialize()
 
 	// RTGマネージャ初期化.
 	{
-		rtg_manager_.Init(device_);
+		rtg_manager_.Init(&device_);
 	}
 
 	// Work RenderBuffer.

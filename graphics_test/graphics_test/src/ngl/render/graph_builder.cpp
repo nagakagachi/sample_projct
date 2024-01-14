@@ -950,10 +950,33 @@ namespace ngl
 			std::cout << u8"</RenderTaskGraphManager>" << std::endl;
 		}
 		// 初期化.
-		bool RenderTaskGraphManager::Init(rhi::DeviceDep& p_device)
+		bool RenderTaskGraphManager::Init(rhi::DeviceDep* p_device)
 		{
-			p_device_ = &p_device;
-			return (nullptr != p_device_);
+			if(!p_device)
+			{
+				assert(p_device);
+				return false;
+			}
+			
+			p_device_ = p_device;
+
+			// CommandListPool初期化.
+			commandlist_pool_.Initialize(p_device);
+			
+			// DEBUG.
+			{
+				/*
+				//	テスト用にCommandList作成.
+				rhi::RhiRef<rhi::GraphicsCommandListDep> graphics_commandlist0 = {};
+				rhi::RhiRef<rhi::GraphicsCommandListDep> graphics_commandlist1 = {};
+				rhi::RhiRef<rhi::ComputeCommandListDep> compute_commandlist0 = {};
+				commandlist_pool_.GetFrameCommandList(graphics_commandlist0);
+				commandlist_pool_.GetFrameCommandList(graphics_commandlist1);
+				commandlist_pool_.GetFrameCommandList(compute_commandlist0);
+				*/
+			}
+			
+			return true;
 		}
 		
 		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
@@ -982,6 +1005,11 @@ namespace ngl
 						e = {};
 					}
 				}
+			}
+
+			// CommandListPoolの更新.
+			{
+				commandlist_pool_.BeginFrame();
 			}
 		}
 		
