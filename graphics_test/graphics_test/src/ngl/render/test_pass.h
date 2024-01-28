@@ -12,7 +12,7 @@ namespace ngl::render
 	{
 
 		// PreZパス.
-		struct TaskDepthPass : public rtg::ITaskNode
+		struct TaskDepthPass : public rtg::IGraphicsTaskNode
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskDepthPass)
@@ -25,11 +25,6 @@ namespace ngl::render
 			std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
-
-			virtual rtg::ETASK_TYPE TaskType() const
-			{
-				return rtg::ETASK_TYPE::GRAPHICS;
-			}
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rhi::RefCbvDep ref_scene_cbv, std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
@@ -128,7 +123,7 @@ namespace ngl::render
 
 
 		// GBufferパス.
-		struct TaskGBufferPass : public rtg::ITaskNode
+		struct TaskGBufferPass : public rtg::IGraphicsTaskNode
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskGBufferPass)
@@ -140,13 +135,7 @@ namespace ngl::render
 				rtg::ResourceHandle h_depth_{};
 			rtg::ResourceHandle h_gb0_{};
 			rtg::ResourceHandle h_gb1_{};
-
-
-			virtual rtg::ETASK_TYPE TaskType() const
-			{
-				return rtg::ETASK_TYPE::GRAPHICS;
-			}
-
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth)
 			{
@@ -178,7 +167,7 @@ namespace ngl::render
 
 
 		// LinearDepthパス.
-		struct TaskLinearDepthPass : public rtg::ITaskNode
+		struct TaskLinearDepthPass : public rtg::IGraphicsTaskNode
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskLinearDepthPass)
@@ -192,11 +181,6 @@ namespace ngl::render
 			rhi::RefCbvDep ref_scene_cbv_{};
 
 			rhi::RhiRef<rhi::ComputePipelineStateDep> pso_;
-
-			virtual rtg::ETASK_TYPE TaskType() const
-			{
-				return rtg::ETASK_TYPE::GRAPHICS;
-			}
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rhi::RefCbvDep ref_scene_cbv)
@@ -261,7 +245,7 @@ namespace ngl::render
 
 
 		// Lightingパス.
-		struct TaskLightPass : public rtg::ITaskNode
+		struct TaskLightPass : public rtg::IGraphicsTaskNode
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskLightPass)
@@ -283,11 +267,6 @@ namespace ngl::render
 			rhi::RefSampDep ref_samp_linear_clamp_{};
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
-
-			virtual rtg::ETASK_TYPE TaskType() const
-			{
-				return rtg::ETASK_TYPE::GRAPHICS;
-			}
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
@@ -407,7 +386,7 @@ namespace ngl::render
 
 
 		// 最終パス.
-		struct TaskFinalPass : public rtg::ITaskNode
+		struct TaskFinalPass : public rtg::IGraphicsTaskNode
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskFinalPass)
@@ -428,11 +407,6 @@ namespace ngl::render
 			rhi::RefSampDep ref_samp_linear_clamp_{};
 
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
-
-			virtual rtg::ETASK_TYPE TaskType() const
-			{
-				return rtg::ETASK_TYPE::GRAPHICS;
-			}
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
@@ -540,7 +514,7 @@ namespace ngl::render
 			}
 		};
 
-		class TaskCopmuteTest : public  rtg::ITaskNode
+		class TaskCopmuteTest : public  rtg::IGraphicsTaskNode
 		{
 		public:
 			
@@ -554,11 +528,6 @@ namespace ngl::render
 			rtg::ResourceHandle h_work_tex_{};
 
 			ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_ = {};
-
-			virtual rtg::ETASK_TYPE TaskType() const
-			{
-				return rtg::ETASK_TYPE::ASYNC_COMPUTE;
-			}
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_linear_depth)

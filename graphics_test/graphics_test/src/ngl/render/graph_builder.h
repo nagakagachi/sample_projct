@@ -191,7 +191,73 @@ namespace ngl
 		};
 		static constexpr auto sizeof_ResourceHandle = sizeof(ResourceHandle);
 
+		
+		// Taskの基底.
+		// 直接このクラスを継承することは出来ない.
+		//	IGraphicsTaskBase または IAsyncComputeTaskBase を継承すること.
+		struct ITaskNode
+		{
+		public:
+			virtual ~ITaskNode() {}
 
+			// Type.
+			virtual ETASK_TYPE TaskType() const = 0;
+			
+			// レンダリングの実装部.
+			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) = 0;
+
+
+			
+			// ------------------------------------------------------------------------------------------------------------------
+			// デバッグ用
+		public:
+			struct DebugHandleRef
+			{
+				RtgNameType name{};
+				ResourceHandle* p_handle{};
+			};
+			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
+			{
+				DebugHandleRef elem = { name , &handle};
+				debug_ref_handles_.push_back(elem);
+			}
+			// Debug用途でメンバとしてHandleを持つ. 名前などを付けたい場合はResourceHandle経由でアクセスできる場所に登録すべきか.
+			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
+			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
+			std::vector<DebugHandleRef> debug_ref_handles_{};
+			
+			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
+		protected:
+			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
+			RtgNameType debug_node_name_{};
+			// デバッグ用
+			// ------------------------------------------------------------------------------------------------------------------
+		};
+		
+		// -------------------------------------------------------------
+		// Nodeクラスのコンストラクタ定義開始マクロ. デバッグ名登録等も自動化.
+		#		define ITASK_NODE_DEF_BEGIN(CLASS_NAME) CLASS_NAME()\
+				{\
+				SetDebugNodeName( #CLASS_NAME );
+		// -------------------------------------------------------------
+
+		// -------------------------------------------------------------
+		// Nodeのメンバハンドル定義. 
+		// ITASK_NODE_DEF_BEGIN と ITASK_NODE_DEF_END の間に記述.
+		// マクロで登録処理などを隠蔽.
+		#define ITASK_NODE_HANDLE_REGISTER(name)\
+				{\
+				DebugHandleRef elem = { #name , &name};\
+				debug_ref_handles_.push_back(elem);\
+				};
+		// -------------------------------------------------------------
+
+		// -------------------------------------------------------------
+		// Nodeクラスのコンストラクタ定義終端マクロ.
+		#define ITASK_NODE_DEF_END\
+				};
+		// -------------------------------------------------------------
+		
 		/*
 		// 生成はRenderTaskGraphBuilder経由.
 		// 派生クラスでは基本情報の簡易定義とハンドルのデバッグ情報登録のために専用のマクロを利用する.
@@ -226,68 +292,34 @@ namespace ngl
 				rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 				auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 			}
-
 		*/
-		struct ITaskNode
+		// GraphicsTaskの基底クラス.
+		struct IGraphicsTaskNode : public ITaskNode
 		{
-			virtual ~ITaskNode() = default;
-
-			// Graphics or Computeの識別.
-			virtual ETASK_TYPE TaskType() const
-			{
-				return ETASK_TYPE::GRAPHICS;// 基底はGraphics.
-			}
-
-			// レンダリングの実装部.
-			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist)
-			{}
-
-			
-			struct DebugHandleRef
-			{
-				RtgNameType name{};
-				ResourceHandle* p_handle{};
-			};
-			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
-			{
-				DebugHandleRef elem = { name , &handle};
-				debug_ref_handles_.push_back(elem);
-			}
-			// Debug用途でメンバとしてHandleを持つ. 名前などを付けたい場合はResourceHandle経由でアクセスできる場所に登録すべきか.
-			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
-			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
-			std::vector<DebugHandleRef> debug_ref_handles_{};
-
 		public:
-			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
-		protected:
-			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
-			RtgNameType debug_node_name_{};
+			virtual ~IGraphicsTaskNode() = default;
+			
+			// Type Graphics.
+			ETASK_TYPE TaskType() const final
+			{ return ETASK_TYPE::GRAPHICS; }
+
+			// レンダリングの実装は以下のメソッドをオーバーライドすること.
+			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) {}
+		};
+		// AsyncComputeTaskの基底クラス.
+		struct IAsyncComputeTaskNode : public ITaskNode
+		{
+		public:
+			virtual ~IAsyncComputeTaskNode() = default;
+
+			// Type AsyncCompute.
+			ETASK_TYPE TaskType() const final
+			{ return ETASK_TYPE::ASYNC_COMPUTE; }
+			
+			// レンダリングの実装は以下のメソッドをオーバーライドすること.
+			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) {}
 		};
 
-// -------------------------------------------------------------
-		// Nodeクラスのコンストラクタ定義開始マクロ. デバッグ名登録等も自動化.
-#		define ITASK_NODE_DEF_BEGIN(CLASS_NAME) CLASS_NAME()\
-				{\
-					SetDebugNodeName( #CLASS_NAME );
-// -------------------------------------------------------------
-
-// -------------------------------------------------------------
-		// Nodeのメンバハンドル定義. 
-		// ITASK_NODE_DEF_BEGIN と ITASK_NODE_DEF_END の間に記述.
-		// マクロで登録処理などを隠蔽.
-#define ITASK_NODE_HANDLE_REGISTER(name)\
-					{\
-							DebugHandleRef elem = { #name , &name};\
-							debug_ref_handles_.push_back(elem);\
-					};
-// -------------------------------------------------------------
-
-// -------------------------------------------------------------
-		// Nodeクラスのコンストラクタ定義終端マクロ.
-#define ITASK_NODE_DEF_END\
-				};
-// -------------------------------------------------------------
 
 
 		// ハンドル毎のタイムライン上での位置を示す情報を生成.
@@ -370,15 +402,17 @@ namespace ngl
 			friend class RenderTaskGraphManager;
 		public:
 			~RenderTaskGraphBuilder();
-			// ITaskNode派生クラスをシーケンスの末尾に新規生成する.
-			template<typename TPassNode>
-			TPassNode* AppendNodeToSequence()
+
+			// ITaskBase派生クラスをシーケンスの末尾に新規生成する.
+			// GraphicsおよびAsyncCompute両方を登録する. それぞれのタイプ毎での実行順は登録順となる. GraphicsとAsyncComputeの同期ポイントは別途指示する予定.
+			template<typename TTaskNode>
+			TTaskNode* AppendNodeToSequence()
 			{
-				auto new_node = new TPassNode();
+				auto new_node = new TTaskNode();
 				node_sequence_.push_back(new_node);
 				return new_node;
 			}
-			
+
 		public:
 			// リソースハンドルを生成.
 			//	Graph内リソースを確保してハンドルを取得する.
@@ -410,7 +444,7 @@ namespace ngl
 			
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-			ResourceHandle RecordResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type);
+			ResourceHandle RecordResourceAccess(const ITaskNode& node, const ResourceHandle res_handle, const ACCESS_TYPE access_type);
 			
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
@@ -547,7 +581,9 @@ namespace ngl
 				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
 		};
 
-		// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+	// ------------------------------------------------------------------------------------------------------------------------------------------------------
 		// RenderTaskGraphBuilderのCompileや, それらが利用するリソースの永続的なプール管理.
 		class RenderTaskGraphManager
 		{

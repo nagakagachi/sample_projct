@@ -215,13 +215,32 @@ namespace ngl
 
 		// Nodeからのリソースアクセスを記録.
 		// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-		ResourceHandle RenderTaskGraphBuilder::RecordResourceAccess(const ITaskNode& node, ResourceHandle res_handle, ACCESS_TYPE access_type)
+		ResourceHandle RenderTaskGraphBuilder::RecordResourceAccess(const ITaskNode& node, const ResourceHandle res_handle, const ACCESS_TYPE access_type)
 		{
 			if(!IsRecordable())
 			{
 				std::cout <<  u8"[ERROR] このBuilderはRecordできません. すでにCompile済み, 又はExecute済みのBuilderは破棄して新規Builderを利用してください." << std::endl;
 				assert(false);
 				return {};
+			}
+
+			// TaskNodeのタイプによって許可されないアクセスをチェック.
+			//	AsyncComputeで許可されないアクセス等を事前にエラーとする.
+			{
+				if(ETASK_TYPE::ASYNC_COMPUTE ==  node.TaskType())
+				{
+					// AsyncComputeでは SRVとUAVアクセスのみ許可.
+					if(
+						access_type != access_type::SHADER_READ
+						&&
+						access_type != access_type::UAV
+						)
+					{
+						std::cout <<  u8"[ERROR] AsyncComputeTaskで許可されないアクセスタイプを検出しました. 許可されるアクセスタイプは ShaderRead と UAV のみです." << std::endl;
+						assert(false);
+						return {};
+					}
+				}
 			}
 				
 			// Node->Handle&AccessTypeのMap登録.
