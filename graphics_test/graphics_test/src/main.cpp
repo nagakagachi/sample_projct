@@ -666,31 +666,49 @@ bool AppGame::Execute()
 
 	// Render Frame.
 	{
+		// -------------------------------------------------------
 		// Deviceのフレーム準備
 		device_.ReadyToNewFrame();
+		
 		// RTGのフレーム開始処理.
 		rtg_manager_.BeginFrame();
+		// -------------------------------------------------------
 
+
+		// フレームのSwapchainインデックス.
 		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
+
+		
+		// CommandListPoolテストのためRtgManagerから取得.
+		ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep> rtg_gfx_command_list = {};
+		rtg_manager_.GetNewFrameCommandList(rtg_gfx_command_list);
+		ngl::rhi::RhiRef<ngl::rhi::ComputeCommandListDep> rtg_compute_command_list = {};
+		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
+		
 		{
 			gfx_command_list_->Begin();
-
-			// CommandList に最初にResourceManagerの処理を積み込み.
-			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
-
-			// Rt.
 			{
-				// RtScene更新.
-				rt_st_.UpdateOnRender(&device_, gfx_command_list_.Get(), frame_scene);
-				
-				// RtPass 更新.
-				rt_pass_test.PreRenderUpdate(&rt_st_, gfx_command_list_.Get());
-				
-				// RtPass Render.
-				rt_pass_test.Render(gfx_command_list_.Get());
-			}
+				// CommandList に最初にResourceManagerの処理を積み込み.
+				ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
 
+				// Raytracing.
+				{
+					// RtScene更新.
+					rt_st_.UpdateOnRender(&device_, gfx_command_list_.Get(), frame_scene);
+				
+					// RtPass 更新.
+					rt_pass_test.PreRenderUpdate(&rt_st_, gfx_command_list_.Get());
+				
+					// RtPass Render.
+					rt_pass_test.Render(gfx_command_list_.Get());
+				}
+			}
+			gfx_command_list_->End();
+
+			
 			// RenderTaskGraphによるレンダリングパス.
+			// テストのためPoolから取得したCommandListに積み込み.
+			rtg_gfx_command_list->Begin();
 			{
 				// RTG Build.
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
@@ -745,15 +763,15 @@ bool AppGame::Execute()
 				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
 				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
 				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
-				rtg_builder.ExecuteSerial(gfx_command_list_);
+				rtg_builder.ExecuteSerial(rtg_gfx_command_list);
 			}
-
-			gfx_command_list_->End();
+			rtg_gfx_command_list->End();
 		}
 
 		// AsyncComputeテスト.
 		{
-			compute_command_list_->Begin();
+			// テストのためPoolから取得したCommandListに積み込み.
+			rtg_compute_command_list->Begin();
 
 			// 仮で適当なAsyncComputeタスクを生成.
 			// GraphicsQueueがComputeQueueをWaitする状況のテスト用.
@@ -776,13 +794,13 @@ bool AppGame::Execute()
 					
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				ref_cpso->SetDescriptorHandle(&desc_set, "rwtex_out", tex_rw_uav_->GetView().cpu_handle);
-				compute_command_list_->SetPipelineState(ref_cpso.Get());
-				compute_command_list_->SetDescriptorSet(ref_cpso.Get(), &desc_set);
-				ref_cpso->DispatchHelper(compute_command_list_.Get(), tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
+				rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
+				rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
+				ref_cpso->DispatchHelper(rtg_compute_command_list.Get(), tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
 			}
 
 			
-			compute_command_list_->End();
+			rtg_compute_command_list->End();
 		}
 
 		// CommandList Submit
@@ -792,7 +810,7 @@ bool AppGame::Execute()
 			{
 				ngl::rhi::ComputeCommandListDep* p_command_lists[] =
 				{
-					compute_command_list_.Get()
+					rtg_compute_command_list.Get()
 				};
 				compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
 				
@@ -804,7 +822,9 @@ bool AppGame::Execute()
 			{
 				ngl::rhi::GraphicsCommandListDep* p_command_lists[] =
 				{
-					gfx_command_list_.Get()
+					gfx_command_list_.Get(),
+
+					rtg_gfx_command_list.Get()
 				};
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
 				

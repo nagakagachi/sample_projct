@@ -133,7 +133,7 @@ namespace ngl
 				new_handle.detail.unique_id = new_handle_id;
 			}
 			
-			// ResourceのDescをHandleから引ける用に登録.
+			// ResourceのDescをHandleから引けるように登録.
 			ResourceDesc2D res_desc = {};
 			{
 				if(swapchain.IsValid())

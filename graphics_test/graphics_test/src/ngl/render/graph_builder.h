@@ -632,9 +632,8 @@ namespace ngl
 			// 伝搬されたハンドルに紐付けられたリソースIDを検索.
 			int FindPropagatedResourceId(ResourceHandle handle);
 			
-		private:
-			
-			pool::CommandListPool commandlist_pool_ = {};
+		public:
+			// 本来はこれらはBuilder側で隠蔽する予定(CommandListの確保もスケジューリングする).
 			// Builderが利用するCommandListの新規取得.
 			void GetNewFrameCommandList(rhi::RhiRef<rhi::GraphicsCommandListDep>& out_ref)
 			{
@@ -645,6 +644,8 @@ namespace ngl
 			{
 				commandlist_pool_.GetFrameCommandList(out_ref);
 			}
+		private:
+			pool::CommandListPool commandlist_pool_ = {};
 			
 		private:
 			// ユニークなハンドルIDを取得.
