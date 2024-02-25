@@ -203,8 +203,9 @@ namespace ngl
 			// Type.
 			virtual ETASK_TYPE TaskType() const = 0;
 			
-			// レンダリングの実装部.
+			// レンダリングの実装部. 一旦動的にGraphicsとComputeを分ける.
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) = 0;
+			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) = 0;
 
 
 			
@@ -298,26 +299,38 @@ namespace ngl
 		{
 		public:
 			virtual ~IGraphicsTaskNode() = default;
-			
 			// Type Graphics.
 			ETASK_TYPE TaskType() const final
 			{ return ETASK_TYPE::GRAPHICS; }
 
-			// レンダリングの実装は以下のメソッドをオーバーライドすること.
+			// GraphicsTaskのレンダリングの実装は以下のメソッドをオーバーライドすること.
 			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) {}
+			
+			// GraphicsTaskはComputeComandList不許可. もうすこしTemplateで静的に切り分けたい.
+			void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) final
+			{
+				assert(false);
+			}
 		};
-		// AsyncComputeTaskの基底クラス.
-		struct IAsyncComputeTaskNode : public ITaskNode
+		// ComputeTaskの基底クラス.
+		// GraphicsでもAsyncComputeでも実行可能なもの. UAVバリア以外のバリアは出来ないようにComputeCommandListのみ利用可能とする.
+		// このTaskで利用するリソースのためのState遷移はRtg側の責任とする.
+		struct IComputeTaskNode : public ITaskNode
 		{
 		public:
-			virtual ~IAsyncComputeTaskNode() = default;
-
+			virtual ~IComputeTaskNode() = default;
 			// Type AsyncCompute.
 			ETASK_TYPE TaskType() const final
 			{ return ETASK_TYPE::ASYNC_COMPUTE; }
 			
-			// レンダリングの実装は以下のメソッドをオーバーライドすること.
-			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) {}
+			// ComputeTaskのレンダリングの実装は以下のメソッドをオーバーライドすること.
+			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) {}
+			
+			// ComputeTaskはGraphicsCommandLit不許可. もうすこしTemplateで静的に切り分けたい.
+			void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) final
+			{
+				assert(false);
+			}
 		};
 
 

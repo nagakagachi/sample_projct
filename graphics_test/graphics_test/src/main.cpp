@@ -729,6 +729,14 @@ bool AppGame::Execute()
 
 				// Build Rendering Pass.
 				{
+					// ComputeTaskテスト.
+					#if 0
+					// ComputeTaskをGraphics/AsyncComputeどちらにスケジュールするかはこのタイミングで決めたい.
+					auto* task_test_compute = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
+					task_test_compute->Setup(rtg_builder, &device_);
+					#endif
+
+					
 					// Depth Only.
 					auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
 					task_depth->Setup(rtg_builder, &device_, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);

@@ -514,30 +514,28 @@ namespace ngl::render
 			}
 		};
 
-		class TaskCopmuteTest : public  rtg::IGraphicsTaskNode
+		class TaskCopmuteTest : public  rtg::IComputeTaskNode
 		{
 		public:
 			
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskCopmuteTest)
-				ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
 				ITASK_NODE_HANDLE_REGISTER(h_work_tex_)
 			ITASK_NODE_DEF_END
 
-			rtg::ResourceHandle h_linear_depth_{};
 			rtg::ResourceHandle h_work_tex_{};
 
 			ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_ = {};
 
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_linear_depth)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device)
 			{
+				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
 				{
 					// リソース定義.
 					rtg::ResourceDesc2D work_tex_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
 
 					// リソースアクセス定義.
-					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 					h_work_tex_ = builder.RecordResourceAccess(*this, builder.CreateResource(work_tex_desc), rtg::access_type::UAV);
 				}
 
@@ -561,22 +559,20 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
 				auto res_work_tex = builder.GetAllocatedResource(this, h_work_tex_);
 
-				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_work_tex.tex_.IsValid() && res_work_tex.uav_.IsValid());
 
-				/*
+				commandlist->SetPipelineState(pso_.Get());
+				
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetDescriptorHandle(&desc_set, "rwtex_out", res_work_tex.uav_->GetView().cpu_handle);
-				commandlist->SetPipelineState(pso_->Get());
-				commandlist->SetDescriptorSet(pso_->Get(), &desc_set);
+				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+				
 				pso_->DispatchHelper(commandlist.Get(), res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
-				*/
 			}
 		};
 
