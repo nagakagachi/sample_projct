@@ -380,6 +380,7 @@ namespace ngl::render
 				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
 				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
+				commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
 				commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
@@ -510,6 +511,7 @@ namespace ngl::render
 				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
 				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
+				commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
 				commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};

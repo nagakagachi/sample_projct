@@ -679,9 +679,9 @@ bool AppGame::Execute()
 		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 
 		
-		// CommandListPoolテストのためRtgManagerから取得.
-		ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep> rtg_gfx_command_list = {};
-		rtg_manager_.GetNewFrameCommandList(rtg_gfx_command_list);
+		// RtgのCommandList配列.
+		std::vector<ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>> rtg_gfx_command_list_sequence = {};
+		
 		ngl::rhi::RhiRef<ngl::rhi::ComputeCommandListDep> rtg_compute_command_list = {};
 		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
 		
@@ -707,8 +707,6 @@ bool AppGame::Execute()
 
 			
 			// RenderTaskGraphによるレンダリングパス.
-			// テストのためPoolから取得したCommandListに積み込み.
-			rtg_gfx_command_list->Begin();
 			{
 				// RTG Build.
 				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
@@ -771,9 +769,9 @@ bool AppGame::Execute()
 				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
 				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
 				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
-				rtg_builder.ExecuteSerial(rtg_gfx_command_list);
+				rtg_builder.ExecuteMultiCommandlist(rtg_gfx_command_list_sequence);
+				
 			}
-			rtg_gfx_command_list->End();
 		}
 
 		// AsyncComputeテスト.
@@ -807,7 +805,6 @@ bool AppGame::Execute()
 				ref_cpso->DispatchHelper(rtg_compute_command_list.Get(), tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
 			}
 
-			
 			rtg_compute_command_list->End();
 		}
 
@@ -828,18 +825,21 @@ bool AppGame::Execute()
 			
 			// Graphics.
 			{
-				ngl::rhi::GraphicsCommandListDep* p_command_lists[] =
+				std::vector<ngl::rhi::GraphicsCommandListDep*> p_command_list_submit_sequence = {};
 				{
-					gfx_command_list_.Get(),
+					p_command_list_submit_sequence.push_back(gfx_command_list_.Get());
 
-					rtg_gfx_command_list.Get()
-				};
-				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
+					// RtgのCommandList配列をPush.
+					for(auto& e : rtg_gfx_command_list_sequence)
+					{
+						p_command_list_submit_sequence.push_back(e.Get());
+					}
+				}
+				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(p_command_list_submit_sequence.size()), p_command_list_submit_sequence.data());
 				
 				// ComputeQueueのFenceを待つWait.
 				graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
 			}
-
 		}
 		// Present
 		swapchain_->GetDxgiSwapChain()->Present(1, 0);

@@ -100,6 +100,8 @@ namespace ngl::rtg
 
         private:
             rhi::DeviceDep* p_device_ = {};
+            
+            std::mutex	mutex_ = {};
         };
 
         
@@ -132,11 +134,14 @@ namespace ngl::rtg
         }
 
         // 対応したTypeのCommandListをPoolから取得.
-        // non threadsafe.
+        // Mutex Lock.
         template<typename TCommandList>
         inline bool CommandListPool::GetFrameCommandList(rhi::RhiRef<TCommandList>& ref_out)
         {
             constexpr  int type_index = CommandListTypeTraits<TCommandList>::TypeIndex;
+
+            // 素直にMutexLock.
+			std::scoped_lock<std::mutex> lock(mutex_);
 
             auto& target_pool = std::get<type_index>(typed_pool_list_);
             auto cur_size = target_pool.size();

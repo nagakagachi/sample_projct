@@ -461,9 +461,8 @@ namespace ngl
 			
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
-			// 現状はRenderThreadでCompileしてそのままRenderThreadで実行するというスタイルとする.
-			void ExecuteSerial(rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist);
-
+			// Task毎にCommandListを割り当て, Submit用のCommandListのリストを返す.
+			void ExecuteMultiCommandlist(std::vector<rhi::RhiRef<rhi::GraphicsCommandListDep>>& out_executed_command_list_array);
 
 			// -------------------------------------------------------------------------------------------
 			// Compileで割り当てられたHandleのリソース情報.
