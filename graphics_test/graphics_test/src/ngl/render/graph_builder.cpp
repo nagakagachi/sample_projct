@@ -475,7 +475,6 @@ namespace ngl
 					{
 						// 伝搬リソースではない場合は通常の内部プールからの割当.
 
-						// TODO.
 						// 問題点として, 初回フレーム等で前回フレーム自体が存在せず, 伝搬リソースが存在しない場合にどう対応すべきか.
 						// FindPropagatedResourceId()が無効値を返してきて且つ, handle_2_desc_に未登録であるようなパターンになる.
 						// その場合は割当失敗として処理を続けて, GetAllocatedHandleResource()が無効値を返すようにするのが良さそう. それ以降は描画Pass実装側の責任にする.
@@ -834,16 +833,66 @@ namespace ngl
 				assert(false);
 				return;
 			}
-
 			// 状態遷移.
 			is_executed_ = true;
 
+			// 各Taskの使用リソースバリア発行.
+			auto generate_barrier_command = [&](const ITaskNode* p_node, rhi::GraphicsCommandListDep* p_command_list )
+			{					
+				// Nodeが登録したHandleを全て列挙. Nodeのdebug_ref_handles_はデバッグ用とであることと, メンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
+				const auto& node_handle_access = node_handle_usage_list_[p_node];
+				for (const auto& handle_access : node_handle_access)
+				{
+					AllocatedHandleResourceInfo handle_res = GetAllocatedResource(p_node, handle_access.handle);
+					if (handle_res.tex_.IsValid())
+					{
+						// 通常テクスチャリソースの場合.
 
+						// 状態遷移コマンド発効..
+						if (handle_res.prev_state_ != handle_res.curr_state_)
+						{
+							p_command_list->ResourceBarrier(handle_res.tex_.Get(), handle_res.prev_state_, handle_res.curr_state_);
+						}
+					}
+					else if (handle_res.swapchain_.IsValid())
+					{
+						// Swapchain(外部)の場合.
+						
+						// 状態遷移コマンド発効..
+						if (handle_res.prev_state_ != handle_res.curr_state_)
+						{
+							p_command_list->ResourceBarrier(handle_res.swapchain_.Get(), handle_res.swapchain_->GetCurrentBufferIndex(), handle_res.prev_state_, handle_res.curr_state_);
+						}
+					}
+				}
+			};
+			// 外部リソースの最終リソースバリア発行.
+			auto generate_final_barrier_for_imported_resource = [](std::vector<ExternalResourceInfo>& ref_imported_resource, rhi::GraphicsCommandListDep* p_command_list)
+			{
+				for(auto& ex_res : ref_imported_resource)
+				{
+					// CompileされたGraph内で最終的に遷移したステートが, 登録時に指定された最終ステートと異なる場合は追加で遷移コマンド.
+					if(ex_res.require_end_state_ != ex_res.cached_state_)
+					{
+						if(ex_res.swapchain_.IsValid())
+						{
+							// Swapchainの場合.
+							p_command_list->ResourceBarrier(ex_res.swapchain_.Get(), ex_res.swapchain_->GetCurrentBufferIndex(), ex_res.cached_state_, ex_res.require_end_state_);
+						}
+						else
+						{
+							p_command_list->ResourceBarrier(ex_res.tex_.Get(), ex_res.cached_state_, ex_res.require_end_state_);
+						}
+					}
+				}
+			};
+
+			
 			// Node毎に複数CommandList利用が可能なようにNode毎のCommandList配列. Node毎のMultiThread処理.
 			std::vector<std::vector<rhi::RhiRef<rhi::GraphicsCommandListDep>>> node_commandlists = {};
 			node_commandlists.resize(node_sequence_.size());
 			
-			// TaskNodeをシーケンス順に評価.
+			// Taskのレンダリング実行.
 			for (const auto& e : node_sequence_)
 			{
 				const int node_index = GetNodeSequencePosition(e);
@@ -856,40 +905,15 @@ namespace ngl
 				node_commandlists[node_index].push_back(ref_cmdlist);
 
 				{
-					ref_cmdlist->Begin();
+					ref_cmdlist->Begin();// CommandLList Start.
+
+					// Taskに割り当てられたリソースのバリア.
+					generate_barrier_command(e, ref_cmdlist.Get());
 					
-					// Nodeが登録したHandleを全て列挙. Nodeのdebug_ref_handles_はデバッグ用とであることと, メンバマクロ登録されたHandleしか格納されていないため, Builderに登録されたHandle全てを列挙するにはこの方法しかない.
-					const auto& node_handle_access = node_handle_usage_list_[e];
-					for (const auto& handle_access : node_handle_access)
-					{
-						AllocatedHandleResourceInfo handle_res = GetAllocatedResource(e, handle_access.handle);
-						if (handle_res.tex_.IsValid())
-						{
-							// 通常テクスチャリソースの場合.
-
-							// 状態遷移コマンド発効..
-							if (handle_res.prev_state_ != handle_res.curr_state_)
-							{
-								ref_cmdlist->ResourceBarrier(handle_res.tex_.Get(), handle_res.prev_state_, handle_res.curr_state_);
-							}
-						}
-						else if (handle_res.swapchain_.IsValid())
-						{
-							// Swapchain(外部)の場合.
-						
-							// 状態遷移コマンド発効..
-							if (handle_res.prev_state_ != handle_res.curr_state_)
-							{
-								ref_cmdlist->ResourceBarrier(handle_res.swapchain_.Get(), handle_res.swapchain_->GetCurrentBufferIndex(), handle_res.prev_state_, handle_res.curr_state_);
-							}
-						}
-					}
-
-					// BarrierをCommandListに正しく積んでからNodeを実行.
-					// MEMO. 現状はシーケンス順にシングルスレッド.
+					// Barrier発行後にレンダリングコマンド生成.
 					e->Run(*this, ref_cmdlist);
 
-					ref_cmdlist->End();
+					ref_cmdlist->End();// CommandList End.
 				}
 			}
 
@@ -898,28 +922,14 @@ namespace ngl
 			p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist_final);
 			{
 				ref_cmdlist_final->Begin();
-				
-				for(auto& ex_res : imported_resource_)
-				{
-					// CompileされたGraph内で最終的に遷移したステートが, 登録時に指定された最終ステートと異なる場合は追加で遷移コマンド.
-					if(ex_res.require_end_state_ != ex_res.cached_state_)
-					{
-						if(ex_res.swapchain_.IsValid())
-						{
-							// Swapchainの場合.
-							ref_cmdlist_final->ResourceBarrier(ex_res.swapchain_.Get(), ex_res.swapchain_->GetCurrentBufferIndex(), ex_res.cached_state_, ex_res.require_end_state_);
-						}
-						else
-						{
-							ref_cmdlist_final->ResourceBarrier(ex_res.tex_.Get(), ex_res.cached_state_, ex_res.require_end_state_);
-						}
-					}
-				}
+
+				// 外部リソースの最終リソース解決バリア発行.
+				generate_final_barrier_for_imported_resource(imported_resource_, ref_cmdlist_final.Get());
 				
 				ref_cmdlist_final->End();
 			}
 
-			// 出力用CommandList配列を構成.
+			// CommandList配列を構築.
 			{
 				out_executed_command_list_array.clear();
 
@@ -939,7 +949,6 @@ namespace ngl
 			// is_compiled_やis_executed_などのフラグはリセットせず, 内部リソースだけ解放して破棄を待つようにする.
 			{	
 				p_compiled_manager_ = nullptr;
-
 				// 外部リソースクリア.
 				{
 					imported_resource_ = {};
