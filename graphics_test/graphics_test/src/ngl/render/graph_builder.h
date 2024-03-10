@@ -487,8 +487,13 @@ namespace ngl
 			// -------------------------------------------------------------------------------------------
 			
 		private:
-			bool is_compiled_ = false;// Compileが完了して, Execute可能な状態.
-			bool is_executed_ = false;// Executeが完了して, 使用不可となった状態. 内部ステートのリセット等はミスが発生し易いため, BuilderはExecuteのたびに使い捨てとする.
+			enum class EBuilderState
+			{
+				RECORDING,
+				COMPILED,
+				EXECUTED
+			};
+			EBuilderState	state_ = EBuilderState::RECORDING;
 			
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
 			

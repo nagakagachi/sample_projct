@@ -273,7 +273,8 @@ namespace ngl
 			}
 			
 			// 状態遷移.
-			is_compiled_ = true;
+			state_ = EBuilderState::COMPILED;
+			
 			// Compileでリソース割当をするマネージャを保持.
 			p_compiled_manager_ = &manager;
 
@@ -751,12 +752,13 @@ namespace ngl
 		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle)
 		{	
 			// Compileされていないかチェック.
-			if (!is_compiled_ || nullptr == p_compiled_manager_)
+			if (state_ != EBuilderState::COMPILED)
 			{
 				std::cout <<  u8"[ERROR] このBuilderはCompileされていません." << std::endl;
 				assert(false);
 				return {};
 			}
+			assert(nullptr != p_compiled_manager_);// Compileされていれば設定されているはず.
 
 			// 初回フレームの伝搬リソース等はこのパターンなので無効値を返す.
 			if(res_handle.IsInvalid())
@@ -833,9 +835,7 @@ namespace ngl
 				assert(false);
 				return;
 			}
-			// 状態遷移.
-			is_executed_ = true;
-
+			
 			// 各Taskの使用リソースバリア発行.
 			auto generate_barrier_command = [&](const ITaskNode* p_node, rhi::GraphicsCommandListDep* p_command_list )
 			{					
@@ -946,8 +946,10 @@ namespace ngl
 			}
 			
 			// ExecuteしたBuilderは使い捨てとすることで状態リセットの実装ミス等を回避する.
-			// is_compiled_やis_executed_などのフラグはリセットせず, 内部リソースだけ解放して破棄を待つようにする.
-			{	
+			{
+				// 状態遷移.
+				state_ = EBuilderState::EXECUTED;// 実行済みBuilderは再利用不可なのでステート遷移はそのまま続行.
+				
 				p_compiled_manager_ = nullptr;
 				// 外部リソースクリア.
 				{
@@ -986,15 +988,15 @@ namespace ngl
 		// Builderの状態取得用.
 		bool RenderTaskGraphBuilder::IsRecordable() const
 		{
-			return (!is_compiled_) && (!is_executed_);
+			return EBuilderState::RECORDING == state_;
 		}
 		bool RenderTaskGraphBuilder::IsCompilable() const
 		{
-			return (!is_compiled_) && (!is_executed_);// 実質Recordableと同じ.
+			return EBuilderState::RECORDING == state_;// 実質Recordableと同等.
 		}
 		bool RenderTaskGraphBuilder::IsExecutable() const
 		{
-			return (is_compiled_) && (!is_executed_);
+			return EBuilderState::COMPILED == state_;
 		}
 		
 		// --------------------------------------------------------------------------------------------------------------------
