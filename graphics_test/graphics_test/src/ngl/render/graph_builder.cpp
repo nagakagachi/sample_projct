@@ -897,23 +897,44 @@ namespace ngl
 			{
 				const int node_index = GetNodeSequencePosition(e);
 
-				// このNode用にCommandList確保.
-				rhi::RhiRef<rhi::GraphicsCommandListDep> ref_cmdlist = {};
-				p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
-
-				// Node別CommandListArrayに登録.
-				node_commandlists[node_index].push_back(ref_cmdlist);
-
+				if(ETASK_TYPE::GRAPHICS == e->TaskType())
 				{
-					ref_cmdlist->Begin();// CommandLList Start.
+					// このNode用にCommandList確保.
+					rhi::RhiRef<rhi::GraphicsCommandListDep> ref_cmdlist = {};
+					p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
+					// Node別CommandListArrayに登録.
+					node_commandlists[node_index].push_back(ref_cmdlist);
 
-					// Taskに割り当てられたリソースのバリア.
-					generate_barrier_command(e, ref_cmdlist.Get());
+					// CommandList積み込みJob部分.
+					{
+						// CommandLList Begin. Endは最後にまとめて実行される.
+						ref_cmdlist->Begin();
+						// Taskに割り当てられたリソースのバリア.
+						generate_barrier_command(e, ref_cmdlist.Get());
 					
-					// Barrier発行後にレンダリングコマンド生成.
-					e->Run(*this, ref_cmdlist);
+						// Barrier発行後にレンダリングコマンド生成.
+						e->Run(*this, ref_cmdlist);
+					}
+				}
+				else if(ETASK_TYPE::ASYNC_COMPUTE == e->TaskType())
+				{
+					// AsyncCompute用.
+					// 実装中.
+					assert(false);
+				}
+				else
+				{
+					// ありえない.
+					assert(false);
+				}
+			}
 
-					ref_cmdlist->End();// CommandList End.
+			// Taskが積み込みをした全CommandListをEnd.
+			for(auto& per_node_list : node_commandlists)
+			{
+				for(auto& list : per_node_list)
+				{
+					list->End();
 				}
 			}
 
@@ -929,7 +950,7 @@ namespace ngl
 				ref_cmdlist_final->End();
 			}
 
-			// CommandList配列を構築.
+			// CommandList配列を直列化.
 			{
 				out_executed_command_list_array.clear();
 
