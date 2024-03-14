@@ -790,7 +790,7 @@ bool AppGame::Execute()
 						cs_load_desc.stage = ngl::rhi::ShaderStage::Compute;
 						cs_load_desc.shader_model_version = "6_3";
 						cs_load_desc.entry_point_name = "main_cs";
-						auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/debug/async_task_test_cs.hlsl", &cs_load_desc);
+						auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/test/async_task_test_cs.hlsl", &cs_load_desc);
 					
 						cpso_desc.cs = &cs_load_handle->data_;
 					}

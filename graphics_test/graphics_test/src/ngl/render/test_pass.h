@@ -551,7 +551,7 @@ namespace ngl::render
 							cs_load_desc.shader_model_version = "6_3";
 							cs_load_desc.entry_point_name = "main_cs";
 							auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(
-								p_device, "./src/ngl/data/shader/debug/async_task_test_cs.hlsl", &cs_load_desc
+								p_device, "./src/ngl/data/shader/test/async_task_test_cs.hlsl", &cs_load_desc
 							);
 							cpso_desc.cs = &cs_load_handle->data_;
 						}
