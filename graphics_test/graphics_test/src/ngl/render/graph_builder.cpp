@@ -227,7 +227,7 @@ namespace ngl
 			// TaskNodeのタイプによって許可されないアクセスをチェック.
 			//	AsyncComputeで許可されないアクセス等を事前にエラーとする.
 			{
-				if(ETASK_TYPE::ASYNC_COMPUTE ==  node.TaskType())
+				if(ETASK_TYPE::COMPUTE ==  node.TaskType())
 				{
 					// AsyncComputeでは SRVとUAVアクセスのみ許可.
 					if(
@@ -428,8 +428,7 @@ namespace ngl
 			handle_compiled_resource_id_.clear();
 			handle_compiled_resource_id_.resize(handle_count, CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
 
-			// MEMO. handle_2_compiled_index_はunordered_mapのためイテレートに使うと順序がNodeSequence順にならずにいきなり終端の最終アクセスPassへの割当が発生して正しい再利用が働かない!.
-			///for(auto handle_index : handle_2_compiled_index_)
+			// MEMO. handle_2_compiled_index_はunordered_mapのためイテレートに使うと順序がNodeSequence順にならずにいきなり終端の最終アクセスPassへの割当が発生して正しい再利用が働かない.
 			for(int handle_index = 0; handle_index < compiled_index_handle_.size(); ++handle_index)
 			{
 				const ResourceHandle res_handle = compiled_index_handle_[handle_index];
@@ -660,6 +659,7 @@ namespace ngl
 					}
 					else
 					{
+						// Compile前のステートを保持.
 						imported_resource_[res_id.detail.resource_id].prev_cached_state_
 						= imported_resource_[res_id.detail.resource_id].cached_state_;
 					
@@ -826,7 +826,7 @@ namespace ngl
 			return ret_info;
 		}
 
-		void RenderTaskGraphBuilder::ExecuteMultiCommandlist(std::vector<rhi::RhiRef<rhi::GraphicsCommandListDep>>& out_executed_command_list_array)
+		void RenderTaskGraphBuilder::ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array)
 		{
 			// Compileされていないチェック.
 			if(!IsExecutable())
@@ -889,7 +889,7 @@ namespace ngl
 
 			
 			// Node毎に複数CommandList利用が可能なようにNode毎のCommandList配列. Node毎のMultiThread処理.
-			std::vector<std::vector<rhi::RhiRef<rhi::GraphicsCommandListDep>>> node_commandlists = {};
+			std::vector<std::vector<rhi::GraphicsCommandListDep*>> node_commandlists = {};
 			node_commandlists.resize(node_sequence_.size());
 			
 			// Taskのレンダリング実行.
@@ -899,8 +899,10 @@ namespace ngl
 
 				if(ETASK_TYPE::GRAPHICS == e->TaskType())
 				{
+					// Graphics.
+					
 					// このNode用にCommandList確保.
-					rhi::RhiRef<rhi::GraphicsCommandListDep> ref_cmdlist = {};
+					rhi::GraphicsCommandListDep* ref_cmdlist = {};
 					p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
 					// Node別CommandListArrayに登録.
 					node_commandlists[node_index].push_back(ref_cmdlist);
@@ -910,16 +912,19 @@ namespace ngl
 						// CommandLList Begin. Endは最後にまとめて実行される.
 						ref_cmdlist->Begin();
 						// Taskに割り当てられたリソースのバリア.
-						generate_barrier_command(e, ref_cmdlist.Get());
+						generate_barrier_command(e, ref_cmdlist);
 					
 						// Barrier発行後にレンダリングコマンド生成.
 						e->Run(*this, ref_cmdlist);
 					}
 				}
-				else if(ETASK_TYPE::ASYNC_COMPUTE == e->TaskType())
+				else if(ETASK_TYPE::COMPUTE == e->TaskType())
 				{
-					// AsyncCompute用.
+					// Compute.
 					// 実装中.
+
+
+					
 					assert(false);
 				}
 				else
@@ -939,13 +944,13 @@ namespace ngl
 			}
 
 			// 外部リソースの必須最終ステートの解決.
-			rhi::RhiRef<rhi::GraphicsCommandListDep> ref_cmdlist_final = {};
+			rhi::GraphicsCommandListDep* ref_cmdlist_final = {};
 			p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist_final);
 			{
 				ref_cmdlist_final->Begin();
 
 				// 外部リソースの最終リソース解決バリア発行.
-				generate_final_barrier_for_imported_resource(imported_resource_, ref_cmdlist_final.Get());
+				generate_final_barrier_for_imported_resource(imported_resource_, ref_cmdlist_final);
 				
 				ref_cmdlist_final->End();
 			}
@@ -954,9 +959,9 @@ namespace ngl
 			{
 				out_executed_command_list_array.clear();
 
-				for(const auto& per_node_list : node_commandlists)
+				for(auto& per_node_list : node_commandlists)
 				{
-					for(const auto& list : per_node_list)
+					for(auto& list : per_node_list)
 					{
 						out_executed_command_list_array.push_back(list);
 					}

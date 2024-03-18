@@ -27,7 +27,7 @@ namespace ngl
 		enum class ETASK_TYPE : int
 		{
 			GRAPHICS,
-			ASYNC_COMPUTE,
+			COMPUTE,
 		};
 
 		// リソースアクセス時のリソース解釈.
@@ -204,8 +204,8 @@ namespace ngl
 			virtual ETASK_TYPE TaskType() const = 0;
 			
 			// レンダリングの実装部. 一旦動的にGraphicsとComputeを分ける.
-			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) = 0;
-			virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) = 0;
+			virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
+			virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
 
 
 			
@@ -304,10 +304,10 @@ namespace ngl
 			{ return ETASK_TYPE::GRAPHICS; }
 
 			// GraphicsTaskのレンダリングの実装は以下のメソッドをオーバーライドすること.
-			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) {}
+			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
 			
 			// GraphicsTaskはComputeComandList不許可. もうすこしTemplateで静的に切り分けたい.
-			void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) final
+			void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) final
 			{
 				assert(false);
 			}
@@ -321,13 +321,13 @@ namespace ngl
 			virtual ~IComputeTaskNode() = default;
 			// Type AsyncCompute.
 			ETASK_TYPE TaskType() const final
-			{ return ETASK_TYPE::ASYNC_COMPUTE; }
+			{ return ETASK_TYPE::COMPUTE; }
 			
 			// ComputeTaskのレンダリングの実装は以下のメソッドをオーバーライドすること.
-			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) {}
+			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
 			
 			// ComputeTaskはGraphicsCommandLit不許可. もうすこしTemplateで静的に切り分けたい.
-			void Run(RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) final
+			void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) final
 			{
 				assert(false);
 			}
@@ -337,12 +337,12 @@ namespace ngl
 
 		// ハンドル毎のタイムライン上での位置を示す情報を生成.
 		// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
-		// GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有るなどの制御に使う
+		// [GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有る]などのチェックや制御に使う
 		struct TaskStage
 		{
 			constexpr TaskStage() = default;
 			
-			int stage_ = 0;// Stage番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
+			int stage_ = 0;// Stage番号. Sequence先頭である0からみてさらに以前を表現したいため符号付き.
 			int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
 
 			// Stage 0 に対して常に前となるようなStage. リソースプール側リソースのリセットや新規生成リソースのステージとして利用.
@@ -462,7 +462,7 @@ namespace ngl
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
 			// Task毎にCommandListを割り当て, Submit用のCommandListのリストを返す.
-			void ExecuteMultiCommandlist(std::vector<rhi::RhiRef<rhi::GraphicsCommandListDep>>& out_executed_command_list_array);
+			void ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array);
 
 			// -------------------------------------------------------------------------------------------
 			// Compileで割り当てられたHandleのリソース情報.
@@ -652,12 +652,12 @@ namespace ngl
 		public:
 			// 本来はこれらはBuilder側で隠蔽する予定(CommandListの確保もスケジューリングする).
 			// Builderが利用するCommandListの新規取得.
-			void GetNewFrameCommandList(rhi::RhiRef<rhi::GraphicsCommandListDep>& out_ref)
+			void GetNewFrameCommandList(rhi::GraphicsCommandListDep*& out_ref)
 			{
 				commandlist_pool_.GetFrameCommandList(out_ref);
 			}
 			// Builderが利用するCommandListの新規取得.
-			void GetNewFrameCommandList(rhi::RhiRef<rhi::ComputeCommandListDep>& out_ref)
+			void GetNewFrameCommandList(rhi::ComputeCommandListDep*& out_ref)
 			{
 				commandlist_pool_.GetFrameCommandList(out_ref);
 			}

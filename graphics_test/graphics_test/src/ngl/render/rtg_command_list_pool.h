@@ -89,7 +89,7 @@ namespace ngl::rtg
             void BeginFrame();
 
             template<typename TCommandList>
-            bool GetFrameCommandList(rhi::RhiRef<TCommandList>& ref_out);
+            bool GetFrameCommandList(TCommandList*& ref_out);
             
         private:
             using GraphicsCommandListPoolBuffer = std::vector<PooledCommandListElem<GraphicsCommandListType>>;
@@ -136,7 +136,7 @@ namespace ngl::rtg
         // 対応したTypeのCommandListをPoolから取得.
         // Mutex Lock.
         template<typename TCommandList>
-        inline bool CommandListPool::GetFrameCommandList(rhi::RhiRef<TCommandList>& ref_out)
+        inline bool CommandListPool::GetFrameCommandList(TCommandList*& ref_out)
         {
             constexpr  int type_index = CommandListTypeTraits<TCommandList>::TypeIndex;
 
@@ -181,7 +181,7 @@ namespace ngl::rtg
             // BeginFrameでカウントダウンされて0で再利用可能. Render0->GPU1->Render2 で2F想定.
             target_pool[lent_index].reusable_frame_count = 2;
             // 返却.
-            ref_out = target_pool[lent_index].ref_commandlist;
+            ref_out = target_pool[lent_index].ref_commandlist.Get();
             
             return true;
         }

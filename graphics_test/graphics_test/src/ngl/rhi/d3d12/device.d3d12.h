@@ -34,6 +34,7 @@ namespace ngl
 		class RenderTargetViewDep;
 		class FenceDep;
 
+		class CommandListBaseDep;
 		class GraphicsCommandListDep;
 		class ComputeCommandListDep;
 		class GraphicsCommandQueueDep;
@@ -195,7 +196,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device);
 			void Finalize();
 
-			void ExecuteCommandLists(unsigned int num_command_list, GraphicsCommandListDep** p_command_lists);
+			void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists);
 		private:
 		};
 		
@@ -211,7 +212,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device);
 			void Finalize();
 
-			void ExecuteCommandLists(unsigned int num_command_list, ComputeCommandListDep** p_command_lists);
+			void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists);
 		private:
 		};
 		

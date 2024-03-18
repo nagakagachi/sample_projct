@@ -10,6 +10,7 @@ namespace ngl::render
 
 	namespace task
 	{
+		static constexpr char k_shader_model[] = "6_3";
 
 		// PreZパス.
 		struct TaskDepthPass : public rtg::IGraphicsTaskNode
@@ -43,8 +44,6 @@ namespace ngl::render
 
 				{
 					auto& ResourceMan = ngl::res::ResourceManager::Instance();
-
-					static const char* k_shader_model = "6_3";
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					loaddesc_vs.entry_point_name = "main_vs";
@@ -101,7 +100,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -114,7 +113,7 @@ namespace ngl::render
 				commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
 
 				// Set Viewport and Scissor.
-				ngl::gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
+				ngl::gfx::helper::SetFullscreenViewportAndScissor(commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
 				// Mesh Rendering.
 				ngl::gfx::RenderMeshSinglePso(*commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
@@ -150,7 +149,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -199,8 +198,6 @@ namespace ngl::render
 				}
 
 				{
-					auto k_shader_model = "6_3";
-
 					auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
 					ngl::gfx::ResShader::LoadDesc loaddesc = {};
@@ -220,7 +217,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -237,7 +234,7 @@ namespace ngl::render
 				commandlist->SetPipelineState(pso_.Get());
 				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
-				pso_->DispatchHelper(commandlist.Get(), res_linear_depth.tex_->GetWidth(), res_linear_depth.tex_->GetHeight(), 1);
+				pso_->DispatchHelper(commandlist, res_linear_depth.tex_->GetWidth(), res_linear_depth.tex_->GetHeight(), 1);
 
 			}
 
@@ -302,9 +299,7 @@ namespace ngl::render
 				// 
 				{
 					// 初期化. シェーダバイナリの要求とPSO生成.
-
-					auto k_shader_model = "6_3";
-
+					
 					auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
@@ -344,7 +339,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -365,7 +360,7 @@ namespace ngl::render
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
 
-				gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
+				gfx::helper::SetFullscreenViewportAndScissor(commandlist, res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
 
 				// Rtv, Dsv セット.
 				{
@@ -440,8 +435,6 @@ namespace ngl::render
 				{
 					// 初期化. シェーダバイナリの要求とPSO生成.
 
-					auto k_shader_model = "6_3";
-
 					auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
@@ -480,7 +473,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::GraphicsCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -496,7 +489,7 @@ namespace ngl::render
 				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
 
-				gfx::helper::SetFullscreenViewportAndScissor(commandlist.Get(), res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
+				gfx::helper::SetFullscreenViewportAndScissor(commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
 
 				// Rtv, Dsv セット.
 				{
@@ -548,7 +541,7 @@ namespace ngl::render
 						{
 							ngl::gfx::ResShader::LoadDesc cs_load_desc = {};
 							cs_load_desc.stage = ngl::rhi::ShaderStage::Compute;
-							cs_load_desc.shader_model_version = "6_3";
+							cs_load_desc.shader_model_version = k_shader_model;
 							cs_load_desc.entry_point_name = "main_cs";
 							auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(
 								p_device, "./src/ngl/data/shader/test/async_task_test_cs.hlsl", &cs_load_desc
@@ -561,7 +554,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::RhiRef<rhi::ComputeCommandListDep> commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_work_tex = builder.GetAllocatedResource(this, h_work_tex_);
@@ -574,7 +567,7 @@ namespace ngl::render
 				pso_->SetDescriptorHandle(&desc_set, "rwtex_out", res_work_tex.uav_->GetView().cpu_handle);
 				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 				
-				pso_->DispatchHelper(commandlist.Get(), res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
+				pso_->DispatchHelper(commandlist, res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
 			}
 		};
 

@@ -486,7 +486,7 @@ namespace ngl
 		{
 		}
 
-		void GraphicsCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, GraphicsCommandListDep** p_command_lists)
+		void GraphicsCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists)
 		{
 			// 一時バッファに詰める
 			std::vector<ID3D12CommandList*> p_command_list_array = {};
@@ -525,7 +525,7 @@ namespace ngl
 		{
 		}
 
-		void ComputeCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, ComputeCommandListDep** p_command_lists)
+		void ComputeCommandQueueDep::ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists)
 		{
 			// 一時バッファに詰める
 			std::vector<ID3D12CommandList*> p_command_list_array = {};

@@ -680,9 +680,9 @@ bool AppGame::Execute()
 
 		
 		// RtgのCommandList配列.
-		std::vector<ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>> rtg_gfx_command_list_sequence = {};
+		std::vector<ngl::rhi::CommandListBaseDep*> rtg_command_list_sequence = {};
 		
-		ngl::rhi::RhiRef<ngl::rhi::ComputeCommandListDep> rtg_compute_command_list = {};
+		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
 		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
 		
 		{
@@ -769,7 +769,7 @@ bool AppGame::Execute()
 				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
 				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
 				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
-				rtg_builder.ExecuteMultiCommandlist(rtg_gfx_command_list_sequence);
+				rtg_builder.ExecuteMultiCommandlist(rtg_command_list_sequence);
 				
 			}
 		}
@@ -802,7 +802,7 @@ bool AppGame::Execute()
 				ref_cpso->SetDescriptorHandle(&desc_set, "rwtex_out", tex_rw_uav_->GetView().cpu_handle);
 				rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
 				rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
-				ref_cpso->DispatchHelper(rtg_compute_command_list.Get(), tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
+				ref_cpso->DispatchHelper(rtg_compute_command_list, tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
 			}
 
 			rtg_compute_command_list->End();
@@ -813,9 +813,9 @@ bool AppGame::Execute()
 			// Compute.
 			ngl::u64 compute_end_fence_value = {};
 			{
-				ngl::rhi::ComputeCommandListDep* p_command_lists[] =
+				ngl::rhi::CommandListBaseDep* p_command_lists[] =
 				{
-					rtg_compute_command_list.Get()
+					rtg_compute_command_list
 				};
 				compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
 				
@@ -825,14 +825,14 @@ bool AppGame::Execute()
 			
 			// Graphics.
 			{
-				std::vector<ngl::rhi::GraphicsCommandListDep*> p_command_list_submit_sequence = {};
+				std::vector<ngl::rhi::CommandListBaseDep*> p_command_list_submit_sequence = {};
 				{
 					p_command_list_submit_sequence.push_back(gfx_command_list_.Get());
 
 					// RtgのCommandList配列をPush.
-					for(auto& e : rtg_gfx_command_list_sequence)
+					for(auto& e : rtg_command_list_sequence)
 					{
-						p_command_list_submit_sequence.push_back(e.Get());
+						p_command_list_submit_sequence.push_back(e);
 					}
 				}
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(p_command_list_submit_sequence.size()), p_command_list_submit_sequence.data());
