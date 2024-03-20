@@ -727,11 +727,11 @@ bool AppGame::Execute()
 
 				// Build Rendering Pass.
 				{
-					// ComputeTaskテスト.
-					#if 0
-					// ComputeTaskをGraphics/AsyncComputeどちらにスケジュールするかはこのタイミングで決めたい.
-					auto* task_test_compute = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
-					task_test_compute->Setup(rtg_builder, &device_);
+					// ComputeTaskテスト. Builder側が対応したら有効化して検証する. これはまだAsyncではないGraphicsQueue実行である.
+					#if 1
+						// ComputeTaskをGraphics/AsyncComputeどちらにスケジュールするかはこのタイミングで決めたい.
+						auto* task_test_compute = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
+						task_test_compute->Setup(rtg_builder, &device_);
 					#endif
 
 					

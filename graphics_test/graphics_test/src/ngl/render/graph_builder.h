@@ -204,8 +204,8 @@ namespace ngl
 			virtual ETASK_TYPE TaskType() const = 0;
 			
 			// レンダリングの実装部. 一旦動的にGraphicsとComputeを分ける.
+			// GraphicsTaskの実装用.
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
-			virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
 
 
 			
@@ -302,15 +302,6 @@ namespace ngl
 			// Type Graphics.
 			ETASK_TYPE TaskType() const final
 			{ return ETASK_TYPE::GRAPHICS; }
-
-			// GraphicsTaskのレンダリングの実装は以下のメソッドをオーバーライドすること.
-			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
-			
-			// GraphicsTaskはComputeComandList不許可. もうすこしTemplateで静的に切り分けたい.
-			void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) final
-			{
-				assert(false);
-			}
 		};
 		// ComputeTaskの基底クラス.
 		// GraphicsでもAsyncComputeでも実行可能なもの. UAVバリア以外のバリアは出来ないようにComputeCommandListのみ利用可能とする.
@@ -322,15 +313,6 @@ namespace ngl
 			// Type AsyncCompute.
 			ETASK_TYPE TaskType() const final
 			{ return ETASK_TYPE::COMPUTE; }
-			
-			// ComputeTaskのレンダリングの実装は以下のメソッドをオーバーライドすること.
-			//virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
-			
-			// ComputeTaskはGraphicsCommandLit不許可. もうすこしTemplateで静的に切り分けたい.
-			void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) final
-			{
-				assert(false);
-			}
 		};
 
 
@@ -483,7 +465,7 @@ namespace ngl
 			};
 			// NodeのHandleに対して割り当て済みリソースを取得する.
 			// Graphシステム側で必要なBarrierコマンドを発効するため基本的にNode実装側ではBarrierコマンドは不要.
-			AllocatedHandleResourceInfo GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle);
+			AllocatedHandleResourceInfo GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle) const;
 			// -------------------------------------------------------------------------------------------
 			
 		private:

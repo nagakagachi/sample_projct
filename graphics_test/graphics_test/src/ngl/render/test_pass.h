@@ -100,23 +100,23 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 
 
-				commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
+				gfx_commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
 
 				// Set RenderTarget.
-				commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
+				gfx_commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
 
 				// Set Viewport and Scissor.
-				ngl::gfx::helper::SetFullscreenViewportAndScissor(commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
+				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshSinglePso(*commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
+				ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
 			}
 		};
 
@@ -149,7 +149,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -217,7 +217,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -231,10 +231,10 @@ namespace ngl::render
 				pso_->SetDescriptorHandle(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_->GetView().cpu_handle);
 				pso_->SetDescriptorHandle(&desc_set, "cb_sceneview", ref_scene_cbv_->GetView().cpu_handle);
 
-				commandlist->SetPipelineState(pso_.Get());
-				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+				gfx_commandlist->SetPipelineState(pso_.Get());
+				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
-				pso_->DispatchHelper(commandlist, res_linear_depth.tex_->GetWidth(), res_linear_depth.tex_->GetHeight(), 1);
+				pso_->DispatchHelper(gfx_commandlist, res_linear_depth.tex_->GetWidth(), res_linear_depth.tex_->GetHeight(), 1);
 
 			}
 
@@ -339,7 +339,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -360,23 +360,23 @@ namespace ngl::render
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
 
-				gfx::helper::SetFullscreenViewportAndScissor(commandlist, res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
+				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
 
 				// Rtv, Dsv セット.
 				{
 					const auto* p_rtv = res_light.rtv_.Get();
-					commandlist->SetRenderTargets(&p_rtv, 1, nullptr);
+					gfx_commandlist->SetRenderTargets(&p_rtv, 1, nullptr);
 				}
 
-				commandlist->SetPipelineState(pso_.Get());
+				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetDescriptorHandle(&desc_set, "tex_lineardepth", res_linear_depth.srv_->GetView().cpu_handle);
 				pso_->SetDescriptorHandle(&desc_set, "tex_prev_light", res_prev_light.srv_->GetView().cpu_handle);
 				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
-				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
-				commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
-				commandlist->DrawInstanced(3, 1, 0, 0);
+				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+				gfx_commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
 
@@ -473,7 +473,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
@@ -489,23 +489,23 @@ namespace ngl::render
 				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
 
-				gfx::helper::SetFullscreenViewportAndScissor(commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
+				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
 
 				// Rtv, Dsv セット.
 				{
 					const auto* p_rtv = res_swapchain.rtv_.Get();
-					commandlist->SetRenderTargets(&p_rtv, 1, nullptr);
+					gfx_commandlist->SetRenderTargets(&p_rtv, 1, nullptr);
 				}
 
-				commandlist->SetPipelineState(pso_.Get());
+				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetDescriptorHandle(&desc_set, "tex_light", res_light.srv_->GetView().cpu_handle);
 				pso_->SetDescriptorHandle(&desc_set, "tex_rt", ref_raytrace_result_srv_->GetView().cpu_handle);
 				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
-				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
-				commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
-				commandlist->DrawInstanced(3, 1, 0, 0);
+				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+				gfx_commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
 
@@ -554,7 +554,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_work_tex = builder.GetAllocatedResource(this, h_work_tex_);

@@ -749,7 +749,7 @@ namespace ngl
 			return true;
 		}
 
-		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle)
+		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle) const
 		{	
 			// Compileされていないかチェック.
 			if (state_ != EBuilderState::COMPILED)
@@ -766,26 +766,29 @@ namespace ngl
 				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
 				return {};
 			}
-
 			if (handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_handle))
 			{
 				// 初回フレームの伝搬リソースであってもハンドル自体は登録されるはずなので, それがない場合はassert.　
 				assert(false);// 念のためMapに登録されているかチェック.
 			}
-			if (node_handle_state_.end() == node_handle_state_.find(node))
+			const auto it_node_handle_state = node_handle_state_.find(node);
+			if (node_handle_state_.end() == it_node_handle_state)
 			{
 				//assert(false);// 念のためMapに登録されているかチェック.
 				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
 				return {};
 			}
-			if (node_handle_state_[node].end() == node_handle_state_[node].find(res_handle))
+			const auto it_handle_state = it_node_handle_state->second.find(res_handle);
+			if (it_node_handle_state->second.end() == it_handle_state)
 			{
 				//assert(false);// 念のためMapに登録されているかチェック.
 				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
 				return {};
 			}
-			
-			const int handle_id = handle_2_compiled_index_[res_handle];
+
+			const auto it_compiled_handle_index = handle_2_compiled_index_.find(res_handle);
+			assert(handle_2_compiled_index_.end() != it_compiled_handle_index);
+			const int handle_id = it_compiled_handle_index->second;
 			const CompiledResourceInfo handle_res_id = handle_compiled_resource_id_[handle_id];
 			if(0 > handle_res_id.detail.resource_id)
 			{
@@ -794,7 +797,7 @@ namespace ngl
 			}
 			
 			// ステート遷移情報取得.
-			NodeHandleState state_transition = node_handle_state_[node][res_handle];
+			const NodeHandleState state_transition = it_handle_state->second;
 			
 			// 返却情報構築.
 			AllocatedHandleResourceInfo ret_info = {};
@@ -835,6 +838,27 @@ namespace ngl
 				assert(false);
 				return;
 			}
+
+			// Nodeの使用Resouceに有効な状態遷移が1つでも存在するかをチェック.
+			auto check_exist_state_transition = [&](const ITaskNode* p_node)-> bool
+			{					
+				const auto& node_handle_access = node_handle_usage_list_[p_node];
+				for (const auto& handle_access : node_handle_access)
+				{
+					AllocatedHandleResourceInfo handle_res = GetAllocatedResource(p_node, handle_access.handle);
+					if (handle_res.tex_.IsValid() && (handle_res.prev_state_ != handle_res.curr_state_))
+					{
+						// 通常テクスチャリソースの場合.
+						return true;
+					}
+					else if (handle_res.swapchain_.IsValid() && (handle_res.prev_state_ != handle_res.curr_state_))
+					{
+						// Swapchain(外部)の場合.
+						return true;
+					}
+				}
+				return false;// 有効な状態遷移が1つも存在しなければ false;
+			};
 			
 			// 各Taskの使用リソースバリア発行.
 			auto generate_barrier_command = [&](const ITaskNode* p_node, rhi::GraphicsCommandListDep* p_command_list )
@@ -889,7 +913,7 @@ namespace ngl
 
 			
 			// Node毎に複数CommandList利用が可能なようにNode毎のCommandList配列. Node毎のMultiThread処理.
-			std::vector<std::vector<rhi::GraphicsCommandListDep*>> node_commandlists = {};
+			std::vector<std::vector<rhi::CommandListBaseDep*>> node_commandlists = {};
 			node_commandlists.resize(node_sequence_.size());
 			
 			// Taskのレンダリング実行.
@@ -901,14 +925,13 @@ namespace ngl
 				{
 					// Graphics.
 					
-					// このNode用にCommandList確保.
-					rhi::GraphicsCommandListDep* ref_cmdlist = {};
-					p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
-					// Node別CommandListArrayに登録.
-					node_commandlists[node_index].push_back(ref_cmdlist);
-
 					// CommandList積み込みJob部分.
 					{
+						// このNode用にCommandList確保. Graphics板を取得.
+						rhi::GraphicsCommandListDep* ref_cmdlist = {};
+						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
+						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
+						
 						// CommandLList Begin. Endは最後にまとめて実行される.
 						ref_cmdlist->Begin();
 						// Taskに割り当てられたリソースのバリア.
@@ -923,9 +946,32 @@ namespace ngl
 					// Compute.
 					// 実装中.
 
-
+					// 最初に状態遷移が必要なリソースがあれば, GraphicsCommandListを取得してバリアを発行する.
+					if(check_exist_state_transition(e))
+					{
+						// 状態遷移コマンド発行用にGraphics板を取得.
+						rhi::GraphicsCommandListDep* ref_cmdlist = {};
+						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
+						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
+						
+						// CommandLList Begin. Endは最後にまとめて実行される.
+						ref_cmdlist->Begin();
+						// Taskに割り当てられたリソースのバリア.
+						generate_barrier_command(e, ref_cmdlist);
+					}
+					// ComputeTaskのCommandを発行する.
+					{
+						// 現状はGraphicsQueueで実行するためGraphicsCommandListを取得.
+						rhi::GraphicsCommandListDep* ref_cmdlist = {};
+						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
+						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
+						
+						// CommandLList Begin. Endは最後にまとめて実行される.
+						ref_cmdlist->Begin();
 					
-					assert(false);
+						// Barrier発行後にレンダリングコマンド生成.
+						e->Run(*this, ref_cmdlist);
+					}
 				}
 				else
 				{
