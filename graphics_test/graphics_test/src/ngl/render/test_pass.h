@@ -136,13 +136,19 @@ namespace ngl::render
 			rtg::ResourceHandle h_gb1_{};
 			
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex)
 			{
 				// リソース定義.
 				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
 				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
 
 				// リソースアクセス定義.
+				if(!h_async_write_tex.IsInvalid())
+				{
+					// 試しにAsyncComputeで書き込まれたリソースを読み取り.
+					builder.RecordResourceAccess(*this, h_async_write_tex, rtg::access_type::SHADER_READ);
+				}
+				
 				h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
 				h_gb0_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
 				h_gb1_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
@@ -182,12 +188,18 @@ namespace ngl::render
 			rhi::RhiRef<rhi::ComputePipelineStateDep> pso_;
 
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rhi::RefCbvDep ref_scene_cbv)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, rhi::RefCbvDep ref_scene_cbv)
 			{
 				{
 					// リソース定義.
 					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R32_FLOAT);
 
+					// テスト用
+					if(!h_tex_compute.IsInvalid())
+					{
+						builder.RecordResourceAccess(*this, h_tex_compute, rtg::access_type::SHADER_READ);
+					}
+					
 					// リソースアクセス定義.
 					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 					h_linear_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::UAV);
@@ -523,7 +535,7 @@ namespace ngl::render
 			ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_ = {};
 
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_input_test)
 			{
 				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
 				{
@@ -532,6 +544,10 @@ namespace ngl::render
 
 					// リソースアクセス定義.
 					h_work_tex_ = builder.RecordResourceAccess(*this, builder.CreateResource(work_tex_desc), rtg::access_type::UAV);
+
+					// 入力リソーステスト.
+					if(!h_input_test.IsInvalid())
+						builder.RecordResourceAccess(*this, h_input_test, rtg::access_type::SHADER_READ);
 				}
 
 				{
@@ -554,7 +570,7 @@ namespace ngl::render
 			}
 
 			// 実際のレンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_work_tex = builder.GetAllocatedResource(this, h_work_tex_);

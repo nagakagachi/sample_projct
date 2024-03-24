@@ -175,7 +175,7 @@ namespace ngl
 			// Fenceに対してSignal発行..
 			void Signal(FenceDep* p_fence, ngl::types::u64 fence_value);
 			// Fenceに対してSignal発行.
-			// 内部でp_fenceのFenceValueでSignalを発行してからFenceValueを加算し, wait対象のFenceValue(加算前野値)を返す.
+			// 内部でp_fenceのFenceValueでSignalを発行してからFenceValueを加算し, wait対象のFenceValue(加算前の値)を返す.
 			ngl::types::u64 SignalAndIncrement(FenceDep* p_fence);
 			// FenceでWait. 待機するFenceValueを指定する.
 			void Wait(FenceDep* p_fence, ngl::types::u64 wait_value);

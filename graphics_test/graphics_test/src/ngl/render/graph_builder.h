@@ -26,7 +26,7 @@ namespace ngl
 
 		enum class ETASK_TYPE : int
 		{
-			GRAPHICS,
+			GRAPHICS = 0,
 			COMPUTE,
 		};
 
@@ -180,6 +180,7 @@ namespace ngl
 			{
 				return ResourceHandle({});
 			}
+			// 無効はHandleか.
 			bool IsInvalid() const
 			{
 				return detail.unique_id == InvalidHandle().detail.unique_id;
@@ -207,6 +208,7 @@ namespace ngl
 			// GraphicsTaskの実装用.
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
 
+			virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
 
 			
 			// ------------------------------------------------------------------------------------------------------------------
@@ -302,6 +304,12 @@ namespace ngl
 			// Type Graphics.
 			ETASK_TYPE TaskType() const final
 			{ return ETASK_TYPE::GRAPHICS; }
+
+			// 念の為に空で継承も禁止.
+			void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) final
+			{
+				assert(false);
+			};
 		};
 		// ComputeTaskの基底クラス.
 		// GraphicsでもAsyncComputeでも実行可能なもの. UAVバリア以外のバリアは出来ないようにComputeCommandListのみ利用可能とする.
@@ -313,6 +321,12 @@ namespace ngl
 			// Type AsyncCompute.
 			ETASK_TYPE TaskType() const final
 			{ return ETASK_TYPE::COMPUTE; }
+			
+			// 念の為に空で継承も禁止.
+			void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) final
+			{
+				assert(false);
+			};
 		};
 
 
@@ -386,6 +400,16 @@ namespace ngl
 			rhi::ResourceState	require_end_state_ = rhi::ResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
 		};
 		
+		struct RtgCommandListRangeInfo
+		{
+			ETASK_TYPE type = ETASK_TYPE::GRAPHICS;
+			int begin = -1;// 直列化CommandList配列上の開始インデックス.
+			int count = 0;// 直列化CommandList配列上の開始インデックスからの個数.
+				
+			int fence_signal = -1;// Signal発行するFenceのユニークインデックス(-1で無効).
+			int fence_wait = -1;// WaitするFenceのユニークインデックス(-1で無効).
+		};
+		
 		// レンダリング処理をもつTaskNode列を記録し, リソースの割当やリソース状態遷移を解決してTaskNodeの並列CommandList構築を実現する.
 		//	このクラスのインスタンスは　TaskNodeのRecord, Compile, Execute の一連の処理の後に使い捨てとなる. これは使いまわしのための状態リセットの実装ミスを避けるため.
 		//	
@@ -444,7 +468,7 @@ namespace ngl
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
 			// Task毎にCommandListを割り当て, Submit用のCommandListのリストを返す.
-			void ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array);
+			void ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array, std::vector<RtgCommandListRangeInfo>& out_executed_command_list_range_info);
 
 			// -------------------------------------------------------------------------------------------
 			// Compileで割り当てられたHandleのリソース情報.
@@ -509,55 +533,64 @@ namespace ngl
 			
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
-			// HandleからリニアインデックスへのMap.
-			std::unordered_map<ResourceHandleKeyType, int> handle_2_compiled_index_ = {};
-			// NodeSequenceの順序に沿ったHandle配列.
-			std::vector<ResourceHandle>						compiled_index_handle_ = {};
-
-			// Compileで構築される情報.
-			// Handleに割り当てられたリソースのPool上のIndex.
-			// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
-			using CompiledResourceInfoKeyType = uint64_t;  
-			struct CompiledResourceInfo
-			{
-				union
+				struct NodeDependency
 				{
-					// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
-					CompiledResourceInfoKeyType data = {};
-					struct Detail
-					{
-						int32_t	 resource_id;		// 内部リソースプール又は外部リソースリストへの参照.
-						uint32_t is_external	: 1; // 外部リソースマーク.
-						uint32_t dummy			: 31;
-					}detail;
+					int from = -1;
+					int to = -1;
+
+					int fence_id = -1;// Wait側に格納されるFence. Signal側はtoの指すIndexが持つこのIDを利用する.
 				};
-				
-				CompiledResourceInfo() = default;
-				constexpr CompiledResourceInfo(CompiledResourceInfoKeyType data)
-				{ this->data = data; }
-				
-				operator CompiledResourceInfoKeyType() const
-				{ return data; }
+				// Queue違いのNode間のfence依存関係.
+				std::vector<NodeDependency> node_dependency_fence_ = {};
+				// HandleからリニアインデックスへのMap.
+				std::unordered_map<ResourceHandleKeyType, int> handle_2_compiled_index_ = {};
+				// NodeSequenceの順序に沿ったHandle配列.
+				std::vector<ResourceHandle>						compiled_index_handle_ = {};
 
-				// 無効値.
-				static constexpr CompiledResourceInfo k_invalid()
+				// Compileで構築される情報.
+				// Handleに割り当てられたリソースのPool上のIndex.
+				// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
+				using CompiledResourceInfoKeyType = uint64_t;  
+				struct CompiledResourceInfo
 				{
-					CompiledResourceInfo tmp = {};
-					tmp.detail.resource_id = -1;// 無効値.
-					return tmp;
-				}
-			};
-			// Handleのリニアインデックスから割り当て済みリソースID.
-			std::vector<CompiledResourceInfo> handle_compiled_resource_id_ = {};
-			
-			struct NodeHandleState
-			{
-				rhi::ResourceState prev_ = {};
-				rhi::ResourceState curr_ = {};
-			};
-			// Compileで構築される情報.
-			// NodeのHandle毎のリソース状態遷移.
-			std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
+					union
+					{
+						// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
+						CompiledResourceInfoKeyType data = {};
+						struct Detail
+						{
+							int32_t	 resource_id;		// 内部リソースプール又は外部リソースリストへの参照.
+							uint32_t is_external	: 1; // 外部リソースマーク.
+							uint32_t dummy			: 31;
+						}detail;
+					};
+					
+					CompiledResourceInfo() = default;
+					constexpr CompiledResourceInfo(CompiledResourceInfoKeyType data)
+					{ this->data = data; }
+					
+					operator CompiledResourceInfoKeyType() const
+					{ return data; }
+
+					// 無効値.
+					static constexpr CompiledResourceInfo k_invalid()
+					{
+						CompiledResourceInfo tmp = {};
+						tmp.detail.resource_id = -1;// 無効値.
+						return tmp;
+					}
+				};
+				// Handleのリニアインデックスから割り当て済みリソースID.
+				std::vector<CompiledResourceInfo> handle_compiled_resource_id_ = {};
+				
+				struct NodeHandleState
+				{
+					rhi::ResourceState prev_ = {};
+					rhi::ResourceState curr_ = {};
+				};
+				// Compileで構築される情報.
+				// NodeのHandle毎のリソース状態遷移.
+				std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 		private:

@@ -278,15 +278,14 @@ namespace ngl
 			// Compileでリソース割当をするマネージャを保持.
 			p_compiled_manager_ = &manager;
 
-			// MEMO 終端に寄与しないノードのカリングは保留.
-			// 念のためのValidation Check.
+			// Validation Check.
 			{
 				for(int sequence_id = 0; sequence_id < node_sequence_.size(); ++sequence_id)
 				{
 					ITaskNode* p_node = node_sequence_[sequence_id];
 					assert(node_handle_usage_list_.end() != node_handle_usage_list_.find(p_node));// ありえない.
 
-					// Nodeが同じHandleに対して重複したRegisterを指定ないかチェック.
+					// Nodeが同じHandleに対して重複したアクセスがないかチェック.
 					for(int i = 0; i < node_handle_usage_list_[p_node].size() - 1; ++i)
 					{
 						for(int j = i + 1; j < node_handle_usage_list_[p_node].size(); ++j)
@@ -301,6 +300,125 @@ namespace ngl
 				}
 			}
 
+
+			std::vector<int> graphics_node_index;
+			std::vector<int> compute_node_index;
+			for(int i = 0; i < node_sequence_.size(); ++i)
+			{
+				if(ETASK_TYPE::GRAPHICS == node_sequence_[i]->TaskType())
+				{
+					graphics_node_index.push_back(i);
+				}
+				else
+				{
+					compute_node_index.push_back(i);
+				}
+			}
+			
+			
+			// ------------------------------------------------------------------------
+			// Nodeの依存関係(Graphics-Compute).
+			node_dependency_fence_.clear();
+			node_dependency_fence_.resize(node_sequence_.size());
+			std::fill(node_dependency_fence_.begin(), node_dependency_fence_.end(), NodeDependency{});// fill -1
+			{
+				std::vector<ETASK_TYPE> task_type = {};
+				std::vector<NodeDependency> task_dependency = {};
+				task_type.resize(node_sequence_.size());
+				task_dependency.resize(node_sequence_.size());
+				std::fill(task_dependency.begin(), task_dependency.end(), NodeDependency{});// fill -1
+				// NodeのTaskTypeにアクセスしやすくするための配列セットアップ.
+				for(int i = 0; i < node_sequence_.size(); ++i)
+				{
+					task_type[i] = node_sequence_[i]->TaskType();
+				}
+				// 先にGraphics-Computeの依存関係をリストアップする.
+				for(int i = 1; i < node_sequence_.size(); ++i)
+				{
+					const auto* p_node_i = node_sequence_[i];
+					const auto task_type_i = p_node_i->TaskType();
+
+					int nearest_dependency_index = -1;
+					// 前段のNodeを近い順に探索.
+					for(int j = i - 1; j >= 0; --j)
+					{
+						const auto* p_node_j = node_sequence_[j];
+						const auto task_type_j = p_node_j->TaskType();
+
+						// 異なるTypeのNodeで同一Handleへアクセスしているものを探す
+						if(task_type_i == task_type_j)
+							continue;
+				
+						for(auto& res_access_i : node_handle_usage_list_[p_node_i])
+						{
+							for(auto& res_access_j : node_handle_usage_list_[p_node_j])
+							{
+								// 同一HandleへのアクセスをするNodeを発見.
+								if(res_access_i.handle == res_access_j.handle)
+								{
+									// node_iに最も近い前段のNodeからの依存を探索する
+									nearest_dependency_index = std::max(nearest_dependency_index, j);
+									break;
+								}
+							}
+							if(0 <= nearest_dependency_index)
+								break;// 早期break.
+						}
+						if(0 <= nearest_dependency_index)
+							break;// 早期break.
+					}
+					if(0 <= nearest_dependency_index)
+					{
+						// 近い依存のみを更新.
+						// 前方からそれより前方への依存を近い順に探索しているため, node_iからみたnearest_dependency_indexは最短距離にある依存作のはず.
+						if(0 > task_dependency[nearest_dependency_index].to
+							|| i < task_dependency[nearest_dependency_index].to)
+						{
+							task_dependency[i].from = nearest_dependency_index;
+							task_dependency[nearest_dependency_index].to = i;
+						}
+					}
+				}
+				// リストアップした依存関係からFenceを張るべき有効な関係を抽出する.
+				//	依存元と依存先の位置関係から意味のない依存関係を除外して有効な依存関係のみ抽出.
+				int fence_count = 0;
+				for(int type_i = 0; type_i < 2; ++type_i)
+				{
+					const int other_type_i = 1 - type_i;// 0 or 1.
+					
+					for(int i = 0; i < node_sequence_.size(); ++i)
+					{
+						if((int)task_type[i] != type_i)
+							continue;// 処理対象のTypeのみ.
+
+						// 前段のNodeを探索.
+						bool is_valid_dependency = true;
+						for(int j = i-1; j >= 0 && is_valid_dependency; --j)
+						{
+							if((int)task_type[j] != type_i)
+								continue;// 処理対象のTypeのみ.
+							// 前方のNodeからの依存先は, 自身の依存先よりも前方であるはず. 同じか後方にあるような依存先の場合はこの依存関係iは意味が無いものとして除去する.
+							if(task_dependency[i].from <= task_dependency[j].from)
+							{
+								is_valid_dependency = false;
+							}
+						}
+						if(is_valid_dependency)
+						{
+							if(0 <= task_dependency[i].from)
+							{
+								node_dependency_fence_[i].from = task_dependency[i].from;
+								node_dependency_fence_[task_dependency[i].from].to = i;
+
+								node_dependency_fence_[i].fence_id = fence_count;
+								++fence_count;
+							}
+						}
+					}
+				}
+			}
+			// ------------------------------------------------------------------------
+			
 			
 			std::vector<TaskStage> node_stage_array = {};// Sequence上のインデックスからタスクステージ情報を引く.
 			{
@@ -373,7 +491,6 @@ namespace ngl
 					handle_access_info_array[handle_index].from_node_.push_back(access_flow_part);
 					// アクセスパターンタイプに追加.
 					handle_access_info_array[handle_index].access_pattern_[res_access.access] = true;
-					
 				}
 			}
 				// Validation. ここで RenderTarget且つDepthStencilTarget等の許可されないアクセスチェック.
@@ -829,7 +946,7 @@ namespace ngl
 			return ret_info;
 		}
 
-		void RenderTaskGraphBuilder::ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array)
+		void RenderTaskGraphBuilder::ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array, std::vector<RtgCommandListRangeInfo>& out_executed_command_list_range_info)
 		{
 			// Compileされていないチェック.
 			if(!IsExecutable())
@@ -961,8 +1078,7 @@ namespace ngl
 					}
 					// ComputeTaskのCommandを発行する.
 					{
-						// 現状はGraphicsQueueで実行するためGraphicsCommandListを取得.
-						rhi::GraphicsCommandListDep* ref_cmdlist = {};
+						rhi::ComputeCommandListDep* ref_cmdlist = {};
 						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
 						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
 						
@@ -1001,20 +1117,56 @@ namespace ngl
 				ref_cmdlist_final->End();
 			}
 
+			out_executed_command_list_range_info.clear();
+			out_executed_command_list_array.clear();
 			// CommandList配列を直列化.
 			{
-				out_executed_command_list_array.clear();
-
-				for(auto& per_node_list : node_commandlists)
+				int command_list_count = 0;
+				for(int i = 0; i < node_commandlists.size(); ++i)
 				{
+					auto& per_node_list = node_commandlists[i];
+
+					const int range_begin = command_list_count;
 					for(auto& list : per_node_list)
 					{
-						out_executed_command_list_array.push_back(list);
+						out_executed_command_list_array.push_back(list);// Push.
+						++command_list_count;
+					}
+
+					// 直列化CommandListのレンジとFence情報構築.
+					{
+						RtgCommandListRangeInfo range_info = {};
+						range_info.type = node_sequence_[i]->TaskType();
+						range_info.begin = range_begin;
+						range_info.count = command_list_count - range_begin;
+
+						if(0 <= node_dependency_fence_[i].from)
+						{
+							const auto fence_id = node_dependency_fence_[i].fence_id;
+							assert(0 <= fence_id);// Wait側は直接FenceIDを保持しているはず.
+							range_info.fence_wait = fence_id;
+						}
+						if(0 <= node_dependency_fence_[i].to)
+						{
+							const auto fence_id = node_dependency_fence_[ node_dependency_fence_[i].to ].fence_id;
+							assert(0 <= fence_id);
+							range_info.fence_signal = fence_id;
+						}
+
+						out_executed_command_list_range_info.push_back(range_info);
 					}
 				}
 				
 				// 最終CommandList登録.
 				out_executed_command_list_array.push_back(ref_cmdlist_final);
+				{
+					// 最終CommandListのRangeも登録.
+					RtgCommandListRangeInfo range_info = {};
+					range_info.type = ETASK_TYPE::GRAPHICS;
+					range_info.begin = command_list_count;
+					range_info.count = 1;
+					out_executed_command_list_range_info.push_back(range_info);
+				}
 			}
 			
 			// ExecuteしたBuilderは使い捨てとすることで状態リセットの実装ミス等を回避する.

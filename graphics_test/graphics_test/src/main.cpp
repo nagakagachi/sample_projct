@@ -681,6 +681,7 @@ bool AppGame::Execute()
 		
 		// RtgのCommandList配列.
 		std::vector<ngl::rhi::CommandListBaseDep*> rtg_command_list_sequence = {};
+		std::vector<ngl::rtg::RtgCommandListRangeInfo> rtg_command_list_range_info = {};
 		
 		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
 		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
@@ -727,27 +728,38 @@ bool AppGame::Execute()
 
 				// Build Rendering Pass.
 				{
-					// ComputeTaskテスト. Builder側が対応したら有効化して検証する. これはまだAsyncではないGraphicsQueue実行である.
-					#if 1
-						// ComputeTaskをGraphics/AsyncComputeどちらにスケジュールするかはこのタイミングで決めたい.
-						auto* task_test_compute = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
-						task_test_compute->Setup(rtg_builder, &device_);
-					#endif
 
+#define ASYNC_COMPUTE_TEST 1
+					// AsyncComputeの依存関係の追い越しパターンテスト用.
+					ngl::rtg::ResourceHandle async_compute_tex2 = {};
+#if ASYNC_COMPUTE_TEST
+					// AsyncCompute Pass.
+					auto* task_test_compute1 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
+					task_test_compute1->Setup(rtg_builder, &device_, {});
+					async_compute_tex2 = task_test_compute1->h_work_tex_;
+#endif
 					
-					// Depth Only.
+					// PreZ Pass.
 					auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
 					task_depth->Setup(rtg_builder, &device_, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
 
-					// GBuffer.
+					ngl::rtg::ResourceHandle async_compute_tex = {};
+#if ASYNC_COMPUTE_TEST
+					// AsyncCompute Pass 其の二.
+					auto* task_test_compute2 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
+					task_test_compute2->Setup(rtg_builder, &device_, task_depth->h_depth_);
+					async_compute_tex = task_test_compute2->h_work_tex_;
+#endif
+					
+					// GBuffer Pass.
 					auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
-					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_);
-
-					// Linear Depth.
+					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex);
+					
+					// Linear Depth Pass.
 					auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
-					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_, cbv_sceneview_[flip_index_sceneview_]);
+					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_,async_compute_tex2, cbv_sceneview_[flip_index_sceneview_]);
 
-					// Deferred Lighting.
+					// Deferred Lighting Pass.
 					auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
 					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_linear_depth->h_linear_depth_, h_prev_light, samp_linear_clamp_);
 
@@ -769,7 +781,7 @@ bool AppGame::Execute()
 				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
 				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
 				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
-				rtg_builder.ExecuteMultiCommandlist(rtg_command_list_sequence);
+				rtg_builder.ExecuteMultiCommandlist(rtg_command_list_sequence, rtg_command_list_range_info);
 				
 			}
 		}
@@ -823,12 +835,122 @@ bool AppGame::Execute()
 				compute_end_fence_value = compute_queue_.SignalAndIncrement(&test_compute_to_gfx_fence_);
 			}
 			
+			// 適当にComputeQueueのFenceを待つWait.
+			//	実際にはGraphicsタスクの先頭でのWaitなので並列動作しないが, RTG内部でのAsyncComputeの検証のためここでWait.
+			graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
+
+			
+			// システム用の先頭CommandListをSubmit.
+			{
+				ngl::rhi::CommandListBaseDep* submit_list[]=
+				{
+					gfx_command_list_.Get()
+				};
+				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
+			}
+#if 1
+			// RTGのGraphicsとComputeのCommandListを実行するテスト.
+			{
+
+				// RTGのCommandList同期のために使い捨てでFenceを作成する.
+				std::vector<ngl::rhi::RhiRef<ngl::rhi::FenceDep>> temp_fence_list = {};
+				std::vector<ngl::u64>	temp_fence_value = {};
+				std::vector<bool>		temp_fence_signaled = {};
+				auto GetTemporalFenceObject = [&temp_fence_list, &temp_fence_value, &temp_fence_signaled](ngl::rhi::DeviceDep* p_device, int fence_id)
+				-> int
+				{
+					// Fenceを必要分確保. fence_idは連番で最小限となっているはず.
+					for(;temp_fence_list.size() <= fence_id;)
+					{
+						ngl::rhi::RhiRef<ngl::rhi::FenceDep> fence = new ngl::rhi::FenceDep();
+						fence->Initialize(p_device);
+						temp_fence_list.push_back(fence);
+						temp_fence_value.push_back(fence->GetFenceValue());// 初期値.
+						temp_fence_signaled.push_back(false);
+					}
+					assert(temp_fence_list.size() > fence_id);
+					assert(temp_fence_value.size() > fence_id);
+					return fence_id;
+				};
+				
+				
+				for(int range_i = 0; range_i < rtg_command_list_range_info.size(); ++range_i)
+				{
+					const auto queue_type = rtg_command_list_range_info[range_i].type;
+					const auto begin_index = rtg_command_list_range_info[range_i].begin;
+					const auto list_count =rtg_command_list_range_info[range_i].count;
+					const auto signal_id = rtg_command_list_range_info[range_i].fence_signal;
+					const auto wait_id = rtg_command_list_range_info[range_i].fence_wait;
+
+
+					int local_command_list_index = begin_index;
+					int local_command_list_count = list_count;
+					// Computeの場合は先頭にState Transition用のGraphicsCommandListが存在する場合があるため, その専用処理.
+					if(ngl::rtg::ETASK_TYPE::COMPUTE == queue_type)
+					{
+						// TODO. 面倒なので一旦D3D12型を直接使用.
+						if(D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT == rtg_command_list_sequence[local_command_list_index]->GetDesc().type)
+						{
+							// サブミット.
+							graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(1), &rtg_command_list_sequence[local_command_list_index]);
+							// インデックスとカウント更新.
+							local_command_list_index += 1;
+							local_command_list_count -= 1;
+						}
+					}
+
+					// Wait.
+					//	Submit前にWaitが必要であれば発行.
+					if(0 <= wait_id)
+					{
+						// Wait発行.
+						const int fence_index = GetTemporalFenceObject(&device_, wait_id);
+						// まだSignalに使われていない場合はFence値が更新されていないため, +1した値をWaitする.
+						auto wait_value = (temp_fence_signaled[fence_index])? temp_fence_value[fence_index] : temp_fence_value[fence_index]+1;
+						
+						if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
+							graphics_queue_.Wait(temp_fence_list[fence_index].Get(), wait_value);
+						else
+							compute_queue_.Wait(temp_fence_list[fence_index].Get(), wait_value);
+					}
+					
+					// Submit.
+					//	メインのCommandList群をSubmit.
+					//	TODO. Typeが同じでFenceにかかわらない連続したNodeのCommandListはマージしてExecuteしたいところ.
+					if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
+					{
+						graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(local_command_list_count), &rtg_command_list_sequence[local_command_list_index]);
+					}
+					else
+					{
+						compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(local_command_list_count), &rtg_command_list_sequence[local_command_list_index]);
+					}
+
+					// Signal.
+					//	Submit後にSignalが必要であれば発行.
+					if(0 <= signal_id)
+					{
+						// Signal発行.
+						const int fence_index = GetTemporalFenceObject(&device_, signal_id);
+						assert(false == temp_fence_signaled[fence_index]);// Fenceオブジェクトは現状では使い回ししないためfalceのはず.
+						temp_fence_signaled[fence_index] = true;
+						
+						++temp_fence_value[fence_index];// Signalの値を更新.
+						auto signal_value = temp_fence_value[fence_index];
+						
+						if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
+							graphics_queue_.Signal(temp_fence_list[fence_index].Get(), signal_value);
+						else
+							compute_queue_.Signal(temp_fence_list[fence_index].Get(), signal_value);
+					}
+				}
+			}
+#else
 			// Graphics.
+			// AsyncCompute無し想定ですべてのCommandListを直列実行するテスト.
 			{
 				std::vector<ngl::rhi::CommandListBaseDep*> p_command_list_submit_sequence = {};
 				{
-					p_command_list_submit_sequence.push_back(gfx_command_list_.Get());
-
 					// RtgのCommandList配列をPush.
 					for(auto& e : rtg_command_list_sequence)
 					{
@@ -836,10 +958,8 @@ bool AppGame::Execute()
 					}
 				}
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(p_command_list_submit_sequence.size()), p_command_list_submit_sequence.data());
-				
-				// ComputeQueueのFenceを待つWait.
-				graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
 			}
+#endif
 		}
 		// Present
 		swapchain_->GetDxgiSwapChain()->Present(1, 0);
