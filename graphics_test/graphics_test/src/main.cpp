@@ -728,7 +728,6 @@ bool AppGame::Execute()
 
 				// Build Rendering Pass.
 				{
-
 #define ASYNC_COMPUTE_TEST 1
 					// AsyncComputeの依存関係の追い越しパターンテスト用.
 					ngl::rtg::ResourceHandle async_compute_tex2 = {};
@@ -822,6 +821,7 @@ bool AppGame::Execute()
 
 		// CommandList Submit
 		{
+#if 1
 			// Compute.
 			ngl::u64 compute_end_fence_value = {};
 			{
@@ -832,13 +832,13 @@ bool AppGame::Execute()
 				compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
 				
 				// ComputeのCommandListの末尾からSignal発行.
-				compute_end_fence_value = compute_queue_.SignalAndIncrement(&test_compute_to_gfx_fence_);
+				//compute_end_fence_value = compute_queue_.SignalAndIncrement(&test_compute_to_gfx_fence_);
 			}
 			
 			// 適当にComputeQueueのFenceを待つWait.
 			//	実際にはGraphicsタスクの先頭でのWaitなので並列動作しないが, RTG内部でのAsyncComputeの検証のためここでWait.
-			graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
-
+			//graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
+#endif
 			
 			// システム用の先頭CommandListをSubmit.
 			{
@@ -852,24 +852,31 @@ bool AppGame::Execute()
 			// RTGのGraphicsとComputeのCommandListを実行するテスト.
 			{
 
-				// RTGのCommandList同期のために使い捨てでFenceを作成する.
-				std::vector<ngl::rhi::RhiRef<ngl::rhi::FenceDep>> temp_fence_list = {};
-				std::vector<ngl::u64>	temp_fence_value = {};
-				std::vector<bool>		temp_fence_signaled = {};
-				auto GetTemporalFenceObject = [&temp_fence_list, &temp_fence_value, &temp_fence_signaled](ngl::rhi::DeviceDep* p_device, int fence_id)
+				// RTGがスケジューリングした依存関係IDに割り当てられたFenceを取得(確保)する.
+				std::vector<ngl::rhi::RhiRef<ngl::rhi::FenceDep>> dependency_fence_list = {};
+				std::vector<ngl::u64>	dependency_fence_value = {};
+				std::vector<bool>		dependency_fence_signaled = {};
+				auto GetDepencendyFenceObject = [&dependency_fence_list, &dependency_fence_value, &dependency_fence_signaled](ngl::rhi::DeviceDep* p_device, int fence_id)
 				-> int
 				{
 					// Fenceを必要分確保. fence_idは連番で最小限となっているはず.
-					for(;temp_fence_list.size() <= fence_id;)
+					for(;dependency_fence_list.size() <= fence_id;)
 					{
-						ngl::rhi::RhiRef<ngl::rhi::FenceDep> fence = new ngl::rhi::FenceDep();
-						fence->Initialize(p_device);
-						temp_fence_list.push_back(fence);
-						temp_fence_value.push_back(fence->GetFenceValue());// 初期値.
-						temp_fence_signaled.push_back(false);
+						dependency_fence_list.push_back({});
+						dependency_fence_value.push_back({});// 初期値.
+						dependency_fence_signaled.push_back({});
 					}
-					assert(temp_fence_list.size() > fence_id);
-					assert(temp_fence_value.size() > fence_id);
+					assert(dependency_fence_list.size() > fence_id);
+					assert(dependency_fence_value.size() > fence_id);
+					if(!dependency_fence_list[fence_id].IsValid())
+					{
+						dependency_fence_list[fence_id].Reset( new ngl::rhi::FenceDep() );
+						dependency_fence_list[fence_id]->Initialize(p_device);
+						
+						dependency_fence_value[fence_id] = dependency_fence_list[fence_id]->GetFenceValue();// 初期値.
+						dependency_fence_signaled[fence_id] = false;
+					}
+
 					return fence_id;
 				};
 				
@@ -888,6 +895,7 @@ bool AppGame::Execute()
 					// Computeの場合は先頭にState Transition用のGraphicsCommandListが存在する場合があるため, その専用処理.
 					if(ngl::rtg::ETASK_TYPE::COMPUTE == queue_type)
 					{
+						// ComputeTaskのCommandListの1つ目のタイプがGraphicsの場合はState Transitionのためのものであるため, GraphicsQueueにSubmitしたうえでFenceで同期する.
 						// TODO. 面倒なので一旦D3D12型を直接使用.
 						if(D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT == rtg_command_list_sequence[local_command_list_index]->GetDesc().type)
 						{
@@ -896,6 +904,16 @@ bool AppGame::Execute()
 							// インデックスとカウント更新.
 							local_command_list_index += 1;
 							local_command_list_count -= 1;
+
+							// GraphicsにSubmitしたState TransitionをComputeが待機するようにFence.
+							{
+								// 現状ではFenceはその場で生成して使い捨て.
+								ngl::rhi::RhiRef<ngl::rhi::FenceDep> fence = new ngl::rhi::FenceDep();
+								fence->Initialize(&device_);
+
+								const auto signal_value = graphics_queue_.SignalAndIncrement(fence.Get());
+								compute_queue_.Wait(fence.Get(), signal_value);
+							}
 						}
 					}
 
@@ -904,14 +922,14 @@ bool AppGame::Execute()
 					if(0 <= wait_id)
 					{
 						// Wait発行.
-						const int fence_index = GetTemporalFenceObject(&device_, wait_id);
+						const int fence_index = GetDepencendyFenceObject(&device_, wait_id);
 						// まだSignalに使われていない場合はFence値が更新されていないため, +1した値をWaitする.
-						auto wait_value = (temp_fence_signaled[fence_index])? temp_fence_value[fence_index] : temp_fence_value[fence_index]+1;
+						auto wait_value = (dependency_fence_signaled[fence_index])? dependency_fence_value[fence_index] : dependency_fence_value[fence_index]+1;
 						
 						if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
-							graphics_queue_.Wait(temp_fence_list[fence_index].Get(), wait_value);
+							graphics_queue_.Wait(dependency_fence_list[fence_index].Get(), wait_value);
 						else
-							compute_queue_.Wait(temp_fence_list[fence_index].Get(), wait_value);
+							compute_queue_.Wait(dependency_fence_list[fence_index].Get(), wait_value);
 					}
 					
 					// Submit.
@@ -931,17 +949,17 @@ bool AppGame::Execute()
 					if(0 <= signal_id)
 					{
 						// Signal発行.
-						const int fence_index = GetTemporalFenceObject(&device_, signal_id);
-						assert(false == temp_fence_signaled[fence_index]);// Fenceオブジェクトは現状では使い回ししないためfalceのはず.
-						temp_fence_signaled[fence_index] = true;
+						const int fence_index = GetDepencendyFenceObject(&device_, signal_id);
+						assert(false == dependency_fence_signaled[fence_index]);// Fenceオブジェクトは現状では使い回ししないためfalceのはず.
+						dependency_fence_signaled[fence_index] = true;
 						
-						++temp_fence_value[fence_index];// Signalの値を更新.
-						auto signal_value = temp_fence_value[fence_index];
+						++dependency_fence_value[fence_index];// Signalの値を更新.
+						auto signal_value = dependency_fence_value[fence_index];
 						
 						if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
-							graphics_queue_.Signal(temp_fence_list[fence_index].Get(), signal_value);
+							graphics_queue_.Signal(dependency_fence_list[fence_index].Get(), signal_value);
 						else
-							compute_queue_.Signal(temp_fence_list[fence_index].Get(), signal_value);
+							compute_queue_.Signal(dependency_fence_list[fence_index].Get(), signal_value);
 					}
 				}
 			}
