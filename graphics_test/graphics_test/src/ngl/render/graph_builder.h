@@ -400,16 +400,6 @@ namespace ngl
 			rhi::ResourceState	require_end_state_ = rhi::ResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
 		};
 		
-		struct RtgCommandListRangeInfo
-		{
-			ETASK_TYPE type = ETASK_TYPE::GRAPHICS;
-			int begin = -1;// 直列化CommandList配列上の開始インデックス.
-			int count = 0;// 直列化CommandList配列上の開始インデックスからの個数.
-				
-			int fence_signal = -1;// Signal発行するFenceのユニークインデックス(-1で無効).
-			int fence_wait = -1;// WaitするFenceのユニークインデックス(-1で無効).
-		};
-
 		// Execute結果のCommandSequence要素のタイプ.
 		enum ERtgSubmitCommandType
 		{
