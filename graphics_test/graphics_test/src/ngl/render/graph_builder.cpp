@@ -946,7 +946,7 @@ namespace ngl
 			return ret_info;
 		}
 
-		void RenderTaskGraphBuilder::ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array, std::vector<RtgCommandListRangeInfo>& out_executed_command_list_range_info)
+		void RenderTaskGraphBuilder::Execute(std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands)
 		{
 			// Compileされていないチェック.
 			if(!IsExecutable())
@@ -1061,8 +1061,6 @@ namespace ngl
 				else if(ETASK_TYPE::COMPUTE == e->TaskType())
 				{
 					// Compute.
-					// 実装中.
-
 					// 最初に状態遷移が必要なリソースがあれば, GraphicsCommandListを取得してバリアを発行する.
 					if(check_exist_state_transition(e))
 					{
@@ -1117,56 +1115,145 @@ namespace ngl
 				ref_cmdlist_final->End();
 			}
 
-			out_executed_command_list_range_info.clear();
-			out_executed_command_list_array.clear();
-			// CommandList配列を直列化.
-			{
-				int command_list_count = 0;
+			// Fence込のSubmit可能シーケンスを生成.
+			out_graphics_commands.clear();
+			out_compute_commands.clear();
+			{	
+				// Task間同期に必要なFenceをセットアップ.
+				std::vector<rhi::RhiRef<rhi::FenceDep>> sync_fences;
+				{
+					sync_fences.clear();
+					for(auto&& e : node_dependency_fence_)
+					{
+						if(0 > e.fence_id)
+							continue;
+						
+						for(;sync_fences.size() <= e.fence_id;)
+						{
+							sync_fences.push_back({});
+						}
+						if(!sync_fences[e.fence_id].IsValid())
+						{
+							ngl::rhi::RhiRef<ngl::rhi::FenceDep> fence = new ngl::rhi::FenceDep();
+							fence->Initialize(p_compiled_manager_->p_device_);
+
+							fence->IncrementFenceValue();// Fence値を加算してWaitが即完了しないようにする.
+							sync_fences[e.fence_id] = fence;
+						}
+					}
+				}
 				for(int i = 0; i < node_commandlists.size(); ++i)
 				{
-					auto& per_node_list = node_commandlists[i];
+					const auto queue_type = node_sequence_[i]->TaskType();
 
-					const int range_begin = command_list_count;
-					for(auto& list : per_node_list)
+					// 別のQueueを待機する.
+					if(0 <= node_dependency_fence_[i].from)
 					{
-						out_executed_command_list_array.push_back(list);// Push.
-						++command_list_count;
+						const auto fence_id = node_dependency_fence_[i].fence_id;
+						assert(0 <= fence_id);
+						
+						RtgSubmitCommandSequenceElem wait_elem = {};
+						wait_elem.type = ERtgSubmitCommandType::Wait;
+						wait_elem.fence = sync_fences[fence_id];
+						wait_elem.fence_value = sync_fences[fence_id]->GetFenceValue();// すでにユニーク値になっているのでそのまま使用.
+						
+						if(ETASK_TYPE::GRAPHICS == queue_type)
+						{
+							out_graphics_commands.push_back(wait_elem);
+						}
+						else
+						{
+							out_compute_commands.push_back(wait_elem);
+						}
 					}
 
-					// 直列化CommandListのレンジとFence情報構築.
+					// CommandList部積み込み.
+					for(auto&& list : node_commandlists[i])
 					{
-						RtgCommandListRangeInfo range_info = {};
-						range_info.type = node_sequence_[i]->TaskType();
-						range_info.begin = range_begin;
-						range_info.count = command_list_count - range_begin;
-
-						if(0 <= node_dependency_fence_[i].from)
+						RtgSubmitCommandSequenceElem command_elem = {};
+						command_elem.type = ERtgSubmitCommandType::CommandList;
+						command_elem.command_list = list;
+							
+						if(ETASK_TYPE::GRAPHICS == queue_type)
 						{
-							const auto fence_id = node_dependency_fence_[i].fence_id;
-							assert(0 <= fence_id);// Wait側は直接FenceIDを保持しているはず.
-							range_info.fence_wait = fence_id;
+							// Graphics.
+							out_graphics_commands.push_back(command_elem);
 						}
-						if(0 <= node_dependency_fence_[i].to)
+						else
 						{
-							const auto fence_id = node_dependency_fence_[ node_dependency_fence_[i].to ].fence_id;
-							assert(0 <= fence_id);
-							range_info.fence_signal = fence_id;
-						}
+							// Compute.
+							// CommandList自体のタイプがGtaphicsの場合は, ComputeのためのState遷移CommandであるためGraphicsへPushし必要なFenceも張る.
+							if(list->GetD3D12GraphicsCommandList()->GetType() == D3D12_COMMAND_LIST_TYPE_DIRECT)
+							{
+								// Compute用のState遷移をGraphics側に発行するCommandListなのでGraphicsへPush.
+								out_graphics_commands.push_back(command_elem);
 
-						out_executed_command_list_range_info.push_back(range_info);
+								// さらにこのGraphicsComamndをComputeが待機する必要があるためFence追加.
+								{
+									// 現状ではFenceはその場で生成して使い捨て.
+									ngl::rhi::RhiRef<ngl::rhi::FenceDep> fence = new ngl::rhi::FenceDep();
+									fence->Initialize(p_compiled_manager_->p_device_);
+
+									const u64 state_transition_fenec_value = fence->GetFenceValue() + 1;//一応現在の値+1で
+									{
+										// GraphicsでPushしたState遷移をComputeで待たせるためのSignal.
+										RtgSubmitCommandSequenceElem signal_elem = {};
+										signal_elem.type = ERtgSubmitCommandType::Signal;
+										signal_elem.fence = fence;
+										signal_elem.fence_value = state_transition_fenec_value;
+
+										out_graphics_commands.push_back(signal_elem);
+									}
+									{
+										// GraphicsでPushしたState遷移をComputeが待つためのWait.
+										RtgSubmitCommandSequenceElem wait_elem = {};
+										wait_elem.type = ERtgSubmitCommandType::Wait;
+										wait_elem.fence = fence;
+										wait_elem.fence_value = state_transition_fenec_value;
+
+										out_compute_commands.push_back(wait_elem);
+									}
+								}
+							}
+							else
+							{
+								// Compute TypeのCommandListはそのままPush.
+								out_compute_commands.push_back(command_elem);
+							}
+						}
+					}
+					
+					// 別のQueueへSignal発行する.
+					if(0 <= node_dependency_fence_[i].to)
+					{
+						// Fence自体はWait側が管理しているため, Signal側はtoの指すIndexのFenceを使用する.
+						const auto fence_id = node_dependency_fence_[ node_dependency_fence_[i].to ].fence_id;
+						assert(0 <= fence_id);
+						
+						RtgSubmitCommandSequenceElem signal_elem = {};
+						signal_elem.type = ERtgSubmitCommandType::Signal;
+						signal_elem.fence = sync_fences[fence_id];
+						signal_elem.fence_value = sync_fences[fence_id]->GetFenceValue();// すでにユニーク値になっているのでそのまま使用.
+						
+						if(ETASK_TYPE::GRAPHICS == queue_type)
+						{
+							out_graphics_commands.push_back(signal_elem);
+						}
+						else
+						{
+							out_compute_commands.push_back(signal_elem);
+						}
 					}
 				}
-				
-				// 最終CommandList登録.
-				out_executed_command_list_array.push_back(ref_cmdlist_final);
-				{
-					// 最終CommandListのRangeも登録.
-					RtgCommandListRangeInfo range_info = {};
-					range_info.type = ETASK_TYPE::GRAPHICS;
-					range_info.begin = command_list_count;
-					range_info.count = 1;
-					out_executed_command_list_range_info.push_back(range_info);
-				}
+			}
+			
+			// 最終CommandList登録.
+			{
+				RtgSubmitCommandSequenceElem command_elem = {};
+				command_elem.type = ERtgSubmitCommandType::CommandList;
+				command_elem.command_list = ref_cmdlist_final;
+
+				out_graphics_commands.push_back(command_elem);
 			}
 			
 			// ExecuteしたBuilderは使い捨てとすることで状態リセットの実装ミス等を回避する.

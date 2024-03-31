@@ -680,8 +680,11 @@ bool AppGame::Execute()
 
 		
 		// RtgのCommandList配列.
-		std::vector<ngl::rhi::CommandListBaseDep*> rtg_command_list_sequence = {};
-		std::vector<ngl::rtg::RtgCommandListRangeInfo> rtg_command_list_range_info = {};
+		//std::vector<ngl::rhi::CommandListBaseDep*> rtg_command_list_sequence = {};
+		//std::vector<ngl::rtg::RtgCommandListRangeInfo> rtg_command_list_range_info = {};
+		
+		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_graphics_commands = {};
+		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_compute_commands = {};
 		
 		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
 		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
@@ -780,8 +783,9 @@ bool AppGame::Execute()
 				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
 				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
 				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
-				rtg_builder.ExecuteMultiCommandlist(rtg_command_list_sequence, rtg_command_list_range_info);
-				
+				//rtg_builder.ExecuteMultiCommandlist(rtg_command_list_sequence, rtg_command_list_range_info);
+
+				rtg_builder.Execute(rtg_graphics_commands, rtg_compute_commands);
 			}
 		}
 
@@ -849,120 +853,53 @@ bool AppGame::Execute()
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
 			}
 #if 1
-			// RTGのGraphicsとComputeのCommandListを実行するテスト.
+			// 整理したCommandSequenceを実行する.
+			//	連続したCommandListをなるべく一度のExecuteにまとめる.
+			auto submit_sequence = [](std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& sequence, ngl::rhi::CommandQueueBaseDep& graphics_queue)
 			{
-
-				// RTGがスケジューリングした依存関係IDに割り当てられたFenceを取得(確保)する.
-				std::vector<ngl::rhi::RhiRef<ngl::rhi::FenceDep>> dependency_fence_list = {};
-				std::vector<ngl::u64>	dependency_fence_value = {};
-				std::vector<bool>		dependency_fence_signaled = {};
-				auto GetDepencendyFenceObject = [&dependency_fence_list, &dependency_fence_value, &dependency_fence_signaled](ngl::rhi::DeviceDep* p_device, int fence_id)
-				-> int
+				std::vector<ngl::rhi::CommandListBaseDep*> exec_command_list_cache = {};
+				for(auto&& e : sequence)
 				{
-					// Fenceを必要分確保. fence_idは連番で最小限となっているはず.
-					for(;dependency_fence_list.size() <= fence_id;)
+					if(ngl::rtg::ERtgSubmitCommandType::CommandList == e.type)
 					{
-						dependency_fence_list.push_back({});
-						dependency_fence_value.push_back({});// 初期値.
-						dependency_fence_signaled.push_back({});
-					}
-					assert(dependency_fence_list.size() > fence_id);
-					assert(dependency_fence_value.size() > fence_id);
-					if(!dependency_fence_list[fence_id].IsValid())
-					{
-						dependency_fence_list[fence_id].Reset( new ngl::rhi::FenceDep() );
-						dependency_fence_list[fence_id]->Initialize(p_device);
-						
-						dependency_fence_value[fence_id] = dependency_fence_list[fence_id]->GetFenceValue();// 初期値.
-						dependency_fence_signaled[fence_id] = false;
-					}
-
-					return fence_id;
-				};
-				
-				
-				for(int range_i = 0; range_i < rtg_command_list_range_info.size(); ++range_i)
-				{
-					const auto queue_type = rtg_command_list_range_info[range_i].type;
-					const auto begin_index = rtg_command_list_range_info[range_i].begin;
-					const auto list_count =rtg_command_list_range_info[range_i].count;
-					const auto signal_id = rtg_command_list_range_info[range_i].fence_signal;
-					const auto wait_id = rtg_command_list_range_info[range_i].fence_wait;
-
-
-					int local_command_list_index = begin_index;
-					int local_command_list_count = list_count;
-					// Computeの場合は先頭にState Transition用のGraphicsCommandListが存在する場合があるため, その専用処理.
-					if(ngl::rtg::ETASK_TYPE::COMPUTE == queue_type)
-					{
-						// ComputeTaskのCommandListの1つ目のタイプがGraphicsの場合はState Transitionのためのものであるため, GraphicsQueueにSubmitしたうえでFenceで同期する.
-						// TODO. 面倒なので一旦D3D12型を直接使用.
-						if(D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT == rtg_command_list_sequence[local_command_list_index]->GetDesc().type)
-						{
-							// サブミット.
-							graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(1), &rtg_command_list_sequence[local_command_list_index]);
-							// インデックスとカウント更新.
-							local_command_list_index += 1;
-							local_command_list_count -= 1;
-
-							// GraphicsにSubmitしたState TransitionをComputeが待機するようにFence.
-							{
-								// 現状ではFenceはその場で生成して使い捨て.
-								ngl::rhi::RhiRef<ngl::rhi::FenceDep> fence = new ngl::rhi::FenceDep();
-								fence->Initialize(&device_);
-
-								const auto signal_value = graphics_queue_.SignalAndIncrement(fence.Get());
-								compute_queue_.Wait(fence.Get(), signal_value);
-							}
-						}
-					}
-
-					// Wait.
-					//	Submit前にWaitが必要であれば発行.
-					if(0 <= wait_id)
-					{
-						// Wait発行.
-						const int fence_index = GetDepencendyFenceObject(&device_, wait_id);
-						// まだSignalに使われていない場合はFence値が更新されていないため, +1した値をWaitする.
-						auto wait_value = (dependency_fence_signaled[fence_index])? dependency_fence_value[fence_index] : dependency_fence_value[fence_index]+1;
-						
-						if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
-							graphics_queue_.Wait(dependency_fence_list[fence_index].Get(), wait_value);
-						else
-							compute_queue_.Wait(dependency_fence_list[fence_index].Get(), wait_value);
-					}
-					
-					// Submit.
-					//	メインのCommandList群をSubmit.
-					//	TODO. Typeが同じでFenceにかかわらない連続したNodeのCommandListはマージしてExecuteしたいところ.
-					if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
-					{
-						graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(local_command_list_count), &rtg_command_list_sequence[local_command_list_index]);
+						exec_command_list_cache.push_back(e.command_list);
 					}
 					else
 					{
-						compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(local_command_list_count), &rtg_command_list_sequence[local_command_list_index]);
-					}
-
-					// Signal.
-					//	Submit後にSignalが必要であれば発行.
-					if(0 <= signal_id)
-					{
-						// Signal発行.
-						const int fence_index = GetDepencendyFenceObject(&device_, signal_id);
-						assert(false == dependency_fence_signaled[fence_index]);// Fenceオブジェクトは現状では使い回ししないためfalceのはず.
-						dependency_fence_signaled[fence_index] = true;
+						// Fenceが現れたらそれまでのCommandListをまとめてSubmit.
+						if(0 < exec_command_list_cache.size())
+						{
+							graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_cache.size()), exec_command_list_cache.data());
+							exec_command_list_cache.clear();
+						}
+						assert(e.fence.IsValid());
 						
-						++dependency_fence_value[fence_index];// Signalの値を更新.
-						auto signal_value = dependency_fence_value[fence_index];
-						
-						if(ngl::rtg::ETASK_TYPE::GRAPHICS == queue_type)
-							graphics_queue_.Signal(dependency_fence_list[fence_index].Get(), signal_value);
+						if(ngl::rtg::ERtgSubmitCommandType::Signal == e.type)
+						{
+							graphics_queue.Signal(e.fence.Get(), e.fence_value);
+						}
+						else if(ngl::rtg::ERtgSubmitCommandType::Wait == e.type)
+						{
+							graphics_queue.Wait(e.fence.Get(), e.fence_value);
+						}
 						else
-							compute_queue_.Signal(dependency_fence_list[fence_index].Get(), signal_value);
+						{
+							assert(false);
+						}
 					}
 				}
-			}
+				// 残ったCommandListをSubmit.
+				if(0 < exec_command_list_cache.size())
+				{
+					graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_cache.size()), exec_command_list_cache.data());
+					exec_command_list_cache.clear();
+				}
+			};
+			
+			// それぞれのQueueにSubmit.
+			submit_sequence(rtg_graphics_commands, graphics_queue_);
+			submit_sequence(rtg_compute_commands, compute_queue_);
+			
 #else
 			// Graphics.
 			// AsyncCompute無し想定ですべてのCommandListを直列実行するテスト.

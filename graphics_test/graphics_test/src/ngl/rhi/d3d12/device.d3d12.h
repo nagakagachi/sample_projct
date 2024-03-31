@@ -179,6 +179,8 @@ namespace ngl
 			ngl::types::u64 SignalAndIncrement(FenceDep* p_fence);
 			// FenceでWait. 待機するFenceValueを指定する.
 			void Wait(FenceDep* p_fence, ngl::types::u64 wait_value);
+
+			virtual void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists) = 0;
 			
 			ID3D12CommandQueue* GetD3D12CommandQueue();
 		protected:
@@ -196,7 +198,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device);
 			void Finalize();
 
-			void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists);
+			void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists) override;
 		private:
 		};
 		
@@ -212,7 +214,7 @@ namespace ngl
 			bool Initialize(DeviceDep* p_device);
 			void Finalize();
 
-			void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists);
+			void ExecuteCommandLists(unsigned int num_command_list, CommandListBaseDep** p_command_lists) override;
 		private:
 		};
 		

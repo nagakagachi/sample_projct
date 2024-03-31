@@ -409,6 +409,26 @@ namespace ngl
 			int fence_signal = -1;// Signal発行するFenceのユニークインデックス(-1で無効).
 			int fence_wait = -1;// WaitするFenceのユニークインデックス(-1で無効).
 		};
+
+		// Execute結果のCommandSequence要素のタイプ.
+		enum ERtgSubmitCommandType
+		{
+			CommandList,
+			Signal,
+			Wait
+		};
+		// Execute結果のCommandSequence要素.
+		struct RtgSubmitCommandSequenceElem
+		{
+			ERtgSubmitCommandType type = ERtgSubmitCommandType::CommandList;
+
+			// ERtgSubmitCommandType == CommandList
+			rhi::CommandListBaseDep* command_list = {};// 内部プールの関係でRefではなくポインタにしている.
+
+			// ERtgSubmitCommandType == Signal or Wait
+			rhi::RhiRef<rhi::FenceDep>	fence = {};
+			u64							fence_value = 0;
+		};
 		
 		// レンダリング処理をもつTaskNode列を記録し, リソースの割当やリソース状態遷移を解決してTaskNodeの並列CommandList構築を実現する.
 		//	このクラスのインスタンスは　TaskNodeのRecord, Compile, Execute の一連の処理の後に使い捨てとなる. これは使いまわしのための状態リセットの実装ミスを避けるため.
@@ -467,9 +487,9 @@ namespace ngl
 			
 			// Graph実行.
 			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
-			// Task毎にCommandListを割り当て, Submit用のCommandListのリストを返す.
-			void ExecuteMultiCommandlist(std::vector<rhi::CommandListBaseDep*>& out_executed_command_list_array, std::vector<RtgCommandListRangeInfo>& out_executed_command_list_range_info);
-
+			// フレーム寿命のCommandListやFenceを内部プールから割当, Submit用のシーケンスを返す.
+			void Execute(std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands);
+			
 			// -------------------------------------------------------------------------------------------
 			// Compileで割り当てられたHandleのリソース情報.
 			struct AllocatedHandleResourceInfo
