@@ -164,8 +164,8 @@ AppGame::~AppGame()
 
 bool AppGame::Initialize()
 {
-	constexpr auto scree_w = 1280;
-	constexpr auto scree_h = 720;
+	constexpr auto scree_h = 900;
+	constexpr auto scree_w = scree_h * 16/9;//1280;
 
 	// ウィンドウ作成
 	if (!window_.Initialize(_T("Test Window"), scree_w, scree_h))
@@ -175,7 +175,9 @@ bool AppGame::Initialize()
 
 
 	ngl::rhi::DeviceDep::Desc device_desc = {};
+#if _DEBUG
 	device_desc.enable_debug_layer = true;	// デバッグレイヤ
+#endif
 	device_desc.frame_descriptor_size = 500000;
 	device_desc.persistent_descriptor_size = 500000;
 	if (!device_.Initialize(&window_, device_desc))
@@ -436,7 +438,7 @@ bool AppGame::Initialize()
 		}
 
 		// RtPass.
-		if(!rt_pass_test.Initialize(&device_, sizeof(float) * 4, sizeof(float) * 2, 1))
+		if(!rt_pass_test.Initialize(&device_, 1))
 		{
 			assert(false);
 		}
@@ -599,7 +601,7 @@ bool AppGame::Execute()
 
 
 	const float screen_aspect_ratio = (float)swapchain_->GetWidth() / swapchain_->GetHeight();
-
+	// Update View Constant Buffer.
 	{
 		ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1());
 
@@ -666,54 +668,54 @@ bool AppGame::Execute()
 
 	// Render Frame.
 	{
-		// -------------------------------------------------------
-		// Deviceのフレーム準備
-		device_.ReadyToNewFrame();
+		// フレーム開始のGame-Render同期処理.
+		{
+			// -------------------------------------------------------
+			// Deviceのフレーム準備
+			device_.ReadyToNewFrame();
 		
-		// RTGのフレーム開始処理.
-		rtg_manager_.BeginFrame();
-		// -------------------------------------------------------
-
+			// RTGのフレーム開始処理.
+			rtg_manager_.BeginFrame();
+			// -------------------------------------------------------
+		}
 
 		// フレームのSwapchainインデックス.
 		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 
 		
-		// RtgのCommandList配列.
-		//std::vector<ngl::rhi::CommandListBaseDep*> rtg_command_list_sequence = {};
-		//std::vector<ngl::rtg::RtgCommandListRangeInfo> rtg_command_list_range_info = {};
+		// Renderのシステム用コマンド生成.
+		{
+			gfx_command_list_->Begin();
+			
+			// ResourceManager のCommandList生成.
+			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
+
+			
+			// Raytracingテスト.
+			{
+				// RtScene更新. AS更新とそのCommand生成.
+				rt_st_.UpdateOnRender(&device_, gfx_command_list_.Get(), frame_scene);
+				
+				// RtPass 更新.
+				rt_pass_test.PreRenderUpdate(&rt_st_, gfx_command_list_.Get());
+				
+				// RtPass Render.
+				rt_pass_test.Render(gfx_command_list_.Get());
+			}
+			
+			gfx_command_list_->End();
+		}
+
+
 		
 		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_graphics_commands = {};
 		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_compute_commands = {};
-		
-		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
-		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
-		
 		{
-			gfx_command_list_->Begin();
-			{
-				// CommandList に最初にResourceManagerの処理を積み込み.
-				ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
-
-				// Raytracing.
-				{
-					// RtScene更新.
-					rt_st_.UpdateOnRender(&device_, gfx_command_list_.Get(), frame_scene);
-				
-					// RtPass 更新.
-					rt_pass_test.PreRenderUpdate(&rt_st_, gfx_command_list_.Get());
-				
-					// RtPass Render.
-					rt_pass_test.Render(gfx_command_list_.Get());
-				}
-			}
-			gfx_command_list_->End();
-
-			
 			// RenderTaskGraphによるレンダリングパス.
 			{
 				// RTG Build.
-				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};// 実行単位のGraph構築.
+				// 現在の設計ではBuilderは使い捨てとなる.
+				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};
 				
 				// Append External Resource Info.
 				ngl::rtg::ResourceHandle h_swapchain = {};
@@ -778,17 +780,15 @@ bool AppGame::Execute()
 				// Compile. ManagerでCompileを実行する.
 				rtg_manager_.Compile(rtg_builder);
 				
-				// Execute. GraphのCommandListを生成する.
+				// GraphのCommandListを生成する.
 				//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
-				//	GraphのExecuteで生成されるCommandListはCompileされた順序でSubmitされることで正しい実行順となる.
-				//	よって複数のGraphを別スレッドでExecuteして別のCommandListを生成->正しい順序でSubmitという運用は許可される.
-				//	Compile,ExecuteしたBuilderは再利用不可となり使い捨てする.
-				//rtg_builder.ExecuteMultiCommandlist(rtg_command_list_sequence, rtg_command_list_range_info);
-
 				rtg_builder.Execute(rtg_graphics_commands, rtg_compute_commands);
 			}
 		}
 
+		
+		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
+		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
 		// AsyncComputeテスト.
 		{
 			// テストのためPoolから取得したCommandListに積み込み.
@@ -826,7 +826,7 @@ bool AppGame::Execute()
 		// CommandList Submit
 		{
 #if 1
-			// Compute.
+			// フレーム先頭からAcyncComputeのテストSubmit.
 			ngl::u64 compute_end_fence_value = {};
 			{
 				ngl::rhi::CommandListBaseDep* p_command_lists[] =
@@ -834,17 +834,10 @@ bool AppGame::Execute()
 					rtg_compute_command_list
 				};
 				compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
-				
-				// ComputeのCommandListの末尾からSignal発行.
-				//compute_end_fence_value = compute_queue_.SignalAndIncrement(&test_compute_to_gfx_fence_);
 			}
-			
-			// 適当にComputeQueueのFenceを待つWait.
-			//	実際にはGraphicsタスクの先頭でのWaitなので並列動作しないが, RTG内部でのAsyncComputeの検証のためここでWait.
-			//graphics_queue_.Wait(&test_compute_to_gfx_fence_, compute_end_fence_value);
 #endif
 			
-			// システム用の先頭CommandListをSubmit.
+			// システム用のGraphics CommandListをSubmit.
 			{
 				ngl::rhi::CommandListBaseDep* submit_list[]=
 				{
@@ -852,70 +845,11 @@ bool AppGame::Execute()
 				};
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
 			}
-#if 1
-			// 整理したCommandSequenceを実行する.
-			//	連続したCommandListをなるべく一度のExecuteにまとめる.
-			auto submit_sequence = [](std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& sequence, ngl::rhi::CommandQueueBaseDep& graphics_queue)
-			{
-				std::vector<ngl::rhi::CommandListBaseDep*> exec_command_list_cache = {};
-				for(auto&& e : sequence)
-				{
-					if(ngl::rtg::ERtgSubmitCommandType::CommandList == e.type)
-					{
-						exec_command_list_cache.push_back(e.command_list);
-					}
-					else
-					{
-						// Fenceが現れたらそれまでのCommandListをまとめてSubmit.
-						if(0 < exec_command_list_cache.size())
-						{
-							graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_cache.size()), exec_command_list_cache.data());
-							exec_command_list_cache.clear();
-						}
-						assert(e.fence.IsValid());
-						
-						if(ngl::rtg::ERtgSubmitCommandType::Signal == e.type)
-						{
-							graphics_queue.Signal(e.fence.Get(), e.fence_value);
-						}
-						else if(ngl::rtg::ERtgSubmitCommandType::Wait == e.type)
-						{
-							graphics_queue.Wait(e.fence.Get(), e.fence_value);
-						}
-						else
-						{
-							assert(false);
-						}
-					}
-				}
-				// 残ったCommandListをSubmit.
-				if(0 < exec_command_list_cache.size())
-				{
-					graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_cache.size()), exec_command_list_cache.data());
-					exec_command_list_cache.clear();
-				}
-			};
 			
-			// それぞれのQueueにSubmit.
-			submit_sequence(rtg_graphics_commands, graphics_queue_);
-			submit_sequence(rtg_compute_commands, compute_queue_);
-			
-#else
-			// Graphics.
-			// AsyncCompute無し想定ですべてのCommandListを直列実行するテスト.
-			{
-				std::vector<ngl::rhi::CommandListBaseDep*> p_command_list_submit_sequence = {};
-				{
-					// RtgのCommandList配列をPush.
-					for(auto& e : rtg_command_list_sequence)
-					{
-						p_command_list_submit_sequence.push_back(e);
-					}
-				}
-				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(p_command_list_submit_sequence.size()), p_command_list_submit_sequence.data());
-			}
-#endif
+			// RTGのCommaandをSubmit.
+			ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, rtg_graphics_commands, rtg_compute_commands);
 		}
+		
 		// Present
 		swapchain_->GetDxgiSwapChain()->Present(1, 0);
 
@@ -925,7 +859,7 @@ bool AppGame::Execute()
 		{
 			wait_signal_.Wait(&wait_fence_, wait_gpu_fence_value);
 		}
-
+		// フレーム描画完了.
 	}
 
 	return true;

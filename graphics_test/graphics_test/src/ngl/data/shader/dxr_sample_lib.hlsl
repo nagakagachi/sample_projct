@@ -125,7 +125,7 @@ void miss2(inout Payload payload)
 
 // ------------------------------------------------------
 // Hitgroup Local Root Sig.
-
+	// HitGroup毎のジオメトリデータをLocalRootSigに設定している.
 	// Tir 頂点位置.
 	Buffer<float3>	srv_prim_vertex_pos	: register(t1000);
 	// Tri Index

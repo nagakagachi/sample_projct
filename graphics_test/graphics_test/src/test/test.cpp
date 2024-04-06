@@ -57,12 +57,12 @@ namespace ngl_test
 
 
 
-		ngl::text::HashCharPtr<8> fixstr00("abc");
-		constexpr ngl::text::HashCharPtr<8> fixstr01("abc");
-		constexpr ngl::text::HashCharPtr<8> fixstr02("abc");
-		constexpr ngl::text::HashCharPtr<8> fixstr03("abd");
-		constexpr ngl::text::HashCharPtr<16> fixstr04("abc");
-		constexpr ngl::text::HashCharPtr<16> fixstr05("abcde");
+		ngl::text::HashText<8> fixstr00("abc");
+		constexpr ngl::text::HashText<8> fixstr01("abc");
+		constexpr ngl::text::HashText<8> fixstr02("abc");
+		constexpr ngl::text::HashText<8> fixstr03("abd");
+		constexpr ngl::text::HashText<16> fixstr04("abc");
+		constexpr ngl::text::HashText<16> fixstr05("abcde");
 
 		constexpr bool comp00 = (fixstr01 == fixstr02);
 		constexpr bool comp01 = (fixstr01 == fixstr03);
@@ -75,7 +75,7 @@ namespace ngl_test
 		const bool comp06 = (fixstr01 == fixstr05);
 
 		//using FixedStr32 = ngl::text::FixedString<32>;
-		using FixedStr32 = ngl::text::HashCharPtr<32>;
+		using FixedStr32 = ngl::text::HashText<32>;
 		std::unordered_map<FixedStr32, int> map00;
 		map00["fdafda"] = 1;
 		map00["fdafda"] = 2;

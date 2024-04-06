@@ -1,8 +1,7 @@
-﻿//  rtg_command_list_pool.h
+﻿#pragma once
 
-#pragma once
-
-#include "ngl/math/math.h"
+//  rtg_command_list_pool.h
+//  RenderTaskGraphが利用するフレーム寿命CommandListPoolの定義.
 
 #include "ngl/rhi/d3d12/device.d3d12.h"
 #include "ngl/rhi/d3d12/command_list.d3d12.h"

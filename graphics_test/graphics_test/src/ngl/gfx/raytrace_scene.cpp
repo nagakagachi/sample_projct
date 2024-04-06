@@ -1546,10 +1546,8 @@ namespace ngl
 		RtPassTest::~RtPassTest()
 		{
 		}
-		bool RtPassTest::Initialize(rhi::DeviceDep* p_device,
-			uint32_t payload_byte_size, uint32_t attribute_byte_size, uint32_t max_trace_recursionmiss_name)
+		bool RtPassTest::Initialize(rhi::DeviceDep* p_device, uint32_t max_trace_recursion)
 		{
-
 			// Shaderセットアップ.
 			{
 				auto& ResourceMan = ngl::res::ResourceManager::Instance();
@@ -1596,7 +1594,9 @@ namespace ngl
 				}
 			}
 
-			if (!rt_pass_core_.InitializeBase(p_device, shader_reg_info_array, payload_byte_size, attribute_byte_size, max_trace_recursionmiss_name))
+			uint32_t payload_byte_size = sizeof(float) * 4;// Payloadのサイズ.
+			uint32_t attribute_byte_size = sizeof(float) * 2;// BuiltInTriangleIntersectionAttributes の固定サイズ.
+			if (!rt_pass_core_.InitializeBase(p_device, shader_reg_info_array, payload_byte_size, attribute_byte_size, max_trace_recursion))
 			{
 				assert(false);
 				return false;

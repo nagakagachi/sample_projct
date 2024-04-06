@@ -94,7 +94,7 @@ namespace rhi
 		struct InputParamInfo
 		{
 			//char	semantic_name[32];
-			text::HashCharPtr<32>	semantic_name;
+			text::HashText<32>	semantic_name;
 
 			u8		semantic_index;
 

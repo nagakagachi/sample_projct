@@ -22,7 +22,7 @@ namespace ngl
 	namespace rtg
 	{
 		class RenderTaskGraphBuilder;
-		using RtgNameType = text::HashCharPtr<64>;
+		using RtgNameType = text::HashText<64>;
 
 		enum class ETASK_TYPE : int
 		{
@@ -476,9 +476,15 @@ namespace ngl
 			ResourceHandle RecordResourceAccess(const ITaskNode& node, const ResourceHandle res_handle, const ACCESS_TYPE access_type);
 			
 			// Graph実行.
-			// Compileしたグラフを実行しCommandListを構築する. Compileはリソースプールを管理する RenderTaskGraphManager 経由で実行する.
-			// フレーム寿命のCommandListやFenceを内部プールから割当, Submit用のシーケンスを返す.
+			// Compileしたグラフを実行しCommandListを構築する (RenderTaskGraphManager::Compile).
+			// 結果はQueueへSubmitするCommandListとFenceのSequence.
+			// 結果のSequenceは外部でQueueに直接Submitすることも可能であるが, ヘルパ関数SubmitCommand()を利用することを推奨する.
 			void Execute(std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands);
+
+			// RTGのExecute() で構築したが生成したComandListのSequenceをGPUへSubmitするヘルパー関数.
+			static inline void SubmitCommand(
+				rhi::GraphicsCommandQueueDep& graphics_queue, rhi::ComputeCommandQueueDep& compute_queue,
+				std::vector<RtgSubmitCommandSequenceElem>& graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& compute_commands);
 			
 			// -------------------------------------------------------------------------------------------
 			// Compileで割り当てられたHandleのリソース情報.
@@ -697,6 +703,61 @@ namespace ngl
 		};
 		
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+		// RTGのExecute() で構築したが生成したComandListのSequenceをGPUへSubmitする.
+		void RenderTaskGraphBuilder::SubmitCommand(
+			rhi::GraphicsCommandQueueDep& graphics_queue, rhi::ComputeCommandQueueDep& compute_queue,
+			std::vector<RtgSubmitCommandSequenceElem>& graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& compute_commands)
+		{
+			//	連続したCommandListをなるべく一度のExecuteにまとめ, 必要な箇所でFenceを張る.
+			auto submit_sequence = [](std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& sequence, ngl::rhi::CommandQueueBaseDep& graphics_queue)
+			{
+				std::vector<ngl::rhi::CommandListBaseDep*> exec_command_list_reservoir = {};
+				for(auto&& e : sequence)
+				{
+					if(ngl::rtg::ERtgSubmitCommandType::CommandList == e.type)
+					{
+						exec_command_list_reservoir.push_back(e.command_list);
+					}
+					else
+					{
+						// Fenceが現れたらそれまでのCommandListをまとめてSubmit.
+						if(0u < exec_command_list_reservoir.size())
+						{
+							graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_reservoir.size()), exec_command_list_reservoir.data());
+							exec_command_list_reservoir.clear();
+						}
+						assert(e.fence.IsValid());
+						
+						if(ngl::rtg::ERtgSubmitCommandType::Signal == e.type)
+						{
+							graphics_queue.Signal(e.fence.Get(), e.fence_value);
+						}
+						else if(ngl::rtg::ERtgSubmitCommandType::Wait == e.type)
+						{
+							graphics_queue.Wait(e.fence.Get(), e.fence_value);
+						}
+						else
+						{
+							assert(false);// ありえない.
+						}
+					}
+				}
+				// 残ったCommandListをSubmit.
+				if(0u < exec_command_list_reservoir.size())
+				{
+					graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_reservoir.size()), exec_command_list_reservoir.data());
+					exec_command_list_reservoir.clear();
+				}
+			};
+			
+			// QueueにSubmit.
+			submit_sequence(graphics_commands, graphics_queue);
+			submit_sequence(compute_commands, compute_queue);
+		}
+
 		
 	}
 }

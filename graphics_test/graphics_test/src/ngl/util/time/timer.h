@@ -33,7 +33,7 @@ namespace ngl
 	namespace time
 	{
 		//typedef ngl::text::HashText<64>	TimerName;
-		using TimerName = ngl::text::HashCharPtr<64>;
+		using TimerName = ngl::text::HashText<64>;
 
 
 		class Timer : public Singleton< Timer >

@@ -12,7 +12,7 @@ namespace ngl
 {
 	namespace rhi
 	{
-		using ResourceViewName = ngl::text::HashCharPtr<32>;
+		using ResourceViewName = ngl::text::HashText<32>;
 
 		enum class RootParameterType : u16
 		{

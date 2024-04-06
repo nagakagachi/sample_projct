@@ -79,10 +79,8 @@ namespace ngl
 				return false;
 
 			desc_ = desc;
-
 			p_window_ = window;
 
-#if 1
 			// DebugLayer有効化
 			if (desc_.enable_debug_layer)
 			{
@@ -92,10 +90,10 @@ namespace ngl
 					debugController->EnableDebugLayer();
 				}
 			}
-#endif
 
+			// Factory生成.
 			{
-#if 1
+#if _DEBUG
 				if (desc_.enable_debug_layer)
 				{
 					// デバッグ情報有効Factory

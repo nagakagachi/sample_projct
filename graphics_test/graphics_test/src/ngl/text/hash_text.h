@@ -77,7 +77,7 @@ namespace ngl
 
 
 		template<int LEN>
-		class HashCharPtr
+		class HashText
 		{
 		private:
 			static constexpr int StrLenConstexpr(const char* str)
@@ -90,13 +90,13 @@ namespace ngl
 			}
 
 		public:
-			constexpr HashCharPtr()
+			constexpr HashText()
 				: str_()
 				, valid_len_()
 				, hash_()
 			{
 			}
-			constexpr HashCharPtr(const char* s)
+			constexpr HashText(const char* s)
 				: str_()
 				, valid_len_()
 				, hash_()
@@ -150,7 +150,7 @@ namespace ngl
 			template<int N0, int N1>
 			struct CompStr
 			{
-				constexpr CompStr(const HashCharPtr<N0>& v0, const HashCharPtr<N1>& v1)
+				constexpr CompStr(const HashText<N0>& v0, const HashText<N1>& v1)
 					: result()
 				{
 					result = true;
@@ -164,13 +164,13 @@ namespace ngl
 			};
 		}
 		template<int LEN0, int LEN1>
-		static constexpr bool operator == (const HashCharPtr<LEN0>& v0, const HashCharPtr<LEN1>& v1)
+		static constexpr bool operator == (const HashText<LEN0>& v0, const HashText<LEN1>& v1)
 		{
 			bool result = (v0.Hash() == v1.Hash()) && CompStr(v0, v1).result;
 			return result;
 		}
 		template<int LEN0, int LEN1>
-		static constexpr bool operator != (const HashCharPtr<LEN0>& v0, const HashCharPtr<LEN1>& v1)
+		static constexpr bool operator != (const HashText<LEN0>& v0, const HashText<LEN1>& v1)
 		{
 			return !(v0 == v1);
 		}
@@ -271,9 +271,9 @@ namespace ngl
 namespace std
 {
 	template <unsigned int SIZE>
-	struct hash<ngl::text::HashCharPtr<SIZE>>
+	struct hash<ngl::text::HashText<SIZE>>
 	{
-		size_t operator()(const ngl::text::HashCharPtr<SIZE>& v) const
+		size_t operator()(const ngl::text::HashText<SIZE>& v) const
 		{
 			return v.Hash();
 		}

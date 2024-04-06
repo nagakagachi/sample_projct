@@ -56,7 +56,7 @@ namespace gfx
 
 	// セマンティクス名.
 	//using SemanticNameType = FixSizeName<32>;
-	using SemanticNameType = text::HashCharPtr<32>;
+	using SemanticNameType = text::HashText<32>;
 
 
 	static constexpr int k_mesh_vertex_semantic_texcoord_max_count = 4;
