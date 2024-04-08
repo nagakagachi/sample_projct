@@ -23,12 +23,12 @@ namespace ngl::render
 				rtg::ResourceHandle h_depth_{};
 
 			rhi::RefCbvDep ref_scene_cbv_{};
-			std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
+			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rhi::RefCbvDep ref_scene_cbv, std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rhi::RefCbvDep ref_scene_cbv, const std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
 			{
 				// リソース定義.
 				//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
@@ -130,18 +130,41 @@ namespace ngl::render
 				ITASK_NODE_HANDLE_REGISTER(h_gb0_)
 				ITASK_NODE_HANDLE_REGISTER(h_gb1_)
 				ITASK_NODE_DEF_END
+			;
 
-				rtg::ResourceHandle h_depth_{};
+			rtg::ResourceHandle h_depth_{};
 			rtg::ResourceHandle h_gb0_{};
 			rtg::ResourceHandle h_gb1_{};
-			
-			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex)
-			{
-				// リソース定義.
-				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
-				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+			rtg::ResourceHandle h_gb2_{};
+			rtg::ResourceHandle h_gb3_{};
+			rtg::ResourceHandle h_velocity_{};
 
+			
+			rhi::RefCbvDep ref_scene_cbv_{};
+			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
+
+			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
+
+
+			// リソースとアクセスを定義するプリプロセス.
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex
+				,rhi::RefCbvDep ref_scene_cbv, const std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
+			{	
+				// リソース定義.
+				// GBuffer0 BaseColor.xyz, Occlusion.w
+				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM_SRGB);
+				// GBuffer1 WorldNormal.xyz, 1bitOption.w
+				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R10G10B10A2_UNORM);
+				// GBuffer2 Roughness, Metallic, Optional, MaterialId
+				rtg::ResourceDesc2D gbuffer2_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
+				// GBuffer3 Emissive.xyz, Unused.w
+				rtg::ResourceDesc2D gbuffer3_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
+				// Velocity xy
+				rtg::ResourceDesc2D velocity_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16_FLOAT);
+
+				// DepthのFormat取得.
+				const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
+				
 				// リソースアクセス定義.
 				if(!h_async_write_tex.IsInvalid())
 				{
@@ -152,6 +175,86 @@ namespace ngl::render
 				h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
 				h_gb0_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
 				h_gb1_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
+				h_gb2_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer2_desc), rtg::access_type::RENDER_TARTGET);
+				h_gb3_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer3_desc), rtg::access_type::RENDER_TARTGET);
+				h_velocity_ = builder.RecordResourceAccess(*this, builder.CreateResource(velocity_desc), rtg::access_type::RENDER_TARTGET);
+
+				
+				{
+					ref_scene_cbv_ = ref_scene_cbv;
+					p_mesh_list_ = &ref_mesh_list;
+				}
+				
+				{
+					auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
+					loaddesc_vs.entry_point_name = "main_vs";
+					loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+					loaddesc_vs.shader_model_version = k_shader_model;
+					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_gbuffer_vs.hlsl", &loaddesc_vs);
+
+					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
+					loaddesc_ps.entry_point_name = "main_ps";
+					loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+					loaddesc_ps.shader_model_version = k_shader_model;
+					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_gbuffer_ps.hlsl", &loaddesc_ps);
+
+
+					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+					desc.vs = &res_shader_vs->data_;
+					desc.ps = &res_shader_ps->data_;
+					{
+						desc.num_render_targets = 5;
+						desc.render_target_formats[0] = builder.GetResourceHandleDesc(h_gb0_).desc.format;
+						desc.render_target_formats[1] = builder.GetResourceHandleDesc(h_gb1_).desc.format;
+						desc.render_target_formats[2] = builder.GetResourceHandleDesc(h_gb2_).desc.format;
+						desc.render_target_formats[3] = builder.GetResourceHandleDesc(h_gb3_).desc.format;
+						desc.render_target_formats[4] = builder.GetResourceHandleDesc(h_velocity_).desc.format;
+
+						
+						desc.blend_state.target_blend_states[0].write_mask = ~u8(0);
+						desc.blend_state.target_blend_states[1].write_mask = ~u8(0);
+						desc.blend_state.target_blend_states[2].write_mask = ~u8(0);
+						desc.blend_state.target_blend_states[3].write_mask = ~u8(0);
+						desc.blend_state.target_blend_states[4].write_mask = ~u8(0);
+					}
+					{
+						desc.depth_stencil_state.depth_enable = true;
+						desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Equal; // Maskedを含めたEarlyZ Full PreZのためEqual.
+						desc.depth_stencil_state.depth_write_mask = 0;// 描き込み無効. MaskではなくStateとして描き込み無効はある?.
+						desc.depth_stencil_state.stencil_enable = false;
+						desc.depth_stencil_format = depth_desc.desc.format;
+					}
+					// 入力レイアウト
+					std::array<ngl::rhi::InputElement, 3> input_elem_data;
+					desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
+					desc.input_layout.p_input_elements = input_elem_data.data();
+					{
+						input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
+						input_elem_data[0].semantic_index = 0;
+						input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
+						input_elem_data[0].element_offset = 0;
+
+						input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
+						input_elem_data[1].semantic_index = 0;
+						input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
+						input_elem_data[1].element_offset = 0;
+
+						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+						input_elem_data[2].semantic_index = 0;
+						input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
+						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+						input_elem_data[2].element_offset = 0;
+					}
+					pso_ = new rhi::GraphicsPipelineStateDep();
+					if (!pso_->Initialize(p_device, desc))
+					{
+						assert(false);
+					}
+				}
 			}
 
 			// 実際のレンダリング処理.
@@ -161,12 +264,34 @@ namespace ngl::render
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				auto res_gb0 = builder.GetAllocatedResource(this, h_gb0_);
 				auto res_gb1 = builder.GetAllocatedResource(this, h_gb1_);
+				auto res_gb2 = builder.GetAllocatedResource(this, h_gb2_);
+				auto res_gb3 = builder.GetAllocatedResource(this, h_gb3_);
+				auto res_velocity = builder.GetAllocatedResource(this, h_velocity_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
 				assert(res_gb0.tex_.IsValid() && res_gb0.rtv_.IsValid());
 				assert(res_gb1.tex_.IsValid() && res_gb1.rtv_.IsValid());
+				assert(res_gb2.tex_.IsValid() && res_gb2.rtv_.IsValid());
+				assert(res_gb3.tex_.IsValid() && res_gb3.rtv_.IsValid());
+				assert(res_velocity.tex_.IsValid() && res_velocity.rtv_.IsValid());
 
-				// TODO.
+				const rhi::RenderTargetViewDep* p_targets[] =
+				{
+					res_gb0.rtv_.Get(),
+					res_gb1.rtv_.Get(),
+					res_gb2.rtv_.Get(),
+					res_gb3.rtv_.Get(),
+					res_velocity.rtv_.Get(),
+				};
+				
+				// Set RenderTarget.
+				gfx_commandlist->SetRenderTargets(p_targets, (int)std::size(p_targets), res_depth.dsv_.Get());
+
+				// Set Viewport and Scissor.
+				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
+
+				// Mesh Rendering.
+				ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
 			}
 		};
 

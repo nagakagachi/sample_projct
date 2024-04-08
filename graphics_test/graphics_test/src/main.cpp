@@ -757,7 +757,7 @@ bool AppGame::Execute()
 					
 					// GBuffer Pass.
 					auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
-					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex);
+					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
 					
 					// Linear Depth Pass.
 					auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();

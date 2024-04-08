@@ -168,6 +168,8 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\boot\win\boot_application.win.cpp" />
     <None Include="src\ngl\data\shader\df_light_pass_ps.hlsl" />
     <None Include="src\ngl\data\shader\test\async_task_test_cs.hlsl" />
+    <None Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_ps.hlsl" />
+    <None Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_vs.hlsl" />
     <ClCompile Include="src\ngl\file\file.cpp" />
     <ClCompile Include="src\ngl\gfx\command_helper.cpp" />
     <ClCompile Include="src\ngl\gfx\mesh_component.cpp" />

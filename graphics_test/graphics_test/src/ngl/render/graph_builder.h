@@ -413,10 +413,13 @@ namespace ngl
 			ERtgSubmitCommandType type = ERtgSubmitCommandType::CommandList;
 
 			// ERtgSubmitCommandType == CommandList
+			//	Rtg管理化のPoolから現在フレームのみの寿命として割り当てられたCommandList.
 			rhi::CommandListBaseDep* command_list = {};// 内部プールの関係でRefではなくポインタにしている.
 
 			// ERtgSubmitCommandType == Signal or Wait
+			//	Rtg管理化のPoolから現在フレームのみの寿命として割り当てられたFence.
 			rhi::RhiRef<rhi::FenceDep>	fence = {};
+			//	Rtgがスケジュールした同期のためのSignalまたはWaitで使用するFenceValue.
 			u64							fence_value = 0;
 		};
 		
@@ -644,7 +647,8 @@ namespace ngl
 			// 初期化.
 			bool Init(rhi::DeviceDep* p_device);
 
-			//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
+			//	フレーム開始通知. Game-Render同期中に呼び出す.
+			//		内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 			void BeginFrame();
 
 			// builderをCompileしてリソース割当を確定する.

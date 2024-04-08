@@ -346,6 +346,8 @@ namespace ngl
 						const auto task_type_j = p_node_j->TaskType();
 
 						// 異なるTypeのNodeで同一Handleへアクセスしているものを探す
+						//	GraphicsとComputeではRead-Readの同時アクセスでもTextureレイアウト違いは失敗するなど制限が多い.
+						//	そのためアクセスタイプにかかわらず同じハンドルにアクセスしていたら依存があるという扱いにしている.
 						if(task_type_i == task_type_j)
 							continue;
 				
@@ -356,7 +358,7 @@ namespace ngl
 								// 同一HandleへのアクセスをするNodeを発見.
 								if(res_access_i.handle == res_access_j.handle)
 								{
-									// node_iに最も近い前段のNodeからの依存を探索する
+									// 最も近い前段のNodeからの依存のみで十分なので, 最大値で探索する.
 									nearest_dependency_index = std::max(nearest_dependency_index, j);
 									break;
 								}
@@ -1343,23 +1345,11 @@ namespace ngl
 			// CommandListPool初期化.
 			commandlist_pool_.Initialize(p_device);
 			
-			// DEBUG.
-			{
-				/*
-				//	テスト用にCommandList作成.
-				rhi::RhiRef<rhi::GraphicsCommandListDep> graphics_commandlist0 = {};
-				rhi::RhiRef<rhi::GraphicsCommandListDep> graphics_commandlist1 = {};
-				rhi::RhiRef<rhi::ComputeCommandListDep> compute_commandlist0 = {};
-				commandlist_pool_.GetFrameCommandList(graphics_commandlist0);
-				commandlist_pool_.GetFrameCommandList(graphics_commandlist1);
-				commandlist_pool_.GetFrameCommandList(compute_commandlist0);
-				*/
-			}
-			
 			return true;
 		}
 		
-		//	フレーム開始通知. 内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
+		//	フレーム開始通知. Game-Render同期中に呼び出す.
+		//		内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
 		void RenderTaskGraphManager::BeginFrame()
 		{
 			// フレーム開始でフレーム伝搬リソースのMapフリップとクリア.
