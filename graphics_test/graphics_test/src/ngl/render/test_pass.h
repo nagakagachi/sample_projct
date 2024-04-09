@@ -211,13 +211,6 @@ namespace ngl::render
 						desc.render_target_formats[2] = builder.GetResourceHandleDesc(h_gb2_).desc.format;
 						desc.render_target_formats[3] = builder.GetResourceHandleDesc(h_gb3_).desc.format;
 						desc.render_target_formats[4] = builder.GetResourceHandleDesc(h_velocity_).desc.format;
-
-						
-						desc.blend_state.target_blend_states[0].write_mask = ~u8(0);
-						desc.blend_state.target_blend_states[1].write_mask = ~u8(0);
-						desc.blend_state.target_blend_states[2].write_mask = ~u8(0);
-						desc.blend_state.target_blend_states[3].write_mask = ~u8(0);
-						desc.blend_state.target_blend_states[4].write_mask = ~u8(0);
 					}
 					{
 						desc.depth_stencil_state.depth_enable = true;

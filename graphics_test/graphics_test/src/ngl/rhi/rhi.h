@@ -410,7 +410,7 @@ namespace ngl
 			EBlendFactor		src_alpha_blend = EBlendFactor::SrcAlpha;
 			EBlendFactor		dst_alpha_blend = EBlendFactor::DestAlpha;
 			EBlendOp			alpha_op = EBlendOp::Add;
-			u8				write_mask;
+			u8					write_mask = static_cast<u8>(~0u);
 		};
 
 		// ブレンドステート
@@ -460,20 +460,20 @@ namespace ngl
 		struct StreamOutputDesc
 		{
 			// dummy
-			u32				num_entries;
+			u32				num_entries = 0;
 		};
 
 		struct InputElement
 		{
 			// セマンティック名. インデックス無し.
-			const char*		semantic_name;
+			const char*		semantic_name	= {};
 			// セマンティックインデックス.
-			u32				semantic_index;
+			u32				semantic_index	= 0;
 			// 現状はD3Dのものを利用. 必要に応じて抽象化.
-			EResourceFormat	format;
-			u32			 stream_slot;
+			EResourceFormat	format			= EResourceFormat::Format_UNKNOWN;
+			u32				stream_slot		= 0;
 			// slotの1頂点情報内の対応する情報までのByteOffset
-			u32			 element_offset;
+			u32				element_offset	= 0;
 		};
 
 		struct InputLayout

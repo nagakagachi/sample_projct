@@ -30,7 +30,10 @@ GBufferOutput main_ps(VS_OUTPUT input)
 	GBufferOutput output = (GBufferOutput)0;
 
 	output.gbuffer0.xyz = float3(input.uv, 0.0);	// BaseColorには適当にUV描き込み.
-	output.gbuffer1.xyz = normalize(input.normal_ws);
+	
+	output.gbuffer1.xyz = normalize(input.normal_ws) * 0.5 + 0.5;// [-1,+1] を unorm に [0,1]で格納.
+
+	output.velocity = input.uv;
 	
 	return output;
 }
