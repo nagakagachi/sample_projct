@@ -26,29 +26,29 @@ namespace ngl
 	{
 
 
-		DXGI_FORMAT ConvertResourceFormat(ResourceFormat v);
+		DXGI_FORMAT ConvertResourceFormat(EResourceFormat v);
 
-		D3D12_RESOURCE_STATES ConvertResourceState(ResourceState v);
+		D3D12_RESOURCE_STATES ConvertResourceState(EResourceState v);
 
-		D3D12_BLEND_OP	ConvertBlendOp(BlendOp v);
+		D3D12_BLEND_OP	ConvertBlendOp(EBlendOp v);
 
-		D3D12_BLEND	ConvertBlendFactor(BlendFactor v);
+		D3D12_BLEND	ConvertBlendFactor(EBlendFactor v);
 
-		D3D12_CULL_MODE	ConvertCullMode(CullingMode v);
+		D3D12_CULL_MODE	ConvertCullMode(ECullingMode v);
 
-		D3D12_FILL_MODE ConvertFillMode(FillMode v);
+		D3D12_FILL_MODE ConvertFillMode(EFillMode v);
 
-		D3D12_STENCIL_OP ConvertStencilOp(StencilOp v);
+		D3D12_STENCIL_OP ConvertStencilOp(EStencilOp v);
 
-		D3D12_COMPARISON_FUNC ConvertComparisonFunc(CompFunc v);
+		D3D12_COMPARISON_FUNC ConvertComparisonFunc(ECompFunc v);
 
-		D3D12_PRIMITIVE_TOPOLOGY_TYPE ConvertPrimitiveTopologyType(PrimitiveTopologyType v);
+		D3D12_PRIMITIVE_TOPOLOGY_TYPE ConvertPrimitiveTopologyType(EPrimitiveTopologyType v);
 
-		D3D_PRIMITIVE_TOPOLOGY ConvertPrimitiveTopology(PrimitiveTopology v);
+		D3D_PRIMITIVE_TOPOLOGY ConvertPrimitiveTopology(EPrimitiveTopology v);
 
-		D3D12_FILTER ConvertTextureFilter(TextureFilterMode v);
+		D3D12_FILTER ConvertTextureFilter(ETextureFilterMode v);
 
-		D3D12_TEXTURE_ADDRESS_MODE ConvertTextureAddressMode(TextureAddressMode v);
+		D3D12_TEXTURE_ADDRESS_MODE ConvertTextureAddressMode(ETextureAddressMode v);
 
 
 

@@ -127,7 +127,7 @@ namespace ngl
 			void SetDescriptorSet(const GraphicsPipelineStateDep* p_pso, const DescriptorSetDep* p_desc_set);
 
 
-			void SetPrimitiveTopology(PrimitiveTopology topology);
+			void SetPrimitiveTopology(EPrimitiveTopology topology);
 			void SetVertexBuffers(u32 slot, u32 num, const D3D12_VERTEX_BUFFER_VIEW* p_views);
 			void SetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW* p_view);
 
@@ -139,9 +139,9 @@ namespace ngl
 			void ClearDepthTarget(const DepthStencilViewDep* p_dsv, float depth, uint8_t stencil, bool clearDepth, bool clearStencil);
 
 			// Barrier Swapchain, Texture, Buffer.
-			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next);
-			void ResourceBarrier(TextureDep* p_texture, ResourceState prev, ResourceState next);
-			void ResourceBarrier(BufferDep* p_buffer, ResourceState prev, ResourceState next);
+			void ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, EResourceState prev, EResourceState next);
+			void ResourceBarrier(TextureDep* p_texture, EResourceState prev, EResourceState next);
+			void ResourceBarrier(BufferDep* p_buffer, EResourceState prev, EResourceState next);
 		};
 		
 	}

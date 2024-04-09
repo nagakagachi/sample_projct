@@ -14,7 +14,7 @@ namespace ngl
 	{
 		using ResourceViewName = ngl::text::HashText<32>;
 
-		enum class RootParameterType : u16
+		enum class ERootParameterType : u16
 		{
 			ConstantBuffer,
 			ShaderResource,
@@ -31,7 +31,7 @@ namespace ngl
 		static const u32 k_uav_table_size = 16;
 		static const u32 k_sampler_table_size = 16;
 
-		static constexpr u32 RootParameterTableSize(RootParameterType type)
+		static constexpr u32 RootParameterTableSize(ERootParameterType type)
 		{
 			const u32 type_size[] =
 			{
@@ -42,7 +42,7 @@ namespace ngl
 
 				0,
 			};
-			static_assert(std::size(type_size) - 1 == static_cast<size_t>(RootParameterType::_Max), "");
+			static_assert(std::size(type_size) - 1 == static_cast<size_t>(ERootParameterType::_Max), "");
 			return type_size[static_cast<u32>(type)];
 		}
 
@@ -53,7 +53,7 @@ namespace ngl
 			return 0 != (v0 & v1);
 		}
 
-		enum class ResourceFormat
+		enum class EResourceFormat
 		{
 			Format_UNKNOWN,
 			Format_R32G32B32A32_TYPELESS,
@@ -175,35 +175,35 @@ namespace ngl
 		};
 
 		// DepthFormatをSrv用に変換. それ以外はそのまま返却.
-		inline ResourceFormat depthToColorFormat(ResourceFormat format)
+		inline EResourceFormat depthToColorFormat(EResourceFormat format)
 		{
 			switch (format)
 			{
-			case ResourceFormat::Format_D16_UNORM:
-				return ResourceFormat::Format_R16_UNORM;
-			case ResourceFormat::Format_D24_UNORM_S8_UINT:
-				return ResourceFormat::Format_R24_UNORM_X8_TYPELESS;
-			case ResourceFormat::Format_D32_FLOAT:
-				return ResourceFormat::Format_R32_FLOAT;
-			case ResourceFormat::Format_D32_FLOAT_S8X24_UINT:
+			case EResourceFormat::Format_D16_UNORM:
+				return EResourceFormat::Format_R16_UNORM;
+			case EResourceFormat::Format_D24_UNORM_S8_UINT:
+				return EResourceFormat::Format_R24_UNORM_X8_TYPELESS;
+			case EResourceFormat::Format_D32_FLOAT:
+				return EResourceFormat::Format_R32_FLOAT;
+			case EResourceFormat::Format_D32_FLOAT_S8X24_UINT:
 				assert(false);
-				return ResourceFormat::Format_UNKNOWN;
+				return EResourceFormat::Format_UNKNOWN;
 			default:
 				return format;
 			}
 		}
 		// DepthFormatなら真
-		inline bool isDepthFormat(ResourceFormat format)
+		inline bool isDepthFormat(EResourceFormat format)
 		{
 			switch (format)
 			{
-			case ResourceFormat::Format_D16_UNORM:
+			case EResourceFormat::Format_D16_UNORM:
 				return true;
-			case ResourceFormat::Format_D24_UNORM_S8_UINT:
+			case EResourceFormat::Format_D24_UNORM_S8_UINT:
 				return true;
-			case ResourceFormat::Format_D32_FLOAT:
+			case EResourceFormat::Format_D32_FLOAT:
 				return true;
-			case ResourceFormat::Format_D32_FLOAT_S8X24_UINT:
+			case EResourceFormat::Format_D32_FLOAT_S8X24_UINT:
 				assert(false);
 				return false;
 			default:
@@ -211,7 +211,7 @@ namespace ngl
 			}
 		}
 
-		enum class ResourceState
+		enum class EResourceState
 		{
 			Common,
 			General,
@@ -231,7 +231,7 @@ namespace ngl
 		};
 
 
-		enum class ResourceHeapType
+		enum class EResourceHeapType
 		{
 			Default,
 			Upload,
@@ -239,7 +239,7 @@ namespace ngl
 		};
 
 
-		enum class ShaderStage
+		enum class EShaderStage
 		{
 			Vertex,
 			Hull,
@@ -255,7 +255,7 @@ namespace ngl
 		};
 
 		// ブレンド要素
-		enum class BlendFactor
+		enum class EBlendFactor
 		{
 			Zero,
 			One,
@@ -277,7 +277,7 @@ namespace ngl
 		};	// enum BlendFactor
 
 		// ブレンド関数
-		enum class BlendOp
+		enum class EBlendOp
 		{
 			Add,
 			Subtract,
@@ -287,7 +287,7 @@ namespace ngl
 		};	// enum BlendOp
 
 		// 比較関数
-		enum class CompFunc
+		enum class ECompFunc
 		{
 			Never,
 			Less,
@@ -300,7 +300,7 @@ namespace ngl
 		};	// enum CompFunc
 
 		// ステンシル関数
-		enum class StencilOp
+		enum class EStencilOp
 		{
 			Keep,
 			Zero,
@@ -313,7 +313,7 @@ namespace ngl
 		};	// enum StencilOp
 
 		// ステンシル面方向
-		enum class StencilFace
+		enum class EStencilFace
 		{
 			Front,
 			Back,
@@ -322,14 +322,14 @@ namespace ngl
 		};	// enum StencilFace
 
 		// ポリゴン描画モード
-		enum class FillMode
+		enum class EFillMode
 		{
 			Wireframe,
 			Solid,
 		};	// enum FillMode
 
 		// カリング面
-		enum class CullingMode
+		enum class ECullingMode
 		{
 			None,
 			Front,
@@ -337,7 +337,7 @@ namespace ngl
 		};	// enum CullingMode
 
 		// テクスチャフィルタ
-		enum class TextureFilterMode
+		enum class ETextureFilterMode
 		{
 			Min_Point_Mag_Point_Mip_Point,
 			Min_Point_Mag_Point_Mip_Linear,
@@ -365,7 +365,7 @@ namespace ngl
 		};	// enum TextureFilterMode
 
 		// テクスチャラップモード
-		enum class TextureAddressMode
+		enum class ETextureAddressMode
 		{
 			Repeat,
 			Mirror,
@@ -375,7 +375,7 @@ namespace ngl
 		};	// enum TextureAddressMode
 
 		// 描画トポロジータイプ
-		enum class PrimitiveTopologyType
+		enum class EPrimitiveTopologyType
 		{
 			Point,
 			Line,
@@ -384,7 +384,7 @@ namespace ngl
 		};	// enum PrimitiveTopologyType
 
 		// 描画トポロジー
-		enum class PrimitiveTopology
+		enum class EPrimitiveTopology
 		{
 			Undefined,
 			PointList,
@@ -403,13 +403,13 @@ namespace ngl
 		// レンダーターゲットブレンドステート
 		struct RenderTargetBlendState
 		{
-			bool			blend_enable;
-			BlendFactor		src_color_blend;
-			BlendFactor		dst_color_blend;
-			BlendOp			color_op;
-			BlendFactor		src_alpha_blend;
-			BlendFactor		dst_alpha_blend;
-			BlendOp			alpha_op;
+			bool				blend_enable = false;
+			EBlendFactor		src_color_blend = EBlendFactor::SrcAlpha;
+			EBlendFactor		dst_color_blend = EBlendFactor::InvSrcAlpha;
+			EBlendOp			color_op = EBlendOp::Add;
+			EBlendFactor		src_alpha_blend = EBlendFactor::SrcAlpha;
+			EBlendFactor		dst_alpha_blend = EBlendFactor::DestAlpha;
+			EBlendOp			alpha_op = EBlendOp::Add;
 			u8				write_mask;
 		};
 
@@ -418,14 +418,14 @@ namespace ngl
 		{
 			bool					alpha_to_coverage_enable = false;
 			bool					independent_blend_enable = false;
-			RenderTargetBlendState target_blend_states[8];
+			RenderTargetBlendState target_blend_states[8] = {};
 		};
 
 		// ラスタライザステート
 		struct RasterizerState
 		{
-			FillMode		fill_mode = FillMode::Solid;
-			CullingMode		cull_mode = CullingMode::Back;
+			EFillMode		fill_mode = EFillMode::Solid;
+			ECullingMode	cull_mode = ECullingMode::Back;
 			bool			front_counter_clockwise = false;
 			int				depth_bias = 0;
 			float			depth_bias_clamp = 0.0f;
@@ -439,17 +439,17 @@ namespace ngl
 
 		struct DepthStencilOp
 		{
-			StencilOp		stencil_fail_op = StencilOp::Keep;
-			StencilOp		stencil_depth_fail_op = StencilOp::Keep;
-			StencilOp		stencil_pass_op = StencilOp::Keep;
-			CompFunc		stencil_func = CompFunc::Always;
+			EStencilOp		stencil_fail_op = EStencilOp::Keep;
+			EStencilOp		stencil_depth_fail_op = EStencilOp::Keep;
+			EStencilOp		stencil_pass_op = EStencilOp::Keep;
+			ECompFunc		stencil_func = ECompFunc::Always;
 		};
 
 		struct DepthStencilState 
 		{
 			bool					depth_enable = false;
-			u32						depth_write_mask = ~0u;		// D3D12_DEPTH_WRITE_MASK 
-			CompFunc				depth_func = ngl::rhi::CompFunc::Always;
+			bool					depth_write_enable = true; 
+			ECompFunc				depth_func = ngl::rhi::ECompFunc::Always;
 			bool					stencil_enable = false;
 			u8						stencil_read_mask = u8(~0u);
 			u8						stencil_write_mask = u8(~0u);
@@ -470,7 +470,7 @@ namespace ngl
 			// セマンティックインデックス.
 			u32				semantic_index;
 			// 現状はD3Dのものを利用. 必要に応じて抽象化.
-			ResourceFormat	format;
+			EResourceFormat	format;
 			u32			 stream_slot;
 			// slotの1頂点情報内の対応する情報までのByteOffset
 			u32			 element_offset;
@@ -484,7 +484,7 @@ namespace ngl
 
 
 
-		enum class TextureType : u32
+		enum class ETextureType : u32
 		{
 			Texture1D,              ///< 1D texture. Can be bound as render-target, shader-resource and UAV
 			Texture2D,              ///< 2D texture. Can be bound as render-target, shader-resource and UAV
@@ -493,7 +493,7 @@ namespace ngl
 			Texture2DMultisample,   ///< 2D multi-sampled texture. Can be bound as render-target, shader-resource and UAV
 		};
 
-		enum class ResourceDimension : u32
+		enum class EResourceDimension : u32
 		{
 			Unknown,
 			Texture1D,

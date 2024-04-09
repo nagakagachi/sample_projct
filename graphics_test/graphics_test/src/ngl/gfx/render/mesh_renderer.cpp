@@ -54,7 +54,7 @@ namespace gfx
 
 				// Set Index and topology.
 				command_list.SetIndexBuffer(&shape.index_.rhi_vbv_.GetView());
-				command_list.SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+				command_list.SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
 
 				// Draw.
 				command_list.DrawIndexedInstanced(shape.num_primitive_ * 3, 1, 0, 0, 0);

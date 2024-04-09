@@ -45,8 +45,8 @@ namespace ngl
 					geom_desc_array_.push_back({});
 					auto& geom_desc = geom_desc_array_[geom_desc_array_.size() - 1];// Tail.
 
-					const auto vertex_ngl_format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
-					auto index_ngl_format = ngl::rhi::ResourceFormat::Format_R32_UINT;
+					const auto vertex_ngl_format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+					auto index_ngl_format = ngl::rhi::EResourceFormat::Format_R32_UINT;
 
 					auto& rhi_position = g.mesh_data->position_.rhi_buffer_;
 					auto& rhi_index = g.mesh_data->index_.rhi_buffer_;
@@ -68,12 +68,12 @@ namespace ngl
 						if (rhi_index.GetElementByteSize() == 4)
 						{
 							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R32_UINT;
-							index_ngl_format = ngl::rhi::ResourceFormat::Format_R32_UINT;
+							index_ngl_format = ngl::rhi::EResourceFormat::Format_R32_UINT;
 						}
 						else if (rhi_index.GetElementByteSize() == 2)
 						{
 							geom_desc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
-							index_ngl_format = ngl::rhi::ResourceFormat::Format_R16_UINT;
+							index_ngl_format = ngl::rhi::EResourceFormat::Format_R16_UINT;
 						}
 						else
 						{
@@ -107,8 +107,8 @@ namespace ngl
 			// Scratch Buffer.
 			rhi::BufferDep::Desc scratch_desc = {};
 			scratch_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess;
-			scratch_desc.initial_state = rhi::ResourceState::Common;// UnorderedAccessだとValidationエラー.
-			scratch_desc.heap_type = rhi::ResourceHeapType::Default;
+			scratch_desc.initial_state = rhi::EResourceState::Common;// UnorderedAccessだとValidationエラー.
+			scratch_desc.heap_type = rhi::EResourceHeapType::Default;
 			scratch_desc.element_count = 1;
 			scratch_desc.element_byte_size = (u32)build_info.ScratchDataSizeInBytes;
 			scratch_.Reset(new rhi::BufferDep());
@@ -121,8 +121,8 @@ namespace ngl
 			// Main Buffer.
 			rhi::BufferDep::Desc main_desc = {};
 			main_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess;
-			main_desc.initial_state = rhi::ResourceState::RaytracingAccelerationStructure;
-			main_desc.heap_type = rhi::ResourceHeapType::Default;
+			main_desc.initial_state = rhi::EResourceState::RaytracingAccelerationStructure;
+			main_desc.heap_type = rhi::EResourceHeapType::Default;
 			main_desc.element_count = 1;
 			main_desc.element_byte_size = (u32)build_info.ResultDataMaxSizeInBytes;
 			main_.Reset(new rhi::BufferDep());
@@ -296,8 +296,8 @@ namespace ngl
 			// Instance Desc Buffer.
 			const uint32_t num_instance_total = (uint32_t)transform_array_.size();
 			rhi::BufferDep::Desc instance_buffer_desc = {};
-			instance_buffer_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUからアップロードするInstanceDataのため.
-			instance_buffer_desc.initial_state = rhi::ResourceState::General;// UploadヒープのためにGeneral.
+			instance_buffer_desc.heap_type = rhi::EResourceHeapType::Upload;// CPUからアップロードするInstanceDataのため.
+			instance_buffer_desc.initial_state = rhi::EResourceState::General;// UploadヒープのためにGeneral.
 			instance_buffer_desc.element_count = num_instance_total;// Instance数を確保.
 			instance_buffer_desc.element_byte_size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
 			instance_buffer_.Reset(new rhi::BufferDep());
@@ -355,8 +355,8 @@ namespace ngl
 			// Scratch Buffer.
 			rhi::BufferDep::Desc scratch_desc = {};
 			scratch_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess;
-			scratch_desc.initial_state = rhi::ResourceState::Common;// UnorderedAccessだとValidationエラー.
-			scratch_desc.heap_type = rhi::ResourceHeapType::Default;
+			scratch_desc.initial_state = rhi::EResourceState::Common;// UnorderedAccessだとValidationエラー.
+			scratch_desc.heap_type = rhi::EResourceHeapType::Default;
 			scratch_desc.element_count = 1;
 			scratch_desc.element_byte_size = (u32)build_info.ScratchDataSizeInBytes;
 			scratch_.Reset(new rhi::BufferDep());
@@ -369,8 +369,8 @@ namespace ngl
 			// Main Buffer.
 			rhi::BufferDep::Desc main_desc = {};
 			main_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::ShaderResource; // シェーダからはSRVとして見えるためShaderResourceフラグも設定.
-			main_desc.initial_state = rhi::ResourceState::RaytracingAccelerationStructure;
-			main_desc.heap_type = rhi::ResourceHeapType::Default;
+			main_desc.initial_state = rhi::EResourceState::RaytracingAccelerationStructure;
+			main_desc.heap_type = rhi::EResourceHeapType::Default;
 			main_desc.element_count = 1;
 			main_desc.element_byte_size = (u32)build_info.ResultDataMaxSizeInBytes;
 			main_.Reset(new rhi::BufferDep());
@@ -1284,8 +1284,8 @@ namespace ngl
 			rhi::BufferDep::Desc rt_shader_table_desc = {};
 			rt_shader_table_desc.element_count = 1;
 			rt_shader_table_desc.element_byte_size = shader_table_byte_size;
-			rt_shader_table_desc.heap_type = rhi::ResourceHeapType::Upload;// CPUから直接書き込むため.
-			rt_shader_table_desc.initial_state = rhi::ResourceState::General;// UploadヒープのためGeneral.
+			rt_shader_table_desc.heap_type = rhi::EResourceHeapType::Upload;// CPUから直接書き込むため.
+			rt_shader_table_desc.initial_state = rhi::EResourceState::General;// UploadヒープのためGeneral.
 			out.shader_table_.Reset(new rhi::BufferDep());
 			if (!out.shader_table_->Initialize(p_device, rt_shader_table_desc))
 			{
@@ -1553,7 +1553,7 @@ namespace ngl
 				auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
 				ngl::gfx::ResShader::LoadDesc loaddesc = {};
-				loaddesc.stage = ngl::rhi::ShaderStage::ShaderLibrary;
+				loaddesc.stage = ngl::rhi::EShaderStage::ShaderLibrary;
 				loaddesc.shader_model_version = "6_3";
 				res_shader_lib_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/dxr_sample_lib.hlsl", &loaddesc);
 			}
@@ -1605,8 +1605,8 @@ namespace ngl
 			// 出力テスト用のTextureとUAV.
 			{
 				rhi::TextureDep::Desc tex_desc = {};
-				tex_desc.type = rhi::TextureType::Texture2D;
-				tex_desc.format = rhi::ResourceFormat::Format_R8G8B8A8_UNORM;
+				tex_desc.type = rhi::ETextureType::Texture2D;
+				tex_desc.format = rhi::EResourceFormat::Format_R8G8B8A8_UNORM;
 				tex_desc.bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::ShaderResource;
 				tex_desc.width = 1920;
 				tex_desc.height = 1080;
@@ -1627,7 +1627,7 @@ namespace ngl
 					assert(false);
 				}
 				// 初期ステート.
-				ray_result_state_ = rhi::ResourceState::General;
+				ray_result_state_ = rhi::EResourceState::General;
 			}
 
 
@@ -1645,8 +1645,8 @@ namespace ngl
 			// Resource State Transition.
 			{
 				// 出力先UAVバリア.
-				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::UnorderedAccess);
-				ray_result_state_ = rhi::ResourceState::UnorderedAccess;
+				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::EResourceState::UnorderedAccess);
+				ray_result_state_ = rhi::EResourceState::UnorderedAccess;
 			}
 
 			// Ray Dispatch.
@@ -1675,8 +1675,8 @@ namespace ngl
 			// Resource State Transition.
 			{
 				// to SRV.
-				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::ResourceState::ShaderRead);
-				ray_result_state_ = rhi::ResourceState::ShaderRead;
+				p_command_list->ResourceBarrier(ray_result_.Get(), ray_result_state_, rhi::EResourceState::ShaderRead);
+				ray_result_state_ = rhi::EResourceState::ShaderRead;
 			}
 		}
 		// ------------------------------------------------------------------------------------------------------------------------------------

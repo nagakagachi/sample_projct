@@ -102,14 +102,14 @@ namespace ngl_test
 				// UAV用設定.
 				buffer_desc0.bind_flag |= ngl::rhi::ResourceBindFlag::UnorderedAccess;
 				// UAVはDefaultHeap必須
-				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Default;
-				buffer_desc0.initial_state = ngl::rhi::ResourceState::Common;// 通常はCommon.
+				buffer_desc0.heap_type = ngl::rhi::EResourceHeapType::Default;
+				buffer_desc0.initial_state = ngl::rhi::EResourceState::Common;// 通常はCommon.
 			}
 			else
 			{
 				// CPU->GPU Uploadリソース
-				buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;
-				buffer_desc0.initial_state = ngl::rhi::ResourceState::General;// UploadヒープではGeneral.
+				buffer_desc0.heap_type = ngl::rhi::EResourceHeapType::Upload;
+				buffer_desc0.initial_state = ngl::rhi::EResourceState::General;// UploadヒープではGeneral.
 			}
 
 			if (!buffer0.Initialize(&device, buffer_desc0))
@@ -171,12 +171,12 @@ namespace ngl_test
 		{
 			// Textureテスト
 			ngl::rhi::TextureDep::Desc tex_desc00 = {};
-			tex_desc00.heap_type = ngl::rhi::ResourceHeapType::Default;
-			tex_desc00.type = ngl::rhi::TextureType::Texture3D;
+			tex_desc00.heap_type = ngl::rhi::EResourceHeapType::Default;
+			tex_desc00.type = ngl::rhi::ETextureType::Texture3D;
 			tex_desc00.width = 64;
 			tex_desc00.height = 64;
 			tex_desc00.depth = 64;
-			tex_desc00.format = ngl::rhi::ResourceFormat::Format_R16_FLOAT;
+			tex_desc00.format = ngl::rhi::EResourceFormat::Format_R16_FLOAT;
 			tex_desc00.bind_flag = (int)ngl::rhi::ResourceBindFlag::ShaderResource;
 
 			//tex_desc00.bind_flag |= ngl::rhi::ResourceBindFlag::RenderTarget;
@@ -194,15 +194,15 @@ namespace ngl_test
 		{
 			// Samplerテスト
 			ngl::rhi::SamplerDep::Desc samp_desc = {};
-			samp_desc.AddressU = ngl::rhi::TextureAddressMode::Repeat;
-			samp_desc.AddressV = ngl::rhi::TextureAddressMode::Repeat;
-			samp_desc.AddressW = ngl::rhi::TextureAddressMode::Repeat;
+			samp_desc.AddressU = ngl::rhi::ETextureAddressMode::Repeat;
+			samp_desc.AddressV = ngl::rhi::ETextureAddressMode::Repeat;
+			samp_desc.AddressW = ngl::rhi::ETextureAddressMode::Repeat;
 			samp_desc.BorderColor[0] = 0.0f;
 			samp_desc.BorderColor[1] = 0.0f;
 			samp_desc.BorderColor[2] = 0.0f;
 			samp_desc.BorderColor[3] = 0.0f;
-			samp_desc.ComparisonFunc = ngl::rhi::CompFunc::Never;
-			samp_desc.Filter = ngl::rhi::TextureFilterMode::Min_Point_Mag_Point_Mip_Linear;
+			samp_desc.ComparisonFunc = ngl::rhi::ECompFunc::Never;
+			samp_desc.Filter = ngl::rhi::ETextureFilterMode::Min_Point_Mag_Point_Mip_Linear;
 			samp_desc.MaxAnisotropy = 0;
 			samp_desc.MaxLOD = FLT_MAX;
 			samp_desc.MinLOD = 0.0f;
@@ -229,14 +229,14 @@ namespace ngl_test
 			{
 				ngl::gfx::ResShader::LoadDesc loaddesc = {};
 				loaddesc.entry_point_name = "main_vs";
-				loaddesc.stage = ngl::rhi::ShaderStage::Vertex;
+				loaddesc.stage = ngl::rhi::EShaderStage::Vertex;
 				loaddesc.shader_model_version = "6_3";
 				res_shader_sample_vs_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device, "./src/ngl/data/shader/sample_vs.hlsl", &loaddesc);
 			}
 			{
 				ngl::gfx::ResShader::LoadDesc loaddesc = {};
 				loaddesc.entry_point_name = "main_ps";
-				loaddesc.stage = ngl::rhi::ShaderStage::Pixel;
+				loaddesc.stage = ngl::rhi::EShaderStage::Pixel;
 				loaddesc.shader_model_version = "6_3";
 				res_shader_sample_ps_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(&device, "./src/ngl/data/shader/sample_ps.hlsl", &loaddesc);
 			}
@@ -251,7 +251,7 @@ namespace ngl_test
 				desc.ps = &res_shader_sample_ps_->data_;
 
 				desc.num_render_targets = 1;
-				desc.render_target_formats[0] = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+				desc.render_target_formats[0] = ngl::rhi::EResourceFormat::Format_R10G10B10A2_UNORM;
 
 				desc.depth_stencil_state.depth_enable = false;
 				desc.depth_stencil_state.stencil_enable = false;
@@ -264,12 +264,12 @@ namespace ngl_test
 				desc.input_layout.p_input_elements = input_elem_data.data();
 				input_elem_data[0].semantic_name = "POSITION";
 				input_elem_data[0].semantic_index = 0;
-				input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32A32_FLOAT;
+				input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32A32_FLOAT;
 				input_elem_data[0].stream_slot = 0;
 				input_elem_data[0].element_offset = 0;
 				input_elem_data[1].semantic_name = "TEXCOORD";
 				input_elem_data[1].semantic_index = 0;
-				input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
+				input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
 				input_elem_data[1].stream_slot = 0;
 				input_elem_data[1].element_offset = sizeof(float) * 4;
 
@@ -292,9 +292,9 @@ namespace ngl_test
 					buffer_desc0.element_byte_size = sizeof(CbTest);
 					buffer_desc0.element_count = 1;
 					buffer_desc0.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
-					buffer_desc0.initial_state = ngl::rhi::ResourceState::General;
+					buffer_desc0.initial_state = ngl::rhi::EResourceState::General;
 					// CPU->GPU Uploadリソース
-					buffer_desc0.heap_type = ngl::rhi::ResourceHeapType::Upload;
+					buffer_desc0.heap_type = ngl::rhi::EResourceHeapType::Upload;
 
 					if (!buffer0.Initialize(&device, buffer_desc0))
 					{
@@ -368,7 +368,7 @@ namespace ngl_test
 				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 				shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
 				shader_desc.entry_point_name = "main_ps";
-				shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+				shader_desc.stage = ngl::rhi::EShaderStage::Pixel;
 				shader_desc.shader_model_version = "5_0";
 
 				if (!shader00.Initialize(&device, shader_desc))
@@ -396,7 +396,7 @@ namespace ngl_test
 				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 				shader_desc.shader_file_path = "./src/ngl/data/shader/sample_ps.hlsl";
 				shader_desc.entry_point_name = "main_ps";
-				shader_desc.stage = ngl::rhi::ShaderStage::Pixel;
+				shader_desc.stage = ngl::rhi::EShaderStage::Pixel;
 				shader_desc.shader_model_version = "6_0";
 
 				if (!shader01.Initialize(&device, shader_desc))
@@ -418,7 +418,7 @@ namespace ngl_test
 				ngl::rhi::ShaderDep::InitFileDesc shader_desc = {};
 				shader_desc.shader_file_path = "./src/ngl/data/shader/sample_vs.hlsl";
 				shader_desc.entry_point_name = "main_vs";
-				shader_desc.stage = ngl::rhi::ShaderStage::Vertex;
+				shader_desc.stage = ngl::rhi::EShaderStage::Vertex;
 				shader_desc.shader_model_version = "5_0";
 
 				if (!shader02.Initialize(&device, shader_desc))

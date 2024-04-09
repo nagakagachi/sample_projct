@@ -83,7 +83,7 @@ namespace ngl
 		// 外部リソースを登録共通部.
 		ResourceHandle RenderTaskGraphBuilder::AppendExternalResourceCommon(
 			rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
-			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+			rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{	
 			// 無効なリソースチェック.
 			if (!swapchain.IsValid() && !tex.IsValid())
@@ -181,14 +181,14 @@ namespace ngl
 		// 外部リソースの登録. 一般.
 		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(
 			rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
-			rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+			rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{
 			handle_imported_swapchain_ = AppendExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
 			return handle_imported_swapchain_;
 		}
 		
 		// 外部リソースの登録. Swapchain.
-		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state)
+		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{
 			handle_imported_swapchain_ = AppendExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
 			return handle_imported_swapchain_;
@@ -707,7 +707,7 @@ namespace ngl
 				// 初回フレームの伝搬リソース等は無効なリソースIDとなっているためチェック.
 				if(0 <= res_id.detail.resource_id)
 				{
-					rhi::ResourceState begin_state = {};
+					rhi::EResourceState begin_state = {};
 					if(!res_id.detail.is_external)
 					{
 						// 内部リソースの場合はキャッシュされたステートから開始.
@@ -720,7 +720,7 @@ namespace ngl
 						begin_state = imported_resource_[res_id.detail.resource_id].cached_state_;
 					}
 				
-					rhi::ResourceState curr_state = begin_state;
+					rhi::EResourceState curr_state = begin_state;
 					for(const auto* p_node : res_access_node_array[res_index])
 					{
 						for(const auto handle : node_handle_usage_list_[p_node])
@@ -729,22 +729,22 @@ namespace ngl
 							if(res_id == handle_compiled_resource_id_[handle_index])
 							{
 								// Handleへのアクセスタイプから次のrhiステートを決定.
-								rhi::ResourceState next_state = {};
+								rhi::EResourceState next_state = {};
 								if(access_type::RENDER_TARTGET == handle.access)
 								{
-									next_state = rhi::ResourceState::RenderTarget;
+									next_state = rhi::EResourceState::RenderTarget;
 								}
 								else if(access_type::DEPTH_TARGET == handle.access)
 								{
-									next_state = rhi::ResourceState::DepthWrite;
+									next_state = rhi::EResourceState::DepthWrite;
 								}
 								else if(access_type::UAV == handle.access)
 								{
-									next_state = rhi::ResourceState::UnorderedAccess;
+									next_state = rhi::EResourceState::UnorderedAccess;
 								}
 								else if(access_type::SHADER_READ == handle.access)
 								{
-									next_state = rhi::ResourceState::ShaderRead;
+									next_state = rhi::EResourceState::ShaderRead;
 								}
 								else
 								{
@@ -1524,14 +1524,14 @@ namespace ngl
 			if(0 > res_id)
 			{
 				rhi::TextureDep::Desc desc = {};
-				rhi::ResourceState init_state = rhi::ResourceState::General;
+				rhi::EResourceState init_state = rhi::EResourceState::General;
 				{
-					desc.type = rhi::TextureType::Texture2D;// 現状2D固定.
+					desc.type = rhi::ETextureType::Texture2D;// 現状2D固定.
 					desc.initial_state = init_state;
 					desc.array_size = 1;
 					desc.mip_count = 1;
 					desc.sample_count = 1;
-					desc.heap_type = rhi::ResourceHeapType::Default;
+					desc.heap_type = rhi::EResourceHeapType::Default;
 						
 					desc.format = key.format;
 					desc.width = key.require_width_;	// MEMO 相対サイズの場合はここには縮小サイズ等が来てしまうので無駄がありそう.

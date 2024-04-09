@@ -204,51 +204,51 @@ namespace ngl
 		{
 			/** texture dimension -> view dimension.
 			*/
-			ResourceDimension getTextureDimension(TextureType type, bool is_texture_array)
+			EResourceDimension getTextureDimension(ETextureType type, bool is_texture_array)
 			{
 				switch (type)
 				{
 					//case TextureType::Buffer:
 					//	assert(is_texture_array == false);
 					//	return ResourceDimension::Buffer;
-				case TextureType::Texture1D:
-					return (is_texture_array) ? ResourceDimension::Texture1DArray : ResourceDimension::Texture1D;
-				case TextureType::Texture2D:
-					return (is_texture_array) ? ResourceDimension::Texture2DArray : ResourceDimension::Texture2D;
-				case TextureType::Texture2DMultisample:
-					return (is_texture_array) ? ResourceDimension::Texture2DMSArray : ResourceDimension::Texture2DMS;
-				case TextureType::Texture3D:
+				case ETextureType::Texture1D:
+					return (is_texture_array) ? EResourceDimension::Texture1DArray : EResourceDimension::Texture1D;
+				case ETextureType::Texture2D:
+					return (is_texture_array) ? EResourceDimension::Texture2DArray : EResourceDimension::Texture2D;
+				case ETextureType::Texture2DMultisample:
+					return (is_texture_array) ? EResourceDimension::Texture2DMSArray : EResourceDimension::Texture2DMS;
+				case ETextureType::Texture3D:
 					assert(is_texture_array == false);
-					return ResourceDimension::Texture3D;
-				case TextureType::TextureCube:
-					return (is_texture_array) ? ResourceDimension::TextureCubeArray : ResourceDimension::TextureCube;
+					return EResourceDimension::Texture3D;
+				case ETextureType::TextureCube:
+					return (is_texture_array) ? EResourceDimension::TextureCubeArray : EResourceDimension::TextureCube;
 				default:
 					assert(false);
-					return ResourceDimension::Unknown;
+					return EResourceDimension::Unknown;
 				}
 			}
 
 			/** view dimension to D3D12 view dimension.
 			*/
 			template<typename ViewType>
-			ViewType getTextureViewDimension(ResourceDimension dimension);
+			ViewType getTextureViewDimension(EResourceDimension dimension);
 
 			// for srv.
 			template<>
-			D3D12_SRV_DIMENSION getTextureViewDimension<D3D12_SRV_DIMENSION>(ResourceDimension dimension)
+			D3D12_SRV_DIMENSION getTextureViewDimension<D3D12_SRV_DIMENSION>(EResourceDimension dimension)
 			{
 				switch (dimension)
 				{
-				case ResourceDimension::Texture1D: return D3D12_SRV_DIMENSION_TEXTURE1D;
-				case ResourceDimension::Texture1DArray: return D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
-				case ResourceDimension::Texture2D: return D3D12_SRV_DIMENSION_TEXTURE2D;
-				case ResourceDimension::Texture2DArray: return D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-				case ResourceDimension::Texture2DMS: return D3D12_SRV_DIMENSION_TEXTURE2DMS;
-				case ResourceDimension::Texture2DMSArray: return D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
-				case ResourceDimension::Texture3D: return D3D12_SRV_DIMENSION_TEXTURE3D;
-				case ResourceDimension::TextureCube: return D3D12_SRV_DIMENSION_TEXTURECUBE;
-				case ResourceDimension::TextureCubeArray: return D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
-				case ResourceDimension::AccelerationStructure: return D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+				case EResourceDimension::Texture1D: return D3D12_SRV_DIMENSION_TEXTURE1D;
+				case EResourceDimension::Texture1DArray: return D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
+				case EResourceDimension::Texture2D: return D3D12_SRV_DIMENSION_TEXTURE2D;
+				case EResourceDimension::Texture2DArray: return D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+				case EResourceDimension::Texture2DMS: return D3D12_SRV_DIMENSION_TEXTURE2DMS;
+				case EResourceDimension::Texture2DMSArray: return D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+				case EResourceDimension::Texture3D: return D3D12_SRV_DIMENSION_TEXTURE3D;
+				case EResourceDimension::TextureCube: return D3D12_SRV_DIMENSION_TEXTURECUBE;
+				case EResourceDimension::TextureCubeArray: return D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+				case EResourceDimension::AccelerationStructure: return D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
 				default:
 					assert(false);
 					return D3D12_SRV_DIMENSION_UNKNOWN;
@@ -256,15 +256,15 @@ namespace ngl
 			}
 			// for uav.
 			template<>
-			D3D12_UAV_DIMENSION getTextureViewDimension<D3D12_UAV_DIMENSION>(ResourceDimension dimension)
+			D3D12_UAV_DIMENSION getTextureViewDimension<D3D12_UAV_DIMENSION>(EResourceDimension dimension)
 			{
 				switch (dimension)
 				{
-				case ResourceDimension::Texture1D: return D3D12_UAV_DIMENSION_TEXTURE1D;
-				case ResourceDimension::Texture1DArray: return D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
-				case ResourceDimension::Texture2D: return D3D12_UAV_DIMENSION_TEXTURE2D;
-				case ResourceDimension::Texture2DArray: return D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-				case ResourceDimension::Texture3D: return D3D12_UAV_DIMENSION_TEXTURE3D;
+				case EResourceDimension::Texture1D: return D3D12_UAV_DIMENSION_TEXTURE1D;
+				case EResourceDimension::Texture1DArray: return D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
+				case EResourceDimension::Texture2D: return D3D12_UAV_DIMENSION_TEXTURE2D;
+				case EResourceDimension::Texture2DArray: return D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+				case EResourceDimension::Texture3D: return D3D12_UAV_DIMENSION_TEXTURE3D;
 				default:
 					assert(false);
 					return D3D12_UAV_DIMENSION_UNKNOWN;
@@ -272,16 +272,16 @@ namespace ngl
 			}
 			// for dsv.
 			template<>
-			D3D12_DSV_DIMENSION getTextureViewDimension<D3D12_DSV_DIMENSION>(ResourceDimension dimension)
+			D3D12_DSV_DIMENSION getTextureViewDimension<D3D12_DSV_DIMENSION>(EResourceDimension dimension)
 			{
 				switch (dimension)
 				{
-				case ResourceDimension::Texture1D: return D3D12_DSV_DIMENSION_TEXTURE1D;
-				case ResourceDimension::Texture1DArray: return D3D12_DSV_DIMENSION_TEXTURE1DARRAY;
-				case ResourceDimension::Texture2D: return D3D12_DSV_DIMENSION_TEXTURE2D;
-				case ResourceDimension::Texture2DArray: return D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
-				case ResourceDimension::Texture2DMS: return D3D12_DSV_DIMENSION_TEXTURE2DMS;
-				case ResourceDimension::Texture2DMSArray: return D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+				case EResourceDimension::Texture1D: return D3D12_DSV_DIMENSION_TEXTURE1D;
+				case EResourceDimension::Texture1DArray: return D3D12_DSV_DIMENSION_TEXTURE1DARRAY;
+				case EResourceDimension::Texture2D: return D3D12_DSV_DIMENSION_TEXTURE2D;
+				case EResourceDimension::Texture2DArray: return D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+				case EResourceDimension::Texture2DMS: return D3D12_DSV_DIMENSION_TEXTURE2DMS;
+				case EResourceDimension::Texture2DMSArray: return D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
 					// TODO: Falcor previously mapped cube to 2D array. Not sure if needed anymore.
 					//case ReflectionResourceType::Dimensions::TextureCube: return D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
 				default:
@@ -291,17 +291,17 @@ namespace ngl
 			}
 			// for rtv.
 			template<>
-			D3D12_RTV_DIMENSION getTextureViewDimension<D3D12_RTV_DIMENSION>(ResourceDimension dimension)
+			D3D12_RTV_DIMENSION getTextureViewDimension<D3D12_RTV_DIMENSION>(EResourceDimension dimension)
 			{
 				switch (dimension)
 				{
-				case ResourceDimension::Texture1D: return D3D12_RTV_DIMENSION_TEXTURE1D;
-				case ResourceDimension::Texture1DArray: return D3D12_RTV_DIMENSION_TEXTURE1DARRAY;
-				case ResourceDimension::Texture2D: return D3D12_RTV_DIMENSION_TEXTURE2D;
-				case ResourceDimension::Texture2DArray: return D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-				case ResourceDimension::Texture2DMS: return D3D12_RTV_DIMENSION_TEXTURE2DMS;
-				case ResourceDimension::Texture2DMSArray: return D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
-				case ResourceDimension::Texture3D: return D3D12_RTV_DIMENSION_TEXTURE3D;
+				case EResourceDimension::Texture1D: return D3D12_RTV_DIMENSION_TEXTURE1D;
+				case EResourceDimension::Texture1DArray: return D3D12_RTV_DIMENSION_TEXTURE1DARRAY;
+				case EResourceDimension::Texture2D: return D3D12_RTV_DIMENSION_TEXTURE2D;
+				case EResourceDimension::Texture2DArray: return D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+				case EResourceDimension::Texture2DMS: return D3D12_RTV_DIMENSION_TEXTURE2DMS;
+				case EResourceDimension::Texture2DMSArray: return D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+				case EResourceDimension::Texture3D: return D3D12_RTV_DIMENSION_TEXTURE3D;
 				default:
 					assert(false);
 					return D3D12_RTV_DIMENSION_UNKNOWN;
@@ -318,7 +318,7 @@ namespace ngl
 			{
 				assert(p_texture);   // Buffers should not get here
 
-				uint32_t arrayMultiplier = (p_texture->GetType() == TextureType::TextureCube) ? 6 : 1;
+				uint32_t arrayMultiplier = (p_texture->GetType() == ETextureType::TextureCube) ? 6 : 1;
 
 				if (array_size + first_array_slice > p_texture->GetArraySize())
 				{
@@ -331,7 +331,7 @@ namespace ngl
 
 				switch (p_texture->GetType())
 				{
-				case TextureType::Texture1D:
+				case ETextureType::Texture1D:
 					if (p_texture->GetArraySize() > 1)
 					{
 						desc.Texture1DArray.ArraySize = array_size;
@@ -343,8 +343,8 @@ namespace ngl
 						desc.Texture1D.MipSlice = mip_slice;
 					}
 					break;
-				case TextureType::Texture2D:
-				case TextureType::TextureCube:
+				case ETextureType::Texture2D:
+				case ETextureType::TextureCube:
 					if (p_texture->GetArraySize() * arrayMultiplier > 1)
 					{
 						desc.Texture2DArray.ArraySize = array_size * arrayMultiplier;
@@ -356,7 +356,7 @@ namespace ngl
 						desc.Texture2D.MipSlice = mip_slice;
 					}
 					break;
-				case TextureType::Texture2DMultisample:
+				case ETextureType::Texture2DMultisample:
 					if constexpr (std::is_same_v<DescType, D3D12_DEPTH_STENCIL_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
 					{
 						if (p_texture->GetArraySize() > 1)
@@ -370,7 +370,7 @@ namespace ngl
 						throw std::exception("Texture2DMultisample does not support UAV views");
 					}
 					break;
-				case TextureType::Texture3D:
+				case ETextureType::Texture3D:
 					if constexpr (std::is_same_v<DescType, D3D12_UNORDERED_ACCESS_VIEW_DESC> || std::is_same_v<DescType, D3D12_RENDER_TARGET_VIEW_DESC>)
 					{
 						assert(p_texture->GetArraySize() == 1);
@@ -419,7 +419,7 @@ namespace ngl
 
 				switch (p_texture->GetType())
 				{
-				case TextureType::Texture1D:
+				case ETextureType::Texture1D:
 					if (isTextureArray)
 					{
 						desc.Texture1DArray.MipLevels = mip_count;
@@ -433,7 +433,7 @@ namespace ngl
 						desc.Texture1D.MostDetailedMip = mip_slice;
 					}
 					break;
-				case TextureType::Texture2D:
+				case ETextureType::Texture2D:
 					if (isTextureArray)
 					{
 						desc.Texture2DArray.MipLevels = mip_count;
@@ -447,19 +447,19 @@ namespace ngl
 						desc.Texture2D.MostDetailedMip = mip_slice;
 					}
 					break;
-				case TextureType::Texture2DMultisample:
+				case ETextureType::Texture2DMultisample:
 					if (array_size > 1)
 					{
 						desc.Texture2DMSArray.ArraySize = array_size;
 						desc.Texture2DMSArray.FirstArraySlice = first_array_slice;
 					}
 					break;
-				case TextureType::Texture3D:
+				case ETextureType::Texture3D:
 					assert(array_size == 1);
 					desc.Texture3D.MipLevels = mip_count;
 					desc.Texture3D.MostDetailedMip = mip_slice;
 					break;
-				case TextureType::TextureCube:
+				case ETextureType::TextureCube:
 					if (array_size > 1)
 					{
 						desc.TextureCubeArray.First2DArrayFace = 0;
@@ -498,7 +498,7 @@ namespace ngl
 				// 初期化モード.
 				, BufferViewMode::Type mode
 				// 初期化モードTyped の場合の要素フォーマットタイプ.
-				, ResourceFormat typed_format
+				, EResourceFormat typed_format
 				// 初期化モードStructured の場合の要素サイズ.
 				, u32 structured_element_size
 				, u32 element_offset, u32 element_count)
@@ -539,7 +539,7 @@ namespace ngl
 				// 初期化モード.
 				, BufferViewMode::Type mode
 				// 初期化モードTyped の場合の要素フォーマットタイプ.
-				, ResourceFormat typed_format
+				, EResourceFormat typed_format
 				// 初期化モードStructured の場合の要素サイズ.
 				, u32 structured_element_size
 				, u32 element_offset, u32 element_count)
@@ -760,7 +760,7 @@ namespace ngl
 			return _Initialize(p_device, p_buffer, desc, view_);
 		}
 		// BufferのTypedBufferView.
-		bool UnorderedAccessViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
+		bool UnorderedAccessViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, EResourceFormat format, u32 element_offset, u32 element_count)
 		{
 			InitializeRhiObject(p_device);
 
@@ -892,7 +892,7 @@ namespace ngl
 			return _Initialize(p_device, p_buffer, desc, view_);
 		}
 		// BufferのTypedBufferView.
-		bool ShaderResourceViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count)
+		bool ShaderResourceViewDep::InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, EResourceFormat format, u32 element_offset, u32 element_count)
 		{
 			InitializeRhiObject(p_device);
 

@@ -37,13 +37,13 @@ namespace assimp
 			ngl::rhi::IndexBufferViewDep* p_out_ibv,
 
 			ngl::rhi::DeviceDep* p_device,
-			uint32_t bind_flag, rhi::ResourceFormat view_format, int element_size_in_byte, int element_count, void* initial_data = nullptr)
+			uint32_t bind_flag, rhi::EResourceFormat view_format, int element_size_in_byte, int element_count, void* initial_data = nullptr)
 			-> bool
 		{
 			ngl::rhi::BufferDep::Desc buffer_desc = {};
 			// 高速化のため描画用のバッファをDefaultHeapにしてUploadBufferからコピーする対応.
-			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Default;
-			buffer_desc.initial_state = ngl::rhi::ResourceState::Common;// DefaultHeapの場合?は初期ステートがGeneralだとValidationErrorとされるようになった.
+			buffer_desc.heap_type = ngl::rhi::EResourceHeapType::Default;
+			buffer_desc.initial_state = ngl::rhi::EResourceState::Common;// DefaultHeapの場合?は初期ステートがGeneralだとValidationErrorとされるようになった.
 			buffer_desc.bind_flag = bind_flag | ngl::rhi::ResourceBindFlag::ShaderResource;// Raytrace用のShaderResource.
 			buffer_desc.element_count = element_count;
 			buffer_desc.element_byte_size = element_size_in_byte;
@@ -61,8 +61,8 @@ namespace assimp
 			if (p_mesh_geom_buffer->ref_upload_rhibuffer_.IsValid())
 			{
 				auto upload_desc = buffer_desc;
-				upload_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
-				upload_desc.initial_state = ngl::rhi::ResourceState::General;// UploadHeapはGenericRead.
+				upload_desc.heap_type = ngl::rhi::EResourceHeapType::Upload;
+				upload_desc.initial_state = ngl::rhi::EResourceState::General;// UploadHeapはGenericRead.
 
 				if (!p_mesh_geom_buffer->ref_upload_rhibuffer_->Initialize(p_device, upload_desc))
 				{
@@ -362,7 +362,7 @@ namespace assimp
 					&mesh.position_.rhi_srv,
 					&mesh.position_.rhi_vbv_,
 					nullptr,
-					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
+					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::EResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.position_.raw_ptr_);
 
 				// Slotマッピング.
@@ -379,7 +379,7 @@ namespace assimp
 					&mesh.normal_.rhi_srv,
 					&mesh.normal_.rhi_vbv_,
 					nullptr,
-					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
+					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::EResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.normal_.raw_ptr_);
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
@@ -398,7 +398,7 @@ namespace assimp
 					&mesh.tangent_.rhi_srv,
 					&mesh.tangent_.rhi_vbv_,
 					nullptr,
-					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
+					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::EResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.tangent_.raw_ptr_);
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
@@ -417,7 +417,7 @@ namespace assimp
 					&mesh.binormal_.rhi_srv,
 					&mesh.binormal_.rhi_vbv_,
 					nullptr,
-					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
+					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::EResourceFormat::Format_R32G32B32_FLOAT, sizeof(ngl::math::Vec3), mesh.num_vertex_,
 					mesh.binormal_.raw_ptr_);
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
@@ -437,7 +437,7 @@ namespace assimp
 					&mesh.color_[ci].rhi_srv,
 					&mesh.color_[ci].rhi_vbv_,
 					nullptr,
-					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R8G8B8A8_UNORM, sizeof(ngl::gfx::VertexColor), mesh.num_vertex_,
+					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::EResourceFormat::Format_R8G8B8A8_UNORM, sizeof(ngl::gfx::VertexColor), mesh.num_vertex_,
 					mesh.color_[ci].raw_ptr_);
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
@@ -456,7 +456,7 @@ namespace assimp
 					&mesh.texcoord_[ci].rhi_srv,
 					&mesh.texcoord_[ci].rhi_vbv_,
 					nullptr,
-					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::ResourceFormat::Format_R32G32_FLOAT, sizeof(ngl::math::Vec2), mesh.num_vertex_,
+					p_device, ngl::rhi::ResourceBindFlag::VertexBuffer, rhi::EResourceFormat::Format_R32G32_FLOAT, sizeof(ngl::math::Vec2), mesh.num_vertex_,
 					mesh.texcoord_[ci].raw_ptr_);
 
 				rhi::VertexBufferViewDep::Desc vbv_desc = {};
@@ -476,7 +476,7 @@ namespace assimp
 					&mesh.index_.rhi_srv,
 					nullptr,
 					&mesh.index_.rhi_vbv_,
-					p_device, ngl::rhi::ResourceBindFlag::IndexBuffer, rhi::ResourceFormat::Format_R32_UINT, sizeof(uint32_t), mesh.num_primitive_ * 3,
+					p_device, ngl::rhi::ResourceBindFlag::IndexBuffer, rhi::EResourceFormat::Format_R32_UINT, sizeof(uint32_t), mesh.num_primitive_ * 3,
 					mesh.index_.raw_ptr_);
 			}
 		}

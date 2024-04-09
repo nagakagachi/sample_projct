@@ -270,7 +270,7 @@ namespace ngl
 
 			struct Desc
 			{
-				ResourceFormat		format = ResourceFormat::Format_R10G10B10A2_UNORM;
+				EResourceFormat		format = EResourceFormat::Format_R10G10B10A2_UNORM;
 			};
 
 			SwapChainDep();

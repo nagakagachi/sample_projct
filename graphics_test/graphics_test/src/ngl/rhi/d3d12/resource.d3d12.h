@@ -34,14 +34,14 @@ namespace ngl
 				ngl::u32			element_byte_size = 0;
 				ngl::u32			element_count = 0;
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				ResourceHeapType	heap_type = ResourceHeapType::Default;
-				ResourceState		initial_state = ResourceState::Common; // 既定はCommon. Uploadヒープの場合はGeneralとする.
+				EResourceHeapType	heap_type = EResourceHeapType::Default;
+				EResourceState		initial_state = EResourceState::Common; // 既定はCommon. Uploadヒープの場合はGeneralとする.
 
 				void SetupAsConstantBuffer(ngl::u32 size) 
 				{
 					// CBは大抵CPU書き込みをするため Upload.
-					heap_type = rhi::ResourceHeapType::Upload;
-					initial_state = rhi::ResourceState::General;// 初期ステートでConstantBuffer指定. (Generic_Read開始でないといけないかもしれない).
+					heap_type = rhi::EResourceHeapType::Upload;
+					initial_state = rhi::EResourceState::General;// 初期ステートでConstantBuffer指定. (Generic_Read開始でないといけないかもしれない).
 
 					bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 					element_byte_size = size;
@@ -89,7 +89,7 @@ namespace ngl
 		public:
 			struct Desc
 			{
-				ResourceFormat		format = ResourceFormat::Format_UNKNOWN;
+				EResourceFormat		format = EResourceFormat::Format_UNKNOWN;
 				ngl::u32			width = 1;
 				ngl::u32			height = 1;
 				ngl::u32			depth = 1;
@@ -97,11 +97,11 @@ namespace ngl
 				ngl::u32			sample_count = 1;
 				ngl::u32			array_size = 1;
 
-				TextureType			type = TextureType::Texture2D;
+				ETextureType			type = ETextureType::Texture2D;
 
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				ResourceHeapType	heap_type = ResourceHeapType::Default;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
-				ResourceState		initial_state = ResourceState::General;
+				EResourceHeapType	heap_type = EResourceHeapType::Default;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
+				EResourceState		initial_state = EResourceState::General;
 
 				// リソースのデフォルトクリア値を指定する. ハードウェア的に可能なら指定した値によるクリアが高速になる?.
 				// ただし指定した場合はクリア値のバリデーションチェックが有効になり異なる値でのクリアで警告がでるようになる.
@@ -165,13 +165,13 @@ namespace ngl
 			uint32_t GetSubresourceIndex(uint32_t arraySlice, uint32_t mipLevel) const { return mipLevel + arraySlice * desc_.mip_count; }
 			/** Get the resource format
 			*/
-			ResourceFormat GetFormat() const { return desc_.format; }
+			EResourceFormat GetFormat() const { return desc_.format; }
 			/** Get the resource bind flag
 			*/
 			u32 GetBindFlag() const { return desc_.bind_flag; }
 			/** Get the resource Type
 			*/
-			TextureType GetType() const { return desc_.type; }
+			ETextureType GetType() const { return desc_.type; }
 
 		private:
 			Desc	desc_ = {};

@@ -32,7 +32,7 @@ namespace ngl::render
 			{
 				// リソース定義.
 				//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
-				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT);
+				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_D32_FLOAT);
 
 				// リソースアクセス定義.
 				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
@@ -47,13 +47,13 @@ namespace ngl::render
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					loaddesc_vs.entry_point_name = "main_vs";
-					loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 					loaddesc_vs.shader_model_version = k_shader_model;
 					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl", &loaddesc_vs);
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					loaddesc_ps.entry_point_name = "main_ps";
-					loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 					loaddesc_ps.shader_model_version = k_shader_model;
 					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl", &loaddesc_ps);
 
@@ -63,8 +63,8 @@ namespace ngl::render
 					desc.ps = &res_shader_ps->data_;
 
 					desc.depth_stencil_state.depth_enable = true;
-					desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Greater; // ReverseZ.
-					desc.depth_stencil_state.depth_write_mask = ~ngl::u32(0);
+					desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Greater; // ReverseZ.
+					desc.depth_stencil_state.depth_write_enable = true;
 					desc.depth_stencil_state.stencil_enable = false;
 					desc.depth_stencil_format = depth_desc.desc.format;
 
@@ -75,19 +75,19 @@ namespace ngl::render
 					{
 						input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
 						input_elem_data[0].semantic_index = 0;
-						input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
 						input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
 						input_elem_data[0].element_offset = 0;
 
 						input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
 						input_elem_data[1].semantic_index = 0;
-						input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
 						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
 						input_elem_data[1].element_offset = 0;
 
 						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
 						input_elem_data[2].semantic_index = 0;
-						input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
+						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
 						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
 						input_elem_data[2].element_offset = 0;
 					}
@@ -152,15 +152,15 @@ namespace ngl::render
 			{	
 				// リソース定義.
 				// GBuffer0 BaseColor.xyz, Occlusion.w
-				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM_SRGB);
+				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R8G8B8A8_UNORM_SRGB);
 				// GBuffer1 WorldNormal.xyz, 1bitOption.w
-				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R10G10B10A2_UNORM);
+				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R10G10B10A2_UNORM);
 				// GBuffer2 Roughness, Metallic, Optional, MaterialId
-				rtg::ResourceDesc2D gbuffer2_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R8G8B8A8_UNORM);
+				rtg::ResourceDesc2D gbuffer2_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R8G8B8A8_UNORM);
 				// GBuffer3 Emissive.xyz, Unused.w
-				rtg::ResourceDesc2D gbuffer3_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
+				rtg::ResourceDesc2D gbuffer3_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 				// Velocity xy
-				rtg::ResourceDesc2D velocity_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16_FLOAT);
+				rtg::ResourceDesc2D velocity_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16_FLOAT);
 
 				// DepthのFormat取得.
 				const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
@@ -190,13 +190,13 @@ namespace ngl::render
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					loaddesc_vs.entry_point_name = "main_vs";
-					loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 					loaddesc_vs.shader_model_version = k_shader_model;
 					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_gbuffer_vs.hlsl", &loaddesc_vs);
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					loaddesc_ps.entry_point_name = "main_ps";
-					loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 					loaddesc_ps.shader_model_version = k_shader_model;
 					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_gbuffer_ps.hlsl", &loaddesc_ps);
 
@@ -221,8 +221,8 @@ namespace ngl::render
 					}
 					{
 						desc.depth_stencil_state.depth_enable = true;
-						desc.depth_stencil_state.depth_func = ngl::rhi::CompFunc::Equal; // Maskedを含めたEarlyZ Full PreZのためEqual.
-						desc.depth_stencil_state.depth_write_mask = 0;// 描き込み無効. MaskではなくStateとして描き込み無効はある?.
+						desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Equal; // Maskedを含めたEarlyZ Full PreZのためEqual.
+						desc.depth_stencil_state.depth_write_enable = false;// 描き込み無効. 深度テストのみで書き込み無効.
 						desc.depth_stencil_state.stencil_enable = false;
 						desc.depth_stencil_format = depth_desc.desc.format;
 					}
@@ -233,19 +233,19 @@ namespace ngl::render
 					{
 						input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
 						input_elem_data[0].semantic_index = 0;
-						input_elem_data[0].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
 						input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
 						input_elem_data[0].element_offset = 0;
 
 						input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
 						input_elem_data[1].semantic_index = 0;
-						input_elem_data[1].format = ngl::rhi::ResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
 						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
 						input_elem_data[1].element_offset = 0;
 
 						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
 						input_elem_data[2].semantic_index = 0;
-						input_elem_data[2].format = ngl::rhi::ResourceFormat::Format_R32G32_FLOAT;
+						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
 						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
 						input_elem_data[2].element_offset = 0;
 					}
@@ -317,7 +317,7 @@ namespace ngl::render
 			{
 				{
 					// リソース定義.
-					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R32_FLOAT);
+					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
 
 					// テスト用
 					if(!h_tex_compute.IsInvalid())
@@ -339,7 +339,7 @@ namespace ngl::render
 
 					ngl::gfx::ResShader::LoadDesc loaddesc = {};
 					loaddesc.entry_point_name = "main_cs";
-					loaddesc.stage = ngl::rhi::ShaderStage::Compute;
+					loaddesc.stage = ngl::rhi::EShaderStage::Compute;
 					loaddesc.shader_model_version = k_shader_model;
 					auto res_shader = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/screen/generate_lineardepth_cs.hlsl", &loaddesc);
 
@@ -408,7 +408,7 @@ namespace ngl::render
 				rhi::RefSampDep ref_samp_linear_clamp)
 			{
 				// リソース定義.
-				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
+				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 				{
 					// リソースアクセス定義.
 					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
@@ -442,7 +442,7 @@ namespace ngl::render
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					{
 						loaddesc_vs.entry_point_name = "main_vs";
-						loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+						loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 						loaddesc_vs.shader_model_version = k_shader_model;
 					}
 					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl", &loaddesc_vs);
@@ -450,7 +450,7 @@ namespace ngl::render
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					{
 						loaddesc_ps.entry_point_name = "main_ps";
-						loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+						loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 						loaddesc_ps.shader_model_version = k_shader_model;
 					}
 					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/df_light_pass_ps.hlsl", &loaddesc_ps);
@@ -512,7 +512,7 @@ namespace ngl::render
 				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
-				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
 				gfx_commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
@@ -556,7 +556,7 @@ namespace ngl::render
 
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
+					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RecordResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 					h_tmp_ = temp_res0;
 				}
@@ -577,7 +577,7 @@ namespace ngl::render
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					{
 						loaddesc_vs.entry_point_name = "main_vs";
-						loaddesc_vs.stage = ngl::rhi::ShaderStage::Vertex;
+						loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 						loaddesc_vs.shader_model_version = k_shader_model;
 					}
 					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/screen/fullscr_procedural_vs.hlsl", &loaddesc_vs);
@@ -585,7 +585,7 @@ namespace ngl::render
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					{
 						loaddesc_ps.entry_point_name = "main_ps";
-						loaddesc_ps.stage = ngl::rhi::ShaderStage::Pixel;
+						loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 						loaddesc_ps.shader_model_version = k_shader_model;
 					}
 					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/final_screen_pass_ps.hlsl", &loaddesc_ps);
@@ -641,7 +641,7 @@ namespace ngl::render
 				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
-				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::PrimitiveTopology::TriangleList);
+				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
 				gfx_commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
@@ -665,7 +665,7 @@ namespace ngl::render
 				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
 				{
 					// リソース定義.
-					rtg::ResourceDesc2D work_tex_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
+					rtg::ResourceDesc2D work_tex_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 
 					// リソースアクセス定義.
 					h_work_tex_ = builder.RecordResourceAccess(*this, builder.CreateResource(work_tex_desc), rtg::access_type::UAV);
@@ -681,7 +681,7 @@ namespace ngl::render
 						ngl::rhi::ComputePipelineStateDep::Desc cpso_desc = {};
 						{
 							ngl::gfx::ResShader::LoadDesc cs_load_desc = {};
-							cs_load_desc.stage = ngl::rhi::ShaderStage::Compute;
+							cs_load_desc.stage = ngl::rhi::EShaderStage::Compute;
 							cs_load_desc.shader_model_version = k_shader_model;
 							cs_load_desc.entry_point_name = "main_cs";
 							auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(

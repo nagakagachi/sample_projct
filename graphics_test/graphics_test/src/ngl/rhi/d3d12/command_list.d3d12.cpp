@@ -312,7 +312,7 @@ namespace ngl
 		};
 
 		// State Transition Barrier関連共通部.
-		void _Barrier(ID3D12GraphicsCommandList* p_command_list, ID3D12Resource* p_resource, ResourceState prev, ResourceState next)
+		void _Barrier(ID3D12GraphicsCommandList* p_command_list, ID3D12Resource* p_resource, EResourceState prev, EResourceState next)
 		{
 			D3D12_RESOURCE_STATES state_before = ConvertResourceState(prev);
 			D3D12_RESOURCE_STATES state_after = ConvertResourceState(next);
@@ -330,7 +330,7 @@ namespace ngl
 		}
 
 		// バリア Swapchain.
-		void GraphicsCommandListDep::ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, ResourceState prev, ResourceState next)
+		void GraphicsCommandListDep::ResourceBarrier(SwapChainDep* p_swapchain, unsigned int buffer_index, EResourceState prev, EResourceState next)
 		{
 			if (!p_swapchain || prev == next)
 				return;
@@ -338,7 +338,7 @@ namespace ngl
 			_Barrier(p_command_list_, resource, prev, next);
 		}
 		// バリア Texture.
-		void GraphicsCommandListDep::ResourceBarrier(TextureDep* p_texture, ResourceState prev, ResourceState next)
+		void GraphicsCommandListDep::ResourceBarrier(TextureDep* p_texture, EResourceState prev, EResourceState next)
 		{
 			if (!p_texture || prev == next)
 				return;
@@ -346,7 +346,7 @@ namespace ngl
 			_Barrier(p_command_list_, resource, prev, next);
 		}
 		// バリア Buffer.
-		void GraphicsCommandListDep::ResourceBarrier(BufferDep* p_buffer, ResourceState prev, ResourceState next)
+		void GraphicsCommandListDep::ResourceBarrier(BufferDep* p_buffer, EResourceState prev, EResourceState next)
 		{
 			if (!p_buffer || prev == next)
 				return;
@@ -366,7 +366,7 @@ namespace ngl
 			assert(num);
 			p_command_list_->RSSetScissorRects(num, p_rects);
 		}
-		void GraphicsCommandListDep::SetPrimitiveTopology(PrimitiveTopology topology)
+		void GraphicsCommandListDep::SetPrimitiveTopology(EPrimitiveTopology topology)
 		{
 			p_command_list_->IASetPrimitiveTopology(ConvertPrimitiveTopology(topology));
 		}

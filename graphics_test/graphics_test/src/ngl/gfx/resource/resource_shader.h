@@ -32,7 +32,7 @@ namespace ngl
 			{
 				const char* entry_point_name = nullptr;
 				// シェーダステージ.
-				rhi::ShaderStage		stage = rhi::ShaderStage::Vertex;
+				rhi::EShaderStage		stage = rhi::EShaderStage::Vertex;
 				// シェーダモデル文字列.
 				// "4_0", "5_0", "5_1" etc.
 				const char* shader_model_version = nullptr;

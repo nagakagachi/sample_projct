@@ -24,7 +24,7 @@ namespace rhi
 		virtual ~ShaderDep();
 
 		// コンパイル済みシェーダバイナリから初期化
-		bool Initialize(DeviceDep* p_device, ShaderStage stage, const void* shader_binary_ptr, u32 shader_binary_size);
+		bool Initialize(DeviceDep* p_device, EShaderStage stage, const void* shader_binary_ptr, u32 shader_binary_size);
 
 		struct InitFileDesc
 		{
@@ -35,7 +35,7 @@ namespace rhi
 			// "main_ps"
 			const char* entry_point_name = nullptr;
 			// シェーダステージ.
-			ShaderStage		stage = ShaderStage::Vertex;
+			EShaderStage		stage = EShaderStage::Vertex;
 			// シェーダモデル文字列.
 			// "4_0", "5_0", "5_1" etc.
 			const char* shader_model_version = nullptr;
@@ -55,9 +55,9 @@ namespace rhi
 
 		u32		GetShaderBinarySize() const;
 		const void* GetShaderBinaryPtr() const;
-		ShaderStage GetShaderStageType() const;
+		EShaderStage GetShaderStageType() const;
 	private:
-		ShaderStage stage_;
+		EShaderStage stage_;
 		std::vector<u8>	data_;
 	};
 
@@ -105,7 +105,7 @@ namespace rhi
 		struct ResourceSlotInfo
 		{
 			ResourceViewName			name;
-			RootParameterType			type = RootParameterType::_Max;
+			ERootParameterType			type = ERootParameterType::_Max;
 			s32							bind_point = -1;
 
 		};
@@ -230,7 +230,7 @@ namespace rhi
 
 		struct ShaderStageSlot
 		{
-			RootParameterType	type = RootParameterType::_Max;
+			ERootParameterType	type = ERootParameterType::_Max;
 			s16					slot = -1;
 		};
 		struct Slot
@@ -291,11 +291,11 @@ namespace rhi
 			DepthStencilState	depth_stencil_state = {};
 
 			InputLayout				input_layout = {};
-			PrimitiveTopologyType	primitive_topology_type = PrimitiveTopologyType::Triangle;
+			EPrimitiveTopologyType	primitive_topology_type = EPrimitiveTopologyType::Triangle;
 
 			u32					num_render_targets = 0;
-			ResourceFormat		render_target_formats[8] = {};
-			ResourceFormat		depth_stencil_format = ResourceFormat::Format_D24_UNORM_S8_UINT;
+			EResourceFormat		render_target_formats[8] = {};
+			EResourceFormat		depth_stencil_format = EResourceFormat::Format_D24_UNORM_S8_UINT;
 			SampleDesc			sample_desc = {};
 			u32					node_mask = 0;
 		};

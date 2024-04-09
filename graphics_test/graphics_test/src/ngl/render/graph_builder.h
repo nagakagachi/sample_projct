@@ -73,7 +73,7 @@ namespace ngl
 						float h;// 要求するバッファの基準Heightに対する相対スケール値(例 半解像度 0.5).
 					} rel_size;
 				};
-				rhi::ResourceFormat format {};
+				rhi::EResourceFormat format {};
 				bool is_relative {};
 
 
@@ -111,7 +111,7 @@ namespace ngl
 			};
 
 			// サイズ直接指定.
-			static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h, rhi::ResourceFormat format)
+			static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h, rhi::EResourceFormat format)
 			{
 				ResourceDesc2D v = Desc::CreateAsAbsoluteSize(w, h);
 
@@ -119,7 +119,7 @@ namespace ngl
 				return v;
 			}
 			// 相対サイズ指定.
-			static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::ResourceFormat format)
+			static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::EResourceFormat format)
 			{
 				ResourceDesc2D v = Desc::CreateAsRelative(w_rate, h_rate);
 
@@ -362,7 +362,7 @@ namespace ngl
 		// リソースの検索キー.
 		struct ResourceSearchKey
 		{
-			rhi::ResourceFormat format = {};
+			rhi::EResourceFormat format = {};
 			int require_width_ = {};
 			int require_height_ = {};
 			ACCESS_TYPE_MASK	usage_ = {};// 要求する RenderTarget, DepthStencil, UAV等の用途.
@@ -376,8 +376,8 @@ namespace ngl
 			
 			TaskStage last_access_stage_ = {};// Compile中のシーケンス上でのこのリソースへ最後にアクセスしたタスクの情報. Compile完了後にリセットされる.
 				
-			rhi::ResourceState	cached_state_ = rhi::ResourceState::Common;// Compileで確定したGraph終端でのステート.
-			rhi::ResourceState	prev_cached_state_ = rhi::ResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
+			rhi::EResourceState	cached_state_ = rhi::EResourceState::Common;// Compileで確定したGraph終端でのステート.
+			rhi::EResourceState	prev_cached_state_ = rhi::EResourceState::Common;// 前回情報. Compileで確定したGraph終端でのステート.
 				
 			rhi::RefTextureDep	tex_ = {};
 			
@@ -396,8 +396,8 @@ namespace ngl
 		{
 			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {}; // 外部リソースの場合はSwapchainもあり得るため追加.
 			
-			rhi::ResourceState	require_begin_state_ = rhi::ResourceState::Common;// 外部登録で指定された開始ステート.
-			rhi::ResourceState	require_end_state_ = rhi::ResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
+			rhi::EResourceState	require_begin_state_ = rhi::EResourceState::Common;// 外部登録で指定された開始ステート.
+			rhi::EResourceState	require_end_state_ = rhi::EResourceState::Common;// 外部登録で指定された終了ステート. Executeの終端で遷移しているべきステート.
 		};
 		
 		// Execute結果のCommandSequence要素のタイプ.
@@ -459,13 +459,13 @@ namespace ngl
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
 			ResourceHandle AppendExternalResource(rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
-				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+				rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state);
 			
 			// 外部リソースを登録してハンドルを生成. Swapchain用.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
 			ResourceHandle AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
-				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+				rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state);
 			
 			// Swapchainリソースハンドルを取得. 外部リソースとしてSwapchainは特別扱い.
 			ResourceHandle GetSwapchainResourceHandle() const;
@@ -495,8 +495,8 @@ namespace ngl
 			{
 				AllocatedHandleResourceInfo() = default;
 
-				rhi::ResourceState	prev_state_ = rhi::ResourceState::Common;// NodeからResourceHandleでアクセスした際の直前のリソースステート.
-				rhi::ResourceState	curr_state_ = rhi::ResourceState::Common;// NodeからResourceHandleでアクセスした際の現在のリソースステート. RTGによって自動的にステート遷移コマンドが発行される.
+				rhi::EResourceState	prev_state_ = rhi::EResourceState::Common;// NodeからResourceHandleでアクセスした際の直前のリソースステート.
+				rhi::EResourceState	curr_state_ = rhi::EResourceState::Common;// NodeからResourceHandleでアクセスした際の現在のリソースステート. RTGによって自動的にステート遷移コマンドが発行される.
 
 				rhi::RefTextureDep				tex_ = {};
 				rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};// Swapchainの場合はこちらに参照が設定される.
@@ -604,8 +604,8 @@ namespace ngl
 				
 				struct NodeHandleState
 				{
-					rhi::ResourceState prev_ = {};
-					rhi::ResourceState curr_ = {};
+					rhi::EResourceState prev_ = {};
+					rhi::EResourceState curr_ = {};
 				};
 				// Compileで構築される情報.
 				// NodeのHandle毎のリソース状態遷移.
@@ -629,7 +629,7 @@ namespace ngl
 			// 外部リソースを登録共通部.
 			ResourceHandle AppendExternalResourceCommon(
 				rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
-				rhi::ResourceState curr_state, rhi::ResourceState nesesary_end_state);
+				rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state);
 		};
 
 

@@ -115,13 +115,13 @@ namespace ngl
 		public:
 			struct Desc
 			{
-				TextureFilterMode	Filter		= TextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
-				TextureAddressMode	AddressU	= TextureAddressMode::Repeat;
-				TextureAddressMode	AddressV	= TextureAddressMode::Repeat;
-				TextureAddressMode	AddressW	= TextureAddressMode::Repeat;
+				ETextureFilterMode	Filter		= ETextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
+				ETextureAddressMode	AddressU	= ETextureAddressMode::Repeat;
+				ETextureAddressMode	AddressV	= ETextureAddressMode::Repeat;
+				ETextureAddressMode	AddressW	= ETextureAddressMode::Repeat;
 				float				MipLODBias	= 0.0;
 				u32					MaxAnisotropy	= 0;
-				CompFunc			ComparisonFunc	= CompFunc::Never;
+				ECompFunc			ComparisonFunc	= ECompFunc::Never;
 				float				BorderColor[4]	= { 0.0f,0.0f,0.0f,0.0f };
 				float				MinLOD			= 0.0f;
 				float				MaxLOD			= 128.0f;
@@ -198,7 +198,7 @@ namespace ngl
 			// BufferのStructuredBufferView.
 			bool InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count);
 			// BufferのTypedBufferView.
-			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count);
+			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, EResourceFormat format, u32 element_offset, u32 element_count);
 			// BufferのByteAddressBufferView.
 			bool InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count);
 
@@ -224,7 +224,7 @@ namespace ngl
 			// BufferのStructuredBufferView.
 			bool InitializeAsStructured(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_size, u32 element_offset, u32 element_count);
 			// BufferのTypedBufferView.
-			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, ResourceFormat format, u32 element_offset, u32 element_count);
+			bool InitializeAsTyped(DeviceDep* p_device, const BufferDep* p_buffer, EResourceFormat format, u32 element_offset, u32 element_count);
 			// BufferのByteAddressBufferView.
 			bool InitializeAsRaw(DeviceDep* p_device, const BufferDep* p_buffer, u32 element_offset, u32 element_count);
 			// BufferのRaytracingAccelerationStructureView.

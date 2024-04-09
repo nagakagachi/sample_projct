@@ -399,7 +399,7 @@ namespace ngl
 			rhi::RhiRef<rhi::TextureDep>				ray_result_;
 			rhi::RhiRef<rhi::ShaderResourceViewDep>		ray_result_srv_;
 			rhi::RhiRef<rhi::UnorderedAccessViewDep>	ray_result_uav_;
-			rhi::ResourceState							ray_result_state_ = {};
+			rhi::EResourceState							ray_result_state_ = {};
 		};
 
 

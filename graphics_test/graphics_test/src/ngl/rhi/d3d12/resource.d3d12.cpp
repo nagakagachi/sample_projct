@@ -13,19 +13,19 @@ namespace ngl
 
 #define align_to(_alignment, _val) ((((_val) + (_alignment) - 1) / (_alignment)) * (_alignment))
 
-		D3D12_RESOURCE_DIMENSION getD3D12ResourceDimension(TextureType type)
+		D3D12_RESOURCE_DIMENSION getD3D12ResourceDimension(ETextureType type)
 		{
 			switch (type)
 			{
-			case TextureType::Texture1D:
+			case ETextureType::Texture1D:
 				return D3D12_RESOURCE_DIMENSION_TEXTURE1D;
 
-			case TextureType::Texture2D:
+			case ETextureType::Texture2D:
 			//case TextureType::Texture2DMultisample:
-			case TextureType::TextureCube:
+			case ETextureType::TextureCube:
 				return D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 
-			case TextureType::Texture3D:
+			case ETextureType::Texture3D:
 				return D3D12_RESOURCE_DIMENSION_TEXTURE3D;
 			default:
 				assert(false);
@@ -64,29 +64,29 @@ namespace ngl
 			return d3d;
 		}
 
-		D3D12_HEAP_TYPE getD3D12HeapType(ResourceHeapType type)
+		D3D12_HEAP_TYPE getD3D12HeapType(EResourceHeapType type)
 		{
 			switch (type)
 			{
-			case ResourceHeapType::Default:		return D3D12_HEAP_TYPE_DEFAULT;
-			case ResourceHeapType::Upload:		return D3D12_HEAP_TYPE_UPLOAD;
-			case ResourceHeapType::Readback:	return D3D12_HEAP_TYPE_READBACK;
+			case EResourceHeapType::Default:		return D3D12_HEAP_TYPE_DEFAULT;
+			case EResourceHeapType::Upload:		return D3D12_HEAP_TYPE_UPLOAD;
+			case EResourceHeapType::Readback:	return D3D12_HEAP_TYPE_READBACK;
 			default:							return D3D12_HEAP_TYPE_DEFAULT;
 			}
 		}
 
 		// Srv Uav利用するDepthBufferのフォーマットはTypelessとする必要があるため変換.
-		inline DXGI_FORMAT getTypelessFormatFromDepthFormat(ResourceFormat format)
+		inline DXGI_FORMAT getTypelessFormatFromDepthFormat(EResourceFormat format)
 		{
 			switch (format)
 			{
-			case ResourceFormat::Format_D16_UNORM:
+			case EResourceFormat::Format_D16_UNORM:
 				return DXGI_FORMAT_R16_TYPELESS;
-			case ResourceFormat::Format_D32_FLOAT_S8X24_UINT:
+			case EResourceFormat::Format_D32_FLOAT_S8X24_UINT:
 				return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
-			case ResourceFormat::Format_D24_UNORM_S8_UINT:
+			case EResourceFormat::Format_D24_UNORM_S8_UINT:
 				return DXGI_FORMAT_R24G8_TYPELESS;
-			case ResourceFormat::Format_D32_FLOAT:
+			case EResourceFormat::Format_D32_FLOAT:
 				return DXGI_FORMAT_R32_TYPELESS;
 			default:
 				assert(isDepthFormat(format) == false);
@@ -206,7 +206,7 @@ namespace ngl
 		void* BufferDep::Map()
 		{
 			// DefaultヒープリソースはMap不可
-			if (ResourceHeapType::Default == desc_.heap_type)
+			if (EResourceHeapType::Default == desc_.heap_type)
 			{
 				std::cout << "[ERROR] Default Buffer can not Mapped" << std::endl;
 				return nullptr;
@@ -219,7 +219,7 @@ namespace ngl
 
 			// Readbackバッファ以外の場合はMap時に以前のデータを読み取らないようにZero-Range指定.
 			D3D12_RANGE read_range = { 0, 0 };
-			if (ResourceHeapType::Readback == desc_.heap_type)
+			if (EResourceHeapType::Readback == desc_.heap_type)
 			{
 				read_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
 			}
@@ -239,7 +239,7 @@ namespace ngl
 
 			// Uploadバッファ以外の場合はUnmap時に書き戻さないのでZero-Range指定.
 			D3D12_RANGE write_range = {0, 0};
-			if (ResourceHeapType::Upload == desc_.heap_type)
+			if (EResourceHeapType::Upload == desc_.heap_type)
 			{
 				write_range = { 0, static_cast<SIZE_T>(desc_.element_byte_size) * static_cast<SIZE_T>(desc_.element_count) };
 			}
@@ -277,12 +277,12 @@ namespace ngl
 			}
 			if (0 >= desc.width || 0 >= desc.height)
 				return false;
-			if (ResourceFormat::Format_UNKNOWN == desc.format)
+			if (EResourceFormat::Format_UNKNOWN == desc.format)
 				return false;
 
 			desc_ = desc;
 
-			if (ResourceHeapType::Upload == desc_.heap_type || ResourceHeapType::Readback == desc_.heap_type)
+			if (EResourceHeapType::Upload == desc_.heap_type || EResourceHeapType::Readback == desc_.heap_type)
 			{
 				// TODO. DefaultHeap以外のTextureは生成できないので, 内部的にはUpload/READBACKなBufferを生成してそちらにCPUアクセスし,DefaultHeapなTextureにコピーする.
 				// 未実装.
@@ -309,16 +309,16 @@ namespace ngl
 				resource_desc.Width = static_cast<UINT64>(desc_.width);
 				resource_desc.Height = static_cast<UINT64>(desc_.height);
 				resource_desc.MipLevels = desc_.mip_count;
-				resource_desc.SampleDesc.Count = (desc_.type == TextureType::Texture2DMultisample)? desc_.sample_count : 1;// Texture2DMultisample以外では1固定.
+				resource_desc.SampleDesc.Count = (desc_.type == ETextureType::Texture2DMultisample)? desc_.sample_count : 1;// Texture2DMultisample以外では1固定.
 				resource_desc.SampleDesc.Quality = 0;
 				resource_desc.Format = ConvertResourceFormat(desc_.format);
 				resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 				resource_desc.Flags = getD3D12ResourceFlags(desc_.bind_flag);
-				if (desc_.type == TextureType::TextureCube)
+				if (desc_.type == ETextureType::TextureCube)
 				{
 					resource_desc.DepthOrArraySize = desc_.array_size * 6;
 				}
-				else if (desc_.type == TextureType::Texture3D)
+				else if (desc_.type == ETextureType::Texture3D)
 				{
 					resource_desc.DepthOrArraySize = desc_.depth;
 				}
@@ -399,7 +399,7 @@ namespace ngl
 		void* TextureDep::Map()
 		{
 			// DefaultヒープリソースはMap不可
-			if (ResourceHeapType::Default == desc_.heap_type)
+			if (EResourceHeapType::Default == desc_.heap_type)
 			{
 				std::cout << "[ERROR] Default Texture can not Mapped" << std::endl;
 				return nullptr;

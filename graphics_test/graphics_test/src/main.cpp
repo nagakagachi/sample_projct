@@ -91,7 +91,7 @@ private:
 	// SwapChain
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
 	std::vector<ngl::rhi::RefRtvDep>			swapchain_rtvs_;
-	std::vector<ngl::rhi::ResourceState>		swapchain_resource_state_;
+	std::vector<ngl::rhi::EResourceState>		swapchain_resource_state_;
 
 
 	ngl::rhi::RefTextureDep						tex_work_;
@@ -204,7 +204,7 @@ bool AppGame::Initialize()
 	}
 	{
 		ngl::rhi::SwapChainDep::Desc swap_chain_desc;
-		swap_chain_desc.format = ngl::rhi::ResourceFormat::Format_R10G10B10A2_UNORM;
+		swap_chain_desc.format = ngl::rhi::EResourceFormat::Format_R10G10B10A2_UNORM;
 		swapchain_ = new ngl::rhi::SwapChainDep();
 		if (!swapchain_->Initialize(&device_, &graphics_queue_, swap_chain_desc))
 		{
@@ -218,7 +218,7 @@ bool AppGame::Initialize()
 		{
 			swapchain_rtvs_[i] = new ngl::rhi::RenderTargetViewDep();
 			swapchain_rtvs_[i]->Initialize(&device_, swapchain_.Get(), i);
-			swapchain_resource_state_[i] = ngl::rhi::ResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
+			swapchain_resource_state_[i] = ngl::rhi::EResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 	}
 
@@ -231,11 +231,11 @@ bool AppGame::Initialize()
 	{
 		ngl::rhi::TextureDep::Desc desc = {};
 		desc.bind_flag = ngl::rhi::ResourceBindFlag::RenderTarget | ngl::rhi::ResourceBindFlag::ShaderResource;
-		desc.format = ngl::rhi::ResourceFormat::Format_R16G16B16A16_FLOAT;
-		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.format = ngl::rhi::EResourceFormat::Format_R16G16B16A16_FLOAT;
+		desc.type = ngl::rhi::ETextureType::Texture2D;
 		desc.width = scree_w;
 		desc.height = scree_h;
-		desc.initial_state = ngl::rhi::ResourceState::ShaderRead;
+		desc.initial_state = ngl::rhi::EResourceState::ShaderRead;
 
 		tex_work_ = new ngl::rhi::TextureDep();
 		if (!tex_work_->Initialize(&device_, desc))
@@ -258,11 +258,11 @@ bool AppGame::Initialize()
 	{
 		ngl::rhi::TextureDep::Desc desc = {};
 		desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource | ngl::rhi::ResourceBindFlag::UnorderedAccess;
-		desc.format = ngl::rhi::ResourceFormat::Format_R32_FLOAT;
-		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.format = ngl::rhi::EResourceFormat::Format_R32_FLOAT;
+		desc.type = ngl::rhi::ETextureType::Texture2D;
 		desc.width = scree_w;
 		desc.height = scree_h;
-		desc.initial_state = ngl::rhi::ResourceState::ShaderRead;
+		desc.initial_state = ngl::rhi::EResourceState::ShaderRead;
 
 		tex_lineardepth_ = new ngl::rhi::TextureDep();
 		if (!tex_lineardepth_->Initialize(&device_, desc))
@@ -285,11 +285,11 @@ bool AppGame::Initialize()
 	{
 		ngl::rhi::TextureDep::Desc desc = {};
 		desc.bind_flag = ngl::rhi::ResourceBindFlag::UnorderedAccess | ngl::rhi::ResourceBindFlag::ShaderResource;
-		desc.format = ngl::rhi::ResourceFormat::Format_R16G16B16A16_FLOAT;
-		desc.type = ngl::rhi::TextureType::Texture2D;
+		desc.format = ngl::rhi::EResourceFormat::Format_R16G16B16A16_FLOAT;
+		desc.type = ngl::rhi::ETextureType::Texture2D;
 		desc.width = scree_w;
 		desc.height = scree_h;
-		desc.initial_state = ngl::rhi::ResourceState::ShaderRead;
+		desc.initial_state = ngl::rhi::EResourceState::ShaderRead;
 
 		tex_rw_ = new ngl::rhi::TextureDep();
 		if (!tex_rw_->Initialize(&device_, desc))
@@ -340,10 +340,10 @@ bool AppGame::Initialize()
 	{
 		// Sampler.
 		ngl::rhi::SamplerDep::Desc samp_desc = {};
-		samp_desc.Filter = ngl::rhi::TextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
-		samp_desc.AddressU = ngl::rhi::TextureAddressMode::Clamp;
-		samp_desc.AddressV = ngl::rhi::TextureAddressMode::Clamp;
-		samp_desc.AddressW = ngl::rhi::TextureAddressMode::Clamp;
+		samp_desc.Filter = ngl::rhi::ETextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
+		samp_desc.AddressU = ngl::rhi::ETextureAddressMode::Clamp;
+		samp_desc.AddressV = ngl::rhi::ETextureAddressMode::Clamp;
+		samp_desc.AddressW = ngl::rhi::ETextureAddressMode::Clamp;
 		samp_linear_clamp_ = new ngl::rhi::SamplerDep();
 		if (!samp_linear_clamp_->Initialize(&device_, samp_desc))
 		{
@@ -656,7 +656,7 @@ bool AppGame::Execute()
 
 			// ConstantBuffer作成
 			ngl::rhi::BufferDep::Desc buffer_desc = {};
-			buffer_desc.heap_type = ngl::rhi::ResourceHeapType::Upload;
+			buffer_desc.heap_type = ngl::rhi::EResourceHeapType::Upload;
 			buffer_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
 			buffer_desc.element_byte_size = 1024;// テスト用に大きめで確保.
 			buffer_desc.element_count = 1;
@@ -720,7 +720,7 @@ bool AppGame::Execute()
 				// Append External Resource Info.
 				ngl::rtg::ResourceHandle h_swapchain = {};
 				{
-					constexpr ngl::rhi::ResourceState swapchain_final_state = ngl::rhi::ResourceState::Present;// Execute後のステート指定.
+					constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
 					// 外部リソース登録.
 					h_swapchain = rtg_builder.AppendExternalResource(swapchain_, swapchain_rtvs_[swapchain_->GetCurrentBufferIndex()], swapchain_resource_state_[swapchain_index], swapchain_final_state);
 					
@@ -802,7 +802,7 @@ bool AppGame::Execute()
 					ngl::rhi::ComputePipelineStateDep::Desc cpso_desc = {};
 					{
 						ngl::gfx::ResShader::LoadDesc cs_load_desc = {};
-						cs_load_desc.stage = ngl::rhi::ShaderStage::Compute;
+						cs_load_desc.stage = ngl::rhi::EShaderStage::Compute;
 						cs_load_desc.shader_model_version = "6_3";
 						cs_load_desc.entry_point_name = "main_cs";
 						auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/test/async_task_test_cs.hlsl", &cs_load_desc);
