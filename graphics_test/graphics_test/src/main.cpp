@@ -17,6 +17,9 @@
 
 #include "ngl/math/math.h"
 
+// DirectXTexのテスト.
+#include "DirectXTex/DirectXTex.h"
+
 // resource
 #include "ngl/resource/resource_manager.h"
 
@@ -443,10 +446,24 @@ bool AppGame::Initialize()
 			assert(false);
 		}
 	}
-
-
+	
 	// テストコード
 	ngl_test::TestFunc00(&device_);
+
+
+	{
+		// DirectXTex
+		DirectX::WIC_FLAGS flags = DirectX::WIC_FLAGS_NONE;
+		DirectX::TexMetadata meta = {};
+		DirectX::ScratchImage scratch = {};
+		if( SUCCEEDED(DirectX::LoadFromWICFile(L"./data/model/sponza_gltf/glTF/6772804448157695701.jpg", flags, &meta, scratch)))
+		{
+			const auto loaded_meta = scratch.GetMetadata();
+			auto* p_image = scratch.GetImage(0,0,0);
+			assert(nullptr != p_image);
+		}
+	}
+
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;

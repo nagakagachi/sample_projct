@@ -1,3 +1,6 @@
 [submodule "graphics_test/third_party/assimp"]
 	path = graphics_test/third_party/assimp
 	url = https://github.com/assimp/assimp
+[submodule "graphics_test/third_party/DirectXTex"]
+	path = graphics_test/third_party/DirectXTex
+	url = https://github.com/microsoft/DirectXTex.git
