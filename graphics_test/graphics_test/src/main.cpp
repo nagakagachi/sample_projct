@@ -733,6 +733,8 @@ bool AppGame::Execute()
 
 				// Build Rendering Pass.
 				{
+					auto ref_cbv_sceneview = cbv_sceneview_[flip_index_sceneview_];
+					
 #define ASYNC_COMPUTE_TEST 1
 					// AsyncComputeの依存関係の追い越しパターンテスト用.
 					ngl::rtg::ResourceHandle async_compute_tex2 = {};
@@ -745,7 +747,7 @@ bool AppGame::Execute()
 					
 					// PreZ Pass.
 					auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
-					task_depth->Setup(rtg_builder, &device_, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
+					task_depth->Setup(rtg_builder, &device_, ref_cbv_sceneview, frame_scene.mesh_instance_array_);
 
 					ngl::rtg::ResourceHandle async_compute_tex = {};
 #if ASYNC_COMPUTE_TEST
@@ -757,19 +759,25 @@ bool AppGame::Execute()
 					
 					// GBuffer Pass.
 					auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
-					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex, cbv_sceneview_[flip_index_sceneview_], frame_scene.mesh_instance_array_);
+					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex, ref_cbv_sceneview, frame_scene.mesh_instance_array_);
 					
 					// Linear Depth Pass.
 					auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
-					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_,async_compute_tex2, cbv_sceneview_[flip_index_sceneview_]);
+					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_,async_compute_tex2, ref_cbv_sceneview);
 
 					// Deferred Lighting Pass.
 					auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
-					task_light->Setup(rtg_builder, &device_, task_gbuffer->h_depth_, task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_linear_depth->h_linear_depth_, h_prev_light, samp_linear_clamp_);
+					task_light->Setup(rtg_builder, &device_,
+						task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
+						task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, h_prev_light,
+						samp_linear_clamp_,
+						ref_cbv_sceneview);
 
 					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
-					task_final->Setup(rtg_builder, &device_, h_swapchain, task_light->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_, samp_linear_clamp_, rt_pass_test.ray_result_srv_);
+					task_final->Setup(rtg_builder, &device_, h_swapchain,
+						task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
+						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
 
 					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
 					{
@@ -814,7 +822,8 @@ bool AppGame::Execute()
 				}
 					
 				ngl::rhi::DescriptorSetDep desc_set = {};
-				ref_cpso->SetDescriptorHandle(&desc_set, "rwtex_out", tex_rw_uav_->GetView().cpu_handle);
+				//ref_cpso->SetDescriptorHandle(&desc_set, "rwtex_out", tex_rw_uav_->GetView().cpu_handle);
+				ref_cpso->SetView(&desc_set, "rwtex_out", tex_rw_uav_.Get());
 				rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
 				rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
 				ref_cpso->DispatchHelper(rtg_compute_command_list, tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);

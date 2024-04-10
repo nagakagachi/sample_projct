@@ -60,31 +60,15 @@ void rayGen()
 	uint3 launch_index = DispatchRaysIndex();
 	uint3 launch_dim = DispatchRaysDimensions();
 
+	const float2 screen_pos_f = float2(launch_index.xy) + float2(0.5, 0.5);// ピクセル中心への半ピクセルオフセット考慮.
+	const float2 screen_size_f = float2(launch_dim.xy);
+	const float2 screen_uv = (screen_pos_f / screen_size_f);
 
-	float2 screen_pos_f = float2(launch_index.xy);
-	float2 screen_size_f = float2(launch_dim.xy);
-
-
-	float2 ndc_xy = ((screen_pos_f / screen_size_f) * 2.0 - 1.0) * float2(1.0, -1.0);
-
-#if 1
-	// 逆行列を使わずにProj行列の要素からレイ方向計算.
-	const float inv_tan_horizontal = cb_sceneview.cb_proj_mtx._m00; // m00 = 1/tan(fov_x*0.5)
-	const float inv_tan_vertical = cb_sceneview.cb_proj_mtx._m11; // m11 = 1/tan(fov_y*0.5)
-	const float3 ray_dir_view = float3(ndc_xy.x / inv_tan_horizontal, ndc_xy.y / inv_tan_vertical, 1.0);
-
-	// 向きのみなので w=0
-	float3 ray_dir_world = mul(cb_sceneview.cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
-#else
-	// 逆行列からレイ方向計算.
-	float4 ray_dir_view = mul(cb_sceneview.cb_proj_inv_mtx, float4(ndc_xy, 1.0, 1.0));
-	ray_dir_view.xyz /= ray_dir_view.w;
-
-	// 向きのみなので w=0
-	float3 ray_dir_world = mul(cb_sceneview.cb_view_inv_mtx, float4(ray_dir_view.xyz, 0.0));
-#endif
-	
-	float3 ray_dir = normalize(ray_dir_world.xyz);
+	float3 ray_dir;
+	{
+		float3 to_pixel_ray_vs = CalcViewSpaceRay(screen_uv, cb_sceneview.cb_proj_mtx);
+		ray_dir = mul(cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs, 0.0));
+	}
 
 	RayDesc ray;
 	ray.Origin = float3(cb_sceneview.cb_view_inv_mtx._m03, cb_sceneview.cb_view_inv_mtx._m13, cb_sceneview.cb_view_inv_mtx._m23);// View逆行列からRay始点取得.

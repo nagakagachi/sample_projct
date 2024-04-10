@@ -11,10 +11,16 @@ namespace ngl
 {
 namespace rhi
 {
+	
 	class DeviceDep;
 	class CommandListBaseDep;
 	class DescriptorSetDep;
 
+	class ConstantBufferViewDep;
+	class ShaderResourceViewDep;
+	class UnorderedAccessViewDep;
+	class SamplerDep;
+	
 
 	// D3D12では単純にシェーダバイナリを保持するだけ
 	class ShaderDep
@@ -273,8 +279,41 @@ namespace rhi
 		ResourceTable					resource_table_;
 	};
 
+	// PipelineStateヘルパ基底.
+	class PipelineStateBaseDep : public RhiObjectBase
+	{
+	public:
+		PipelineStateBaseDep() = default;
+		virtual ~PipelineStateBaseDep()
+		{
+			view_layout_.Finalize();
+		}
+		
+		const PipelineResourceViewLayoutDep* GetPipelineResourceViewLayout() const
+		{
+			return &view_layout_;
+		}
+		
+	public:
+		// 名前でDescriptorSetへハンドル設定
+		//void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
+		void SetView(DescriptorSetDep* p_desc_set, const char* name, const ConstantBufferViewDep* p_view) const;
+		void SetView(DescriptorSetDep* p_desc_set, const char* name, const ShaderResourceViewDep* p_view) const;
+		void SetView(DescriptorSetDep* p_desc_set, const char* name, const UnorderedAccessViewDep* p_view) const;
+		void SetView(DescriptorSetDep* p_desc_set, const char* name, const SamplerDep* p_view) const;
+
+	public:
+		ID3D12PipelineState* GetD3D12PipelineState();
+		ID3D12RootSignature* GetD3D12RootSignature();
+		const ID3D12PipelineState* GetD3D12PipelineState() const;
+		const ID3D12RootSignature* GetD3D12RootSignature() const;
+	protected:
+		PipelineResourceViewLayoutDep			view_layout_;
+		CComPtr<ID3D12PipelineState>			pso_;
+	};
+	
 	// パイプラインステート Graphics.
-	class GraphicsPipelineStateDep : public RhiObjectBase
+	class GraphicsPipelineStateDep : public PipelineStateBaseDep
 	{
 	public:
 		struct Desc
@@ -300,7 +339,6 @@ namespace rhi
 			u32					node_mask = 0;
 		};
 
-
 		GraphicsPipelineStateDep();
 		~GraphicsPipelineStateDep();
 
@@ -308,27 +346,12 @@ namespace rhi
 		bool Initialize(DeviceDep* p_device, const Desc& desc);
 		void Finalize();
 
-		const PipelineResourceViewLayoutDep* GetPipelineResourceViewLayout() const
-		{
-			return &view_layout_;
-		}
-
-		// 名前でDescriptorSetへハンドル設定
-		void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
-
-	public:
-		ID3D12PipelineState* GetD3D12PipelineState();
-		ID3D12RootSignature* GetD3D12RootSignature();
-		const ID3D12PipelineState* GetD3D12PipelineState() const;
-		const ID3D12RootSignature* GetD3D12RootSignature() const;
 	private:
-		CComPtr<ID3D12PipelineState>			pso_;
-		PipelineResourceViewLayoutDep			view_layout_;
 	};
 
 
 	// パイプラインステート Compute.
-	class ComputePipelineStateDep : public RhiObjectBase
+	class ComputePipelineStateDep : public PipelineStateBaseDep
 	{
 	public:
 		struct Desc
@@ -336,8 +359,7 @@ namespace rhi
 			const ShaderDep* cs = nullptr;
 			u32			node_mask = 0;
 		};
-
-
+		
 		ComputePipelineStateDep();
 		~ComputePipelineStateDep();
 
@@ -345,29 +367,13 @@ namespace rhi
 		bool Initialize(DeviceDep* p_device, const Desc& desc);
 		void Finalize();
 
-		const PipelineResourceViewLayoutDep* GetPipelineResourceViewLayout() const
-		{
-			return &view_layout_;
-		}
-
-		// 名前でDescriptorSetへハンドル設定
-		void SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const;
-
 		// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
 		void DispatchHelper(CommandListBaseDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z) const;
 
 		u32 GetThreadGroupSizeX() const { return threadgroup_size_x_; }
 		u32 GetThreadGroupSizeY() const { return threadgroup_size_y_; }
 		u32 GetThreadGroupSizeZ() const { return threadgroup_size_z_; }
-	public:
-		ID3D12PipelineState* GetD3D12PipelineState();
-		ID3D12RootSignature* GetD3D12RootSignature();
-		const ID3D12PipelineState* GetD3D12PipelineState() const;
-		const ID3D12RootSignature* GetD3D12RootSignature() const;
 	private:
-		CComPtr<ID3D12PipelineState>			pso_;
-		PipelineResourceViewLayoutDep			view_layout_;
-
 		u32										threadgroup_size_x_ = 0;
 		u32										threadgroup_size_y_ = 0;
 		u32										threadgroup_size_z_ = 0;

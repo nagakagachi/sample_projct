@@ -17,6 +17,7 @@
 #include "device.d3d12.h"
 #include "command_list.d3d12.h"
 #include "descriptor.d3d12.h"
+#include "resource_view.d3d12.h"
 
 #if defined _DEBUG
 	#define NGL_SHADER_DEBUG_LOG 0
@@ -1227,6 +1228,43 @@ namespace rhi
 
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
+	// 名前でDescriptorSetへView設定
+	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const ConstantBufferViewDep* p_view) const
+	{
+		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+	}
+	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const ShaderResourceViewDep* p_view) const
+	{
+		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+	}
+	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const UnorderedAccessViewDep* p_view) const
+	{
+		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+	}
+	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const SamplerDep* p_view) const
+	{
+		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+	}
+	
+	ID3D12PipelineState* PipelineStateBaseDep::GetD3D12PipelineState()
+	{
+		return pso_;
+	}
+	ID3D12RootSignature* PipelineStateBaseDep::GetD3D12RootSignature()
+	{
+		return view_layout_.GetD3D12RootSignature();
+	}
+	const ID3D12PipelineState* PipelineStateBaseDep::GetD3D12PipelineState() const
+	{
+		return pso_;
+	}
+	const ID3D12RootSignature* PipelineStateBaseDep::GetD3D12RootSignature() const
+	{
+		return view_layout_.GetD3D12RootSignature();
+	}
+	
+	// -------------------------------------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------------------------------------
 	GraphicsPipelineStateDep::GraphicsPipelineStateDep()
 	{
 	}
@@ -1437,31 +1475,7 @@ namespace rhi
 		pso_ = nullptr;
 		view_layout_.Finalize();
 	}
-
-	// 名前でDescriptorSetへハンドル設定
-	void GraphicsPipelineStateDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
-	{
-		view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
-	}
-
-	ID3D12PipelineState* GraphicsPipelineStateDep::GetD3D12PipelineState()
-	{
-		return pso_;
-	}
-	ID3D12RootSignature* GraphicsPipelineStateDep::GetD3D12RootSignature()
-	{
-		return view_layout_.GetD3D12RootSignature();
-	}
-	const ID3D12PipelineState* GraphicsPipelineStateDep::GetD3D12PipelineState() const
-	{
-		return pso_;
-	}
-	const ID3D12RootSignature* GraphicsPipelineStateDep::GetD3D12RootSignature() const
-	{
-		return view_layout_.GetD3D12RootSignature();
-	}
-
-
+	
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 	ComputePipelineStateDep::ComputePipelineStateDep()
@@ -1532,12 +1546,6 @@ namespace rhi
 		pso_ = nullptr;
 		view_layout_.Finalize();
 	}
-
-	// 名前でDescriptorSetへハンドル設定
-	void ComputePipelineStateDep::SetDescriptorHandle(DescriptorSetDep* p_desc_set, const char* name, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle) const
-	{
-		view_layout_.SetDescriptorHandle(p_desc_set, name, cpu_handle);
-	}
 	// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
 	void ComputePipelineStateDep::DispatchHelper(CommandListBaseDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z) const
 	{
@@ -1547,21 +1555,5 @@ namespace rhi
 		p_command_list->Dispatch(nx, ny, nz);
 	}
 
-	ID3D12PipelineState* ComputePipelineStateDep::GetD3D12PipelineState()
-	{
-		return pso_;
-	}
-	ID3D12RootSignature* ComputePipelineStateDep::GetD3D12RootSignature()
-	{
-		return view_layout_.GetD3D12RootSignature();
-	}
-	const ID3D12PipelineState* ComputePipelineStateDep::GetD3D12PipelineState() const
-	{
-		return pso_;
-	}
-	const ID3D12RootSignature* ComputePipelineStateDep::GetD3D12RootSignature() const
-	{
-		return view_layout_.GetD3D12RootSignature();
-	}
 }
 }

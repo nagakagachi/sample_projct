@@ -29,11 +29,31 @@ GBufferOutput main_ps(VS_OUTPUT input)
 {
 	GBufferOutput output = (GBufferOutput)0;
 
-	output.gbuffer0.xyz = float3(input.uv, 0.0);	// BaseColorには適当にUV描き込み.
-	
-	output.gbuffer1.xyz = normalize(input.normal_ws) * 0.5 + 0.5;// [-1,+1] を unorm に [0,1]で格納.
 
-	output.velocity = input.uv;
+	const float3 base_color = float3(input.uv * 2.0, abs(normalize(input.normal_ws).y));// 適当なベースカラー.
+	const float occlusion = 1.0;
+	const float roughness = 1.0;
+	const float metallic = 0.0;
+	const float surface_optional = 0.0;
+	const float material_id = 0.0;
+	const float3 normal_ws = normalize(input.normal_ws);
+	const float3 emissive = float3(0.0, 0.0, 0.0);
+
+	// GBuffer Encode.
+	{
+		output.gbuffer0.xyz = base_color;
+		output.gbuffer0.w = occlusion;
+
+		// [-1,+1]のNormal を unorm[0,1]で格納.
+		output.gbuffer1.xyz = normal_ws * 0.5 + 0.5;
+		output.gbuffer1.w = 0.0;
+
+		output.gbuffer2 = float4(roughness, metallic, surface_optional, material_id);
+
+		output.gbuffer3 = float4(emissive, 0.0);
+	
+		output.velocity = float2(0.0, 0.0);// velocityは保留.
+	}
 	
 	return output;
 }

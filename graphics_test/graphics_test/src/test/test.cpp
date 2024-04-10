@@ -320,10 +320,6 @@ namespace ngl_test
 						device.GetD3D12Device()->CreateConstantBufferView(&cbv_desc, pd_cbv.cpu_handle);
 
 					}
-					// psoで名前解決をしてDescSetにハンドルを設定するテスト.
-					ngl::rhi::DescriptorSetDep desc_set;
-					pso.SetDescriptorHandle(&desc_set, "CbTest", pd_cbv.cpu_handle);
-
 					// 一応解放しておく
 					persistent_desc_allocator->Deallocate(pd_cbv);
 				}

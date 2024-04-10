@@ -357,9 +357,9 @@ namespace ngl::render
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.uav_.IsValid());
 
 				ngl::rhi::DescriptorSetDep desc_set = {};
-				pso_->SetDescriptorHandle(&desc_set, "TexHardwareDepth", res_depth.srv_->GetView().cpu_handle);
-				pso_->SetDescriptorHandle(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_->GetView().cpu_handle);
-				pso_->SetDescriptorHandle(&desc_set, "cb_sceneview", ref_scene_cbv_->GetView().cpu_handle);
+				pso_->SetView(&desc_set, "TexHardwareDepth", res_depth.srv_.Get());
+				pso_->SetView(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_.Get());
+				pso_->SetView(&desc_set, "cb_sceneview", ref_scene_cbv_.Get());
 
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
@@ -376,37 +376,48 @@ namespace ngl::render
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskLightPass)
-				ITASK_NODE_HANDLE_REGISTER(h_depth_)
 				ITASK_NODE_HANDLE_REGISTER(h_gb0_)
 				ITASK_NODE_HANDLE_REGISTER(h_gb1_)
+				ITASK_NODE_HANDLE_REGISTER(h_gb2_)
+				ITASK_NODE_HANDLE_REGISTER(h_gb3_)
+				ITASK_NODE_HANDLE_REGISTER(h_velocity_)
 				ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
 				ITASK_NODE_HANDLE_REGISTER(h_prev_light_)
 				ITASK_NODE_HANDLE_REGISTER(h_light_)
 				ITASK_NODE_DEF_END
 
-			rtg::ResourceHandle h_depth_{};
+			
 			rtg::ResourceHandle h_gb0_{};
 			rtg::ResourceHandle h_gb1_{};
+			rtg::ResourceHandle h_gb2_{};
+			rtg::ResourceHandle h_gb3_{};
+			rtg::ResourceHandle h_velocity_{};
 			rtg::ResourceHandle h_linear_depth_{};
 			rtg::ResourceHandle h_prev_light_{};
 			rtg::ResourceHandle h_light_{};
 
 			rhi::RefSampDep ref_samp_linear_clamp_{};
 			
+			rhi::RefCbvDep ref_scene_cbv_{};
+			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
-				rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
-				rhi::RefSampDep ref_samp_linear_clamp)
+				rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_gb2, rtg::ResourceHandle h_gb3, rtg::ResourceHandle h_velocity,
+				rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
+				rhi::RefSampDep ref_samp_linear_clamp,
+				rhi::RefCbvDep ref_scene_cbv)
 			{
 				// リソース定義.
 				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 				{
 					// リソースアクセス定義.
-					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 					h_gb0_ = builder.RecordResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
 					h_gb1_ = builder.RecordResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
+					h_gb2_ = builder.RecordResourceAccess(*this, h_gb2, rtg::access_type::SHADER_READ);
+					h_gb3_ = builder.RecordResourceAccess(*this, h_gb3, rtg::access_type::SHADER_READ);
+					h_velocity_ = builder.RecordResourceAccess(*this, h_velocity, rtg::access_type::SHADER_READ);
 					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 				
 					if(h_prev_light.IsInvalid())
@@ -418,12 +429,14 @@ namespace ngl::render
 					}
 					h_prev_light_ = builder.RecordResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
 				
-					h_light_ = builder.RecordResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
+					h_light_ = builder.RecordResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// このTaskで新規生成したRenderTargetを出力先とする.
 				}
 				
 				{
 					// 外部リソース.
 					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
+
+					ref_scene_cbv_ = ref_scene_cbv;
 				}
 				
 				// 
@@ -451,15 +464,17 @@ namespace ngl::render
 					const auto light_desc = builder.GetResourceHandleDesc(h_light_);
 
 					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-					desc.vs = &res_shader_vs->data_;
-					desc.ps = &res_shader_ps->data_;
-
-					desc.num_render_targets = 1;
-					desc.render_target_formats[0] = light_desc.desc.format;
-
-					desc.blend_state.target_blend_states[0].blend_enable = false;
-					desc.blend_state.target_blend_states[0].write_mask = ~ngl::u8(0);
-
+					{
+						desc.vs = &res_shader_vs->data_;
+						desc.ps = &res_shader_ps->data_;
+						{
+							desc.num_render_targets = 1;
+							desc.render_target_formats[0] = light_desc.desc.format;
+						}
+						{
+							//desc.depth_stencil_state.depth_enable;
+						}
+					}
 					pso_ = new rhi::GraphicsPipelineStateDep();
 					if (!pso_->Initialize(p_device, desc))
 					{
@@ -472,9 +487,12 @@ namespace ngl::render
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				auto res_gb0 = builder.GetAllocatedResource(this, h_gb0_);
 				auto res_gb1 = builder.GetAllocatedResource(this, h_gb1_);
+				auto res_gb2 = builder.GetAllocatedResource(this, h_gb2_);
+				auto res_gb3 = builder.GetAllocatedResource(this, h_gb3_);
+				auto res_velocity = builder.GetAllocatedResource(this, h_velocity_);
+
 				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
 				auto res_prev_light = builder.GetAllocatedResource(this, h_prev_light_);// 前回フレームリソースのテスト.
 				auto res_light = builder.GetAllocatedResource(this, h_light_);
@@ -484,12 +502,15 @@ namespace ngl::render
 				{
 					std::cout << u8"Invalid Prev Resource : " << h_prev_light_.detail.unique_id << std::endl;
 				}
-				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_gb0.tex_.IsValid() && res_gb0.srv_.IsValid());
 				assert(res_gb1.tex_.IsValid() && res_gb1.srv_.IsValid());
+				assert(res_gb2.tex_.IsValid() && res_gb2.srv_.IsValid());
+				assert(res_gb3.tex_.IsValid() && res_gb3.srv_.IsValid());
+				assert(res_velocity.tex_.IsValid() && res_velocity.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
 
+				// Viewport.
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
 
 				// Rtv, Dsv セット.
@@ -500,9 +521,17 @@ namespace ngl::render
 
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
-				pso_->SetDescriptorHandle(&desc_set, "tex_lineardepth", res_linear_depth.srv_->GetView().cpu_handle);
-				pso_->SetDescriptorHandle(&desc_set, "tex_prev_light", res_prev_light.srv_->GetView().cpu_handle);
-				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
+
+				pso_->SetView(&desc_set, "cb_sceneview", ref_scene_cbv_.Get());
+				
+				pso_->SetView(&desc_set, "tex_lineardepth", res_linear_depth.srv_.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer0", res_gb0.srv_.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer1", res_gb1.srv_.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer2", res_gb2.srv_.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer3", res_gb3.srv_.Get());
+				
+				pso_->SetView(&desc_set, "tex_prev_light", res_prev_light.srv_.Get());
+				pso_->SetView(&desc_set, "samp", ref_samp_linear_clamp_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
@@ -629,9 +658,9 @@ namespace ngl::render
 
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
-				pso_->SetDescriptorHandle(&desc_set, "tex_light", res_light.srv_->GetView().cpu_handle);
-				pso_->SetDescriptorHandle(&desc_set, "tex_rt", ref_raytrace_result_srv_->GetView().cpu_handle);
-				pso_->SetDescriptorHandle(&desc_set, "samp", ref_samp_linear_clamp_->GetView().cpu_handle);
+				pso_->SetView(&desc_set, "tex_light", res_light.srv_.Get());
+				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
+				pso_->SetView(&desc_set, "samp", ref_samp_linear_clamp_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
@@ -698,7 +727,7 @@ namespace ngl::render
 				commandlist->SetPipelineState(pso_.Get());
 				
 				ngl::rhi::DescriptorSetDep desc_set = {};
-				pso_->SetDescriptorHandle(&desc_set, "rwtex_out", res_work_tex.uav_->GetView().cpu_handle);
+				pso_->SetView(&desc_set, "rwtex_out", res_work_tex.uav_.Get());
 				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 				
 				pso_->DispatchHelper(commandlist, res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);

@@ -30,8 +30,8 @@ namespace gfx
 				{
 					ngl::rhi::DescriptorSetDep desc_set;
 
-					pso.SetDescriptorHandle(&desc_set, "cb_sceneview", cbv_sceneview.GetView().cpu_handle);
-					pso.SetDescriptorHandle(&desc_set, "cb_instance", cbv_instance->GetView().cpu_handle);
+					pso.SetView(&desc_set, "cb_sceneview", &cbv_sceneview);
+					pso.SetView(&desc_set, "cb_instance", cbv_instance.Get());
 
 
 					// DescriptorSetでViewを設定.
