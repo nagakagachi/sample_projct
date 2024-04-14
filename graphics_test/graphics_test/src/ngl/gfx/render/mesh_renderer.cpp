@@ -47,8 +47,8 @@ namespace gfx
 				D3D12_VERTEX_BUFFER_VIEW vtx_views[gfx::MeshVertexSemantic::SemanticSlotMaxCount()] = {};
 				for (auto vi = 0; vi < gfx::MeshVertexSemantic::SemanticSlotMaxCount(); ++vi)
 				{
-					if (shape.slot_mask_.mask & (1 << vi))
-						vtx_views[vi] = shape.p_slot_mapping_[vi]->rhi_vbv_.GetView();
+					if (shape.vtx_attr_mask_.mask & (1 << vi))
+						vtx_views[vi] = shape.p_vtx_attr_mapping_[vi]->rhi_vbv_.GetView();
 				}
 				command_list.SetVertexBuffers(0, (u32)std::size(vtx_views), vtx_views);
 

@@ -375,10 +375,15 @@ bool AppGame::Initialize()
 	{
 		const char* mesh_file_box = "../third_party/assimp/test/models/FBX/box.fbx";
 		const char* mesh_file_spider = "../third_party/assimp/test/models/FBX/spider.fbx";
-		
-		//const char* mesh_file_sponza = "./data/model/sponza/sponza.obj";
-		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
 
+#if 1
+		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
+		const float sponza_scale = 1.0f;
+#else
+		const char* mesh_file_sponza = "./data/model/main_sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf";
+		const float sponza_scale = 1.0f;
+#endif
+		
 		auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
 		// Mesh Component
@@ -390,8 +395,9 @@ bool AppGame::Initialize()
 
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
 				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_sponza, &loaddesc));
-				mc->transform_.SetColumn3(ngl::math::Vec3(0, 0, 0)).SetDiagonal(ngl::math::Vec3(0.1f));
-			}
+				// スケール設定.
+				mc->transform_.SetDiagonal(ngl::math::Vec3(sponza_scale));
+				}
 
 			for(int i = 0; i < 100; ++i)
 			{
@@ -401,18 +407,15 @@ bool AppGame::Initialize()
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
 				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 
-
-
 				constexpr int k_rand_f_div = 10000;
 				const float randx = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 				const float randz = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 				const float randroty = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 
-				constexpr float placement_range = 200.0f;
-				
+				constexpr float placement_range = 30.0f;
 
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(0.1f));
+				tr.SetDiagonal(ngl::math::Vec4(0.0001f));
 				tr = ngl::math::Mat44::RotAxisY(randroty * ngl::math::k_pi_f * 2.0f) * tr;
 				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 0, placement_range* (randz * 2.0f - 1.0f), 1.0f));
 
@@ -494,7 +497,7 @@ bool AppGame::Execute()
 
 	// 操作系.
 	{
-		float camera_translate_speed = 60.0f;
+		float camera_translate_speed = 10.0f;
 
 
 		const auto mouse_pos = window_.Dep().GetMousePosition();
@@ -609,7 +612,7 @@ bool AppGame::Execute()
 
 			auto trans = e->transform_.GetColumn3();
 
-			trans.z += sin_curve * 1.0f;
+			trans.z += sin_curve * 0.1f;
 
 			e->transform_.SetColumn3(trans);
 

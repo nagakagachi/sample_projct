@@ -115,16 +115,28 @@ namespace assimp
 	}
 
 	// Assimpを利用してファイルから1Meshを構成するShape群を生成.
+	//	ファイル内の頂点はすべてPreTransformeされ, 配置情報はベイクされる(GLTFやUSD等の内部に配置情報を含むものはそれらによる複製配置等がすべてジオメトリとして生成される).
 	void LoadMeshData(rhi::DeviceDep* p_device, const char* filename, gfx::MeshData& out_mesh)
 	{
 		// ReadFileで読み込まれたメモリ等はAssimp::Importerインスタンスの寿命でクリーンアップされる.
-		Assimp::Importer asimporter;
-		const aiScene* ai_scene = asimporter.ReadFile(filename,
 
-			aiProcess_CalcTangentSpace |
-			aiProcess_Triangulate |
-			aiProcess_JoinIdenticalVertices |
-			aiProcess_SortByPType
+		unsigned int ai_mesh_read_options = 0u;
+		{
+			ai_mesh_read_options |= aiProcess_CalcTangentSpace;
+			ai_mesh_read_options |= aiProcess_Triangulate;
+			ai_mesh_read_options |= aiProcess_JoinIdenticalVertices;
+			ai_mesh_read_options |= aiProcess_SortByPType;
+
+			// ファイルのジオメトリの配置情報をフラット化してすべて変換済み頂点にする.
+			//	GLTF等の同一MeshをTransformで複数配置できる仕組みを使っているファイルはその分ベイクされてロードされるジオメトリが増加する.
+			//	MeshData は配置情報を含まない単純なジオメトリ情報という役割であるため, ここではすべて変換済みにする.
+			ai_mesh_read_options |= aiProcess_PreTransformVertices;
+		}
+		
+		Assimp::Importer asimporter;
+		const aiScene* ai_scene = asimporter.ReadFile(
+			filename,
+			ai_mesh_read_options
 		);
 		if (!ai_scene)
 			return;
@@ -179,67 +191,114 @@ namespace assimp
 		int total_size_in_byte = 0;
 		for (auto mesh_i = 0u; mesh_i < ai_scene->mNumMeshes; ++mesh_i)
 		{
-			// assume triangle.
+			const auto* p_ai_mesh = ai_scene->mMeshes[mesh_i];
 
-			const int num_prim = ai_scene->mMeshes[mesh_i]->mNumFaces;
-			const int num_vertex = ai_scene->mMeshes[mesh_i]->mNumVertices;
-
-			const int num_position = ai_scene->mMeshes[mesh_i]->mVertices ? num_vertex : 0;
-			const int num_normal = ai_scene->mMeshes[mesh_i]->mNormals ? num_vertex : 0;
-			const int num_tangent = ai_scene->mMeshes[mesh_i]->mTangents ? num_vertex : 0;
-			const int num_binormal = ai_scene->mMeshes[mesh_i]->mBitangents ? num_vertex : 0;
-			const int num_color_ch = std::min(ai_scene->mMeshes[mesh_i]->GetNumColorChannels(), (uint32_t)gfx::MeshVertexSemantic::SemanticCount(gfx::EMeshVertexSemanticKind::COLOR));// Colorのサポート最大数でクランプ.
-			const int num_uv_ch = std::min(ai_scene->mMeshes[mesh_i]->GetNumUVChannels(), (uint32_t)gfx::MeshVertexSemantic::SemanticCount(gfx::EMeshVertexSemanticKind::TEXCOORD));// Texcoordのサポート最大数でクランプ.
-
-			offset_info.push_back({});
-			auto& info = offset_info.back();
-			info.num_prim = num_prim;
-			info.num_vertex = num_vertex;
-
-			info.num_color_ch = num_color_ch;
-			info.num_uv_ch = num_uv_ch;
-
-
-			// 総サイズとオフセット計算.
-			info.total_size_in_byte = 0;
-			// Position.
-			info.offset_position = info.total_size_in_byte + total_size_in_byte;
-			info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_position * sizeof(ngl::math::Vec3);
-			// Normal.
-			if (0 < num_normal)
+			ai_scene->mRootNode->mTransformation;
+			
+			// mesh shape.
 			{
-				info.offset_normal = info.total_size_in_byte + total_size_in_byte;
-				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_normal * sizeof(ngl::math::Vec3);
-			}
-			// Tangent.
-			if (0 < num_tangent)
-			{
-				info.offset_tangent = info.total_size_in_byte + total_size_in_byte;
-				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_tangent * sizeof(ngl::math::Vec3);
-			}
-			// Binormal.
-			if (0 < num_binormal)
-			{
-				info.offset_binormal = info.total_size_in_byte + total_size_in_byte;
-				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_binormal * sizeof(ngl::math::Vec3);
-			}
-			// Color.
-			for (auto ci = 0; ci < num_color_ch; ++ci)
-			{
-				info.offset_color[ci] = info.total_size_in_byte + total_size_in_byte;
-				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_vertex * sizeof(ngl::gfx::VertexColor);
-			}
-			// UV.
-			for (auto ci = 0; ci < num_uv_ch; ++ci)
-			{
-				info.offset_uv[ci] = info.total_size_in_byte + total_size_in_byte;
-				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_vertex * sizeof(ngl::math::Vec2);
-			}
-			// Index.
-			info.offset_index = info.total_size_in_byte + total_size_in_byte;
-			info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_prim * sizeof(uint32_t) * 3;
+				const int num_prim = p_ai_mesh->mNumFaces;
+				const int num_vertex = p_ai_mesh->mNumVertices;
 
-			total_size_in_byte += info.total_size_in_byte;
+				const int num_position = p_ai_mesh->mVertices ? num_vertex : 0;
+				const int num_normal = p_ai_mesh->mNormals ? num_vertex : 0;
+				const int num_tangent = p_ai_mesh->mTangents ? num_vertex : 0;
+				const int num_binormal = p_ai_mesh->mBitangents ? num_vertex : 0;
+				const int num_color_ch = std::min(p_ai_mesh->GetNumColorChannels(), (uint32_t)gfx::MeshVertexSemantic::SemanticCount(gfx::EMeshVertexSemanticKind::COLOR));// Colorのサポート最大数でクランプ.
+				const int num_uv_ch = std::min(p_ai_mesh->GetNumUVChannels(), (uint32_t)gfx::MeshVertexSemantic::SemanticCount(gfx::EMeshVertexSemanticKind::TEXCOORD));// Texcoordのサポート最大数でクランプ.
+
+				offset_info.push_back({});
+				auto& info = offset_info.back();
+				info.num_prim = num_prim;
+				info.num_vertex = num_vertex;
+				info.num_color_ch = num_color_ch;
+				info.num_uv_ch = num_uv_ch;
+
+
+				// 総サイズとオフセット計算.
+				info.total_size_in_byte = 0;
+				// Position.
+				info.offset_position = info.total_size_in_byte + total_size_in_byte;
+				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_position * sizeof(ngl::math::Vec3);
+				// Normal.
+				if (0 < num_normal)
+				{
+					info.offset_normal = info.total_size_in_byte + total_size_in_byte;
+					info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_normal * sizeof(ngl::math::Vec3);
+				}
+				// Tangent.
+				if (0 < num_tangent)
+				{
+					info.offset_tangent = info.total_size_in_byte + total_size_in_byte;
+					info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_tangent * sizeof(ngl::math::Vec3);
+				}
+				// Binormal.
+				if (0 < num_binormal)
+				{
+					info.offset_binormal = info.total_size_in_byte + total_size_in_byte;
+					info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_binormal * sizeof(ngl::math::Vec3);
+				}
+				// Color.
+				for (auto ci = 0; ci < num_color_ch; ++ci)
+				{
+					info.offset_color[ci] = info.total_size_in_byte + total_size_in_byte;
+					info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_vertex * sizeof(ngl::gfx::VertexColor);
+				}
+				// UV.
+				for (auto ci = 0; ci < num_uv_ch; ++ci)
+				{
+					info.offset_uv[ci] = info.total_size_in_byte + total_size_in_byte;
+					info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_vertex * sizeof(ngl::math::Vec2);
+				}
+				// Index.
+				info.offset_index = info.total_size_in_byte + total_size_in_byte;
+				info.total_size_in_byte = CalcAlignedSize(info.total_size_in_byte, vtx_align) + num_prim * sizeof(uint32_t) * 3;
+
+				// ジオメトリ総サイズ更新.
+				total_size_in_byte += info.total_size_in_byte;
+			}
+
+			// Material.
+			{
+#if 0
+				auto func_get_ai_material_texture = [](std::string& out_texture_path,const aiScene* ai_scene, unsigned int material_index, aiTextureType texture_type)
+				-> bool
+				{
+					if(ai_scene->mNumMaterials > material_index)
+					{
+						const auto* p_ai_material = ai_scene->mMaterials[material_index];
+						
+						aiString tex_path;
+						if(aiReturn::aiReturn_SUCCESS == p_ai_material->GetTexture(texture_type, 0, &tex_path))
+						{
+							out_texture_path = tex_path.C_Str();
+							return true;
+						}
+					}
+					out_texture_path = {};// 無効はクリア.
+					return false;
+				};
+
+				std::array<aiTextureType, 5> standard_texture_type_set =
+				{
+					aiTextureType_BASE_COLOR,
+					aiTextureType_NORMALS,
+					aiTextureType_METALNESS,
+					aiTextureType_DIFFUSE_ROUGHNESS,
+					aiTextureType_AMBIENT_OCCLUSION,
+				};
+				std::array<std::string, standard_texture_type_set.size()> standard_texture_path_set = {};
+				
+				const auto ai_material_index = p_ai_mesh->mMaterialIndex;
+
+				for(auto tex_i = 0; tex_i < standard_texture_type_set.size(); ++tex_i)
+				{
+					func_get_ai_material_texture(standard_texture_path_set[tex_i], ai_scene, ai_material_index, standard_texture_type_set[tex_i]);
+				}
+
+				std::cout << standard_texture_path_set[0] << std::endl;
+#endif
+			}
 		}
 
 		// このメッシュの全情報を格納するメモリを確保.
@@ -350,8 +409,8 @@ namespace assimp
 			auto& mesh = out_mesh.shape_array_[i];
 
 			// Slotマッピングクリア.
-			mesh.p_slot_mapping_.fill(nullptr);
-			mesh.slot_mask_ = {};
+			mesh.p_vtx_attr_mapping_.fill(nullptr);
+			mesh.vtx_attr_mask_ = {};
 
 			// Vertex Attribute.
 			{
@@ -366,8 +425,8 @@ namespace assimp
 					mesh.position_.raw_ptr_);
 
 				// Slotマッピング.
-				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::POSITION)] = &mesh.position_;
-				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::POSITION);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::POSITION)] = &mesh.position_;
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::POSITION);
 			}
 
 			if (mesh.normal_.raw_ptr_)
@@ -386,8 +445,8 @@ namespace assimp
 				mesh.normal_.rhi_vbv_.Initialize(&mesh.normal_.rhi_buffer_, vbv_desc);
 
 				// Slotマッピング.
-				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::NORMAL)] = &mesh.normal_;
-				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::NORMAL);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::NORMAL)] = &mesh.normal_;
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::NORMAL);
 			}
 			if (mesh.tangent_.raw_ptr_)
 			{
@@ -405,8 +464,8 @@ namespace assimp
 				mesh.tangent_.rhi_vbv_.Initialize(&mesh.tangent_.rhi_buffer_, vbv_desc);
 
 				// Slotマッピング.
-				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TANNGENT)] = &mesh.tangent_;
-				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TANNGENT);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TANNGENT)] = &mesh.tangent_;
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TANNGENT);
 			}
 			if (mesh.binormal_.raw_ptr_)
 			{
@@ -424,8 +483,8 @@ namespace assimp
 				mesh.binormal_.rhi_vbv_.Initialize(&mesh.binormal_.rhi_buffer_, vbv_desc);
 
 				// Slotマッピング.
-				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::BINORMAL)] = &mesh.binormal_;
-				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::BINORMAL);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::BINORMAL)] = &mesh.binormal_;
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::BINORMAL);
 			}
 			// SRGBかLinearで問題になるかもしれない. 現状はとりあえずLinear扱い.
 			for (int ci = 0; ci < mesh.color_.size(); ++ci)
@@ -444,8 +503,8 @@ namespace assimp
 				mesh.color_[ci].rhi_vbv_.Initialize(&mesh.color_[ci].rhi_buffer_, vbv_desc);
 
 				// Slotマッピング.
-				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::COLOR, ci)] = &mesh.color_[ci];
-				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::COLOR, ci);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::COLOR, ci)] = &mesh.color_[ci];
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::COLOR, ci);
 			}
 			for (int ci = 0; ci < mesh.texcoord_.size(); ++ci)
 			{
@@ -463,8 +522,8 @@ namespace assimp
 				mesh.texcoord_[ci].rhi_vbv_.Initialize(&mesh.texcoord_[ci].rhi_buffer_, vbv_desc);
 
 				// Slotマッピング.
-				mesh.p_slot_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TEXCOORD, ci)] = &mesh.texcoord_[ci];
-				mesh.slot_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TEXCOORD, ci);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TEXCOORD, ci)] = &mesh.texcoord_[ci];
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TEXCOORD, ci);
 			}
 
 			// Index.

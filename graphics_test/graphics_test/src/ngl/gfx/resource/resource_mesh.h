@@ -156,8 +156,8 @@ namespace ngl
 
 
 			// バインド時等に効率的に設定するためのポインタ配列.
-			std::array<MeshShapeVertexDataBase*, MeshVertexSemantic::SemanticSlotMaxCount()> p_slot_mapping_ = {};
-			MeshVertexSemanticSlotMask	slot_mask_ = {};
+			std::array<MeshShapeVertexDataBase*, MeshVertexSemantic::SemanticSlotMaxCount()> p_vtx_attr_mapping_ = {};
+			MeshVertexSemanticSlotMask	vtx_attr_mask_ = {};
 
 		};
 
