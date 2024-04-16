@@ -1,0 +1,17 @@
+﻿#pragma once
+
+#include <memory>
+
+#include "ngl/rhi/d3d12/device.d3d12.h"
+
+#include "DirectXTex/DirectXTex.h"
+
+namespace ngl
+{
+namespace directxtex
+{
+	
+	bool LoadImageData(DirectX::ScratchImage& image_data, DirectX::TexMetadata& meta_data, rhi::DeviceDep* p_device, const char* filename);
+	
+}
+}

@@ -20,8 +20,12 @@
 #include "resource.h"
 
 // resource derived.
-#include "ngl/gfx/resource/resource_mesh.h"
 #include "ngl/gfx/resource/resource_shader.h"
+
+#include "ngl/gfx/resource/resource_mesh.h"
+
+#include "ngl/gfx/resource/resource_texture.h"
+
 // other.
 
 
@@ -77,11 +81,13 @@ namespace res
 
 
 	private:
-		// ResMeshData ロード処理実装部.
-		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc);
 		// ResShader ロード処理実装部.
 		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc);
-
+		// ResMeshData ロード処理実装部.
+		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc);
+		// ResMeshData ロード処理実装部.
+		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc);
+		
 	private:
 		void OnDestroyResource(Resource* p_res);
 

@@ -10,7 +10,7 @@
 #include "ngl/rhi/d3d12/resource_view.d3d12.h"
 
 
-// assimpテスト.
+// assimp.
 #include <assimp/Importer.hpp>      // C++ importer interface
 #include <assimp/scene.h>           // Output data structure
 #include <assimp/postprocess.h>     // Post processing flags
@@ -116,7 +116,11 @@ namespace assimp
 
 	// Assimpを利用してファイルから1Meshを構成するShape群を生成.
 	//	ファイル内の頂点はすべてPreTransformeされ, 配置情報はベイクされる(GLTFやUSD等の内部に配置情報を含むものはそれらによる複製配置等がすべてジオメトリとして生成される).
-	void LoadMeshData(rhi::DeviceDep* p_device, const char* filename, gfx::MeshData& out_mesh)
+	bool LoadMeshData(
+		gfx::MeshData& out_mesh,
+		std::vector<MaterialTextureSet>& out_material_tex_set,
+		std::vector<int>& out_shape_material_index,
+		rhi::DeviceDep* p_device, const char* filename)
 	{
 		// ReadFileで読み込まれたメモリ等はAssimp::Importerインスタンスの寿命でクリーンアップされる.
 
@@ -139,7 +143,7 @@ namespace assimp
 			ai_mesh_read_options
 		);
 		if (!ai_scene)
-			return;
+			return false;
 
 
 		struct ShapeDataOffsetInfo
@@ -165,35 +169,38 @@ namespace assimp
 				offset_index = -1;
 			}
 
-			int total_size_in_byte;
+			int total_size_in_byte = 0;
 
-			int num_prim;
-			int num_vertex;
+			int num_prim = 0;
+			int num_vertex = 0;
 
-			int offset_position;
-			int offset_normal;
-			int offset_tangent;
-			int offset_binormal;
+			int offset_position = -1;
+			int offset_normal = -1;
+			int offset_tangent = -1;
+			int offset_binormal = -1;
 
 			int					num_color_ch;
 			std::array<int, 8>	offset_color;
 			int					num_uv_ch;
 			std::array<int, 8>	offset_uv;
 
-			int offset_index;
+			int offset_index = -1;
 		};
 
-
 		std::vector<ShapeDataOffsetInfo> offset_info;
+		std::vector<assimp::MaterialTextureSet>	material_info_array;
+		std::vector<int> shape_material_index_array;
 
+		offset_info.clear();
+		material_info_array.clear();
+		shape_material_index_array.clear();
+		
 		// 総数計算.
 		constexpr int vtx_align = 16;
 		int total_size_in_byte = 0;
 		for (auto mesh_i = 0u; mesh_i < ai_scene->mNumMeshes; ++mesh_i)
 		{
 			const auto* p_ai_mesh = ai_scene->mMeshes[mesh_i];
-
-			ai_scene->mRootNode->mTransformation;
 			
 			// mesh shape.
 			{
@@ -258,9 +265,16 @@ namespace assimp
 				total_size_in_byte += info.total_size_in_byte;
 			}
 
-			// Material.
+			// ShapeのMaterial.
 			{
-#if 0
+				shape_material_index_array.push_back({});
+				auto& shape_material_index = shape_material_index_array.back();
+
+				shape_material_index = static_cast<int>(p_ai_mesh->mMaterialIndex);
+			}
+
+			// Material情報収集.
+			{
 				auto func_get_ai_material_texture = [](std::string& out_texture_path,const aiScene* ai_scene, unsigned int material_index, aiTextureType texture_type)
 				-> bool
 				{
@@ -279,25 +293,17 @@ namespace assimp
 					return false;
 				};
 
-				std::array<aiTextureType, 5> standard_texture_type_set =
-				{
-					aiTextureType_BASE_COLOR,
-					aiTextureType_NORMALS,
-					aiTextureType_METALNESS,
-					aiTextureType_DIFFUSE_ROUGHNESS,
-					aiTextureType_AMBIENT_OCCLUSION,
-				};
-				std::array<std::string, standard_texture_type_set.size()> standard_texture_path_set = {};
-				
 				const auto ai_material_index = p_ai_mesh->mMaterialIndex;
 
-				for(auto tex_i = 0; tex_i < standard_texture_type_set.size(); ++tex_i)
+				material_info_array.push_back({});
+				auto& material = material_info_array.back();
 				{
-					func_get_ai_material_texture(standard_texture_path_set[tex_i], ai_scene, ai_material_index, standard_texture_type_set[tex_i]);
+					func_get_ai_material_texture(material.tex_base_color, ai_scene, ai_material_index, aiTextureType_BASE_COLOR);
+					func_get_ai_material_texture(material.tex_normal, ai_scene, ai_material_index, aiTextureType_NORMALS);
+					func_get_ai_material_texture(material.tex_roughness, ai_scene, ai_material_index, aiTextureType_DIFFUSE_ROUGHNESS);
+					func_get_ai_material_texture(material.tex_metalness, ai_scene, ai_material_index, aiTextureType_METALNESS);
+					func_get_ai_material_texture(material.tex_occlusion, ai_scene, ai_material_index, aiTextureType_AMBIENT_OCCLUSION);
 				}
-
-				std::cout << standard_texture_path_set[0] << std::endl;
-#endif
 			}
 		}
 
@@ -539,13 +545,13 @@ namespace assimp
 					mesh.index_.raw_ptr_);
 			}
 		}
-	}
 
-	bool LoadMeshData(gfx::ResMeshData& out, rhi::DeviceDep* p_device, const char* filename)
-	{
-		LoadMeshData(p_device, filename, out.data_);
+		// Material Infomation.
+		out_material_tex_set = std::move(material_info_array);
+		// Shape Material Infomation.
+		out_shape_material_index = std::move(shape_material_index_array);
 
-		return (0 < out.data_.raw_data_mem_.size());
+		return true;
 	}
 }
 }

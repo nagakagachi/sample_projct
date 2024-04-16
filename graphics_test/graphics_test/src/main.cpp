@@ -17,8 +17,6 @@
 
 #include "ngl/math/math.h"
 
-// DirectXTexのテスト.
-#include "DirectXTex/DirectXTex.h"
 
 // resource
 #include "ngl/resource/resource_manager.h"
@@ -454,6 +452,7 @@ bool AppGame::Initialize()
 	ngl_test::TestFunc00(&device_);
 
 
+	/*
 	{
 		// DirectXTex
 		DirectX::WIC_FLAGS flags = DirectX::WIC_FLAGS_NONE;
@@ -466,7 +465,11 @@ bool AppGame::Initialize()
 			assert(nullptr != p_image);
 		}
 	}
-
+	*/
+	// Texture Rexource読み込みのテスト.
+	ngl::gfx::ResTextureData::LoadDesc tex_load_desc = {};
+	auto load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTextureData>(&device_, "./data/model/sponza_gltf/glTF/6772804448157695701.jpg", &tex_load_desc);
+	
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;

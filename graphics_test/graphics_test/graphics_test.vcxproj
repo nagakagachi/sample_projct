@@ -177,6 +177,8 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\gfx\render\mesh_renderer.cpp" />
     <ClCompile Include="src\ngl\gfx\resource\resource_mesh.cpp" />
     <ClCompile Include="src\ngl\gfx\raytrace_scene.cpp" />
+    <ClCompile Include="src\ngl\gfx\resource\resource_texture.cpp" />
+    <ClCompile Include="src\ngl\gfx\texture_loader_directxtex.cpp" />
     <ClCompile Include="src\ngl\memory\boundary_tag_block.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />
@@ -210,6 +212,8 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h" />
     <ClInclude Include="src\ngl\gfx\resource\resource_shader.h" />
     <ClInclude Include="src\ngl\gfx\raytrace_scene.h" />
+    <ClInclude Include="src\ngl\gfx\resource\resource_texture.h" />
+    <ClInclude Include="src\ngl\gfx\texture_loader_directxtex.h" />
     <ClInclude Include="src\ngl\math\detail\math_matrix.h" />
     <ClInclude Include="src\ngl\math\detail\math_vector.h" />
     <ClInclude Include="src\ngl\math\math.h" />

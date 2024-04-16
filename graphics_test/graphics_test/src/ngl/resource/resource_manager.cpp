@@ -2,6 +2,7 @@
 #include "resource_manager.h"
 
 #include "ngl/gfx/mesh_loader_assimp.h"
+#include "ngl/gfx/texture_loader_directxtex.h"
 
 namespace ngl
 {
@@ -108,11 +109,6 @@ namespace res
 		}
 	}
 
-	// Mesh Load 実装部.
-	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc)
-	{
-		return assimp::LoadMeshData(*p_res, p_device, p_res->GetFileName());
-	}
 	// Shader Load 実装部.
 	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc)
 	{
@@ -129,7 +125,33 @@ namespace res
 
 		return true;
 	}
+	// Mesh Load 実装部.
+	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc)
+	{
+		// glTFなどに含まれるマテリアル情報も読み取り. テクスチャの読み込みは別途にするか.
+		std::vector<assimp::MaterialTextureSet> material_array = {};
+		std::vector<int> shape_material_index_array = {};
+		const bool result_load_mesh = assimp::LoadMeshData(p_res->data_, material_array, shape_material_index_array, p_device, p_res->GetFileName());
+		if(!result_load_mesh)
+			return false;
 
+		return true;
+	}
+
+	// Texture Load 実装部.
+	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc)
+	{
+		DirectX::ScratchImage image_data;// ピクセルデータ.
+		DirectX::TexMetadata meta_data;
+		const bool result_load_image = directxtex::LoadImageData(image_data, meta_data, p_device, p_res->GetFileName());
+		if(!result_load_image)
+			return false;
+
+		// TODO.
+		// シンプルにピクセルデータとフォーマット情報などをp_resにもたせて ResTextureData::OnResourceRenderUpdate() でGPUメモリへCopyさせる.
+		
+		return true;
+	}
 
 	// Thread Safe.
 	detail::ResourceHolderHandle ResourceManager::FindHandle(const char* res_typename, const char* filename)
