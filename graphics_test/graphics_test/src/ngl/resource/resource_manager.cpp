@@ -143,12 +143,65 @@ namespace res
 	{
 		DirectX::ScratchImage image_data;// ピクセルデータ.
 		DirectX::TexMetadata meta_data;
+		
+		// 直接ロード. DDS直接読み込みは未実装. WIC画像ファイル群のみ.
 		const bool result_load_image = directxtex::LoadImageData(image_data, meta_data, p_device, p_res->GetFileName());
 		if(!result_load_image)
 			return false;
 
-		// TODO.
-		// シンプルにピクセルデータとフォーマット情報などをp_resにもたせて ResTextureData::OnResourceRenderUpdate() でGPUメモリへCopyさせる.
+		const rhi::EResourceFormat image_format = rhi::ConvertResourceFormat(meta_data.format);
+		
+		{
+			p_res->upload_pixel_memory_.resize(image_data.GetPixelsSize());
+			// ピクセルデータを作業用にコピー.
+			memcpy(p_res->upload_pixel_memory_.data(), image_data.GetPixels(), image_data.GetPixelsSize());
+			
+			p_res->upload_image_plane_array_.resize(image_data.GetImageCount());
+			for(int i = 0; i < image_data.GetImageCount(); ++i)
+			{
+				const auto& image_plane = image_data.GetImages()[i];
+
+				p_res->upload_image_plane_array_[i].format = image_format;
+				p_res->upload_image_plane_array_[i].width = static_cast<s32>(image_plane.width);
+				p_res->upload_image_plane_array_[i].height = static_cast<s32>(image_plane.height);
+				p_res->upload_image_plane_array_[i].rowPitch = static_cast<s32>(image_plane.rowPitch);
+				p_res->upload_image_plane_array_[i].slicePitch = static_cast<s32>(image_plane.slicePitch);
+
+				// 作業メモリ上の位置をセット.
+				p_res->upload_image_plane_array_[i].pixels = p_res->upload_pixel_memory_.data() + std::distance(image_data.GetPixels(), image_plane.pixels);
+			}
+		}
+
+		
+		// resにオブジェクト生成.
+		p_res->ref_texture_ = new rhi::TextureDep();
+		p_res->ref_view_ = new rhi::ShaderResourceViewDep();
+
+		rhi::TextureDep::Desc tex_desc = {};
+		{
+			tex_desc.heap_type = rhi::EResourceHeapType::Default;
+			tex_desc.bind_flag = rhi::ResourceBindFlag::ShaderResource;
+			
+			tex_desc.format = image_format;
+			tex_desc.width = static_cast<u32>(meta_data.width);
+			tex_desc.height = static_cast<u32>(meta_data.height);
+			tex_desc.depth = static_cast<u32>(meta_data.depth);
+			{
+				if(meta_data.IsCubemap())
+					tex_desc.type = rhi::ETextureType::TextureCube;
+				else if(DirectX::TEX_DIMENSION_TEXTURE1D == meta_data.dimension)
+					tex_desc.type = rhi::ETextureType::Texture1D;
+				else if(DirectX::TEX_DIMENSION_TEXTURE2D == meta_data.dimension)
+					tex_desc.type = rhi::ETextureType::Texture2D;
+				else if(DirectX::TEX_DIMENSION_TEXTURE3D == meta_data.dimension)
+					tex_desc.type = rhi::ETextureType::Texture3D;
+			}
+			tex_desc.array_size = static_cast<s32>(meta_data.arraySize);
+			tex_desc.mip_count = static_cast<s32>(meta_data.mipLevels);
+		}
+		p_res->ref_texture_->Initialize(p_device, tex_desc);
+
+		p_res->ref_view_->InitializeAsTexture(p_device, p_res->ref_texture_.Get(), 0, tex_desc.mip_count, 0, tex_desc.array_size);
 		
 		return true;
 	}

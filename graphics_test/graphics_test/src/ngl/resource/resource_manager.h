@@ -61,6 +61,19 @@ namespace res
 	{
 		friend class ResourceDeleter;
 
+	private:
+		// ----------------------------------------------------------------------------------------------------------------------------
+		// タイプ毎のロード実装.
+		
+		// ResShader ロード処理実装部.
+		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc);
+		// ResMeshData ロード処理実装部.
+		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc);
+		// ResMeshData ロード処理実装部.
+		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc);
+
+		// ----------------------------------------------------------------------------------------------------------------------------
+		
 	public:
 		ResourceManager();
 
@@ -78,15 +91,6 @@ namespace res
 		// RES_TYPE は ngl::res::Resource 継承クラス.
 		template<typename RES_TYPE>
 		ResourceHandle<RES_TYPE> LoadResource(rhi::DeviceDep* p_device, const char* filename, typename RES_TYPE::LoadDesc* p_desc);
-
-
-	private:
-		// ResShader ロード処理実装部.
-		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc);
-		// ResMeshData ロード処理実装部.
-		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc);
-		// ResMeshData ロード処理実装部.
-		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc);
 		
 	private:
 		void OnDestroyResource(Resource* p_res);

@@ -100,7 +100,7 @@ namespace ngl
 				ETextureType			type = ETextureType::Texture2D;
 
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				EResourceHeapType	heap_type = EResourceHeapType::Default;// UploadTextureはD3Dで未対応. Bufferを作ってそこからコピーする.
+				EResourceHeapType	heap_type = EResourceHeapType::Default;// Upload TextureはD3Dで未対応. Bufferを作ってそこからコピーする.
 				EResourceState		initial_state = EResourceState::General;
 
 				// リソースのデフォルトクリア値を指定する. ハードウェア的に可能なら指定した値によるクリアが高速になる?.

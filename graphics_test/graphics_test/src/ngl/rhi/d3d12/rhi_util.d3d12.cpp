@@ -8,7 +8,7 @@ namespace ngl
 	{
 		DXGI_FORMAT ConvertResourceFormat(EResourceFormat v)
 		{
-			static DXGI_FORMAT table[] = 
+			static constexpr DXGI_FORMAT table[] = 
 			{
 				DXGI_FORMAT_UNKNOWN,
 				DXGI_FORMAT_R32G32B32A32_TYPELESS,
@@ -131,6 +131,16 @@ namespace ngl
 			
 			// 現状はDXGIと一対一の対応
 			return table[static_cast<u32>(v)];
+		}
+		// DirectX->Ngl Convert Format. 探索が発生するため高速ではない.
+		EResourceFormat ConvertResourceFormat(DXGI_FORMAT v)
+		{
+			for(int i = 0; i < static_cast<int>(EResourceFormat::_MAX); ++i)
+			{
+				if(v == ConvertResourceFormat(static_cast<EResourceFormat>(i)))
+					return static_cast<EResourceFormat>(i);
+			}
+			return EResourceFormat::Format_UNKNOWN;
 		}
 
 		D3D12_RESOURCE_STATES ConvertResourceState(EResourceState v)

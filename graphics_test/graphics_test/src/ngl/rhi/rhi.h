@@ -53,7 +53,7 @@ namespace ngl
 			return 0 != (v0 & v1);
 		}
 
-		enum class EResourceFormat
+		enum class EResourceFormat : int
 		{
 			Format_UNKNOWN,
 			Format_R32G32B32A32_TYPELESS,

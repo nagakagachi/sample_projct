@@ -24,6 +24,19 @@ namespace ngl
 	
 	namespace gfx
 	{
+		// Bitmap image container.
+		//
+		struct ResTextureUploadImagePlane
+		{
+			s32		width;
+			s32		height;
+			rhi::EResourceFormat	format;
+			s32		rowPitch;
+			s32		slicePitch;
+			u8*		pixels;
+		};
+
+		
 		class ResTextureData : public res::Resource
 		{
 			NGL_RES_MEMBER_DECLARE(ResTextureData)
@@ -46,8 +59,13 @@ namespace ngl
 			void OnResourceRenderUpdate(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override;
 
 			// 読み込んだイメージから生成したTextureやそのView等.
-			rhi::RefTextureDep			ref_texture_;
-			rhi::ShaderResourceViewDep	ref_view_;
+			rhi::RefTextureDep			ref_texture_ = {};
+			rhi::RefSrvDep				ref_view_ = {};
+
+			
+			// Upload data.
+			std::vector<u8> upload_pixel_memory_ = {};
+			std::vector<ResTextureUploadImagePlane> upload_image_plane_array_;
 		};
 	}
 }

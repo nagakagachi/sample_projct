@@ -27,6 +27,8 @@ namespace ngl
 
 
 		DXGI_FORMAT ConvertResourceFormat(EResourceFormat v);
+		// 逆変換. 内部で探索が実行されるため高速ではない.
+		EResourceFormat ConvertResourceFormat(DXGI_FORMAT v);
 
 		D3D12_RESOURCE_STATES ConvertResourceState(EResourceState v);
 
