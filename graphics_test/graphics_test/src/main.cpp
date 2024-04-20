@@ -107,14 +107,18 @@ private:
 	ngl::rhi::RefTextureDep						tex_rw_;
 	ngl::rhi::RefSrvDep							tex_rw_srv_;
 	ngl::rhi::RefUavDep							tex_rw_uav_;
-
-
+	
 	ngl::rhi::RefSampDep						samp_linear_clamp_;
 
 	std::array<ngl::rhi::RefBufferDep, 2>		cb_sceneview_;
 	std::array<ngl::rhi::RefCbvDep, 2>			cbv_sceneview_;
 	int											flip_index_sceneview_ = 0;
 
+
+	// Loaded Texture.
+	ngl::res::ResourceHandle<ngl::gfx::ResTextureData> res_texture_ = {};
+
+	
 	// RtScene.
 	ngl::gfx::RtSceneManager					rt_st_;
 	// RtPass.
@@ -468,7 +472,8 @@ bool AppGame::Initialize()
 	*/
 	// Texture Rexource読み込みのテスト.
 	ngl::gfx::ResTextureData::LoadDesc tex_load_desc = {};
-	auto load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTextureData>(&device_, "./data/model/sponza_gltf/glTF/6772804448157695701.jpg", &tex_load_desc);
+	//auto load_handle = ;
+	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTextureData>(&device_, "./data/model/sponza_gltf/glTF/6772804448157695701.jpg", &tex_load_desc);
 	
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
@@ -800,7 +805,7 @@ bool AppGame::Execute()
 					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
 					task_final->Setup(rtg_builder, &device_, h_swapchain,
 						task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-						samp_linear_clamp_, rt_pass_test.ray_result_srv_);
+						samp_linear_clamp_, rt_pass_test.ray_result_srv_, res_texture_->ref_view_);
 
 					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
 					{

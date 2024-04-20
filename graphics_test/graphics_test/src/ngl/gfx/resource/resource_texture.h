@@ -26,14 +26,18 @@ namespace ngl
 	{
 		// Bitmap image container.
 		//
-		struct ResTextureUploadImagePlane
+		struct ResTextureUploadSubresourceInfo
 		{
-			s32		width;
-			s32		height;
-			rhi::EResourceFormat	format;
-			s32		rowPitch;
-			s32		slicePitch;
-			u8*		pixels;
+			s32		array_index = {};
+			s32		mip_index = {};
+			s32		slice_index = {};
+			
+			s32		width = {};
+			s32		height = {};
+			rhi::EResourceFormat	format = {};
+			s32		rowPitch = {};
+			s32		slicePitch = {};
+			u8*		pixels = {};
 		};
 
 		
@@ -65,7 +69,7 @@ namespace ngl
 			
 			// Upload data.
 			std::vector<u8> upload_pixel_memory_ = {};
-			std::vector<ResTextureUploadImagePlane> upload_image_plane_array_;
+			std::vector<ResTextureUploadSubresourceInfo> upload_subresource_info_array;
 		};
 	}
 }

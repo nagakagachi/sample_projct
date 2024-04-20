@@ -558,6 +558,8 @@ namespace ngl::render
 			rhi::RefSrvDep ref_raytrace_result_srv_;
 			rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 
+			rhi::RefSrvDep ref_res_texture_srv_ = {};// テクスチャリソーステスト.
+			
 			// 外部指定の出力先バッファ.
 			rhi::RefSampDep ref_samp_linear_clamp_{};
 
@@ -566,7 +568,8 @@ namespace ngl::render
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
 			rhi::RefSampDep ref_samp_linear_clamp,
-			rhi::RefSrvDep ref_raytrace_result_srv)
+			rhi::RefSrvDep ref_raytrace_result_srv,
+			rhi::RefSrvDep ref_res_texture_srv)
 			{
 				{
 					// リソースアクセス定義.
@@ -586,6 +589,8 @@ namespace ngl::render
 				{
 					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
 					ref_raytrace_result_srv_ = ref_raytrace_result_srv;
+
+					ref_res_texture_srv_ = ref_res_texture_srv;
 				}
 
 				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
@@ -660,6 +665,8 @@ namespace ngl::render
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "tex_light", res_light.srv_.Get());
 				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
+				pso_->SetView(&desc_set, "tex_res_data", ref_res_texture_srv_.Get());// テクスチャリソースのテスト.
+				
 				pso_->SetView(&desc_set, "samp", ref_samp_linear_clamp_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 

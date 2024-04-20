@@ -1,8 +1,10 @@
 ﻿
 #include "resource_manager.h"
 
+/*
 #include "ngl/gfx/mesh_loader_assimp.h"
 #include "ngl/gfx/texture_loader_directxtex.h"
+*/
 
 namespace ngl
 {
@@ -107,103 +109,6 @@ namespace res
 			// 次フレーム用に空に.
 			frame_render_update_list_with_handle_.clear();
 		}
-	}
-
-	// Shader Load 実装部.
-	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResShader* p_res, gfx::ResShader::LoadDesc* p_desc)
-	{
-		ngl::rhi::ShaderDep::InitFileDesc desc = {};
-		desc.entry_point_name = p_desc->entry_point_name;
-		desc.shader_file_path = p_res->GetFileName();
-		desc.shader_model_version = p_desc->shader_model_version;
-		desc.stage = p_desc->stage;
-		if (!p_res->data_.Initialize(p_device, desc))
-		{
-			assert(false);
-			return false;
-		}
-
-		return true;
-	}
-	// Mesh Load 実装部.
-	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc)
-	{
-		// glTFなどに含まれるマテリアル情報も読み取り. テクスチャの読み込みは別途にするか.
-		std::vector<assimp::MaterialTextureSet> material_array = {};
-		std::vector<int> shape_material_index_array = {};
-		const bool result_load_mesh = assimp::LoadMeshData(p_res->data_, material_array, shape_material_index_array, p_device, p_res->GetFileName());
-		if(!result_load_mesh)
-			return false;
-
-		return true;
-	}
-
-	// Texture Load 実装部.
-	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc)
-	{
-		DirectX::ScratchImage image_data;// ピクセルデータ.
-		DirectX::TexMetadata meta_data;
-		
-		// 直接ロード. DDS直接読み込みは未実装. WIC画像ファイル群のみ.
-		const bool result_load_image = directxtex::LoadImageData(image_data, meta_data, p_device, p_res->GetFileName());
-		if(!result_load_image)
-			return false;
-
-		const rhi::EResourceFormat image_format = rhi::ConvertResourceFormat(meta_data.format);
-		
-		{
-			p_res->upload_pixel_memory_.resize(image_data.GetPixelsSize());
-			// ピクセルデータを作業用にコピー.
-			memcpy(p_res->upload_pixel_memory_.data(), image_data.GetPixels(), image_data.GetPixelsSize());
-			
-			p_res->upload_image_plane_array_.resize(image_data.GetImageCount());
-			for(int i = 0; i < image_data.GetImageCount(); ++i)
-			{
-				const auto& image_plane = image_data.GetImages()[i];
-
-				p_res->upload_image_plane_array_[i].format = image_format;
-				p_res->upload_image_plane_array_[i].width = static_cast<s32>(image_plane.width);
-				p_res->upload_image_plane_array_[i].height = static_cast<s32>(image_plane.height);
-				p_res->upload_image_plane_array_[i].rowPitch = static_cast<s32>(image_plane.rowPitch);
-				p_res->upload_image_plane_array_[i].slicePitch = static_cast<s32>(image_plane.slicePitch);
-
-				// 作業メモリ上の位置をセット.
-				p_res->upload_image_plane_array_[i].pixels = p_res->upload_pixel_memory_.data() + std::distance(image_data.GetPixels(), image_plane.pixels);
-			}
-		}
-
-		
-		// resにオブジェクト生成.
-		p_res->ref_texture_ = new rhi::TextureDep();
-		p_res->ref_view_ = new rhi::ShaderResourceViewDep();
-
-		rhi::TextureDep::Desc tex_desc = {};
-		{
-			tex_desc.heap_type = rhi::EResourceHeapType::Default;
-			tex_desc.bind_flag = rhi::ResourceBindFlag::ShaderResource;
-			
-			tex_desc.format = image_format;
-			tex_desc.width = static_cast<u32>(meta_data.width);
-			tex_desc.height = static_cast<u32>(meta_data.height);
-			tex_desc.depth = static_cast<u32>(meta_data.depth);
-			{
-				if(meta_data.IsCubemap())
-					tex_desc.type = rhi::ETextureType::TextureCube;
-				else if(DirectX::TEX_DIMENSION_TEXTURE1D == meta_data.dimension)
-					tex_desc.type = rhi::ETextureType::Texture1D;
-				else if(DirectX::TEX_DIMENSION_TEXTURE2D == meta_data.dimension)
-					tex_desc.type = rhi::ETextureType::Texture2D;
-				else if(DirectX::TEX_DIMENSION_TEXTURE3D == meta_data.dimension)
-					tex_desc.type = rhi::ETextureType::Texture3D;
-			}
-			tex_desc.array_size = static_cast<s32>(meta_data.arraySize);
-			tex_desc.mip_count = static_cast<s32>(meta_data.mipLevels);
-		}
-		p_res->ref_texture_->Initialize(p_device, tex_desc);
-
-		p_res->ref_view_->InitializeAsTexture(p_device, p_res->ref_texture_.Get(), 0, tex_desc.mip_count, 0, tex_desc.array_size);
-		
-		return true;
 	}
 
 	// Thread Safe.

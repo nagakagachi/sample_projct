@@ -13,7 +13,8 @@ struct VS_OUTPUT
 
 
 Texture2D tex_light;
-Texture2D tex_rt;
+Texture2D tex_rt;// テクスチャデバッグ.
+Texture2D tex_res_data;// テクスチャデバッグ.
 SamplerState samp;
 
 float4 main_ps(VS_OUTPUT input) : SV_TARGET
@@ -22,12 +23,25 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	float4 color = tex_light.SampleLevel(samp, input.uv, 0);
 	
 	// レイトレ描画確認用に一部に貼り付け.
-	const float2 rt_debug_area = float2(0.3, 0.3);
-	if (rt_debug_area.x >= input.uv.x && rt_debug_area.y >= input.uv.y)
 	{
-		float4 rt_color = tex_rt.SampleLevel(samp, input.uv / rt_debug_area, 0);
+		const float2 rt_debug_area = float2(0.3, 0.3);
+		if (rt_debug_area.x >= input.uv.x && rt_debug_area.y >= input.uv.y)
+		{
+			float4 rt_color = tex_rt.SampleLevel(samp, input.uv / rt_debug_area, 0);
 
-		color = rt_color;
+			color = rt_color;
+		}
+	}
+	{
+		const float2 rt_debug_area_size = float2(0.2, 0.2);
+		const float2 rt_debug_area_lt = float2(0.0, 0.3);
+		const float2 rt_debug_area_br = rt_debug_area_lt + rt_debug_area_size;
+		if (all(rt_debug_area_lt <= input.uv) && all(rt_debug_area_br >= input.uv))
+		{
+			float4 rt_color = tex_res_data.SampleLevel(samp, (input.uv-rt_debug_area_lt) / rt_debug_area_size, 0);
+
+			color = rt_color;
+		}
 	}
 
 	return color;

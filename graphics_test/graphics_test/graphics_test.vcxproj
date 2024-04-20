@@ -186,6 +186,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\render\graph_builder.cpp" />
     <ClCompile Include="src\ngl\resource\resource.cpp" />
     <ClCompile Include="src\ngl\resource\resource_manager.cpp" />
+    <ClCompile Include="src\ngl\resource\resource_manager_impl.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\device.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\command_list.d3d12.cpp" />
     <ClCompile Include="src\ngl\rhi\d3d12\descriptor.d3d12.cpp" />
