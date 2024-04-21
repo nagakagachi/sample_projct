@@ -46,6 +46,7 @@
 #include "ngl/render/test_pass.h"
 
 // test
+#include "ngl/gfx/render/global_render_resource.h"
 #include "test/test.h"
 
 
@@ -107,8 +108,6 @@ private:
 	ngl::rhi::RefTextureDep						tex_rw_;
 	ngl::rhi::RefSrvDep							tex_rw_srv_;
 	ngl::rhi::RefUavDep							tex_rw_uav_;
-	
-	ngl::rhi::RefSampDep						samp_linear_clamp_;
 
 	std::array<ngl::rhi::RefBufferDep, 2>		cb_sceneview_;
 	std::array<ngl::rhi::RefCbvDep, 2>			cbv_sceneview_;
@@ -116,7 +115,7 @@ private:
 
 
 	// Loaded Texture.
-	ngl::res::ResourceHandle<ngl::gfx::ResTextureData> res_texture_ = {};
+	ngl::res::ResourceHandle<ngl::gfx::ResTexture> res_texture_ = {};
 
 	
 	// RtScene.
@@ -153,6 +152,8 @@ AppGame::~AppGame()
 	// リソース参照クリア.
 	mesh_comp_array_.clear();
 
+	ngl::gfx::GlobalRenderResource::Instance().Finalize();
+	
 	// リソースマネージャから全て破棄.
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
@@ -224,6 +225,15 @@ bool AppGame::Initialize()
 			swapchain_rtvs_[i] = new ngl::rhi::RenderTargetViewDep();
 			swapchain_rtvs_[i]->Initialize(&device_, swapchain_.Get(), i);
 			swapchain_resource_state_[i] = ngl::rhi::EResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
+		}
+	}
+
+	// 簡易化のためのリソース保持.
+	{
+		if(!ngl::gfx::GlobalRenderResource::Instance().Initialize(&device_))
+		{
+			assert(false);
+			return false;
 		}
 	}
 
@@ -341,23 +351,7 @@ bool AppGame::Initialize()
 		assert(false);
 		return false;
 	}
-
-	{
-		// Sampler.
-		ngl::rhi::SamplerDep::Desc samp_desc = {};
-		samp_desc.Filter = ngl::rhi::ETextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
-		samp_desc.AddressU = ngl::rhi::ETextureAddressMode::Clamp;
-		samp_desc.AddressV = ngl::rhi::ETextureAddressMode::Clamp;
-		samp_desc.AddressW = ngl::rhi::ETextureAddressMode::Clamp;
-		samp_linear_clamp_ = new ngl::rhi::SamplerDep();
-		if (!samp_linear_clamp_->Initialize(&device_, samp_desc))
-		{
-			std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
-			assert(false);
-		}
-	}
-
-
+	
 	{
 		// SceneView Constant.
 		for (int i = 0; i < cb_sceneview_.size(); ++i)
@@ -377,14 +371,9 @@ bool AppGame::Initialize()
 	{
 		const char* mesh_file_box = "../third_party/assimp/test/models/FBX/box.fbx";
 		const char* mesh_file_spider = "../third_party/assimp/test/models/FBX/spider.fbx";
-
-#if 1
+		
 		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
 		const float sponza_scale = 1.0f;
-#else
-		const char* mesh_file_sponza = "./data/model/main_sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf";
-		const float sponza_scale = 1.0f;
-#endif
 		
 		auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
@@ -392,11 +381,10 @@ bool AppGame::Initialize()
 		{
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
-				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_sponza, &loaddesc));
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_sponza, &loaddesc));
 				// スケール設定.
 				mc->transform_.SetDiagonal(ngl::math::Vec3(sponza_scale));
 				}
@@ -404,10 +392,9 @@ bool AppGame::Initialize()
 			for(int i = 0; i < 100; ++i)
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mc->Initialize(&device_);
 				mesh_comp_array_.push_back(mc);
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
-				mc->SetMeshData(ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 
 				constexpr int k_rand_f_div = 10000;
 				const float randx = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
@@ -456,11 +443,11 @@ bool AppGame::Initialize()
 	ngl_test::TestFunc00(&device_);
 	
 	// Texture Rexource読み込みのテスト.
-	ngl::gfx::ResTextureData::LoadDesc tex_load_desc = {};
+	ngl::gfx::ResTexture::LoadDesc tex_load_desc = {};
 	
-	//const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
-	const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
-	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTextureData>(&device_, test_load_texture_file_name, &tex_load_desc);
+	const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
+	//const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
+	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTexture>(&device_, test_load_texture_file_name, &tex_load_desc);
 	
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
@@ -785,14 +772,13 @@ bool AppGame::Execute()
 					task_light->Setup(rtg_builder, &device_,
 						task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
 						task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, h_prev_light,
-						samp_linear_clamp_,
 						ref_cbv_sceneview);
 
 					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
 					task_final->Setup(rtg_builder, &device_, h_swapchain,
 						task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-						samp_linear_clamp_, rt_pass_test.ray_result_srv_, res_texture_->ref_view_);
+						rt_pass_test.ray_result_srv_, res_texture_->ref_view_);
 
 					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
 					{

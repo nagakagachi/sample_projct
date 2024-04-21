@@ -34,11 +34,59 @@ namespace res
 		if(!result_load_mesh)
 			return false;
 
+		
+		// -------------------------------------------------------------------------
+		// Material情報.
+			p_res->shape_material_index_array_.resize(shape_material_index_array.size());
+			p_res->material_data_array_.resize(material_array.size());
+			for(int i = 0; i < shape_material_index_array.size(); ++i)
+			{
+				p_res->shape_material_index_array_[i] = shape_material_index_array[i];
+			}
+
+			auto FindDirPathLenght = [](const char* file_path)
+			{
+				const int base_file_len = static_cast<int>(strlen(file_path));
+				for(int i = base_file_len-1; i >= 0; --i)
+				{
+					if(file_path[i] == '/' || file_path[i] == '\\')
+						return i;
+				}
+				return 0;
+			};
+
+			const int dir_path_length = FindDirPathLenght(p_res->GetFileName());
+			if(0 >= dir_path_length)
+			{
+				assert(false);
+				return false;
+			}
+			std::string dir_path = std::string(p_res->GetFileName(), dir_path_length);
+
+			for(int i = 0; i < material_array.size(); ++i)
+			{
+				const std::string path_part = dir_path + '/';
+				auto SetValidTexturePath = [path_part](const std::string& tex_name) -> std::string
+				{
+					if(0 < tex_name.length())
+					{
+						return (path_part + tex_name);
+					}
+					return {};
+				};
+				
+				p_res->material_data_array_[i].tex_basecolor = SetValidTexturePath(material_array[i].tex_base_color).c_str();
+				p_res->material_data_array_[i].tex_normal = SetValidTexturePath(material_array[i].tex_normal).c_str();
+				p_res->material_data_array_[i].tex_occlusion = SetValidTexturePath(material_array[i].tex_occlusion).c_str();
+				p_res->material_data_array_[i].tex_roughness = SetValidTexturePath(material_array[i].tex_roughness).c_str();
+				p_res->material_data_array_[i].tex_metalness = SetValidTexturePath( material_array[i].tex_metalness).c_str();
+			}
+
 		return true;
 	}
 
 	// Texture Load 実装部.
-	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc)
+	bool ResourceManager::LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTexture* p_res, gfx::ResTexture::LoadDesc* p_desc)
 	{
 		DirectX::ScratchImage image_data;// ピクセルデータ.
 		DirectX::TexMetadata meta_data;

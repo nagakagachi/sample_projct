@@ -2,6 +2,7 @@
 
 #include "mesh_renderer.h"
 
+#include "global_render_resource.h"
 #include "ngl/rhi/d3d12/command_list.d3d12.h"
 #include "ngl/rhi/d3d12/shader.d3d12.h"
 
@@ -15,8 +16,11 @@ namespace gfx
 	// RenderTargetやViewport設定が完了している状態で呼び出される前提.
     void RenderMeshSinglePso(rhi::GraphicsCommandListDep& command_list, rhi::GraphicsPipelineStateDep& pso, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
     {
-		command_list.SetPipelineState(&pso);
+    	auto dummy_tex_srv = GlobalRenderResource::Instance().default_tex_dummy_srv_;
 
+    	// ここではすべてPSO同じ.
+		command_list.SetPipelineState(&pso);
+    	
 		for (int mesh_comp_i = 0; mesh_comp_i < mesh_instance_array.size(); ++mesh_comp_i)
 		{
 			const auto* e = mesh_instance_array[mesh_comp_i];
@@ -24,8 +28,11 @@ namespace gfx
 			auto cbv_instance = e->GetInstanceBufferView();
 
 
-			for (int gi = 0; gi < e->GetMeshData()->data_.shape_array_.size(); ++gi)
+			for (int gi = 0; gi < e->model_.res_mesh_->data_.shape_array_.size(); ++gi)
 			{
+				const auto& shape_mat_index = e->model_.res_mesh_->shape_material_index_array_[gi];
+				const auto& mat_data = e->model_.material_array_[shape_mat_index];
+				
 				// Descriptor.
 				{
 					ngl::rhi::DescriptorSetDep desc_set;
@@ -33,6 +40,12 @@ namespace gfx
 					pso.SetView(&desc_set, "cb_sceneview", &cbv_sceneview);
 					pso.SetView(&desc_set, "cb_instance", cbv_instance.Get());
 
+					pso.SetView(&desc_set, "samp_default", GlobalRenderResource::Instance().default_sampler_linear_wrap_.Get());
+					// テクスチャ設定テスト.
+					{
+						auto tex_basecolor = (mat_data.tex_basecolor.IsValid())? mat_data.tex_basecolor->ref_view_ : dummy_tex_srv;
+						pso.SetView(&desc_set, "tex_basecolor", tex_basecolor.Get());
+					}
 
 					// DescriptorSetでViewを設定.
 					command_list.SetDescriptorSet(&pso, &desc_set);
@@ -40,7 +53,7 @@ namespace gfx
 
 
 				// Geometry.
-				auto& shape = e->GetMeshData()->data_.shape_array_[gi];
+				auto& shape = e->model_.res_mesh_->data_.shape_array_[gi];
 
 				// 一括設定. Mesh描画はセマンティクスとスロットを固定化しているため, Meshデータロード時にマッピングを構築してそのまま利用する.
 				// PSO側のInputLayoutが要求するセマンティクスとのValidationチェックも可能なはず.

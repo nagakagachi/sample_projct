@@ -25,12 +25,17 @@ struct GBufferOutput
 	float2 velocity : SV_TARGET4;
 };
 
+Texture2D tex_basecolor;
+SamplerState samp_default;
+
 GBufferOutput main_ps(VS_OUTPUT input)
 {
 	GBufferOutput output = (GBufferOutput)0;
 
 
-	const float3 base_color = float3(input.uv * 2.0, abs(normalize(input.normal_ws).y));// 適当なベースカラー.
+	//const float3 base_color = float3(input.uv * 2.0, abs(normalize(input.normal_ws).y));// 適当なベースカラー.
+	const float3 base_color = tex_basecolor.Sample(samp_default, input.uv).rgb;
+	
 	const float occlusion = 1.0;
 	const float roughness = 1.0;
 	const float metallic = 0.0;

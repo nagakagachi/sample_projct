@@ -175,6 +175,7 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClCompile Include="src\ngl\gfx\mesh_component.cpp" />
     <ClCompile Include="src\ngl\gfx\mesh_loader_assimp.cpp" />
     <ClCompile Include="src\ngl\gfx\render\mesh_renderer.cpp" />
+    <ClCompile Include="src\ngl\gfx\render\standard_render_model.cpp" />
     <ClCompile Include="src\ngl\gfx\resource\resource_mesh.cpp" />
     <ClCompile Include="src\ngl\gfx\raytrace_scene.cpp" />
     <ClCompile Include="src\ngl\gfx\resource\resource_texture.cpp" />
@@ -209,6 +210,8 @@ copy /Y "../third_party\assimp\bin\$(Configuration)\assimp-vc143-mt.dll" "$(Targ
     <ClInclude Include="src\ngl\gfx\common_struct.h" />
     <ClInclude Include="src\ngl\gfx\mesh_component.h" />
     <ClInclude Include="src\ngl\gfx\render\mesh_renderer.h" />
+    <ClInclude Include="src\ngl\gfx\render\global_render_resource.h" />
+    <ClInclude Include="src\ngl\gfx\render\standard_render_model.h" />
     <ClInclude Include="src\ngl\gfx\resource\resource_mesh.h" />
     <ClInclude Include="src\ngl\gfx\mesh_loader_assimp.h" />
     <ClInclude Include="src\ngl\gfx\resource\resource_shader.h" />

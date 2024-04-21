@@ -4,6 +4,8 @@
 
 #include<variant>
 
+#include "ngl/gfx/render/global_render_resource.h"
+
 
 namespace ngl::render
 {
@@ -395,8 +397,6 @@ namespace ngl::render
 			rtg::ResourceHandle h_linear_depth_{};
 			rtg::ResourceHandle h_prev_light_{};
 			rtg::ResourceHandle h_light_{};
-
-			rhi::RefSampDep ref_samp_linear_clamp_{};
 			
 			rhi::RefCbvDep ref_scene_cbv_{};
 			
@@ -406,7 +406,6 @@ namespace ngl::render
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
 				rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_gb2, rtg::ResourceHandle h_gb3, rtg::ResourceHandle h_velocity,
 				rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
-				rhi::RefSampDep ref_samp_linear_clamp,
 				rhi::RefCbvDep ref_scene_cbv)
 			{
 				// リソース定義.
@@ -434,8 +433,6 @@ namespace ngl::render
 				
 				{
 					// 外部リソース.
-					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
-
 					ref_scene_cbv_ = ref_scene_cbv;
 				}
 				
@@ -531,7 +528,7 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_gbuffer3", res_gb3.srv_.Get());
 				
 				pso_->SetView(&desc_set, "tex_prev_light", res_prev_light.srv_.Get());
-				pso_->SetView(&desc_set, "samp", ref_samp_linear_clamp_.Get());
+				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_sampler_linear_wrap_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
@@ -560,14 +557,10 @@ namespace ngl::render
 
 			rhi::RefSrvDep ref_res_texture_srv_ = {};// テクスチャリソーステスト.
 			
-			// 外部指定の出力先バッファ.
-			rhi::RefSampDep ref_samp_linear_clamp_{};
-
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
-			rhi::RefSampDep ref_samp_linear_clamp,
 			rhi::RefSrvDep ref_raytrace_result_srv,
 			rhi::RefSrvDep ref_res_texture_srv)
 			{
@@ -587,7 +580,6 @@ namespace ngl::render
 				}
 				
 				{
-					ref_samp_linear_clamp_ = ref_samp_linear_clamp;
 					ref_raytrace_result_srv_ = ref_raytrace_result_srv;
 
 					ref_res_texture_srv_ = ref_res_texture_srv;
@@ -667,7 +659,7 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
 				pso_->SetView(&desc_set, "tex_res_data", ref_res_texture_srv_.Get());// テクスチャリソースのテスト.
 				
-				pso_->SetView(&desc_set, "samp", ref_samp_linear_clamp_.Get());
+				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_sampler_linear_wrap_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);

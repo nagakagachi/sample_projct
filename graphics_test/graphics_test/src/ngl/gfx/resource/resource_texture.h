@@ -41,7 +41,7 @@ namespace ngl
 		};
 
 		
-		class ResTextureData : public res::Resource
+		class ResTexture : public res::Resource
 		{
 			NGL_RES_MEMBER_DECLARE(ResTextureData)
 
@@ -51,10 +51,10 @@ namespace ngl
 				int dummy;
 			};
 			
-			ResTextureData()
+			ResTexture()
 			{
 			}
-			~ResTextureData()
+			~ResTexture()
 			{
 				std::cout << "[ResTextureData] Destruct " << this << std::endl;
 			}

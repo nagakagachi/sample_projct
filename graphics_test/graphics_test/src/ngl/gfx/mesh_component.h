@@ -4,6 +4,7 @@
 
 #include "ngl/util/noncopyable.h"
 #include "ngl/math/math.h"
+#include "render/standard_render_model.h"
 
 #include "resource/resource_mesh.h"
 
@@ -29,18 +30,16 @@ namespace gfx
 		StaticMeshComponent();
 		~StaticMeshComponent();
 
-		bool Initialize(rhi::DeviceDep* p_device);
-
-		void SetMeshData(const res::ResourceHandle<ResMeshData>& res_mesh);
+		bool Initialize(rhi::DeviceDep* p_device, const res::ResourceHandle<ResMeshData>& res_mesh);
 		const ResMeshData* GetMeshData() const;
 
 		void UpdateRenderData();
 		rhi::RhiRef<rhi::ConstantBufferViewDep> GetInstanceBufferView() const;
 
 		math::Mat34	transform_ = math::Mat34::Identity();
+		StandardRenderModel	model_ = {};
+		
 	private:
-		res::ResourceHandle<ResMeshData> res_mesh_ = {};
-
 		std::array<rhi::RhiRef<rhi::BufferDep>, 2>	cb_instance_;
 		std::array<rhi::RhiRef<rhi::ConstantBufferViewDep>, 2>	cbv_instance_;
 

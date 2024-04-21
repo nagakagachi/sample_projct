@@ -13,8 +13,10 @@ namespace gfx
 	{
 	}
 
-	bool StaticMeshComponent::Initialize(rhi::DeviceDep* p_device)
+	bool StaticMeshComponent::Initialize(rhi::DeviceDep* p_device, const res::ResourceHandle<ResMeshData>& res_mesh)
 	{
+		model_.Initialize(p_device,res_mesh);
+		
 		for (int i = 0; i < cb_instance_.size(); ++i)
 		{
 			cb_instance_[i] = new rhi::BufferDep();
@@ -39,13 +41,9 @@ namespace gfx
 		return true;
 	}
 
-	void StaticMeshComponent::SetMeshData(const res::ResourceHandle<ResMeshData>& res_mesh)
-	{
-		res_mesh_ = res_mesh;
-	}
 	const ResMeshData* StaticMeshComponent::GetMeshData() const
 	{
-		return res_mesh_.Get();
+		return model_.res_mesh_.Get();
 	}
 
 	void StaticMeshComponent::UpdateRenderData()

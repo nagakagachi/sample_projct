@@ -3,6 +3,7 @@
 
 #include "ngl/math/math.h"
 #include "ngl/gfx/mesh_component.h"
+
 namespace ngl
 {
 namespace rhi

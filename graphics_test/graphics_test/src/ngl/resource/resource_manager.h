@@ -70,7 +70,7 @@ namespace res
 		// ResMeshData ロード処理実装部.
 		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResMeshData* p_res, gfx::ResMeshData::LoadDesc* p_desc);
 		// ResTextureData ロード処理実装部. DDS or WIC.
-		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTextureData* p_res, gfx::ResTextureData::LoadDesc* p_desc);
+		bool LoadResourceImpl(rhi::DeviceDep* p_device, gfx::ResTexture* p_res, gfx::ResTexture::LoadDesc* p_desc);
 
 		// ----------------------------------------------------------------------------------------------------------------------------
 		

@@ -180,8 +180,17 @@ namespace ngl
 		};
 
 
-
-
+		// Meshデータにマテリアル情報が含まれる場合の取り出し用.
+		class SurfaceMaterialInfo
+		{
+		public:
+			using TexturePath = text::HashText<256>;
+			TexturePath tex_basecolor = {};
+			TexturePath tex_normal = {};
+			TexturePath tex_occlusion = {};
+			TexturePath tex_roughness = {};
+			TexturePath tex_metalness = {};
+		};
 
 		// Mesh Resource 実装.
 		class ResMeshData : public res::Resource
@@ -208,6 +217,9 @@ namespace ngl
 			void OnResourceRenderUpdate(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_commandlist) override;
 
 			MeshData data_ = {};
+
+			std::vector<SurfaceMaterialInfo> material_data_array_;
+			std::vector<int> shape_material_index_array_;
 		};
 	}
 }
