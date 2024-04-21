@@ -135,6 +135,9 @@ namespace assimp
 			//	GLTF等の同一MeshをTransformで複数配置できる仕組みを使っているファイルはその分ベイクされてロードされるジオメトリが増加する.
 			//	MeshData は配置情報を含まない単純なジオメトリ情報という役割であるため, ここではすべて変換済みにする.
 			ai_mesh_read_options |= aiProcess_PreTransformVertices;
+
+			// Texture Coord の V の反転ロード. Sponza等のデータを使う場合にこちらが必要.
+			ai_mesh_read_options |= aiProcess_FlipUVs;
 		}
 		
 		Assimp::Importer asimporter;
