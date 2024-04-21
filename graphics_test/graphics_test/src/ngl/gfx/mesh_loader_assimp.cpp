@@ -143,7 +143,10 @@ namespace assimp
 			ai_mesh_read_options
 		);
 		if (!ai_scene)
+		{
+			std::cout << "[ERROR][LoadMeshData] load failed " << filename << std::endl;
 			return false;
+		}
 
 
 		struct ShapeDataOffsetInfo
