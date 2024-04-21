@@ -454,26 +454,13 @@ bool AppGame::Initialize()
 	
 	// テストコード
 	ngl_test::TestFunc00(&device_);
-
-
-	/*
-	{
-		// DirectXTex
-		DirectX::WIC_FLAGS flags = DirectX::WIC_FLAGS_NONE;
-		DirectX::TexMetadata meta = {};
-		DirectX::ScratchImage scratch = {};
-		if( SUCCEEDED(DirectX::LoadFromWICFile(L"./data/model/sponza_gltf/glTF/6772804448157695701.jpg", flags, &meta, scratch)))
-		{
-			const auto loaded_meta = scratch.GetMetadata();
-			auto* p_image = scratch.GetImage(0,0,0);
-			assert(nullptr != p_image);
-		}
-	}
-	*/
+	
 	// Texture Rexource読み込みのテスト.
 	ngl::gfx::ResTextureData::LoadDesc tex_load_desc = {};
-	//auto load_handle = ;
-	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTextureData>(&device_, "./data/model/sponza_gltf/glTF/6772804448157695701.jpg", &tex_load_desc);
+	
+	//const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
+	const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
+	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTextureData>(&device_, test_load_texture_file_name, &tex_load_desc);
 	
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");

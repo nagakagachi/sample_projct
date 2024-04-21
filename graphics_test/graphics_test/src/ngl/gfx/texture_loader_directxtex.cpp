@@ -27,7 +27,27 @@ namespace directxtex
         }
     }
     
-    bool LoadImageData(DirectX::ScratchImage& image_data, DirectX::TexMetadata& meta_data, rhi::DeviceDep* p_device, const char* filename)
+    bool LoadImageData_DDS(DirectX::ScratchImage& image_data, DirectX::TexMetadata& meta_data, rhi::DeviceDep* p_device, const char* filename)
+    {
+        constexpr int k_temporal_name_buffer_len = 256;
+        wchar_t temporal_name_buffer[k_temporal_name_buffer_len];
+
+        const auto filename_len = strlen(filename);
+        assert(filename_len < k_temporal_name_buffer_len);
+        mbs_to_wcs(temporal_name_buffer, k_temporal_name_buffer_len, filename);
+        
+        DirectX::DDS_FLAGS flags = DirectX::DDS_FLAGS_NONE;
+        image_data = {};
+        meta_data = {};
+        if( FAILED(DirectX::LoadFromDDSFile(temporal_name_buffer, flags, &meta_data, image_data)))
+        {
+            assert(false);
+            return false;
+        }
+        
+        return true;
+    }
+    bool LoadImageData_WIC(DirectX::ScratchImage& image_data, DirectX::TexMetadata& meta_data, rhi::DeviceDep* p_device, const char* filename)
     {
         constexpr int k_temporal_name_buffer_len = 256;
         wchar_t temporal_name_buffer[k_temporal_name_buffer_len];

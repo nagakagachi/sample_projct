@@ -42,11 +42,29 @@ namespace res
 	{
 		DirectX::ScratchImage image_data;// ピクセルデータ.
 		DirectX::TexMetadata meta_data;
-		
-		// 直接ロード. DDS直接読み込みは未実装. ここはWIC画像ファイルタイプ系のみ.
-		const bool result_load_image = directxtex::LoadImageData(image_data, meta_data, p_device, p_res->GetFileName());
-		if(!result_load_image)
-			return false;
+
+		bool is_dds = true;
+		{
+			const auto* file_name = p_res->GetFileName();
+			const auto file_name_lenght = strlen(file_name);
+			if(4 < file_name_lenght)
+			{
+				is_dds = (0==strncmp((file_name + file_name_lenght-4), ".dds", 4));
+			}
+		}
+
+		if(is_dds)
+		{
+			// DDS ロード.
+			if(!directxtex::LoadImageData_DDS(image_data, meta_data, p_device, p_res->GetFileName()))
+				return false;
+		}
+		else
+		{
+			// WIC ロード.
+			if(!directxtex::LoadImageData_WIC(image_data, meta_data, p_device, p_res->GetFileName()))
+				return false;
+		}
 		
 		const rhi::EResourceFormat image_format = rhi::ConvertResourceFormat(meta_data.format);
 
