@@ -118,7 +118,7 @@ namespace res
 			{
 				tex_desc.heap_type = rhi::EResourceHeapType::Default;// GPU読み取り用.
 				tex_desc.bind_flag = rhi::ResourceBindFlag::ShaderResource;// シェーダリソース用途.
-			
+
 				tex_desc.format = image_format;
 				tex_desc.width = static_cast<u32>(meta_data.width);
 				tex_desc.height = static_cast<u32>(meta_data.height);

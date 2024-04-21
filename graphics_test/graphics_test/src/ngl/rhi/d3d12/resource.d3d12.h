@@ -83,7 +83,6 @@ namespace ngl
 		};
 
 		// Texture
-		// TODO. Array対応, Cubemap対応.
 		class TextureDep : public RhiObjectBase
 		{
 		public:
@@ -100,8 +99,8 @@ namespace ngl
 				ETextureType			type = ETextureType::Texture2D;
 
 				u32					bind_flag = 0;// bitmask of ngl::rhi::ResourceBindFlag.
-				EResourceHeapType	heap_type = EResourceHeapType::Default;// Upload TextureはD3Dで未対応. Bufferを作ってそこからコピーする.
-				EResourceState		initial_state = EResourceState::General;
+				EResourceHeapType	heap_type = EResourceHeapType::Default;
+				EResourceState		initial_state = EResourceState::Common;//
 
 				// リソースのデフォルトクリア値を指定する. ハードウェア的に可能なら指定した値によるクリアが高速になる?.
 				// ただし指定した場合はクリア値のバリデーションチェックが有効になり異なる値でのクリアで警告がでるようになる.

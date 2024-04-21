@@ -14,21 +14,18 @@ namespace ngl
 		{
 			assert(ref_texture_.IsValid());
 			
-			// TODO. テストのため 0番のみコピー.
-			//const int subresource_index = 0;
-
-
 				
-				const rhi::TextureDep::Desc& dst_desc = ref_texture_->GetDesc();
-				assert((dst_desc.mip_count * dst_desc.array_size * dst_desc.depth) == static_cast<int>(upload_subresource_info_array.size()));// ロードしたMetadataから取得したSubresource数と一致しないのであればどこか間違っている.
-				
-				u64 dst_byte_size;
-				std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> dst_layout;
-				dst_layout.resize(upload_subresource_info_array.size());
-			
-				const D3D12_RESOURCE_DESC d3d_dst_desc = ref_texture_->GetD3D12Resource()->GetDesc();
-				p_device->GetD3D12Device()->GetCopyableFootprints(&d3d_dst_desc,0, static_cast<u32>(dst_layout.size()), 0,
-					dst_layout.data(), nullptr, nullptr, &dst_byte_size);
+			const rhi::TextureDep::Desc& dst_desc = ref_texture_->GetDesc();
+			assert((dst_desc.mip_count * dst_desc.array_size * dst_desc.depth) == static_cast<int>(upload_subresource_info_array.size()));// ロードしたMetadataから取得したSubresource数と一致しないのであればどこか間違っている.
+
+			// Copy用のLayout情報取得のためD3D12を直接利用している.
+			u64 dst_byte_size;
+			std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> dst_layout;
+			dst_layout.resize(upload_subresource_info_array.size());
+		
+			const D3D12_RESOURCE_DESC d3d_dst_desc = ref_texture_->GetD3D12Resource()->GetDesc();
+			p_device->GetD3D12Device()->GetCopyableFootprints(&d3d_dst_desc,0, static_cast<u32>(dst_layout.size()), 0,
+				dst_layout.data(), nullptr, nullptr, &dst_byte_size);
 
 
 			// 一時Buffer生成.
@@ -111,8 +108,9 @@ namespace ngl
 			
 			// State Transition.
 			{
-				// 今後は読み取りリソースとして扱われるため ShaderRead.
-				p_commandlist->ResourceBarrier(ref_texture_.Get(), rhi::EResourceState::CopyDst, rhi::EResourceState::ShaderRead);
+				//// 今後は読み取りリソースとして扱われるため ShaderRead.
+				// Initial State の Commonなどに戻すようにした
+				p_commandlist->ResourceBarrier(ref_texture_.Get(), rhi::EResourceState::CopyDst, ref_texture_->GetDesc().initial_state);
 				
 				// 一応 Common に戻す.
 				p_commandlist->ResourceBarrier(temporal_upload_buffer.Get(), rhi::EResourceState::CopySrc, temporal_upload_buffer->GetDesc().initial_state);

@@ -1626,8 +1626,8 @@ namespace ngl
 				{
 					assert(false);
 				}
-				// 初期ステート.
-				ray_result_state_ = rhi::EResourceState::General;
+				// 初期ステート保存.
+				ray_result_state_ = tex_desc.initial_state;
 			}
 
 
