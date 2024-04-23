@@ -135,7 +135,7 @@ namespace ngl
 			void DrawIndexedInstanced(u32 index_count_per_instance, u32 instance_count, u32 start_index_location, s32  base_vertex_location, u32 start_instance_location);
 
 
-			void ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4]);
+			void ClearRenderTarget(const RenderTargetViewDep* p_rtv, const float(color)[4]);
 			void ClearDepthTarget(const DepthStencilViewDep* p_dsv, float depth, uint8_t stencil, bool clearDepth, bool clearStencil);
 
 			// Barrier Swapchain, Texture, Buffer.

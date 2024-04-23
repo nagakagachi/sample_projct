@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <functional>
 
 #include <thread>
 #include <mutex>
@@ -91,7 +92,13 @@ namespace res
 		// RES_TYPE は ngl::res::Resource 継承クラス.
 		template<typename RES_TYPE>
 		ResourceHandle<RES_TYPE> LoadResource(rhi::DeviceDep* p_device, const char* filename, typename RES_TYPE::LoadDesc* p_desc);
-		
+
+	public:
+		// FrameのRenderThreadで実行されるLambdaを登録.
+		//	RenderThread先頭, Frameで最初にExecuteされるGraphicsCommandlistを引数に実行されるLambda.
+		//	GraphicsCommandListを使用したRender側初期化が必要なオブジェクト全般で便利に利用するため.
+		inline void AddFrameRenderUpdateLambda(const std::function<void(rhi::GraphicsCommandListDep*)>& f);
+
 	private:
 		void OnDestroyResource(Resource* p_res);
 
@@ -111,6 +118,7 @@ namespace res
 
 		// ResourceのRenderUpdateリスト(参照保持のためハンドル).
 		std::vector<detail::ResourceHolderHandle> frame_render_update_list_with_handle_;
+		std::vector<std::function<void(rhi::GraphicsCommandListDep*)>> frame_render_resource_lambda_;
 		// ResourceのRenderUpdateリストのMutex.
 		std::mutex	res_render_update_mutex_;
 
@@ -168,6 +176,12 @@ namespace res
 
 		// 新規ハンドルを生成して返す.
 		return handle;
+	}
+	
+	void ResourceManager::AddFrameRenderUpdateLambda(const std::function<void(rhi::GraphicsCommandListDep*)>& f)
+	{
+		auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
+		frame_render_resource_lambda_.push_back(f);
 	}
 }
 }

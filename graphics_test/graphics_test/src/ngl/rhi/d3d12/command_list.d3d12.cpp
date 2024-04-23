@@ -298,7 +298,7 @@ namespace ngl
 			const D3D12_CPU_DESCRIPTOR_HANDLE* p_dsv_handle = (p_dsv) ? &dsv_handle : nullptr;
 			GetD3D12GraphicsCommandList()->OMSetRenderTargets(num_rtv, rtvs, false, p_dsv_handle);
 		};
-		void GraphicsCommandListDep::ClearRenderTarget(const RenderTargetViewDep* p_rtv, float(color)[4])
+		void GraphicsCommandListDep::ClearRenderTarget(const RenderTargetViewDep* p_rtv, const float(color)[4])
 		{
 			auto rtv = p_rtv->GetD3D12DescriptorHandle();
 			p_command_list_->ClearRenderTargetView(rtv, color, 0u, nullptr);

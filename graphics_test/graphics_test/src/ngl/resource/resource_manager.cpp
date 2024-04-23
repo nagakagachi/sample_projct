@@ -96,6 +96,12 @@ namespace res
 		// Lock.
 		auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
 		{
+			for(auto& e : frame_render_resource_lambda_)
+			{
+				e(p_commandlist);
+			}
+			frame_render_resource_lambda_.clear();
+			
 			for (auto& e : frame_render_update_list_with_handle_)
 			{
 				if (e)
