@@ -34,6 +34,7 @@ namespace ngl
 				rhi::BufferDep::Desc upload_buffer_desc = {};
 				{
 					upload_buffer_desc.heap_type = rhi::EResourceHeapType::Upload;
+					upload_buffer_desc.initial_state = rhi::EResourceState::General;// D3DではUploadはGeneral(GenericRead)要求.
 					upload_buffer_desc.element_byte_size = rhi::align_to(static_cast<u32>(dst_byte_size), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
 					upload_buffer_desc.element_count = 1;
 				}
@@ -79,7 +80,7 @@ namespace ngl
 				// Copy Dst.
 				p_commandlist->ResourceBarrier(ref_texture_.Get(), ref_texture_->GetDesc().initial_state, rhi::EResourceState::CopyDst);
 				
-				p_commandlist->ResourceBarrier(temporal_upload_buffer.Get(), temporal_upload_buffer->GetDesc().initial_state, rhi::EResourceState::CopySrc);
+				// upload bufferはGeneralのままでOK.
 			}
 
 			// Copy Command.
@@ -111,9 +112,6 @@ namespace ngl
 				//// 今後は読み取りリソースとして扱われるため ShaderRead.
 				// Initial State の Commonなどに戻すようにした
 				p_commandlist->ResourceBarrier(ref_texture_.Get(), rhi::EResourceState::CopyDst, ref_texture_->GetDesc().initial_state);
-				
-				// 一応 Common に戻す.
-				p_commandlist->ResourceBarrier(temporal_upload_buffer.Get(), rhi::EResourceState::CopySrc, temporal_upload_buffer->GetDesc().initial_state);
 			}
 			
 			
