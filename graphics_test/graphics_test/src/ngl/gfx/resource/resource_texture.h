@@ -24,23 +24,6 @@ namespace ngl
 	
 	namespace gfx
 	{
-		// Bitmap image container.
-		//
-		struct ResTextureUploadSubresourceInfo
-		{
-			s32		array_index = {};
-			s32		mip_index = {};
-			s32		slice_index = {};
-			
-			s32		width = {};
-			s32		height = {};
-			rhi::EResourceFormat	format = {};
-			s32		rowPitch = {};
-			s32		slicePitch = {};
-			u8*		pixels = {};
-		};
-
-		
 		class ResTexture : public res::Resource
 		{
 			NGL_RES_MEMBER_DECLARE(ResTextureData)
@@ -69,7 +52,7 @@ namespace ngl
 			
 			// Upload data.
 			std::vector<u8> upload_pixel_memory_ = {};
-			std::vector<ResTextureUploadSubresourceInfo> upload_subresource_info_array;
+			std::vector<rhi::TextureUploadSubresourceInfo> upload_subresource_info_array;
 		};
 	}
 }

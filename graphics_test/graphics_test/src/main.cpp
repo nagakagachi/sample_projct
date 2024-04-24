@@ -445,8 +445,8 @@ bool AppGame::Initialize()
 	// Texture Rexource読み込みのテスト.
 	ngl::gfx::ResTexture::LoadDesc tex_load_desc = {};
 	
-	const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
-	//const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
+	//const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
+	const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
 	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTexture>(&device_, test_load_texture_file_name, &tex_load_desc);
 	
 	

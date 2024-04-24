@@ -14,6 +14,11 @@
 #include "ngl/util/types.h"
 #include "ngl/text/hash_text.h"
 
+namespace ngl::rhi
+{
+	class GraphicsCommandListDep;
+}
+
 namespace ngl
 {
 	namespace rhi
@@ -82,6 +87,33 @@ namespace ngl
 			CComPtr<ID3D12Resource> resource_;
 		};
 
+
+		// Upload用のピクセルデータ.
+		struct TextureUploadSubresourceInfo
+		{
+			s32		array_index = {};
+			s32		mip_index = {};
+			s32		slice_index = {};
+			
+			s32		width = {};
+			s32		height = {};
+			rhi::EResourceFormat	format = {};
+			s32		rowPitch = {};
+			s32		slicePitch = {};
+			u8*		pixels = {};
+		};
+		// TextureSubresourceのレイアウト情報.
+		struct TextureSubresourceLayoutInfo
+		{
+			u64 byte_offset = 0;// このSubresourceが配置される先頭からのオフセット
+			
+			rhi::EResourceFormat format = EResourceFormat::Format_UNKNOWN;
+			u32 width = 0;
+			u32 height = 0;
+			u32 depth = 0;
+			u32 row_pitch = 0;
+		};
+		
 		// Texture
 		class TextureDep : public RhiObjectBase
 		{
@@ -130,6 +162,14 @@ namespace ngl
 
 			const Desc& GetDesc() const { return desc_; }
 
+			int NumSubresource() const;
+			// out_layout_array : TextureSubresourceLayoutInfo[NumSubresource]
+			void GetSubresourceLayoutInfo(TextureSubresourceLayoutInfo* out_layout_array, u64& out_total_byte_size) const;
+
+			// UploadBufferであるp_src_buffer上のsrc_layoutに従うSubresourceデータをTextureのsubresource_indexに対応するSubresourceへコピーする.
+			void CopyTextureRegion(GraphicsCommandListDep* p_command_list, int subresource_index, const BufferDep* p_src_buffer, const TextureSubresourceLayoutInfo& src_layout);
+			
+		public:
 			ID3D12Resource* GetD3D12Resource() const;
 		public:
 			u32 GetBufferSize() const { return allocated_byte_size_; }
@@ -153,15 +193,6 @@ namespace ngl
 			/** Get the array size
 			*/
 			uint32_t GetArraySize() const { return desc_.array_size; }
-			/** Get the array index of a subresource
-			*/
-			uint32_t GetSubresourceArraySlice(uint32_t subresource) const { return subresource / desc_.mip_count; }
-			/** Get the mip-level of a subresource
-			*/
-			uint32_t GetSubresourceMipLevel(uint32_t subresource) const { return subresource % desc_.mip_count; }
-			/** Get the subresource index
-			*/
-			uint32_t GetSubresourceIndex(uint32_t arraySlice, uint32_t mipLevel) const { return mipLevel + arraySlice * desc_.mip_count; }
 			/** Get the resource format
 			*/
 			EResourceFormat GetFormat() const { return desc_.format; }

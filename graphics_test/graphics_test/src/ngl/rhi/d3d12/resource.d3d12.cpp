@@ -2,6 +2,7 @@
 #include "resource.d3d12.h"
 
 #include "device.d3d12.h"
+#include "command_list.d3d12.h"
 
 #include <array>
 #include <algorithm>
@@ -425,6 +426,65 @@ namespace ngl
 			resource_->Unmap(0, nullptr);
 			map_ptr_ = nullptr;
 		}
+
+		int TextureDep::NumSubresource() const
+		{
+			return desc_.mip_count * desc_.array_size * desc_.depth;
+		}
+		void TextureDep::GetSubresourceLayoutInfo(TextureSubresourceLayoutInfo* out_layout_array, u64& out_total_byte_size) const
+		{
+			// ほとんど使用されないため, メンバとして持たずに都度取得する.
+			u64 all_subresource_byte_size;
+			std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> subresource_layout;
+			subresource_layout.resize(NumSubresource());
+		
+			const D3D12_RESOURCE_DESC d3d_dst_desc = GetD3D12Resource()->GetDesc();
+			p_parent_device_->GetD3D12Device()->GetCopyableFootprints(&d3d_dst_desc,0, static_cast<u32>(subresource_layout.size()), 0,
+				subresource_layout.data(), nullptr, nullptr, &all_subresource_byte_size);
+
+			out_total_byte_size = all_subresource_byte_size;
+			for(u32 i = 0; i < subresource_layout.size(); ++i)
+			{
+				out_layout_array[i].format = desc_.format;
+				
+				out_layout_array[i].byte_offset = subresource_layout[i].Offset;
+				out_layout_array[i].width = subresource_layout[i].Footprint.Width;
+				out_layout_array[i].height = subresource_layout[i].Footprint.Height;
+				out_layout_array[i].depth = subresource_layout[i].Footprint.Depth;
+				out_layout_array[i].row_pitch = subresource_layout[i].Footprint.RowPitch;
+			}
+		}
+		void TextureDep::CopyTextureRegion(GraphicsCommandListDep* p_command_list, int subresource_index, const BufferDep* p_src_buffer, const TextureSubresourceLayoutInfo& src_layout)
+		{
+			// Copy Command.
+			D3D12_TEXTURE_COPY_LOCATION copy_location_src = {};
+			{
+				copy_location_src.pResource = p_src_buffer->GetD3D12Resource();
+				// Bufferの場合はFootprintで指定.
+				copy_location_src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+				// p_src_bufferに RowPitch を考慮してコピーしておくことで, レイアウト情報をそのまま利用してコピー.
+				{
+					copy_location_src.PlacedFootprint.Offset = src_layout.byte_offset;
+					
+					copy_location_src.PlacedFootprint.Footprint.Format = ConvertResourceFormat(src_layout.format);
+					copy_location_src.PlacedFootprint.Footprint.Width = src_layout.width;
+					copy_location_src.PlacedFootprint.Footprint.Height = src_layout.height;
+					copy_location_src.PlacedFootprint.Footprint.Depth = src_layout.depth;
+					copy_location_src.PlacedFootprint.Footprint.RowPitch = src_layout.row_pitch;
+				}
+			}
+			D3D12_TEXTURE_COPY_LOCATION copy_location_dst = {};
+			{
+				copy_location_dst.pResource = GetD3D12Resource();
+				// Textureの場合はSubresourceIndexで指定.
+				copy_location_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+				copy_location_dst.SubresourceIndex = subresource_index;
+			}
+			
+			auto* p_d3d_commandlist = p_command_list->GetD3D12GraphicsCommandList();
+			p_d3d_commandlist->CopyTextureRegion(&copy_location_dst, 0, 0, 0, &copy_location_src, {});
+		}
+		
 		ID3D12Resource* TextureDep::GetD3D12Resource() const
 		{
 			return resource_;

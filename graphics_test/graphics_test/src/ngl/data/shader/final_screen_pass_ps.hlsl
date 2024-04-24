@@ -38,7 +38,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		const float2 rt_debug_area_br = rt_debug_area_lt + rt_debug_area_size;
 		if (all(rt_debug_area_lt <= input.uv) && all(rt_debug_area_br >= input.uv))
 		{
-			float4 rt_color = tex_res_data.SampleLevel(samp, (input.uv-rt_debug_area_lt) / rt_debug_area_size, 0);
+			float4 rt_color = tex_res_data.SampleLevel(samp, (input.uv-rt_debug_area_lt) / rt_debug_area_size, 4);
 
 			color = rt_color;
 		}
