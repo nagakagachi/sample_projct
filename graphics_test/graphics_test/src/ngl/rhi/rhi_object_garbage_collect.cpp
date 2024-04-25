@@ -22,7 +22,7 @@ namespace rhi
 	{
 		return p_parent_device_;
 	}
-	const DeviceDep* RhiObjectBase::GetParentDevice() const
+	DeviceDep* RhiObjectBase::GetParentDevice() const
 	{
 		return p_parent_device_;
 	}

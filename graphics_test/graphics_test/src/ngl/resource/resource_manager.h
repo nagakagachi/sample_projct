@@ -99,6 +99,12 @@ namespace res
 		//	GraphicsCommandListを使用したRender側初期化が必要なオブジェクト全般で便利に利用するため.
 		inline void AddFrameRenderUpdateLambda(const std::function<void(rhi::GraphicsCommandListDep*)>& f);
 
+		
+		// TextureUpload用の一時Buffer上メモリを確保.
+		void AllocTextureUploadIntermediateBufferMemory(rhi::RefBufferDep& ref_buffer, u8*& p_buffer_memory, u64 require_byte_size, rhi::DeviceDep* p_device);
+		// TextureUpload用の一時Buffer上に適切に配置されたイメージデータをテクスチャにコピーする.
+		void CopyImageDataToUploadIntermediateBuffer(u8* p_buffer_memory, const rhi::TextureSubresourceLayoutInfo* p_subresource_layout_array, const rhi::TextureUploadSubresourceInfo* p_subresource_data_array, u32 num_subresource_data) const;
+		
 	private:
 		void OnDestroyResource(Resource* p_res);
 
@@ -122,6 +128,8 @@ namespace res
 		// ResourceのRenderUpdateリストのMutex.
 		std::mutex	res_render_update_mutex_;
 
+		// TextureUploadIntermediateBufferのMutex.
+		std::mutex	res_upload_buffer_mutex_;
 	private:
 		class ResourceDeleter : public res::IResourceDeleter
 		{
@@ -183,5 +191,7 @@ namespace res
 		auto lock = std::lock_guard<std::mutex>(res_render_update_mutex_);
 		frame_render_resource_lambda_.push_back(f);
 	}
+	
+	
 }
 }

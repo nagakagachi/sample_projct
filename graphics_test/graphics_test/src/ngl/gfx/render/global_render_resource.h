@@ -31,17 +31,18 @@ namespace ngl::gfx
                 }
             }
             
-            
+            // ランタイム生成デフォルトテクスチャ.
+            //  RTVのAlignmentがもったいない気がしたので, 通常Textureとして生成してimagedataのupload&copyで塗りつぶしするようにしてみた.
             {
                 ngl::rhi::TextureDep::Desc desc = {};
-                desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::RenderTarget;// 任意カラーでクリアするためRenderTargetとしている.
-                desc.format = ngl::rhi::EResourceFormat::Format_R8G8B8A8_UNORM;
+                desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource;
+                desc.format = ngl::rhi::EResourceFormat::Format_R8G8B8A8_UNORM;// 8bitカラー.
                 desc.type = ngl::rhi::ETextureType::Texture2D;
                 desc.width = 64;
                 desc.height = 64;
-                //desc.initial_state = ngl::rhi::EResourceState::ShaderRead;
-                desc.rendertarget.clear_value = {1.0f, 1.0f, 1.0f, 1.0f};
+                desc.mip_count = 1;
 
+                assert(desc.format == rhi::EResourceFormat::Format_R8G8B8A8_UNORM);// Uploadを利用して直接ImageDataをコピーするため単純な8bit colorとする.
                 default_tex_dummy_ = new ngl::rhi::TextureDep();
                 if (!default_tex_dummy_->Initialize(p_device_, desc))
                 {
@@ -56,24 +57,42 @@ namespace ngl::gfx
                     assert(false);
                     return false;
                 }
-                default_tex_dummy_rtv_ = new rhi::RenderTargetViewDep();
-                if(!default_tex_dummy_rtv_->Initialize(p_device_, default_tex_dummy_.Get(), 0, 0, 1))
-                {
-                    std::cout << "[ERROR] Create RTV" << std::endl;
-                    assert(false);
-                    return false;
-                }
 
+                constexpr math::Vec3 clear_color = {1.0f, 0.1f, 0.1f};// 任意カラー指定.
                 // クリアするCommandを発行するLambda登録.
                 auto p_tex = default_tex_dummy_.Get();
-                auto p_rtv = default_tex_dummy_rtv_.Get();
                 res::ResourceManager::Instance().AddFrameRenderUpdateLambda(
-                    [p_tex, p_rtv](rhi::GraphicsCommandListDep* p_command_list)
+                    [p_tex, clear_color](rhi::GraphicsCommandListDep* p_command_list)
                     {
-                        constexpr float clear_color[4] = {1.0, 1.0, 1.0, 1.0};
-                        p_command_list->ResourceBarrier(p_tex, p_tex->GetDesc().initial_state, rhi::EResourceState::RenderTarget);// ClearRenderTargetのため.
-                        p_command_list->ClearRenderTarget(p_rtv, clear_color);
-                        p_command_list->ResourceBarrier(p_tex, rhi::EResourceState::RenderTarget, rhi::EResourceState::ShaderRead);// これ以降はSrv利用のみ.
+                        u64 dst_byte_size;
+                        std::vector<rhi::TextureSubresourceLayoutInfo> dst_layout;
+                        dst_layout.resize(p_tex->NumSubresource());
+                        // Subresouceのレイアウト情報を取得.
+                        p_tex->GetSubresourceLayoutInfo(dst_layout.data(), dst_byte_size);
+			
+                        rhi::RefBufferDep temporal_upload_buffer = {};
+                        u8* p_upload_buffer_memory = {};
+                        // TextureUpload用の一時バッファ上メモリを確保.
+                        res::ResourceManager::Instance().AllocTextureUploadIntermediateBufferMemory(temporal_upload_buffer, p_upload_buffer_memory, dst_byte_size, p_tex->GetParentDevice());
+                        if(!p_upload_buffer_memory)
+                        {
+                            // 一時Buffer上のメモリ確保に失敗.
+                            std::cout << "[ERROR] Failed to AllocTextureUploadIntermediateBufferMemory." << std::endl;
+                            assert(p_upload_buffer_memory);
+                            return;
+                        }
+                        // Uploadするイメージデータ. 指定カラーで埋める(ここでは 8bit color前提).
+                        for(u32 bi = 0; bi < dst_byte_size; bi += 4)
+                        {
+                            p_upload_buffer_memory[bi+0] = static_cast<u8>(255 * clear_color.x);
+                            p_upload_buffer_memory[bi+1] = static_cast<u8>(255 * clear_color.y);
+                            p_upload_buffer_memory[bi+2] = static_cast<u8>(255 * clear_color.z);
+                            p_upload_buffer_memory[bi+3] = 0xff;
+                        }
+
+                        p_command_list->ResourceBarrier(p_tex, p_tex->GetDesc().initial_state, rhi::EResourceState::CopyDst);
+                        p_tex->CopyTextureRegion(p_command_list, 0, temporal_upload_buffer.Get(), dst_layout[0]);
+                        p_command_list->ResourceBarrier(p_tex, rhi::EResourceState::CopyDst, rhi::EResourceState::ShaderRead);// これ以降はSrv利用のみ.
                     }
                 );
             }
@@ -87,7 +106,6 @@ namespace ngl::gfx
 
             default_tex_dummy_ = {};
             default_tex_dummy_srv_ = {};
-            default_tex_dummy_rtv_ = {};
         }
 
         rhi::DeviceDep* p_device_ = {};
@@ -96,7 +114,6 @@ namespace ngl::gfx
 
         rhi::RefTextureDep      default_tex_dummy_ = {};
         rhi::RefSrvDep          default_tex_dummy_srv_ = {};
-        rhi::RefRtvDep          default_tex_dummy_rtv_ = {};// ClearRenderTargetでクリアするため. UAVにしてCSでクリアしたほうがエコかも.
     };
 
 }

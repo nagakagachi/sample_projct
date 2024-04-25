@@ -196,5 +196,60 @@ namespace res
 		}
 		return res_map;
 	}
+
+
+	// TextureUploadBufferテスト.
+	void ResourceManager::AllocTextureUploadIntermediateBufferMemory(rhi::RefBufferDep& ref_buffer, u8*& p_buffer_memory, u64 require_byte_size, rhi::DeviceDep* p_device)
+	{
+		// UploadBufferの確保関連のMutex.
+		auto lock = std::lock_guard<std::mutex>(res_upload_buffer_mutex_);
+		
+		// Upload一時Buffer生成. 現状は要求1つにつき新規にBufferを生成しているが, プール化と1つのバッファ上にAlignを考慮して配置することで効率化できる.
+		rhi::RefBufferDep temporal_upload_buffer = new rhi::BufferDep();
+		{
+			rhi::BufferDep::Desc upload_buffer_desc = {};
+			{
+				upload_buffer_desc.heap_type = rhi::EResourceHeapType::Upload;
+				upload_buffer_desc.initial_state = rhi::EResourceState::General;// D3DではUploadはGeneral(GenericRead)要求.
+				upload_buffer_desc.element_byte_size = rhi::align_to(static_cast<u32>(require_byte_size), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+				upload_buffer_desc.element_count = 1;
+			}
+			if(!temporal_upload_buffer->Initialize(p_device, upload_buffer_desc))
+				assert(false);
+		}
+
+		ref_buffer = temporal_upload_buffer;
+		// 現状は専用に確保したBufferを先頭から使う. Mapしたまま.
+		p_buffer_memory = ref_buffer->MapAs<u8>();
+	}
+	void ResourceManager::CopyImageDataToUploadIntermediateBuffer(u8* p_buffer_memory,
+		const rhi::TextureSubresourceLayoutInfo* p_subresource_layout_array, const rhi::TextureUploadSubresourceInfo* p_subresource_data_array, u32 num_subresource_data) const
+	{
+		// Subresource毎.
+		for(u32 subresource_index = 0; subresource_index < num_subresource_data; ++subresource_index)
+		{
+			// RowPitchのAlignを考慮してコピー.
+			if(p_subresource_layout_array[subresource_index].row_pitch != static_cast<u32>(p_subresource_data_array[subresource_index].rowPitch))
+			{
+				// 読み取りと書き込みのRowPitchがAlighによってずれている場合はRow毎にコピーする.
+				const auto* src_pixel_data = p_subresource_data_array[subresource_index].pixels;
+				const auto src_row_pitch = p_subresource_data_array[subresource_index].rowPitch;
+				const auto src_slice_pitch = p_subresource_data_array[subresource_index].slicePitch;
+				const auto num_row = src_slice_pitch / src_row_pitch;
+				for(int row_i = 0; row_i<num_row; ++row_i)
+				{
+					memcpy(p_buffer_memory + p_subresource_layout_array[subresource_index].byte_offset + (row_i * p_subresource_layout_array[subresource_index].row_pitch),
+						src_pixel_data + (row_i * src_row_pitch),
+						src_row_pitch);
+				}
+			}
+			else
+			{
+				// RowPitchが一致している場合はSlice全体コピー.
+				memcpy(p_buffer_memory + p_subresource_layout_array[subresource_index].byte_offset, p_subresource_data_array[subresource_index].pixels, p_subresource_data_array[subresource_index].slicePitch);
+			}
+		}
+	}
+	
 }
 }

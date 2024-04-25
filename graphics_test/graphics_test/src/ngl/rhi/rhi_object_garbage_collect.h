@@ -28,7 +28,7 @@ namespace rhi
 		const IDevice* GetParentDeviceInreface() const override;
 
 		DeviceDep* GetParentDevice();
-		const DeviceDep* GetParentDevice() const;
+		DeviceDep* GetParentDevice() const;
 
 	protected:
 		void InitializeRhiObject(DeviceDep* p_device);
