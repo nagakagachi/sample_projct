@@ -47,7 +47,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	float gb_occlusion = gb0.w;
 	float3 gb_normal_ws = gb1.xyz * 2.0 - 1.0;// gbufferからWorldNormalデコード.
 	float gb_rounghness = gb2.x;
-	float gb_metallic = gb2.y;
+	float gb_metalness = gb2.y;
 	float gb_surface_option = gb2.z;
 	float gb_material_id = gb2.w;
 	float3 gb_emissive = gb3.xyz;
@@ -61,26 +61,81 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		to_pixel_ray_ws = mul(cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs, 0.0));
 	}
 
-	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * 2.0;
+	const float k_pi = 3.141592;
+	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * k_pi;
 	const float3 lit_dir = normalize(float3(-0.5, -1.0, -0.4));
 
 	
-	float3 diffuse_term = (1.0/3.141592);
+	float3 diffuse_term = (1.0/k_pi);
+#if 0
 	float3 rim_rerm = pow(1.0 - saturate(dot(-to_pixel_ray_ws, gb_normal_ws)), 6);
+#else
+	float3 rim_rerm = (float3)0;
+#endif
 	
 	float cos_term = saturate(dot(gb_normal_ws, -lit_dir));
 	float3 lit_color = gb_albedo * (diffuse_term + rim_rerm) * cos_term * lit_intensity;
-
 	// ambient term.
+	if(1)
 	{
-		lit_color += gb_albedo * diffuse_term * saturate(-dot(gb_normal_ws, -lit_dir)) * lit_intensity * 0.33;
+		const float k_ambient_rate = 0.05;
+		lit_color += gb_albedo * diffuse_term * saturate(dot(gb_normal_ws, lit_dir) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
 	}
 	
 	// 前回フレームのバッファ.
-	float3 prev_light = tex_prev_light.Load(int3(input.pos.xy, 0)).xyz;
-	// 過去フレームと合成テスト. 右半分.
-	if(input.uv.x > 0.7 && input.uv.y > 0.7)
-		lit_color = lerp(lit_color, prev_light, 0.95);
+	{
+		float3 prev_light = tex_prev_light.Load(int3(input.pos.xy, 0)).xyz;
+		
+		const float2 dist_from_center = (input.uv - 0.5);
+		const float length_from_center = length(dist_from_center);
+		// 画面端でテスト用のフィードバックブラー.
+		float prev_blend_rate = (0.49 < length_from_center)? 1.0 : 0.0;
+		lit_color = lerp(lit_color, prev_light, prev_blend_rate * 0.9);
+	}
 
+	// GBufferデバッグ.
+	{
+		{
+			const float2 k_lt = float2(0.5, 0.0);
+			const float2 k_size = float2(0.5, 0.5);
+
+			const float2 area_rate = (input.uv - k_lt)/(k_size);
+			if(all(0.0 < area_rate) && all(1.0 > area_rate))
+				lit_color = gb_albedo;
+		}
+		{
+			const float2 k_lt = float2(0.5, 0.5);
+			const float2 k_size = float2(0.5, 0.5);
+
+			const float2 area_rate = (input.uv - k_lt)/(k_size);
+			if(all(0.0 < area_rate) && all(1.0 > area_rate))
+				lit_color = gb_normal_ws * 0.5 + 0.5;// 可視化は [0,1] 範囲
+		}
+		{
+			const float2 k_lt = float2(0.0, 0.0);
+			const float2 k_size = float2(0.2, 0.5);
+
+			const float2 area_rate = (input.uv - k_lt)/(k_size);
+			if(all(0.0 < area_rate) && all(1.0 > area_rate))
+				lit_color = gb_rounghness;
+		}
+		{
+			const float2 k_lt = float2(0.0, 0.5);
+			const float2 k_size = float2(0.2, 0.25);
+
+			const float2 area_rate = (input.uv - k_lt)/(k_size);
+			if(all(0.0 < area_rate) && all(1.0 > area_rate))
+				lit_color = gb_metalness;
+		}
+		{
+			const float2 k_lt = float2(0.0, 0.75);
+			const float2 k_size = float2(0.2, 0.25);
+
+			const float2 area_rate = (input.uv - k_lt)/(k_size);
+			if(all(0.0 < area_rate) && all(1.0 > area_rate))
+				lit_color = gb_occlusion;
+		}
+	}
+	
 	return float4(lit_color, 1.0);
 }

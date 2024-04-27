@@ -476,8 +476,8 @@ namespace assimp
 				mesh.tangent_.rhi_vbv_.Initialize(&mesh.tangent_.rhi_buffer_, vbv_desc);
 
 				// Slotマッピング.
-				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TANNGENT)] = &mesh.tangent_;
-				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TANNGENT);
+				mesh.p_vtx_attr_mapping_[gfx::MeshVertexSemantic::SemanticSlot(gfx::EMeshVertexSemanticKind::TANGENT)] = &mesh.tangent_;
+				mesh.vtx_attr_mask_.AddSlot(gfx::EMeshVertexSemanticKind::TANGENT);
 			}
 			if (mesh.binormal_.raw_ptr_)
 			{

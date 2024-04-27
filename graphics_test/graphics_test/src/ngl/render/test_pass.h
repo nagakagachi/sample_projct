@@ -222,7 +222,7 @@ namespace ngl::render
 						desc.depth_stencil_format = depth_desc.desc.format;
 					}
 					// 入力レイアウト
-					std::array<ngl::rhi::InputElement, 3> input_elem_data;
+					std::array<ngl::rhi::InputElement, 5> input_elem_data;
 					desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
 					desc.input_layout.p_input_elements = input_elem_data.data();
 					{
@@ -237,12 +237,24 @@ namespace ngl::render
 						input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
 						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
 						input_elem_data[1].element_offset = 0;
-
-						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+						
+						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
 						input_elem_data[2].semantic_index = 0;
-						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
-						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
 						input_elem_data[2].element_offset = 0;
+						
+						input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
+						input_elem_data[3].semantic_index = 0;
+						input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
+						input_elem_data[3].element_offset = 0;
+
+						input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+						input_elem_data[4].semantic_index = 0;
+						input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
+						input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+						input_elem_data[4].element_offset = 0;
 					}
 					pso_ = new rhi::GraphicsPipelineStateDep();
 					if (!pso_->Initialize(p_device, desc))
@@ -528,7 +540,7 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_gbuffer3", res_gb3.srv_.Get());
 				
 				pso_->SetView(&desc_set, "tex_prev_light", res_prev_light.srv_.Get());
-				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_sampler_linear_wrap_.Get());
+				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
@@ -659,7 +671,7 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
 				pso_->SetView(&desc_set, "tex_res_data", ref_res_texture_srv_.Get());// テクスチャリソースのテスト.
 				
-				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_sampler_linear_wrap_.Get());
+				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);

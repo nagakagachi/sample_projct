@@ -68,7 +68,7 @@ namespace gfx
 		{
 			POSITION,
 			NORMAL,
-			TANNGENT,
+			TANGENT,
 			BINORMAL,
 			COLOR,
 			TEXCOORD,
@@ -79,7 +79,7 @@ namespace gfx
 		{
 			"POSITION",
 			"NORMAL",
-			"TANNGENT",
+			"TANGENT",
 			"BINORMAL",
 			"COLOR",
 			"TEXCOORD",

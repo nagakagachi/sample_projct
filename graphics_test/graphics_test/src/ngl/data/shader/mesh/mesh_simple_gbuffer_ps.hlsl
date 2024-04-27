@@ -14,6 +14,8 @@ struct VS_OUTPUT
 	float3 pos_vs	:	POSITION_VS;
 	
 	float3 normal_ws	:	NORMAL_WS;
+	float3 tangent_ws	:	TANGENT_WS;
+	float3 binormal_ws	:	BINORMAL_WS;
 };
 
 struct GBufferOutput
@@ -25,28 +27,38 @@ struct GBufferOutput
 	float2 velocity : SV_TARGET4;
 };
 
-Texture2D tex_basecolor;
+
+// sampler.
 SamplerState samp_default;
+
+Texture2D tex_basecolor;
+Texture2D tex_normal;
+Texture2D tex_occlusion;
+Texture2D tex_roughness;
+Texture2D tex_metalness;
 
 GBufferOutput main_ps(VS_OUTPUT input)
 {
 	GBufferOutput output = (GBufferOutput)0;
 
-
-	//const float3 base_color = float3(input.uv * 2.0, abs(normalize(input.normal_ws).y));// 適当なベースカラー.
-	const float3 base_color = tex_basecolor.Sample(samp_default, input.uv).rgb;
+	const float3 mtl_base_color = tex_basecolor.Sample(samp_default, input.uv).rgb;
+	const float3 mtl_normal = tex_normal.Sample(samp_default, input.uv).rgb * 2.0 - 1.0;
 	
-	const float occlusion = 1.0;
-	const float roughness = 1.0;
-	const float metallic = 0.0;
+	const float mtl_occlusion = tex_occlusion.Sample(samp_default, input.uv).r;	// glTFでは別テクスチャでもチャンネルはORMそれぞれRGBになっている?.
+	const float mtl_roughness = tex_roughness.Sample(samp_default, input.uv).g;	// .
+	const float mtl_metalness = tex_metalness.Sample(samp_default, input.uv).b;	// .
+	
+	const float occlusion = mtl_occlusion;
+	const float roughness = mtl_roughness;
+	const float metallic = mtl_metalness;
 	const float surface_optional = 0.0;
 	const float material_id = 0.0;
-	const float3 normal_ws = normalize(input.normal_ws);
+	const float3 normal_ws = normalize(input.tangent_ws * mtl_normal.x + input.binormal_ws * mtl_normal.y + input.normal_ws * mtl_normal.z);
 	const float3 emissive = float3(0.0, 0.0, 0.0);
 
 	// GBuffer Encode.
 	{
-		output.gbuffer0.xyz = base_color;
+		output.gbuffer0.xyz = mtl_base_color;
 		output.gbuffer0.w = occlusion;
 
 		// [-1,+1]のNormal を unorm[0,1]で格納.

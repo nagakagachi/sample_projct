@@ -170,11 +170,11 @@ AppGame::~AppGame()
 
 bool AppGame::Initialize()
 {
-	constexpr auto scree_h = 900;
-	constexpr auto scree_w = scree_h * 16/9;//1280;
+	constexpr auto scree_h = 1080;
+	constexpr auto scree_w = scree_h * 16/9;;
 
 	// ウィンドウ作成
-	if (!window_.Initialize(_T("Test Window"), scree_w, scree_h))
+	if (!window_.Initialize(_T("ToyRenderer"), scree_w, scree_h))
 	{
 		return false;
 	}
@@ -717,7 +717,7 @@ bool AppGame::Execute()
 			{
 				// RTG Build.
 				// 現在の設計ではBuilderは使い捨てとなる.
-				ngl::rtg::RenderTaskGraphBuilder rtg_builder{};
+				ngl::rtg::RenderTaskGraphBuilder rtg_builder(screen_w, screen_h);
 				
 				// Append External Resource Info.
 				ngl::rtg::ResourceHandle h_swapchain = {};

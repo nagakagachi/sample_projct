@@ -433,6 +433,13 @@ namespace ngl
 		{
 			friend class RenderTaskGraphManager;
 		public:
+			RenderTaskGraphBuilder() = default;
+			RenderTaskGraphBuilder(int base_resolution_width, int base_resolution_height)
+			{
+				res_base_height_ = base_resolution_height;
+				res_base_width_ = base_resolution_width;
+			}
+			
 			~RenderTaskGraphBuilder();
 
 			// ITaskBase派生クラスをシーケンスの末尾に新規生成する.

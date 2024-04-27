@@ -29,9 +29,29 @@ namespace ngl
 			NGL_RES_MEMBER_DECLARE(ResTextureData)
 
 		public:
+			enum ECreateMode
+			{
+				FROM_FILE,			// resourceファイルのロードで生成.
+				FROM_DESC			// descに指定した設定とメモリから生成.
+			};
+			struct FromDescData
+			{
+				rhi::ETextureType		type = rhi::ETextureType::Texture2D;
+				rhi::EResourceFormat	format = rhi::EResourceFormat::Format_UNKNOWN;
+				ngl::u32				width = 1;
+				ngl::u32				height = 1;
+				ngl::u32				depth = 1;
+				ngl::u32				mip_count = 1;
+				ngl::u32				array_size = 1;
+				
+				std::vector<u8>									upload_pixel_memory_ = {};
+				std::vector<rhi::TextureUploadSubresourceInfo>	upload_subresource_info_array = {};
+			};
 			struct LoadDesc
 			{
-				int dummy;
+				ECreateMode		mode = ECreateMode::FROM_FILE;// default.
+
+				FromDescData	from_desc = {}; // for FROM_DESC.
 			};
 			
 			ResTexture()
