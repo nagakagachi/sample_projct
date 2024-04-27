@@ -96,16 +96,16 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	// GBufferデバッグ.
 	{
 		{
-			const float2 k_lt = float2(0.5, 0.0);
-			const float2 k_size = float2(0.5, 0.5);
+			const float2 k_lt = float2(0.8, 0.0);
+			const float2 k_size = float2(0.2, 0.5);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
 				lit_color = gb_albedo;
 		}
 		{
-			const float2 k_lt = float2(0.5, 0.5);
-			const float2 k_size = float2(0.5, 0.5);
+			const float2 k_lt = float2(0.8, 0.5);
+			const float2 k_size = float2(0.2, 0.5);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))

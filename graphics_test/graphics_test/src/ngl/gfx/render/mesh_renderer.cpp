@@ -71,7 +71,7 @@ namespace gfx
 						auto tex_occlusion = (mat_data.tex_occlusion.IsValid())? mat_data.tex_occlusion->ref_view_ : default_white_tex_srv;
 						pso.SetView(&desc_set, "tex_occlusion", tex_occlusion.Get());
 						
-						auto tex_roughness = (mat_data.tex_roughness.IsValid())? mat_data.tex_roughness->ref_view_ : default_black_tex_srv;
+						auto tex_roughness = (mat_data.tex_roughness.IsValid())? mat_data.tex_roughness->ref_view_ : default_white_tex_srv;
 						pso.SetView(&desc_set, "tex_roughness", tex_roughness.Get());
 						
 						auto tex_metalness = (mat_data.tex_metalness.IsValid())? mat_data.tex_metalness->ref_view_ : default_black_tex_srv;
