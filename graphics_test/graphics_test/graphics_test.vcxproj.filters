@@ -102,6 +102,21 @@
     <ClCompile Include="src\ngl\render\graph_builder.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="src\ngl\gfx\render\global_render_resource.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ngl\gfx\render\standard_render_model.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ngl\gfx\resource\resource_texture.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ngl\gfx\texture_loader_directxtex.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ngl\resource\resource_manager_impl.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ngl\util\bit_operation.h">
@@ -236,13 +251,25 @@
     <ClInclude Include="src\test\test.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="src\ngl\render\render_pass.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="src\ngl\render\test_pass.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="src\ngl\render\graph_builder.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\gfx\render\global_render_resource.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\gfx\render\standard_render_model.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\gfx\resource\resource_texture.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\gfx\texture_loader_directxtex.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ngl\render\rtg_command_list_pool.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
@@ -260,5 +287,10 @@
     <None Include="src\ngl\data\shader\screen\copy_tex_to_screen_ps.hlsl" />
     <None Include="src\ngl\data\shader\screen\fullscr_procedural_vs.hlsl" />
     <None Include="src\ngl\data\shader\final_screen_pass_ps.hlsl" />
+    <None Include="src\ngl\data\shader\df_light_pass_ps.hlsl" />
+    <None Include="src\ngl\data\shader\test\async_task_test_cs.hlsl" />
+    <None Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_ps.hlsl" />
+    <None Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_vs.hlsl" />
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

@@ -5,12 +5,15 @@
 #include <stdlib.h>
 
 
-// for compiler
+// for fxc
 #include <d3dcompiler.h>
-// lib
+// for fxc
 #pragma comment(lib, "d3dcompiler.lib")
 
+// for dxc. installed by NuGet.
+//	現状DXCはNuGetパッケージでインストール, dll等のコピーもNuGetパッケージに任せている(プロパティ/DXC Nuget/DXCCopyLocation)
 #include <dxcapi.h>
+#include <d3d12shader.h>
 #pragma comment(lib, "dxcompiler.lib")
 
 
@@ -22,6 +25,9 @@
 #if defined _DEBUG
 	#define NGL_SHADER_DEBUG_LOG 0
 #endif
+
+// 非推奨らしい DxcLibraryをDxcUtilsへ置き換え
+#define NGL_REPLACE_DXCLIBRARY_TO_DXCUTILS
 
 namespace ngl
 {
@@ -96,7 +102,7 @@ namespace rhi
 			: public IDxcIncludeHandler
 		{
 		public:
-			DefaultIncludeHandler(CComPtr<IDxcLibrary> dxc_library)
+			DefaultIncludeHandler(CComPtr<IDxcUtils> dxc_library)
 			{
 				dxc_library_ = dxc_library;
 			}
@@ -115,7 +121,7 @@ namespace rhi
 				uint32_t codePage = CP_UTF8;
 				IDxcBlobEncoding* sourceBlob;
 				// そのままロード.
-				auto result_blob = dxc_library_->CreateBlobFromFile(pFilename, &codePage, &sourceBlob);
+				auto result_blob = dxc_library_->LoadFile(pFilename, &codePage, &sourceBlob);
 				if (FAILED(result_blob))
 					return result_blob;
 				*ppIncludeSource = sourceBlob;
@@ -151,8 +157,8 @@ namespace rhi
 				return E_NOINTERFACE;
 			}
 		private:
-			CComPtr<IDxcLibrary>	dxc_library_;
-			u32						ref_ = 0;
+			CComPtr<IDxcUtils>	dxc_library_;
+			u32					ref_ = 0;
 		};
 
 
@@ -259,17 +265,27 @@ namespace rhi
 				mbs_to_wcs(shader_entry_point_name_w, (int)std::size(shader_entry_point_name_w), desc.entry_point_name);
 			}
 
-			CComPtr<IDxcLibrary> dxc_library;
-			HRESULT hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&dxc_library));
+			CComPtr<IDxcUtils> dxc_library;
+			HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxc_library));
 			if (FAILED(hr))
+			{
+#ifdef _DEBUG
+				std::cout << std::system_category().message(hr) << std::endl;
+#endif
 				compile_success &= false;
+			}
 
 			CComPtr<IDxcCompiler> dxc_compiler;
 			if (compile_success)
 			{
 				hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
 				if (FAILED(hr))
+				{
+#ifdef _DEBUG
+					std::cout << "[ERROR] " << std::system_category().message(hr) << " " << desc.shader_file_path << std::endl;
+#endif
 					compile_success &= false;
+				}
 			}
 
 			CComPtr<IDxcIncludeHandler> dxc_incHandler;
@@ -280,7 +296,7 @@ namespace rhi
 			if (compile_success)
 			{
 				uint32_t codePage = CP_UTF8;
-				hr = dxc_library->CreateBlobFromFile(shader_file_path_ws, &codePage, &sourceBlob);
+				hr = dxc_library->LoadFile(shader_file_path_ws, &codePage, &sourceBlob);
 				if (FAILED(hr))
 				{
 #ifdef _DEBUG
@@ -436,13 +452,13 @@ namespace rhi
 
 			// 最初にDxcApiを試行する
 			// ShaderModel6以降はDxcAPIを利用する
-			CComPtr<IDxcLibrary> lib;
-			hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&lib)));
+			CComPtr<IDxcUtils> lib;
+			hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&lib)));
 
 			CComPtr<IDxcBlobEncoding> binBlob{};
 			if (hresult)
 			{
-				hresult = SUCCEEDED(lib->CreateBlobWithEncodingOnHeapCopy(bin_ptr, bin_size, CP_ACP, &binBlob));
+				hresult = SUCCEEDED(lib->CreateBlob(bin_ptr, bin_size, CP_ACP, &binBlob));
 			}
 			CComPtr<IDxcContainerReflection> refl;
 			if (hresult)
