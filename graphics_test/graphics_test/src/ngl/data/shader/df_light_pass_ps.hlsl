@@ -14,7 +14,7 @@ struct VS_OUTPUT
 
 
 #include "include/scene_view_struct.hlsli"
-ConstantBuffer<SceneViewInfo> cb_sceneview;
+ConstantBuffer<SceneViewInfo> ngl_cb_sceneview;
 
 
 Texture2D tex_lineardepth;
@@ -57,8 +57,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	// ピクセルへのワールド空間レイを計算.
 	float3 to_pixel_ray_ws;
 	{
-		const float3 to_pixel_ray_vs = CalcViewSpaceRay(input.uv, cb_sceneview.cb_proj_mtx);
-		to_pixel_ray_ws = mul(cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs, 0.0));
+		const float3 to_pixel_ray_vs = CalcViewSpaceRay(input.uv, ngl_cb_sceneview.cb_proj_mtx);
+		to_pixel_ray_ws = mul(ngl_cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs, 0.0));
 	}
 
 	const float k_pi = 3.141592;

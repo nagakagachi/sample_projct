@@ -35,7 +35,7 @@
 
 // SceneView定数バッファ構造定義.
 #include "include/scene_view_struct.hlsli"
-ConstantBuffer<SceneViewInfo> cb_sceneview : register(b0);
+ConstantBuffer<SceneViewInfo> ngl_cb_sceneview : register(b0);
 
 
 // Global Srv.
@@ -66,12 +66,12 @@ void rayGen()
 
 	float3 ray_dir;
 	{
-		float3 to_pixel_ray_vs = CalcViewSpaceRay(screen_uv, cb_sceneview.cb_proj_mtx);
-		ray_dir = mul(cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs, 0.0));
+		float3 to_pixel_ray_vs = CalcViewSpaceRay(screen_uv, ngl_cb_sceneview.cb_proj_mtx);
+		ray_dir = mul(ngl_cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs, 0.0));
 	}
 
 	RayDesc ray;
-	ray.Origin = float3(cb_sceneview.cb_view_inv_mtx._m03, cb_sceneview.cb_view_inv_mtx._m13, cb_sceneview.cb_view_inv_mtx._m23);// View逆行列からRay始点取得.
+	ray.Origin = float3(ngl_cb_sceneview.cb_view_inv_mtx._m03, ngl_cb_sceneview.cb_view_inv_mtx._m13, ngl_cb_sceneview.cb_view_inv_mtx._m23);// View逆行列からRay始点取得.
 	ray.Direction = ray_dir;
 	ray.TMin = 0.0;
 	ray.TMax = 1e38;

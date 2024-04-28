@@ -56,8 +56,8 @@ namespace gfx
 				{
 					ngl::rhi::DescriptorSetDep desc_set;
 
-					pso.SetView(&desc_set, "cb_sceneview", &cbv_sceneview);
-					pso.SetView(&desc_set, "cb_instance", cbv_instance.Get());
+					pso.SetView(&desc_set, "ngl_cb_sceneview", &cbv_sceneview);
+					pso.SetView(&desc_set, "ngl_cb_instance", cbv_instance.Get());
 
 					pso.SetView(&desc_set, "samp_default", GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 					// テクスチャ設定テスト.

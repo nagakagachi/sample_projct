@@ -1,14 +1,9 @@
 
 // SceneView定数バッファ構造定義.
 #include "../include/scene_view_struct.hlsli"
-ConstantBuffer<SceneViewInfo> cb_sceneview;
+ConstantBuffer<SceneViewInfo> ngl_cb_sceneview;
 
-struct InstanceInfo
-{
-    float3x4 mtx;
-};
-ConstantBuffer<InstanceInfo> cb_instance;
-
+#include "mesh_transform_buffer.hlsli"
 
 // -------------------------------------------------------------------------------------------
 // VS.
@@ -40,13 +35,15 @@ ConstantBuffer<InstanceInfo> cb_instance;
     {
         VS_OUTPUT output = (VS_OUTPUT)0;
 
-        float3 pos_ws = mul(cb_instance.mtx, float4(input.pos, 1.0)).xyz;
-        float3 pos_vs = mul(cb_sceneview.cb_view_mtx, float4(pos_ws, 1.0));
-        float4 pos_cs = mul(cb_sceneview.cb_proj_mtx, float4(pos_vs, 1.0));
+        const float3x4 instance_mtx = NglGetInstanceTransform(0);
+        
+        float3 pos_ws = mul(instance_mtx, float4(input.pos, 1.0)).xyz;
+        float3 pos_vs = mul(ngl_cb_sceneview.cb_view_mtx, float4(pos_ws, 1.0));
+        float4 pos_cs = mul(ngl_cb_sceneview.cb_proj_mtx, float4(pos_vs, 1.0));
 
-        float3 normal_ws = mul(cb_instance.mtx, float4(input.normal, 0.0)).xyz;
-        float3 tangent_ws = mul(cb_instance.mtx, float4(input.tangent, 0.0)).xyz;
-        float3 binormal_ws = mul(cb_instance.mtx, float4(input.binormal, 0.0)).xyz;
+        float3 normal_ws = mul(instance_mtx, float4(input.normal, 0.0)).xyz;
+        float3 tangent_ws = mul(instance_mtx, float4(input.tangent, 0.0)).xyz;
+        float3 binormal_ws = mul(instance_mtx, float4(input.binormal, 0.0)).xyz;
 	    
         output.pos = pos_cs;
         output.uv = input.uv;

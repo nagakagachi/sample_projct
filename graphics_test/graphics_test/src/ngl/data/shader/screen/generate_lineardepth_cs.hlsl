@@ -10,7 +10,7 @@
 // SceneView定数バッファ構造定義.
 #include "../include/scene_view_struct.hlsli"
 
-ConstantBuffer<SceneViewInfo> cb_sceneview;
+ConstantBuffer<SceneViewInfo> ngl_cb_sceneview;
 
 Texture2D			TexHardwareDepth;
 RWTexture2D<float>	RWTexLinearDepth;
@@ -26,7 +26,7 @@ void main_cs(
 {
 	float d = TexHardwareDepth.Load(int3(dtid.xy, 0)).r;
 
-	float view_z = cb_sceneview.cb_ndc_z_to_view_z_coef.x / (d * cb_sceneview.cb_ndc_z_to_view_z_coef.y + cb_sceneview.cb_ndc_z_to_view_z_coef.z);
+	float view_z = ngl_cb_sceneview.cb_ndc_z_to_view_z_coef.x / (d * ngl_cb_sceneview.cb_ndc_z_to_view_z_coef.y + ngl_cb_sceneview.cb_ndc_z_to_view_z_coef.z);
 
 	RWTexLinearDepth[dtid.xy] = view_z;// 現状はViewZそのまま(1以上のワールド距離単位)
 }

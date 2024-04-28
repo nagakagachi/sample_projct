@@ -205,6 +205,7 @@
     <ClInclude Include="src\ngl\boot\win\boot_application.win.h" />
     <ClInclude Include="src\ngl\data\shader\mesh\mesh_simple_depth_code.hlsli" />
     <ClInclude Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_code.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\mesh\mesh_transform_buffer.hlsli" />
     <ClInclude Include="src\ngl\file\file.h" />
     <ClInclude Include="src\ngl\gfx\command_helper.h" />
     <ClInclude Include="src\ngl\gfx\common_struct.h" />

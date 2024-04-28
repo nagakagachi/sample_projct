@@ -373,7 +373,7 @@ namespace ngl::render
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "TexHardwareDepth", res_depth.srv_.Get());
 				pso_->SetView(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_.Get());
-				pso_->SetView(&desc_set, "cb_sceneview", ref_scene_cbv_.Get());
+				pso_->SetView(&desc_set, "ngl_cb_sceneview", ref_scene_cbv_.Get());
 
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
@@ -531,7 +531,7 @@ namespace ngl::render
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
 
-				pso_->SetView(&desc_set, "cb_sceneview", ref_scene_cbv_.Get());
+				pso_->SetView(&desc_set, "ngl_cb_sceneview", ref_scene_cbv_.Get());
 				
 				pso_->SetView(&desc_set, "tex_lineardepth", res_linear_depth.srv_.Get());
 				pso_->SetView(&desc_set, "tex_gbuffer0", res_gb0.srv_.Get());
