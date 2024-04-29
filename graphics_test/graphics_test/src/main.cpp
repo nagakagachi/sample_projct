@@ -583,6 +583,7 @@ bool AppGame::Execute()
 	}
 
 	// オブジェクト操作(適当).
+	if(true)
 	{
 		for (int i = 0; i < test_move_mesh_comp_array_.size(); ++i)
 		{
@@ -625,6 +626,8 @@ bool AppGame::Execute()
 			mapped->cb_proj_inv_mtx = ngl::math::Mat44::Inverse(proj_mat);
 
 			mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
+
+			mapped->cb_time_sec = std::fmodf(static_cast<float>(ngl::time::Timer::Instance().GetElapsedSec("AppGameTime")), 60.0f*60.0f*24.0f);
 
 			cb_sceneview_[flip_index_sceneview_]->Unmap();
 		}

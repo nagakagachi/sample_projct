@@ -51,13 +51,15 @@ namespace ngl::render
 					loaddesc_vs.entry_point_name = "main_vs";
 					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 					loaddesc_vs.shader_model_version = k_shader_model;
-					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_depth_vs.hlsl", &loaddesc_vs);
+					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
+						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.s000.u000.vs.hlsl", &loaddesc_vs);
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					loaddesc_ps.entry_point_name = "main_ps";
 					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 					loaddesc_ps.shader_model_version = k_shader_model;
-					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_depth_ps.hlsl", &loaddesc_ps);
+					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
+						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.s000.u000.ps.hlsl", &loaddesc_ps);
 
 
 					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
@@ -71,7 +73,8 @@ namespace ngl::render
 					desc.depth_stencil_format = depth_desc.desc.format;
 
 					// 入力レイアウト
-					std::array<ngl::rhi::InputElement, 3> input_elem_data;
+					// 入力レイアウト
+					std::array<ngl::rhi::InputElement, 5> input_elem_data;
 					desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
 					desc.input_layout.p_input_elements = input_elem_data.data();
 					{
@@ -86,12 +89,24 @@ namespace ngl::render
 						input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
 						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
 						input_elem_data[1].element_offset = 0;
-
-						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+						
+						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
 						input_elem_data[2].semantic_index = 0;
-						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
-						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
 						input_elem_data[2].element_offset = 0;
+						
+						input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
+						input_elem_data[3].semantic_index = 0;
+						input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+						input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
+						input_elem_data[3].element_offset = 0;
+
+						input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+						input_elem_data[4].semantic_index = 0;
+						input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
+						input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+						input_elem_data[4].element_offset = 0;
 					}
 					pso_ = new rhi::GraphicsPipelineStateDep();
 					if (!pso_->Initialize(p_device, desc))
@@ -194,13 +209,15 @@ namespace ngl::render
 					loaddesc_vs.entry_point_name = "main_vs";
 					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 					loaddesc_vs.shader_model_version = k_shader_model;
-					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_gbuffer_vs.hlsl", &loaddesc_vs);
+					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
+						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.s000.u000.vs.hlsl", &loaddesc_vs);
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					loaddesc_ps.entry_point_name = "main_ps";
 					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 					loaddesc_ps.shader_model_version = k_shader_model;
-					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/mesh/mesh_simple_gbuffer_ps.hlsl", &loaddesc_ps);
+					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
+						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.s000.u000.ps.hlsl", &loaddesc_ps);
 
 
 					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};

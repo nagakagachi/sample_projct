@@ -23,6 +23,8 @@ struct SceneViewInfo
 	//			Infinite Far Reverse RH: (-near_z, 1.0, 0.0, 0.0)
 	//			Infinite Far Reverse RH: ( near_z, 1.0, 0.0, 0.0)
 	float4	cb_ndc_z_to_view_z_coef;
+
+	float	cb_time_sec;
 };
 
 

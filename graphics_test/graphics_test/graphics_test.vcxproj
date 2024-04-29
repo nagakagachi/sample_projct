@@ -165,8 +165,11 @@
     <None Include="packages.config" />
     <None Include="src\ngl\data\shader\df_light_pass_ps.hlsl" />
     <None Include="src\ngl\data\shader\test\async_task_test_cs.hlsl" />
-    <None Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_ps.hlsl" />
-    <None Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_vs.hlsl" />
+    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.depth.s000.u000.ps.hlsl" />
+    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.depth.s000.u000.vs.hlsl" />
+    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.gbuffer.s000.u000.ps.hlsl" />
+    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.gbuffer.s000.u000.vs.hlsl" />
+    <ClInclude Include="src\ngl\data\shader\material\impl\opaque_standard.hlsli" />
     <ClCompile Include="src\ngl\file\file.cpp" />
     <ClCompile Include="src\ngl\gfx\command_helper.cpp" />
     <ClCompile Include="src\ngl\gfx\mesh_component.cpp" />
@@ -203,9 +206,10 @@
   <ItemGroup>
     <ClInclude Include="src\ngl\boot\boot_application.h" />
     <ClInclude Include="src\ngl\boot\win\boot_application.win.h" />
-    <ClInclude Include="src\ngl\data\shader\mesh\mesh_simple_depth_code.hlsli" />
-    <ClInclude Include="src\ngl\data\shader\mesh\mesh_simple_gbuffer_code.hlsli" />
-    <ClInclude Include="src\ngl\data\shader\mesh\mesh_transform_buffer.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\material\mtl_header.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\material\mtl_instance_transform_buffer.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\material\pass\depth_pass.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\material\pass\gbuffer_pass.hlsli" />
     <ClInclude Include="src\ngl\file\file.h" />
     <ClInclude Include="src\ngl\gfx\command_helper.h" />
     <ClInclude Include="src\ngl\gfx\common_struct.h" />
@@ -268,14 +272,6 @@
       <FileType>Document</FileType>
     </None>
     <None Include="src\ngl\data\shader\sample_vs.hlsl">
-      <FileType>Document</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="src\ngl\data\shader\mesh\mesh_simple_depth_ps.hlsl">
-      <FileType>Document</FileType>
-    </None>
-    <None Include="src\ngl\data\shader\mesh\mesh_simple_depth_vs.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
