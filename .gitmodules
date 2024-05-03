@@ -1,6 +1,9 @@
-[submodule "graphics_test/third_party/assimp"]
-	path = graphics_test/third_party/assimp
-	url = https://github.com/assimp/assimp
-[submodule "graphics_test/third_party/DirectXTex"]
-	path = graphics_test/third_party/DirectXTex
+[submodule "graphics_test/graphics_test/third_party/assimp"]
+	path = graphics_test/graphics_test/third_party/assimp
+	url = https://github.com/assimp/assimp.git
+[submodule "graphics_test/graphics_test/third_party/DirectXTex"]
+	path = graphics_test/graphics_test/third_party/DirectXTex
 	url = https://github.com/microsoft/DirectXTex.git
+[submodule "graphics_test/graphics_test/third_party/tinyxml2"]
+	path = graphics_test/graphics_test/third_party/tinyxml2
+	url = https://github.com/leethomason/tinyxml2.git

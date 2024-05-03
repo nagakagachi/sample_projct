@@ -46,6 +46,7 @@
 #include "ngl/render/test_pass.h"
 
 // test
+#include "../third_party/tinyxml2/tinyxml2.h"
 #include "ngl/gfx/render/global_render_resource.h"
 #include "test/test.h"
 
@@ -94,16 +95,6 @@ private:
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
 	std::vector<ngl::rhi::RefRtvDep>			swapchain_rtvs_;
 	std::vector<ngl::rhi::EResourceState>		swapchain_resource_state_;
-
-
-	ngl::rhi::RefTextureDep						tex_work_;
-	ngl::rhi::RefRtvDep							tex_work_rtv_;
-	ngl::rhi::RefSrvDep							tex_work_srv_;
-
-	ngl::rhi::RefTextureDep						tex_lineardepth_;
-	ngl::rhi::RefSrvDep							tex_lineardepth_srv_;
-	ngl::rhi::RefUavDep							tex_lineardepth_uav_;
-
 
 	ngl::rhi::RefTextureDep						tex_rw_;
 	ngl::rhi::RefSrvDep							tex_rw_srv_;
@@ -242,60 +233,6 @@ bool AppGame::Initialize()
 		rtg_manager_.Init(&device_);
 	}
 
-	// Work RenderBuffer.
-	{
-		ngl::rhi::TextureDep::Desc desc = {};
-		desc.bind_flag = ngl::rhi::ResourceBindFlag::RenderTarget | ngl::rhi::ResourceBindFlag::ShaderResource;
-		desc.format = ngl::rhi::EResourceFormat::Format_R16G16B16A16_FLOAT;
-		desc.type = ngl::rhi::ETextureType::Texture2D;
-		desc.width = scree_w;
-		desc.height = scree_h;
-		desc.initial_state = ngl::rhi::EResourceState::ShaderRead;
-
-		tex_work_ = new ngl::rhi::TextureDep();
-		if (!tex_work_->Initialize(&device_, desc))
-		{
-			assert(false);
-		}
-		tex_work_rtv_ = new ngl::rhi::RenderTargetViewDep();
-		if (!tex_work_rtv_->Initialize(&device_, tex_work_.Get(), 0, 0, 1))
-		{
-			assert(false);
-		}
-		tex_work_srv_ = new ngl::rhi::ShaderResourceViewDep();
-		if (!tex_work_srv_->InitializeAsTexture(&device_, tex_work_.Get(), 0, 1, 0, 1))
-		{
-			assert(false);
-		}
-	}
-
-	// LinearDepth Texture.
-	{
-		ngl::rhi::TextureDep::Desc desc = {};
-		desc.bind_flag = ngl::rhi::ResourceBindFlag::ShaderResource | ngl::rhi::ResourceBindFlag::UnorderedAccess;
-		desc.format = ngl::rhi::EResourceFormat::Format_R32_FLOAT;
-		desc.type = ngl::rhi::ETextureType::Texture2D;
-		desc.width = scree_w;
-		desc.height = scree_h;
-		desc.initial_state = ngl::rhi::EResourceState::ShaderRead;
-
-		tex_lineardepth_ = new ngl::rhi::TextureDep();
-		if (!tex_lineardepth_->Initialize(&device_, desc))
-		{
-			assert(false);
-		}
-		tex_lineardepth_srv_ = new ngl::rhi::ShaderResourceViewDep();
-		if (!tex_lineardepth_srv_->InitializeAsTexture(&device_, tex_lineardepth_.Get(), 0, 1, 0, 1))
-		{
-			assert(false);
-		}
-		tex_lineardepth_uav_ = new ngl::rhi::UnorderedAccessViewDep();
-		if (!tex_lineardepth_uav_->Initialize(&device_, tex_lineardepth_.Get(), 0, 0, 1))
-		{
-			assert(false);
-		}
-	}
-
 	// UnorderedAccess Texture.
 	{
 		ngl::rhi::TextureDep::Desc desc = {};
@@ -369,8 +306,8 @@ bool AppGame::Initialize()
 	}
 
 	{
-		const char* mesh_file_box = "../third_party/assimp/test/models/FBX/box.fbx";
-		const char* mesh_file_spider = "../third_party/assimp/test/models/FBX/spider.fbx";
+		const char* mesh_file_box = "./third_party/assimp/test/models/FBX/box.fbx";
+		const char* mesh_file_spider = "./third_party/assimp/test/models/FBX/spider.fbx";
 		
 		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
 		const float sponza_scale = 1.0f;
@@ -448,7 +385,17 @@ bool AppGame::Initialize()
 	//const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
 	const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
 	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTexture>(&device_, test_load_texture_file_name, &tex_load_desc);
-	
+
+	/*
+	tinyxml2::XMLDocument xml_doc;
+	if(tinyxml2::XMLError::XML_SUCCESS == xml_doc.LoadFile("./src/ngl/data/shader/material/impl/opaque_standard.hlsli"))
+	{
+		auto* xml_root = xml_doc.RootElement();
+
+		std::cout << xml_root->Name() << std::endl;
+		
+	}
+	*/
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
