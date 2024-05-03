@@ -1,4 +1,13 @@
 
+// マテリアルパス定義テキストを記述するためのブロック.
+// 記述の制限
+//  <material_config> と </material_config> は行頭に記述され, 余分な改行やスペース等が入っていることは許可されない(Parseの簡易化のため).
+#if 0
+<material_config>
+    <pass name="depth"/>
+    <pass name="gbuffer"/>
+</material_config>
+#endif
 
 #include "../mtl_header.hlsli"
 
@@ -17,7 +26,7 @@ MtlVsOutput MtlVsEntryPoint(MtlVsInput input)
     MtlVsOutput output = (MtlVsOutput)0;
 
     // テスト
-        //output.position_offset_ws = input.normal_ws * abs(sin(ngl_cb_sceneview.cb_time_sec / 1.0f)) * 0.05;
+    //output.position_offset_ws = input.normal_ws * abs(sin(ngl_cb_sceneview.cb_time_sec / 1.0f)) * 0.05;
     
     return output;
 }

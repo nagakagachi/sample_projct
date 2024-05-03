@@ -45,9 +45,9 @@
 #include "ngl/render/graph_builder.h"
 #include "ngl/render/test_pass.h"
 
-// test
-#include "../third_party/tinyxml2/tinyxml2.h"
-#include "ngl/gfx/render/global_render_resource.h"
+#include "ngl/gfx/material/material_shader_generator.h"
+
+
 #include "test/test.h"
 
 
@@ -218,6 +218,12 @@ bool AppGame::Initialize()
 			swapchain_resource_state_[i] = ngl::rhi::EResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 	}
+
+	// MaterialShaderFile生成.
+	//	実際は事前生成用.
+		ngl::gfx::MaterialShaderGenerator mtl_gen = {};
+		mtl_gen.GenerateMaterialShaderFiles("./src/ngl/data/shader/material/impl", "./src/ngl/data/shader/material/pass", "./src/ngl/data/shader/material/generated");
+		
 
 	// 簡易化のためのリソース保持.
 	{

@@ -124,7 +124,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>.\third_party\assimp\include;.\third_party\DirectXTex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.\third_party\assimp\include;.\third_party\DirectXTex;.\third_party\tinyxml2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -145,7 +145,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>.\third_party\assimp\include;.\third_party\DirectXTex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.\third_party\assimp\include;.\third_party\DirectXTex;.\third_party\tinyxml2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -162,15 +162,13 @@
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ngl\boot\win\boot_application.win.cpp" />
+    <ClCompile Include="src\ngl\gfx\material\material_shader_generator.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
+    <ClInclude Include="src\ngl\gfx\material\material_shader_generator.h" />
     <ClInclude Include="third_party\tinyxml2\tinyxml2.h" />
     <None Include="packages.config" />
     <None Include="src\ngl\data\shader\df_light_pass_ps.hlsl" />
     <None Include="src\ngl\data\shader\test\async_task_test_cs.hlsl" />
-    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.depth.s000.u000.ps.hlsl" />
-    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.depth.s000.u000.vs.hlsl" />
-    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.gbuffer.s000.u000.ps.hlsl" />
-    <None Include="src\ngl\data\shader\material\generated\opaque_standard\opaque_standard.gbuffer.s000.u000.vs.hlsl" />
     <ClInclude Include="src\ngl\data\shader\material\impl\opaque_standard.hlsli" />
     <ClCompile Include="src\ngl\file\file.cpp" />
     <ClCompile Include="src\ngl\gfx\command_helper.cpp" />
@@ -210,8 +208,8 @@
     <ClInclude Include="src\ngl\boot\win\boot_application.win.h" />
     <ClInclude Include="src\ngl\data\shader\material\mtl_header.hlsli" />
     <ClInclude Include="src\ngl\data\shader\material\mtl_instance_transform_buffer.hlsli" />
-    <ClInclude Include="src\ngl\data\shader\material\pass\depth_pass.hlsli" />
-    <ClInclude Include="src\ngl\data\shader\material\pass\gbuffer_pass.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\material\pass\depth.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\material\pass\gbuffer.hlsli" />
     <ClInclude Include="src\ngl\file\file.h" />
     <ClInclude Include="src\ngl\gfx\command_helper.h" />
     <ClInclude Include="src\ngl\gfx\common_struct.h" />
@@ -296,6 +294,9 @@
     <None Include="src\ngl\data\shader\final_screen_pass_ps.hlsl">
       <FileType>Document</FileType>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="src\ngl\data\shader\material\generated\opaque_standard\" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
