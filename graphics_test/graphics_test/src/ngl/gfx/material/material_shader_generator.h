@@ -10,11 +10,11 @@ namespace ngl
 {
 namespace gfx
 {
-    class MaterialShaderGenerator
+    class MaterialShaderFileGenerator
     {
     public:
-        MaterialShaderGenerator() = default;
-        ~MaterialShaderGenerator();
+        MaterialShaderFileGenerator() = default;
+        ~MaterialShaderFileGenerator();
 
         //  material_impl_dir : マテリアル毎の実装hlsliのディレクトリ
         //  material_pass_dir : マテリアルのPassシェーダhlsliのディレクトリ(depth_pass.hlsli, gbuffer_pass.hlsli, etc.)

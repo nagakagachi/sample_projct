@@ -17,7 +17,7 @@ namespace ngl
 {
 namespace gfx
 {
-    MaterialShaderGenerator::~MaterialShaderGenerator()
+    MaterialShaderFileGenerator::~MaterialShaderFileGenerator()
     {   
     }
 
@@ -30,7 +30,7 @@ namespace gfx
             <pass name="gbuffer"/>
         </material_config>
     */
-    bool MaterialShaderGenerator::GenerateMaterialShaderFiles(const char* material_impl_dir, const char* material_pass_dir, const char* generated_root_dir)
+    bool MaterialShaderFileGenerator::GenerateMaterialShaderFiles(const char* material_impl_dir, const char* material_pass_dir, const char* generated_root_dir)
     {   
         constexpr char k_material_config_xml_begin_tag[] = "<material_config>";
         constexpr char k_material_config_xml_end_tag[] = "</material_config>";

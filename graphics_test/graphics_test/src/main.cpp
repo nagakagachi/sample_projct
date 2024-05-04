@@ -45,8 +45,9 @@
 #include "ngl/render/graph_builder.h"
 #include "ngl/render/test_pass.h"
 
+// マテリアルシェーダ関連.
 #include "ngl/gfx/material/material_shader_generator.h"
-
+#include "ngl/gfx/material/material_shader_manager.h"
 
 #include "test/test.h"
 
@@ -221,12 +222,16 @@ bool AppGame::Initialize()
 
 	// MaterialShaderFile生成.
 	//	実際は事前生成すべきだが起動時にテスト実行.
-	ngl::gfx::MaterialShaderGenerator mtl_gen = {};
+	constexpr char k_material_shader_file_dir[] = "./src/ngl/data/shader/material/generated";
+	ngl::gfx::MaterialShaderFileGenerator mtl_gen = {};
 	mtl_gen.GenerateMaterialShaderFiles(
 		"./src/ngl/data/shader/material/impl",
 		"./src/ngl/data/shader/material/pass",
-		"./src/ngl/data/shader/material/generated");
-		
+		k_material_shader_file_dir);
+
+	ngl::gfx::MaterialShaderManager mtl_shader_man = {};
+	mtl_shader_man.Initialize(&device_, k_material_shader_file_dir);
+	
 
 	// デフォルトテクスチャ等の簡易アクセス用クラス初期化.
 	{

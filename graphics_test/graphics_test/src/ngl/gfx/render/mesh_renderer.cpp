@@ -30,6 +30,7 @@ namespace gfx
     		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::BINORMAL, 0);
     		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::TEXCOORD, 0);
     	}
+    	
 
     	
     	// ここではすべてPSO同じ.
