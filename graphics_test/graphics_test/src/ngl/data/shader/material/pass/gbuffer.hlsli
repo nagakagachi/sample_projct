@@ -1,3 +1,7 @@
+/*
+マテリアル実装hlsliで定義された関数を呼び出すPassシェーダコード.
+    マテリアルシェーダコード生成の仕組みによって, generatedディレクトリにマテリアル実装hlsliやこのファイルをincludeしたシェーダファイルが作られる.
+*/
 
 #include "../mtl_header.hlsli"
 #include "../mtl_instance_transform_buffer.hlsli"

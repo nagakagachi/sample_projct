@@ -1,3 +1,2 @@
-
 #include "../../impl/opaque_standard.hlsli"
-#include "../../pass/depth.hlsli"
+#include "../../pass/gbuffer.hlsli"

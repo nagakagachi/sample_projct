@@ -220,12 +220,15 @@ bool AppGame::Initialize()
 	}
 
 	// MaterialShaderFile生成.
-	//	実際は事前生成用.
-		ngl::gfx::MaterialShaderGenerator mtl_gen = {};
-		mtl_gen.GenerateMaterialShaderFiles("./src/ngl/data/shader/material/impl", "./src/ngl/data/shader/material/pass", "./src/ngl/data/shader/material/generated");
+	//	実際は事前生成すべきだが起動時にテスト実行.
+	ngl::gfx::MaterialShaderGenerator mtl_gen = {};
+	mtl_gen.GenerateMaterialShaderFiles(
+		"./src/ngl/data/shader/material/impl",
+		"./src/ngl/data/shader/material/pass",
+		"./src/ngl/data/shader/material/generated");
 		
 
-	// 簡易化のためのリソース保持.
+	// デフォルトテクスチャ等の簡易アクセス用クラス初期化.
 	{
 		if(!ngl::gfx::GlobalRenderResource::Instance().Initialize(&device_))
 		{

@@ -47,19 +47,25 @@ namespace ngl::render
 				{
 					auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
+#if 0
+					constexpr char k_vs[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.s000.u000.vs.hlsl";
+					constexpr char k_ps[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.s000.u000.ps.hlsl";
+#else
+					constexpr char k_vs[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.vs.hlsl";
+					constexpr char k_ps[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.ps.hlsl";
+#endif
+					
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					loaddesc_vs.entry_point_name = "main_vs";
 					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 					loaddesc_vs.shader_model_version = k_shader_model;
-					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
-						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.s000.u000.vs.hlsl", &loaddesc_vs);
+					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_vs, &loaddesc_vs);
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					loaddesc_ps.entry_point_name = "main_ps";
 					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 					loaddesc_ps.shader_model_version = k_shader_model;
-					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
-						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.s000.u000.ps.hlsl", &loaddesc_ps);
+					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_ps, &loaddesc_ps);
 
 
 					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
@@ -205,19 +211,25 @@ namespace ngl::render
 				{
 					auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
+#if 0
+					constexpr char k_vs[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.s000.u000.vs.hlsl";
+					constexpr char k_ps[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.s000.u000.ps.hlsl";
+#else
+					constexpr char k_vs[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.vs.hlsl";
+					constexpr char k_ps[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.ps.hlsl";
+#endif
+					
 					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
 					loaddesc_vs.entry_point_name = "main_vs";
 					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
 					loaddesc_vs.shader_model_version = k_shader_model;
-					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
-						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.s000.u000.vs.hlsl", &loaddesc_vs);
+					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_vs, &loaddesc_vs);
 
 					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
 					loaddesc_ps.entry_point_name = "main_ps";
 					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
 					loaddesc_ps.shader_model_version = k_shader_model;
-					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device,
-						"./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.s000.u000.ps.hlsl", &loaddesc_ps);
+					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_ps, &loaddesc_ps);
 
 
 					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
