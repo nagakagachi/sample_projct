@@ -15,6 +15,8 @@
 #include "ngl/resource/resource_manager.h"
 
 // rhi
+#include "test.h"
+
 #include "ngl/rhi/d3d12/device.d3d12.h"
 #include "ngl/rhi/d3d12/command_list.d3d12.h"
 #include "ngl/rhi/d3d12/descriptor.d3d12.h"
@@ -460,88 +462,17 @@ namespace ngl_test
 
 			std::cout << "PersistentDescriptorAllocatorTest time -> " << ngl::time::Timer::Instance().GetElapsedSec("PersistentDescriptorAllocatorTest") << std::endl;
 		}
-
-		if (false)
-		{
-			// フレームでのDescriptorマネージャ初期化
-			ngl::rhi::DynamicDescriptorManager* frame_desc_man = device.GeDynamicDescriptorManager();
-			// バッファリング数分のフレームDescriptorインターフェース初期化
-			const ngl::u32 buffer_count = 3;
-			std::vector<ngl::rhi::FrameCommandListDynamicDescriptorAllocatorInterface> frame_desc_interface;
-			frame_desc_interface.resize(buffer_count);
-			for (auto&& e : frame_desc_interface)
-			{
-				ngl::rhi::FrameCommandListDynamicDescriptorAllocatorInterface::Desc frame_desc_interface_desc = {};
-				frame_desc_interface_desc.stack_size = 2000;
-				e.Initialize(frame_desc_man, frame_desc_interface_desc);
-			}
-
-			// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
-			ngl::u32 frame_flip_index = 0;
-			for (auto f_i = 0u; f_i < 1000; ++f_i)
-			{
-				// マネージャのフレーム開始処理で過去フレーム確保分の解放(実際にはDeviceのフレーム開始処理で実行される).
-				frame_desc_man->ReadyToNewFrame(f_i);
-
-				// インターフェイスのフレーム開始処理.
-				frame_desc_interface[frame_flip_index].ReadyToNewFrame(f_i);
-
-				// 確保テスト.
-				for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
-				{
-					D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-					D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-					frame_desc_interface[frame_flip_index].Allocate(16, cpu_handle, gpu_handle);
-				}
-
-				frame_flip_index = (frame_flip_index + 1) % buffer_count;
-
-			}
-		}
-
-		if (false)
-		{
-			ngl::rhi::FrameDescriptorHeapPagePool* frame_desc_page_pool = device.GetFrameDescriptorHeapPagePool();
-
-			// インターフェースからそのフレーム用のDescriptorを取得,解放するテスト.
-			//ngl::u32 frame_index = 0;
-			//for (auto f_i = 0u; f_i < 5; ++f_i)
-			{
-				ngl::rhi::FrameDescriptorHeapPageInterface fmra_page_interface_sampler;
-				{
-					ngl::rhi::FrameDescriptorHeapPageInterface::Desc desc = {};
-					desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-					fmra_page_interface_sampler.Initialize(frame_desc_page_pool, desc);
-				}
-
-				ngl::rhi::FrameDescriptorHeapPageInterface fmra_page_interface_srv;
-				{
-					ngl::rhi::FrameDescriptorHeapPageInterface::Desc desc = {};
-					desc.type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-					fmra_page_interface_srv.Initialize(frame_desc_page_pool, desc);
-				}
-
-				for (auto alloc_i = 0u; alloc_i < 2000; ++alloc_i)
-				{
-					{
-						D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-						D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-						fmra_page_interface_sampler.Allocate(16, cpu_handle, gpu_handle);
-					}
-					{
-						D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
-						D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
-						fmra_page_interface_srv.Allocate(16, cpu_handle, gpu_handle);
-					}
-				}
-			}
-		}
-
-
+		
 		if (false)
 		{
 			ngl::thread::test::LockfreeStackIntrusiveTest();
 		}
+
+
+		constexpr auto ce_str = ConstexprString("abc");
+		const auto ce_char = ce_str.buf;
+		constexpr auto test_count = ce_str.k_length;
+		
 #endif
 	}
 }

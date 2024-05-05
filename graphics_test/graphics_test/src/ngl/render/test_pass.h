@@ -5,6 +5,7 @@
 #include<variant>
 
 #include "ngl/gfx/render/global_render_resource.h"
+#include "ngl/gfx/material/material_shader_manager.h"
 
 
 namespace ngl::render
@@ -27,14 +28,13 @@ namespace ngl::render
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 
-			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
-
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rhi::RefCbvDep ref_scene_cbv, const std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
 			{
 				// リソース定義.
 				//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
-				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_D32_FLOAT);
+				// MaterialPassに合わせてFormat設定.
+				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
 
 				// リソースアクセス定義.
 				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
@@ -42,78 +42,6 @@ namespace ngl::render
 				{
 					ref_scene_cbv_ = ref_scene_cbv;
 					p_mesh_list_ = &ref_mesh_list;
-				}
-
-				{
-					auto& ResourceMan = ngl::res::ResourceManager::Instance();
-
-					constexpr char k_vs[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.vs.hlsl";
-					constexpr char k_ps[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.depth.ps.hlsl";
-					
-					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
-					loaddesc_vs.entry_point_name = "main_vs";
-					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
-					loaddesc_vs.shader_model_version = k_shader_model;
-					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_vs, &loaddesc_vs);
-
-					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
-					loaddesc_ps.entry_point_name = "main_ps";
-					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
-					loaddesc_ps.shader_model_version = k_shader_model;
-					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_ps, &loaddesc_ps);
-
-
-					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-					desc.vs = &res_shader_vs->data_;
-					desc.ps = &res_shader_ps->data_;
-
-					desc.depth_stencil_state.depth_enable = true;
-					desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Greater; // ReverseZ.
-					desc.depth_stencil_state.depth_write_enable = true;
-					desc.depth_stencil_state.stencil_enable = false;
-					desc.depth_stencil_format = depth_desc.desc.format;
-
-					// 入力レイアウト
-					// 入力レイアウト
-					std::array<ngl::rhi::InputElement, 5> input_elem_data;
-					desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-					desc.input_layout.p_input_elements = input_elem_data.data();
-					{
-						input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
-						input_elem_data[0].semantic_index = 0;
-						input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
-						input_elem_data[0].element_offset = 0;
-
-						input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
-						input_elem_data[1].semantic_index = 0;
-						input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
-						input_elem_data[1].element_offset = 0;
-						
-						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
-						input_elem_data[2].semantic_index = 0;
-						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
-						input_elem_data[2].element_offset = 0;
-						
-						input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
-						input_elem_data[3].semantic_index = 0;
-						input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
-						input_elem_data[3].element_offset = 0;
-
-						input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
-						input_elem_data[4].semantic_index = 0;
-						input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
-						input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
-						input_elem_data[4].element_offset = 0;
-					}
-					pso_ = new rhi::GraphicsPipelineStateDep();
-					if (!pso_->Initialize(p_device, desc))
-					{
-						assert(false);
-					}
 				}
 			}
 
@@ -133,8 +61,14 @@ namespace ngl::render
 				// Set Viewport and Scissor.
 				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
+				
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
+				// Material Pso 問い合わせ. マテリアル名はとりあえず固定で適当なもの.
+				auto* mtl_pso =  gfx::MaterialShaderManager::Instance().FindMaterialPipeline("opaque_standard", "depth");
+				if(mtl_pso)
+				{
+					ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *mtl_pso, *p_mesh_list_, *ref_scene_cbv_);				
+				}
 			}
 		};
 
@@ -156,29 +90,32 @@ namespace ngl::render
 			rtg::ResourceHandle h_gb2_{};
 			rtg::ResourceHandle h_gb3_{};
 			rtg::ResourceHandle h_velocity_{};
-
 			
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
-
-			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
-
-
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex
 				,rhi::RefCbvDep ref_scene_cbv, const std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
-			{	
+			{
+				// MaterialPassに合わせてFormat設定.
+				constexpr auto k_gbuffer0_format = gfx::MaterialPassPsoCreator_gbuffer::k_gbuffer0_format;
+				constexpr auto k_gbuffer1_format = gfx::MaterialPassPsoCreator_gbuffer::k_gbuffer1_format;
+				constexpr auto k_gbuffer2_format = gfx::MaterialPassPsoCreator_gbuffer::k_gbuffer2_format;
+				constexpr auto k_gbuffer3_format = gfx::MaterialPassPsoCreator_gbuffer::k_gbuffer3_format;
+				constexpr auto k_velocity_format = gfx::MaterialPassPsoCreator_gbuffer::k_velocity_format;
+				
 				// リソース定義.
 				// GBuffer0 BaseColor.xyz, Occlusion.w
-				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R8G8B8A8_UNORM_SRGB);
+				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer0_format);
 				// GBuffer1 WorldNormal.xyz, 1bitOption.w
-				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R10G10B10A2_UNORM);
+				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer1_format);
 				// GBuffer2 Roughness, Metallic, Optional, MaterialId
-				rtg::ResourceDesc2D gbuffer2_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R8G8B8A8_UNORM);
+				rtg::ResourceDesc2D gbuffer2_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer2_format);
 				// GBuffer3 Emissive.xyz, Unused.w
-				rtg::ResourceDesc2D gbuffer3_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+				rtg::ResourceDesc2D gbuffer3_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer3_format);
 				// Velocity xy
-				rtg::ResourceDesc2D velocity_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16_FLOAT);
+				rtg::ResourceDesc2D velocity_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_velocity_format);
 
 				// DepthのFormat取得.
 				const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
@@ -197,89 +134,9 @@ namespace ngl::render
 				h_gb3_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer3_desc), rtg::access_type::RENDER_TARTGET);
 				h_velocity_ = builder.RecordResourceAccess(*this, builder.CreateResource(velocity_desc), rtg::access_type::RENDER_TARTGET);
 
-				
 				{
 					ref_scene_cbv_ = ref_scene_cbv;
 					p_mesh_list_ = &ref_mesh_list;
-				}
-				
-				{
-					auto& ResourceMan = ngl::res::ResourceManager::Instance();
-
-					constexpr char k_vs[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.vs.hlsl";
-					constexpr char k_ps[] = "./src/ngl/data/shader/material/generated/opaque_standard/opaque_standard.gbuffer.ps.hlsl";
-					
-					ngl::gfx::ResShader::LoadDesc loaddesc_vs = {};
-					loaddesc_vs.entry_point_name = "main_vs";
-					loaddesc_vs.stage = ngl::rhi::EShaderStage::Vertex;
-					loaddesc_vs.shader_model_version = k_shader_model;
-					auto res_shader_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_vs, &loaddesc_vs);
-
-					ngl::gfx::ResShader::LoadDesc loaddesc_ps = {};
-					loaddesc_ps.entry_point_name = "main_ps";
-					loaddesc_ps.stage = ngl::rhi::EShaderStage::Pixel;
-					loaddesc_ps.shader_model_version = k_shader_model;
-					auto res_shader_ps = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, k_ps, &loaddesc_ps);
-
-
-					ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
-					desc.vs = &res_shader_vs->data_;
-					desc.ps = &res_shader_ps->data_;
-					{
-						desc.num_render_targets = 5;
-						desc.render_target_formats[0] = builder.GetResourceHandleDesc(h_gb0_).desc.format;
-						desc.render_target_formats[1] = builder.GetResourceHandleDesc(h_gb1_).desc.format;
-						desc.render_target_formats[2] = builder.GetResourceHandleDesc(h_gb2_).desc.format;
-						desc.render_target_formats[3] = builder.GetResourceHandleDesc(h_gb3_).desc.format;
-						desc.render_target_formats[4] = builder.GetResourceHandleDesc(h_velocity_).desc.format;
-					}
-					{
-						desc.depth_stencil_state.depth_enable = true;
-						desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Equal; // Maskedを含めたEarlyZ Full PreZのためEqual.
-						desc.depth_stencil_state.depth_write_enable = false;// 描き込み無効. 深度テストのみで書き込み無効.
-						desc.depth_stencil_state.stencil_enable = false;
-						desc.depth_stencil_format = depth_desc.desc.format;
-					}
-					// 入力レイアウト
-					std::array<ngl::rhi::InputElement, 5> input_elem_data;
-					desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-					desc.input_layout.p_input_elements = input_elem_data.data();
-					{
-						input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
-						input_elem_data[0].semantic_index = 0;
-						input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
-						input_elem_data[0].element_offset = 0;
-
-						input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
-						input_elem_data[1].semantic_index = 0;
-						input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
-						input_elem_data[1].element_offset = 0;
-						
-						input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
-						input_elem_data[2].semantic_index = 0;
-						input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
-						input_elem_data[2].element_offset = 0;
-						
-						input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
-						input_elem_data[3].semantic_index = 0;
-						input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-						input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
-						input_elem_data[3].element_offset = 0;
-
-						input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
-						input_elem_data[4].semantic_index = 0;
-						input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
-						input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
-						input_elem_data[4].element_offset = 0;
-					}
-					pso_ = new rhi::GraphicsPipelineStateDep();
-					if (!pso_->Initialize(p_device, desc))
-					{
-						assert(false);
-					}
 				}
 			}
 
@@ -317,7 +174,12 @@ namespace ngl::render
 				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *pso_, *p_mesh_list_, *ref_scene_cbv_);
+				// Material Pso 問い合わせ. マテリアル名はとりあえず固定で適当なもの.
+				auto* mtl_pso =  gfx::MaterialShaderManager::Instance().FindMaterialPipeline("opaque_standard", "gbuffer");
+				if(mtl_pso)
+				{
+					ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *mtl_pso, *p_mesh_list_, *ref_scene_cbv_);				
+				}
 			}
 		};
 

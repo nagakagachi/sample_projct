@@ -273,6 +273,7 @@ namespace gfx
                         std::filesystem::path rel_impl_path = std::filesystem::path(material_config_list[mtl_index].impl_file_path).lexically_relative(mtl_pass_shader_dir_path);
                         std::filesystem::path rel_pass_path = std::filesystem::path(pass_shader_info_list[pass_index].path).lexically_relative(mtl_pass_shader_dir_path);
 
+                        // コード部生成.
                         /*
                             #include "../../impl/opaque_standard.hlsli"
                             #include "../../pass/depth.hlsli"

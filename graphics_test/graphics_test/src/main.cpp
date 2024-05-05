@@ -144,6 +144,9 @@ AppGame::~AppGame()
 	// リソース参照クリア.
 	mesh_comp_array_.clear();
 
+	// Material Shader Manager 破棄.
+	ngl::gfx::MaterialShaderManager::Instance().Finalize();
+	
 	ngl::gfx::GlobalRenderResource::Instance().Finalize();
 	
 	// リソースマネージャから全て破棄.
@@ -228,10 +231,19 @@ bool AppGame::Initialize()
 		"./src/ngl/data/shader/material/impl",
 		"./src/ngl/data/shader/material/pass",
 		k_material_shader_file_dir);
-
-	ngl::gfx::MaterialShaderManager mtl_shader_man = {};
-	mtl_shader_man.Initialize(&device_, k_material_shader_file_dir);
 	
+	// Material Shader Manager Setup.
+	{
+		// Material PSO Creatorを登録.
+		{
+			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_depth>();
+			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_gbuffer>();
+			// TODO.
+		}
+
+		// 本体のセットアップ.
+		ngl::gfx::MaterialShaderManager::Instance().Setup(&device_, k_material_shader_file_dir);
+	}
 
 	// デフォルトテクスチャ等の簡易アクセス用クラス初期化.
 	{

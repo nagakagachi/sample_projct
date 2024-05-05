@@ -12,24 +12,76 @@ namespace ngl
 {
 namespace gfx
 {
+    enum EMaterialShaderNamePart
+    {
+        MATERIAL_NAME,
+        PASS_NAME,
+        SHADER_STAGE_NAME,
+
+        _MAX
+    };
+    struct MaterialPassShaderSet
+    {
+        std::string pass_name = {};
+            
+        std::string vs_file = {};
+        std::string ps_file = {};
+
+        res::ResourceHandle<ResShader> res_vs = {};
+        res::ResourceHandle<ResShader> res_ps = {};
+    };
+    struct MaterialShaderSet
+    {
+        std::string material_name = {};
+            
+        std::vector<MaterialPassShaderSet> pass_shader_set = {};
+        std::unordered_map<std::string, int> pass_shader_name_index = {};
+    };
+    
+    struct MaterialPassPso
+    {
+        std::string pass_name = {};
+        rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = {};
+    };
+    struct MaterialPassPsoSet
+    {
+        std::string material_name = {};
+            
+        std::vector<MaterialPassPso> pass_pso_set = {};
+        std::unordered_map<std::string, int> pass_pso_name_index = {};
+    };
+    
+    class MaterialShaderManagerImpl
+    {
+    public:
+        std::vector<MaterialShaderSet> material_shader_set_ = {};
+        std::unordered_map<std::string, int> material_shader_name_index_ = {};
+
+        
+        std::vector<MaterialPassPsoSet> material_pso_ = {};
+        std::unordered_map<std::string, int> material_pso_name_index_ = {};
+    };
+
+    
+    MaterialShaderManager::MaterialShaderManager()
+    {
+        p_impl_ = new MaterialShaderManagerImpl();
+    }
     MaterialShaderManager::~MaterialShaderManager()
     {
+        if(p_impl_)
+        {
+            delete p_impl_;
+            p_impl_ = {};
+        }
     }
 
     //  generated_shader_root_dir : マテリアルシェーダディレクトリ. ここに マテリアル名/マテリアル毎のPassシェーダ群 が生成される.
-    bool MaterialShaderManager::Initialize(rhi::DeviceDep* p_device, const char* generated_shader_root_dir)
+    bool MaterialShaderManager::Setup(rhi::DeviceDep* p_device, const char* generated_shader_root_dir)
     {
-        enum EMaterialShaderNamePart
-        {
-            MATERIAL_NAME,
-            PASS_NAME,
-            SHADER_STAGE_NAME,
-
-            _MAX
-        };
-        
         assert(p_device);
         p_device_ = p_device;
+        
         
         std::filesystem::path root_dir_path = generated_shader_root_dir;
         if(!exists(root_dir_path) || !is_directory(root_dir_path))
@@ -38,26 +90,9 @@ namespace gfx
             return false;
         }
 
-        struct MaterialPassShaderSet
-        {
-            std::string pass_name = {};
-            
-            std::string vs_file = {};
-            std::string ps_file = {};
 
-            res::ResourceHandle<ResShader> res_vs = {};
-            res::ResourceHandle<ResShader> res_ps = {};
-        };
-        struct MaterialShaderSet
-        {
-            std::string material_name = {};
-            
-            std::vector<MaterialPassShaderSet> pass_shader_set = {};
-            std::unordered_map<std::string, int> pass_shader_name_index = {};
-        };
-
-        std::vector<MaterialShaderSet> material_shader_set = {};
-        std::unordered_map<std::string, int> material_shader_name_index = {};
+        auto& material_shader_set = p_impl_->material_shader_set_;
+        auto& material_shader_name_index = p_impl_->material_shader_name_index_;
 
         // 直下のマテリアル別ディレクトリ巡回.
         for(auto mtl_dir_it : std::filesystem::directory_iterator(root_dir_path))
@@ -189,11 +224,26 @@ namespace gfx
             }
         }
 
-        // PipelineStateObject生成. TODO.
+        // PipelineStateObject生成.
+        auto& material_pso_set = p_impl_->material_pso_;
+        auto& material_pso_name_index = p_impl_->material_pso_name_index_;
         for(size_t mtl_i = 0; mtl_i < material_shader_set.size(); ++mtl_i)
         {
             auto& mtl_set = material_shader_set[mtl_i];
 
+            // Mapに未登録なら新規追加.
+            if(material_pso_name_index.end() == material_pso_name_index.find(mtl_set.material_name))
+            {
+                material_pso_name_index[mtl_set.material_name] = static_cast<int>(material_pso_set.size());
+                material_pso_set.push_back({});
+                {
+                    auto& new_elem = material_pso_set.back();
+                    new_elem.material_name = mtl_set.material_name;
+                }
+            }
+
+            
+            auto& pass_pso_set = material_pso_set[material_pso_name_index[mtl_set.material_name]];
             for(size_t pass_i = 0; pass_i < mtl_set.pass_shader_set.size(); ++pass_i)
             {
                 auto& pass_set = mtl_set.pass_shader_set[pass_i];
@@ -201,10 +251,36 @@ namespace gfx
                 // VS-PS Pso.
                 if(pass_set.res_vs.IsValid() && pass_set.res_ps.IsValid())
                 {
-                    // TODO.
-                    // pass_nameに対応したMaterialPass毎のPSOの生成をする.
-                    //  depth ならRenderTarget無しであったり, gbuffer なら RenderTargetがGBuffer枚数分あるなど.
-                    
+                    if(pso_creator_map_.end() == pso_creator_map_.find(pass_set.pass_name))
+                    {
+                        assert(false);
+                        continue;
+                    }
+
+                    MaterialPassPsoDesc pso_desc = {};
+                    {
+                        pso_desc.p_vs = pass_set.res_vs.Get();
+                        pso_desc.p_ps = pass_set.res_ps.Get();
+                        // TODO. option.
+                    }
+                    rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = pso_creator_map_[pass_set.pass_name]->Create(p_device_, pso_desc);
+                    if(!ref_pso.IsValid())
+                    {
+                        assert(false);
+                        continue;
+                    }
+
+                    // 登録.
+                    if(pass_pso_set.pass_pso_name_index.end() == pass_pso_set.pass_pso_name_index.find(pass_set.pass_name))
+                    {
+                        pass_pso_set.pass_pso_name_index[pass_set.pass_name] = static_cast<int>(pass_pso_set.pass_pso_set.size());
+                        pass_pso_set.pass_pso_set.push_back({});
+                        {
+                            auto& new_elem = pass_pso_set.pass_pso_set.back();
+                            new_elem.pass_name = pass_set.pass_name;
+                            new_elem.ref_pso = ref_pso;
+                        }
+                    }
                 }
             }
         }
@@ -212,10 +288,165 @@ namespace gfx
         return true;
     }
 
-    // マテリアル名と追加情報からPipeline取得.
-    int MaterialShaderManager::FindMaterialPipeline(const char* material_name, int option)
+    void MaterialShaderManager::Finalize()
     {
-        return -1;
+        (*p_impl_) = {};
+        pso_creator_map_ = {};
+        p_device_ = {};
+    }
+
+    void MaterialShaderManager::RegisterPassPsoCreator(const char* name, IMaterialPassPsoCreator* p_instance)
+    {
+        if(pso_creator_map_.end() != pso_creator_map_.find(name))
+        {
+            // 二重登録はエラー.
+            assert(false);
+            return;
+        }
+        pso_creator_map_.insert( std::make_pair(name, p_instance));
+    }
+
+    // マテリアル名と追加情報からPipeline取得.
+    rhi::GraphicsPipelineStateDep* MaterialShaderManager::FindMaterialPipeline(const char* material_name, const char* pass_name) const
+    {
+        // Material検索.
+        if(p_impl_->material_pso_name_index_.end() == p_impl_->material_pso_name_index_.find(material_name))
+        {
+            return {};
+        }
+
+        // Material内のPass検索.
+        auto& mtl_pso_set = p_impl_->material_pso_[p_impl_->material_pso_name_index_[material_name]];
+        if(mtl_pso_set.pass_pso_name_index.end() == mtl_pso_set.pass_pso_name_index.find(pass_name))
+        {
+            return {};
+        }
+
+        return mtl_pso_set.pass_pso_set[mtl_pso_set.pass_pso_name_index[pass_name]].ref_pso.Get();
+    }
+
+    
+    // Depth Pass用PSO生成.
+    rhi::GraphicsPipelineStateDep* MaterialPassPsoCreator_depth::Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc)
+    {   
+        ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+        desc.vs = &pass_pso_desc.p_vs->data_;
+        desc.ps = &pass_pso_desc.p_ps->data_;
+
+        desc.depth_stencil_state.depth_enable = true;
+        desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Greater; // ReverseZ.
+        desc.depth_stencil_state.depth_write_enable = true;
+        desc.depth_stencil_state.stencil_enable = false;
+        desc.depth_stencil_format = k_depth_format;
+
+        // 入力レイアウト
+        std::array<ngl::rhi::InputElement, 5> input_elem_data;
+        desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
+        desc.input_layout.p_input_elements = input_elem_data.data();
+        {
+            input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
+            input_elem_data[0].semantic_index = 0;
+            input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+            input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
+            input_elem_data[0].element_offset = 0;
+
+            input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
+            input_elem_data[1].semantic_index = 0;
+            input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+            input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
+            input_elem_data[1].element_offset = 0;
+						
+            input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
+            input_elem_data[2].semantic_index = 0;
+            input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+            input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
+            input_elem_data[2].element_offset = 0;
+						
+            input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
+            input_elem_data[3].semantic_index = 0;
+            input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+            input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
+            input_elem_data[3].element_offset = 0;
+
+            input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+            input_elem_data[4].semantic_index = 0;
+            input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
+            input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+            input_elem_data[4].element_offset = 0;
+        }
+        // PSO生成.
+        auto p_pso = new rhi::GraphicsPipelineStateDep();
+        if (!p_pso->Initialize(p_device, desc))
+        {
+            assert(false);
+            return {};
+        }
+        return p_pso;
+    }
+    // GBuffer Pass用PSO生成.
+    rhi::GraphicsPipelineStateDep* MaterialPassPsoCreator_gbuffer::Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc)
+    {   
+		ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+		desc.vs = &pass_pso_desc.p_vs->data_;
+		desc.ps = &pass_pso_desc.p_ps->data_;
+		{
+			desc.num_render_targets = 5;
+			desc.render_target_formats[0] = k_gbuffer0_format;
+			desc.render_target_formats[1] = k_gbuffer1_format;
+			desc.render_target_formats[2] = k_gbuffer2_format;
+			desc.render_target_formats[3] = k_gbuffer3_format;
+			desc.render_target_formats[4] = k_velocity_format;
+		}
+		{
+			desc.depth_stencil_state.depth_enable = true;
+			desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Equal; // Maskedを含めたEarlyZ Full PreZのためEqual.
+			desc.depth_stencil_state.depth_write_enable = false;// 描き込み無効. 深度テストのみで書き込み無効.
+			desc.depth_stencil_state.stencil_enable = false;
+			desc.depth_stencil_format = k_depth_format;
+		}
+		// 入力レイアウト
+		std::array<ngl::rhi::InputElement, 5> input_elem_data;
+		desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
+		desc.input_layout.p_input_elements = input_elem_data.data();
+		{
+			input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
+			input_elem_data[0].semantic_index = 0;
+			input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+			input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
+			input_elem_data[0].element_offset = 0;
+
+			input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
+			input_elem_data[1].semantic_index = 0;
+			input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+			input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
+			input_elem_data[1].element_offset = 0;
+			
+			input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
+			input_elem_data[2].semantic_index = 0;
+			input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+			input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
+			input_elem_data[2].element_offset = 0;
+			
+			input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
+			input_elem_data[3].semantic_index = 0;
+			input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+			input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
+			input_elem_data[3].element_offset = 0;
+
+			input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
+			input_elem_data[4].semantic_index = 0;
+			input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
+			input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
+			input_elem_data[4].element_offset = 0;
+		}
+        // PSO生成.
+        auto p_pso = new rhi::GraphicsPipelineStateDep();
+        if (!p_pso->Initialize(p_device, desc))
+        {
+            assert(false);
+            return {};
+        }
+        return p_pso;
     }
     
 }

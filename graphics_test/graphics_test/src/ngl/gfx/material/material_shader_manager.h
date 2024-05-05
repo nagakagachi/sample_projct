@@ -55,9 +55,22 @@
     
 */
 #pragma once
+#include <ostream>
+#include <string>
+#include <unordered_map>
+#include <iostream>
+
+#include "ngl/rhi/rhi.h"
+#include "ngl/util/singleton.h"
+
+namespace ngl::gfx
+{
+    class ResShader;
+}
 
 namespace ngl::rhi
 {
+    class GraphicsPipelineStateDep;
     class DeviceDep;
 }
 
@@ -65,19 +78,92 @@ namespace ngl
 {
 namespace gfx
 {
-    class MaterialShaderManager
+    struct MaterialPassPsoDesc
+    {
+        const ResShader* p_vs = {};
+        const ResShader* p_ps = {};
+    };
+    // Pass Pso Creator Interface.
+    class IMaterialPassPsoCreator
     {
     public:
-        MaterialShaderManager() = default;
+        virtual ~IMaterialPassPsoCreator() = default;
+        virtual rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc);
+    };
+    
+    // Depth Pass Pso Creator.
+    class MaterialPassPsoCreator_depth : public IMaterialPassPsoCreator
+    {
+    public:
+        static constexpr char k_name[] = "depth";
+        rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc) override;
+        
+        // Depth.
+        static constexpr auto k_depth_format = rhi::EResourceFormat::Format_D32_FLOAT;
+        
+    private:
+    };
+
+    // GBUffer Pass Pso Creator.
+    class MaterialPassPsoCreator_gbuffer : public IMaterialPassPsoCreator
+    {
+    public:
+        static constexpr char k_name[] = "gbuffer";
+        rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc) override;
+        
+        // Depth.
+        static constexpr auto k_depth_format = rhi::EResourceFormat::Format_D32_FLOAT;
+        // GBuffer0 BaseColor, Occlusion
+        static constexpr auto k_gbuffer0_format = rhi::EResourceFormat::Format_R8G8B8A8_UNORM_SRGB;
+        // GBuffer1 WorldNormal.xyz, 1bitOption.w
+        static constexpr auto k_gbuffer1_format = rhi::EResourceFormat::Format_R10G10B10A2_UNORM;
+        // GBuffer2 Roughness, Metallic, Optional, MaterialId
+        static constexpr auto k_gbuffer2_format = rhi::EResourceFormat::Format_R8G8B8A8_UNORM;
+        // GBuffer3 Emissive.xyz, Unused.w
+        static constexpr auto k_gbuffer3_format = rhi::EResourceFormat::Format_R16G16B16A16_FLOAT;
+        // Velocity xy
+        static constexpr auto k_velocity_format = rhi::EResourceFormat::Format_R16G16_FLOAT;
+    private:
+    };
+
+
+    
+    
+    // ランタイムでMaterialShaderPSOの問い合わせに対応するクラス.
+    class MaterialShaderManager : public Singleton<MaterialShaderManager>
+    {
+    public:
+        MaterialShaderManager();
         ~MaterialShaderManager();
 
+        // PassPso生成クラスを登録する.
+        //  Setup()よりも先に登録が必要.
+        template<typename PASS_PSO_CREATOR_TYPE>
+        void RegisterPassPsoCreator();
+        
         //  generated_shader_root_dir : マテリアルシェーダディレクトリ. ここに マテリアル名/マテリアル毎のPassシェーダ群 が生成される.
-        bool Initialize(rhi::DeviceDep* p_device, const char* generated_shader_root_dir);
+        bool Setup(rhi::DeviceDep* p_device, const char* generated_shader_root_dir);
+        void Finalize();
 
-        int FindMaterialPipeline(const char* material_name, int option = 0);
+        rhi::GraphicsPipelineStateDep* FindMaterialPipeline(const char* material_name, const char* pass_name) const;
+    public:
+    private:
+        void RegisterPassPsoCreator(const char* name, IMaterialPassPsoCreator* p_instance);
+        
+        std::unordered_map<std::string, IMaterialPassPsoCreator*> pso_creator_map_;
         
     private:
         rhi::DeviceDep* p_device_ = {};
+
+        class MaterialShaderManagerImpl* p_impl_ = {};
     };
+    template<typename PASS_PSO_CREATOR_TYPE>
+    inline void MaterialShaderManager::RegisterPassPsoCreator()
+    {
+        std::cout << "[MaterialShaderManager] RegisterPassPsoCreator " << PASS_PSO_CREATOR_TYPE::k_name << std::endl;
+
+        static PASS_PSO_CREATOR_TYPE register_instance = {}; 
+        RegisterPassPsoCreator(PASS_PSO_CREATOR_TYPE::k_name, &register_instance);
+    }
 }
 }
