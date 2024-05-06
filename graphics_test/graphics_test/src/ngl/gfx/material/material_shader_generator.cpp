@@ -35,6 +35,9 @@ namespace gfx
         constexpr char k_material_config_xml_begin_tag[] = "<material_config>";
         constexpr char k_material_config_xml_end_tag[] = "</material_config>";
         constexpr char k_material_config_pass_tag[] = "pass";
+        constexpr char k_material_config_vs_in_require_tag[] = "vs_in_require";
+
+        constexpr char k_material_generate_code_macro_vs_in_prefix[] = "NGL_VS_IN_";
 
         // 現状は固定で VS-PS.
         const std::array<std::string,2> k_stage_names =
@@ -59,6 +62,10 @@ namespace gfx
             std::string name = {};
             // depth, gbuffer, etc.
             std::vector<std::string> pass = {};
+
+            // 要求頂点入力情報.
+            std::vector<std::string> vs_in_require_semantic_name = {};
+            std::vector<int> vs_in_require_semantic_index = {};
         };
 
         // パスチェック.
@@ -180,12 +187,36 @@ namespace gfx
                 auto* xml_pass_tag = xml_root->FirstChildElement();
                 while(xml_pass_tag)
                 {
-                    // Pass情報.
                     if(0 == strncmp(xml_pass_tag->Name(), k_material_config_pass_tag, 4))
                     {
+                        // Passタグ.
                         if(auto* pass_name = xml_pass_tag->Attribute("name"))
                         {
                             material_config_list[i].pass.push_back(pass_name);
+                        }
+                    }
+                    else if(0 == strncmp(xml_pass_tag->Name(), k_material_config_vs_in_require_tag, 4))
+                    {
+                        // 要求頂点入力タグ.
+                        std::string semantic_name = "";
+                        std::string semantic_index = "";
+                        if(auto* name = xml_pass_tag->Attribute("name"))
+                        {
+                            semantic_name = name;
+                        }
+                        if(auto* index = xml_pass_tag->Attribute("index"))
+                        {
+                            semantic_index = index;
+                        }
+                        if(!semantic_name.empty())
+                        {
+                            int semantic_index_i = 0;
+                            if(!semantic_index.empty())
+                            {
+                                semantic_index_i = stoi(semantic_index);
+                            }
+                            material_config_list[i].vs_in_require_semantic_index.push_back(semantic_index_i);
+                            material_config_list[i].vs_in_require_semantic_name.push_back(semantic_name);
                         }
                     }
 
@@ -275,12 +306,41 @@ namespace gfx
 
                         // コード部生成.
                         /*
+                            // 追加マクロ...
+                            
                             #include "../../impl/opaque_standard.hlsli"
                             #include "../../pass/depth.hlsli"
                         */
-                        // generic_string() で / 区切りに変換.
-                        ofs << "#include " << "\"" << rel_impl_path.generic_string() << "\"" << std::endl;
-                        ofs << "#include " << "\"" << rel_pass_path.generic_string() << "\"" << std::endl;
+
+                        // マクロ定義部
+                        {
+                            for(int vsi = 0; vsi < material_config_list[mtl_index].vs_in_require_semantic_name.size(); ++vsi)
+                            {
+                                std::string require_semantic_name = material_config_list[mtl_index].vs_in_require_semantic_name[vsi];
+
+                                ofs << "#define "
+                                << k_material_generate_code_macro_vs_in_prefix
+                                << material_config_list[mtl_index].vs_in_require_semantic_name[vsi]
+                                << material_config_list[mtl_index].vs_in_require_semantic_index[vsi]
+                                << "\n";
+                                
+                                if(0 == material_config_list[mtl_index].vs_in_require_semantic_index[vsi])
+                                {
+                                    // Index==0の場合はIndexを省略したバージョンも記述しておく.
+                                    ofs << "#define "
+                                    << k_material_generate_code_macro_vs_in_prefix
+                                    << material_config_list[mtl_index].vs_in_require_semantic_name[vsi]
+                                    << "\n";
+                                }
+                            }
+                        }
+                        
+                        // include部.
+                        {
+                            // generic_string() で / 区切りに変換.
+                            ofs << "#include " << "\"" << rel_impl_path.generic_string() << "\"" << "\n";
+                            ofs << "#include " << "\"" << rel_pass_path.generic_string() << "\"" << "\n";
+                        }
 
                         // Complete.
                         ofs.close();

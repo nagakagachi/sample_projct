@@ -6,6 +6,11 @@
 <material_config>
     <pass name="depth"/>
     <pass name="gbuffer"/>
+
+    <vs_in_require name="NORMAL"/>
+    <vs_in_require name="TANGENT"/>
+    <vs_in_require name="BINORMAL"/>
+    <vs_in_require name="TEXCOORD" index="0"/>
 </material_config>
 #endif
 

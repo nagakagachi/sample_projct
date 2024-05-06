@@ -12,16 +12,20 @@
 // VS.
     VS_OUTPUT main_vs(VS_INPUT input)
     {
+        VsInputWrapper input_wrap = ConstructVsInputWrapper(input);
+        
         const float3x4 instance_mtx = NglGetInstanceTransform(0);
         
-        float3 pos_ws = mul(instance_mtx, float4(input.pos, 1.0)).xyz;
+        float3 pos_ws = mul(instance_mtx, float4(input_wrap.pos, 1.0)).xyz;
         float3 pos_vs = mul(ngl_cb_sceneview.cb_view_mtx, float4(pos_ws, 1.0));
         float4 pos_cs = mul(ngl_cb_sceneview.cb_proj_mtx, float4(pos_vs, 1.0));
 
         // ジオメトリ側のTangentFrameが正規化されていない場合があるため.
-        float3 normal_ws = normalize(mul(instance_mtx, float4(input.normal, 0.0)).xyz);
-        float3 tangent_ws = normalize(mul(instance_mtx, float4(input.tangent, 0.0)).xyz);
-        float3 binormal_ws = normalize(mul(instance_mtx, float4(input.binormal, 0.0)).xyz);
+        float3 normal_ws = normalize(mul(instance_mtx, float4(input_wrap.normal, 0.0)).xyz);
+        float3 tangent_ws = normalize(mul(instance_mtx, float4(input_wrap.tangent, 0.0)).xyz);
+        float3 binormal_ws = normalize(mul(instance_mtx, float4(input_wrap.binormal, 0.0)).xyz);
+
+        float2 uv0 = input_wrap.uv0;
 
         MtlVsInput mtl_input = (MtlVsInput)0;
         {
@@ -39,7 +43,7 @@
         VS_OUTPUT output = (VS_OUTPUT)0;
         {
             output.pos = pos_cs;
-            output.uv = input.uv;
+            output.uv0 = uv0;
 
             output.pos_ws = pos_ws;
             output.pos_vs = pos_vs;
@@ -59,7 +63,7 @@
         MtlPsInput mtl_input = (MtlPsInput)0;
         {
             mtl_input.pos_sv = input.pos;
-            mtl_input.uv0 = input.uv;
+            mtl_input.uv0 = input.uv0;
             
             mtl_input.pos_ws = input.pos_ws;
             mtl_input.pos_vs = input.pos_vs;

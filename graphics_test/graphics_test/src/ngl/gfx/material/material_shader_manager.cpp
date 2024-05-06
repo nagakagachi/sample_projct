@@ -12,11 +12,13 @@ namespace ngl
 {
 namespace gfx
 {
+    // MaterialPassShaderファイル名の.区切りパーツそれぞれの意味を定義するENUM.
+    //  MaterialName.PassName.ShaderStage.hlsl
+    //      ShaderStageは特殊で末尾(.hlsliの一つ前)にあるものとしている.
     enum EMaterialShaderNamePart
     {
         MATERIAL_NAME,
         PASS_NAME,
-        SHADER_STAGE_NAME,
 
         _MAX
     };
@@ -188,8 +190,8 @@ namespace gfx
                 }
 
                 // ファイルから取得した情報数チェック.
-                //  現状では少なくとも MaterialName.
-                if(EMaterialShaderNamePart::_MAX > shader_filename_split.size())
+                //  最低でも MaterialName PassName ShaderStage の3つは存在する.
+                if(3 > shader_filename_split.size())
                 {
                     assert(false);
                     continue;
@@ -197,7 +199,7 @@ namespace gfx
                 
                 const auto material_name = shader_filename_split[EMaterialShaderNamePart::MATERIAL_NAME];
                 const auto pass_name = shader_filename_split[EMaterialShaderNamePart::PASS_NAME];
-                const auto shader_stage_name = shader_filename_split[EMaterialShaderNamePart::SHADER_STAGE_NAME];
+                const auto shader_stage_name = shader_filename_split[shader_filename_split.size()-1];// ShaderStage(vs,ps)は末尾.
 
                 // Material毎のデータベース.
                 if(material_shader_name_index.end() == material_shader_name_index.find(material_name))
