@@ -7,14 +7,30 @@
 #include "ngl/rhi/d3d12/shader.d3d12.h"
 
 #include "ngl/gfx/common_struct.h"
+#include "ngl/gfx/material/material_shader_manager.h"
+#include "ngl/render/test_pass.h"
 
 namespace ngl
 {
 namespace gfx
 {
+	void RenderMeshWithMaterialPass(rhi::GraphicsCommandListDep& command_list,
+		const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
+	{
+		// MaterialのPsoをPass指定して取得.
+		// Material名はとりあえず不透明標準.
+		const auto&& pass_pso = ngl::gfx::MaterialShaderManager::Instance().CreateMaterialPipeline("opaque_standard", pass_name);
+		if(!pass_pso)
+			return;
+
+		// すべてのMeshを単一PSO描画.
+		RenderMeshSinglePso(command_list, *pass_pso, mesh_instance_array, cbv_sceneview);
+	}
+	
 	// 単一PSOでのメッシュ描画.
 	// RenderTargetやViewport設定が完了している状態で呼び出される前提.
-    void RenderMeshSinglePso(rhi::GraphicsCommandListDep& command_list, rhi::GraphicsPipelineStateDep& pso, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
+    void RenderMeshSinglePso(rhi::GraphicsCommandListDep& command_list,
+    	rhi::GraphicsPipelineStateDep& pso, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
     {
     	auto default_white_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_white->ref_view_;
     	auto default_black_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
@@ -22,6 +38,7 @@ namespace gfx
 
 
     	// このRenderが要求するInput.
+    	// 本来はPSO側が要求するものを適宜取得してチェックしたい.
     	MeshVertexSemanticSlotMask require_vtx_input_mask = {};
     	{
     		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::POSITION, 0);

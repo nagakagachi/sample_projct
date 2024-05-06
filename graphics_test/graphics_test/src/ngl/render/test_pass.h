@@ -1,8 +1,12 @@
 ﻿#pragma once
 
-#include "rtg_command_list_pool.h"
 
 #include<variant>
+
+#include "graph_builder.h"
+#include "ngl/gfx/command_helper.h"
+
+#include "ngl/gfx/render/mesh_renderer.h"
 
 #include "ngl/gfx/render/global_render_resource.h"
 #include "ngl/gfx/material/material_shader_manager.h"
@@ -63,12 +67,7 @@ namespace ngl::render
 
 				
 				// Mesh Rendering.
-				// Material Pso 問い合わせ. マテリアル名はとりあえず固定で適当なもの.
-				auto* mtl_pso =  gfx::MaterialShaderManager::Instance().FindMaterialPipeline("opaque_standard", "depth");
-				if(mtl_pso)
-				{
-					ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *mtl_pso, *p_mesh_list_, *ref_scene_cbv_);				
-				}
+				ngl::gfx::RenderMeshWithMaterialPass(*gfx_commandlist, "depth", *p_mesh_list_, *ref_scene_cbv_);
 			}
 		};
 
@@ -174,12 +173,7 @@ namespace ngl::render
 				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
 				// Mesh Rendering.
-				// Material Pso 問い合わせ. マテリアル名はとりあえず固定で適当なもの.
-				auto* mtl_pso =  gfx::MaterialShaderManager::Instance().FindMaterialPipeline("opaque_standard", "gbuffer");
-				if(mtl_pso)
-				{
-					ngl::gfx::RenderMeshSinglePso(*gfx_commandlist, *mtl_pso, *p_mesh_list_, *ref_scene_cbv_);				
-				}
+				ngl::gfx::RenderMeshWithMaterialPass(*gfx_commandlist, "gbuffer", *p_mesh_list_, *ref_scene_cbv_);
 			}
 		};
 

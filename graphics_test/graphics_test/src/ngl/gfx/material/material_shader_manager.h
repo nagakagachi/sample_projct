@@ -60,6 +60,7 @@
 #include <unordered_map>
 #include <iostream>
 
+#include "ngl/gfx/common_struct.h"
 #include "ngl/rhi/rhi.h"
 #include "ngl/util/singleton.h"
 
@@ -82,6 +83,8 @@ namespace gfx
     {
         const ResShader* p_vs = {};
         const ResShader* p_ps = {};
+
+        MeshVertexSemanticSlotMask  vs_input_layout_mask = {};
     };
     // Pass Pso Creator Interface.
     class IMaterialPassPsoCreator
@@ -90,6 +93,7 @@ namespace gfx
         virtual ~IMaterialPassPsoCreator() = default;
         virtual rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc);
     };
+
     
     // Depth Pass Pso Creator.
     class MaterialPassPsoCreator_depth : public IMaterialPassPsoCreator
@@ -145,16 +149,15 @@ namespace gfx
         bool Setup(rhi::DeviceDep* p_device, const char* generated_shader_root_dir);
         void Finalize();
 
-        rhi::GraphicsPipelineStateDep* FindMaterialPipeline(const char* material_name, const char* pass_name) const;
-    public:
+        // マテリアル名と追加情報からPipeline生成またはCacheから取得.
+        rhi::GraphicsPipelineStateDep* CreateMaterialPipeline(const char* material_name, const char* pass_name);
     private:
         void RegisterPassPsoCreator(const char* name, IMaterialPassPsoCreator* p_instance);
-        
+        // Pass Pso Creator登録用.
         std::unordered_map<std::string, IMaterialPassPsoCreator*> pso_creator_map_;
-        
     private:
         rhi::DeviceDep* p_device_ = {};
-
+        // 内部データ隠蔽.
         class MaterialShaderManagerImpl* p_impl_ = {};
     };
     template<typename PASS_PSO_CREATOR_TYPE>
@@ -162,6 +165,7 @@ namespace gfx
     {
         std::cout << "[MaterialShaderManager] RegisterPassPsoCreator " << PASS_PSO_CREATOR_TYPE::k_name << std::endl;
 
+        // Pass Pso CreatorはStateを持たないため, 外部からは型だけ指定して内部でstaticインスタンスを登録する.
         static PASS_PSO_CREATOR_TYPE register_instance = {}; 
         RegisterPassPsoCreator(PASS_PSO_CREATOR_TYPE::k_name, &register_instance);
     }

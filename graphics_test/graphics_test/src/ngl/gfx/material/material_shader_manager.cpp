@@ -29,6 +29,9 @@ namespace gfx
 
         res::ResourceHandle<ResShader> res_vs = {};
         res::ResourceHandle<ResShader> res_ps = {};
+
+        // 頂点シェーダが要求するInputSemanticsMask.
+        MeshVertexSemanticSlotMask vs_require_input_mask = {};
     };
     struct MaterialShaderSet
     {
@@ -42,24 +45,77 @@ namespace gfx
     {
         std::string pass_name = {};
         rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = {};
+        // 頂点シェーダが要求するInputSemanticsMask.
+        MeshVertexSemanticSlotMask vs_require_input_mask = {};
     };
     struct MaterialPassPsoSet
     {
+        ~MaterialPassPsoSet()
+        {
+            for(auto& e : pso_lib)
+            {
+                if(e)
+                {
+                    delete e;
+                    e = {};
+                }
+            }
+            pso_lib.clear();
+        }
         std::string material_name = {};
             
-        std::vector<MaterialPassPso> pass_pso_set = {};
-        std::unordered_map<std::string, int> pass_pso_name_index = {};
+        std::vector<MaterialPassPso*> pso_lib = {};
+        std::unordered_map<std::string, int> pso_name_index = {};
+        
+        std::mutex pso_lib_mutex_ = {};// Material別のLcok用.
     };
-    
+
+    // 隠蔽用.
     class MaterialShaderManagerImpl
     {
     public:
-        std::vector<MaterialShaderSet> material_shader_set_ = {};
-        std::unordered_map<std::string, int> material_shader_name_index_ = {};
+        // ShaderData検索.
+        const MaterialPassShaderSet* FindPassShaderSet(const char* material_name, const char* pass_name) const
+        {
+            // Material検索.
+            const auto mtl_shader_it = material_shader_name_index_.find(material_name);
+            if(material_shader_name_index_.end() == mtl_shader_it)
+                return {};
 
+            // Pass検索.
+            const auto& pass_set = material_shader_lib_[mtl_shader_it->second];
+            const auto pass_it = pass_set.pass_shader_name_index.find(pass_name);
+            if(pass_set.pass_shader_name_index.end() == pass_it)
+                return {};
+
+            return &pass_set.pass_shader_set[pass_it->second];
+        }
         
-        std::vector<MaterialPassPsoSet> material_pso_ = {};
+        
+        void Cleanup()
+        {
+            material_shader_lib_ = {};
+            material_shader_name_index_ = {};
+            {
+                for(auto& e : material_pso_lib_)
+                {
+                    if(e)
+                    {
+                        delete e;
+                        e = {};
+                    }
+                }
+                material_pso_lib_.clear();
+            }
+            material_pso_name_index_ = {};
+        }
+        std::vector<MaterialShaderSet> material_shader_lib_ = {};
+        std::unordered_map<std::string, int> material_shader_name_index_ = {};
+ 
+        std::vector<MaterialPassPsoSet*> material_pso_lib_ = {};
         std::unordered_map<std::string, int> material_pso_name_index_ = {};
+
+        std::mutex material_pso_lib_mutex_ = {};// Material MapのLock用.
     };
 
     
@@ -91,7 +147,7 @@ namespace gfx
         }
 
 
-        auto& material_shader_set = p_impl_->material_shader_set_;
+        auto& material_shader_set = p_impl_->material_shader_lib_;
         auto& material_shader_name_index = p_impl_->material_shader_name_index_;
 
         // 直下のマテリアル別ディレクトリ巡回.
@@ -211,6 +267,22 @@ namespace gfx
                     loaddesc_vs.shader_model_version = k_shader_model;
 
                     pass_set.res_vs = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, pass_set.vs_file.c_str(), &loaddesc_vs);
+
+                    // InputElementのMaskを構築. ShaderReflection利用. 事前生成してもよいかも.
+                    MeshVertexSemanticSlotMask vs_in_mask = {};
+                    {
+                        rhi::ShaderReflectionDep shader_ref;
+                        if(shader_ref.Initialize(p_device_, &pass_set.res_vs->data_))
+                        {
+                            for(u32 ii = 0; ii < shader_ref.NumInputParamInfo(); ++ii)
+                            {
+                                EMeshVertexSemanticKind::Type semantic = MeshVertexSemantic::ConvertSemanticNameToType(shader_ref.GetInputParamInfo(ii)->semantic_name);
+                                if(EMeshVertexSemanticKind::_MAX > semantic)
+                                    vs_in_mask.AddSlot(semantic, shader_ref.GetInputParamInfo(ii)->semantic_index);
+                            }
+                        }
+                    }
+                    pass_set.vs_require_input_mask = vs_in_mask;
                 }
                 if(0 < pass_set.vs_file.size())
                 {
@@ -224,73 +296,14 @@ namespace gfx
             }
         }
 
-        // PipelineStateObject生成.
-        auto& material_pso_set = p_impl_->material_pso_;
-        auto& material_pso_name_index = p_impl_->material_pso_name_index_;
-        for(size_t mtl_i = 0; mtl_i < material_shader_set.size(); ++mtl_i)
-        {
-            auto& mtl_set = material_shader_set[mtl_i];
-
-            // Mapに未登録なら新規追加.
-            if(material_pso_name_index.end() == material_pso_name_index.find(mtl_set.material_name))
-            {
-                material_pso_name_index[mtl_set.material_name] = static_cast<int>(material_pso_set.size());
-                material_pso_set.push_back({});
-                {
-                    auto& new_elem = material_pso_set.back();
-                    new_elem.material_name = mtl_set.material_name;
-                }
-            }
-
-            
-            auto& pass_pso_set = material_pso_set[material_pso_name_index[mtl_set.material_name]];
-            for(size_t pass_i = 0; pass_i < mtl_set.pass_shader_set.size(); ++pass_i)
-            {
-                auto& pass_set = mtl_set.pass_shader_set[pass_i];
-
-                // VS-PS Pso.
-                if(pass_set.res_vs.IsValid() && pass_set.res_ps.IsValid())
-                {
-                    if(pso_creator_map_.end() == pso_creator_map_.find(pass_set.pass_name))
-                    {
-                        assert(false);
-                        continue;
-                    }
-
-                    MaterialPassPsoDesc pso_desc = {};
-                    {
-                        pso_desc.p_vs = pass_set.res_vs.Get();
-                        pso_desc.p_ps = pass_set.res_ps.Get();
-                        // TODO. option.
-                    }
-                    rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = pso_creator_map_[pass_set.pass_name]->Create(p_device_, pso_desc);
-                    if(!ref_pso.IsValid())
-                    {
-                        assert(false);
-                        continue;
-                    }
-
-                    // 登録.
-                    if(pass_pso_set.pass_pso_name_index.end() == pass_pso_set.pass_pso_name_index.find(pass_set.pass_name))
-                    {
-                        pass_pso_set.pass_pso_name_index[pass_set.pass_name] = static_cast<int>(pass_pso_set.pass_pso_set.size());
-                        pass_pso_set.pass_pso_set.push_back({});
-                        {
-                            auto& new_elem = pass_pso_set.pass_pso_set.back();
-                            new_elem.pass_name = pass_set.pass_name;
-                            new_elem.ref_pso = ref_pso;
-                        }
-                    }
-                }
-            }
-        }
+        // 実際のPSO生成はリクエストされた段階で実行する方式. -> CreateMaterialPipeline().
         
         return true;
     }
 
     void MaterialShaderManager::Finalize()
     {
-        (*p_impl_) = {};
+        p_impl_->Cleanup();
         pso_creator_map_ = {};
         p_device_ = {};
     }
@@ -306,25 +319,159 @@ namespace gfx
         pso_creator_map_.insert( std::make_pair(name, p_instance));
     }
 
-    // マテリアル名と追加情報からPipeline取得.
-    rhi::GraphicsPipelineStateDep* MaterialShaderManager::FindMaterialPipeline(const char* material_name, const char* pass_name) const
+    // マテリアル名と追加情報からPipeline生成またはCacheから取得.
+    rhi::GraphicsPipelineStateDep* MaterialShaderManager::CreateMaterialPipeline(const char* material_name, const char* pass_name)
     {
+        // 無効なPassの場合はnullptr.
+        if(pso_creator_map_.end() == pso_creator_map_.find(pass_name))
+        {
+            return {};
+        }
+        
         // Material検索.
-        if(p_impl_->material_pso_name_index_.end() == p_impl_->material_pso_name_index_.find(material_name))
+        MaterialPassPsoSet* p_mtl_pso_set = {};
         {
-            return {};
+            // 最上位のMapをLock.
+            std::lock_guard<std::mutex> lock(p_impl_->material_pso_lib_mutex_);
+
+            const auto mtl_it = p_impl_->material_pso_name_index_.find(material_name);
+            if(p_impl_->material_pso_name_index_.end() != mtl_it)
+            {
+                p_mtl_pso_set = p_impl_->material_pso_lib_[mtl_it->second];
+            }
+            else
+            {
+                // Mapに未登録なら新規追加.
+                const int new_index = static_cast<int>(p_impl_->material_pso_lib_.size());
+                p_impl_->material_pso_name_index_[material_name] = new_index;
+                p_impl_->material_pso_lib_.push_back(new MaterialPassPsoSet());// vector拡張時にアドレス変わらないようにnew.(mutex lockの範囲を狭める都合.
+                {
+                    auto& new_elem = p_impl_->material_pso_lib_.back();
+                    new_elem->material_name = material_name;
+                }
+                p_mtl_pso_set = p_impl_->material_pso_lib_[new_index];
+            }
         }
 
-        // Material内のPass検索.
-        auto& mtl_pso_set = p_impl_->material_pso_[p_impl_->material_pso_name_index_[material_name]];
-        if(mtl_pso_set.pass_pso_name_index.end() == mtl_pso_set.pass_pso_name_index.find(pass_name))
         {
-            return {};
-        }
+            // Material別のLock. 排他範囲が重なりにくくしたい意図.
+            std::lock_guard<std::mutex> lock(p_mtl_pso_set->pso_lib_mutex_);
+            
+            if(p_mtl_pso_set->pso_name_index.end() != p_mtl_pso_set->pso_name_index.find(pass_name))
+            {
+                // Cacheにあれば即座に返却.
+                return p_mtl_pso_set->pso_lib[p_mtl_pso_set->pso_name_index[pass_name]]->ref_pso.Get();
+            }
+            else
+            {
+                // 未登録なら新規生成と登録.
+                rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = {};
+                MeshVertexSemanticSlotMask  vs_require_input_mask = {};
+                {
+                    auto* shader_set = p_impl_->FindPassShaderSet(material_name, pass_name);
+                    if(!shader_set)
+                        return {};
+                    MaterialPassPsoDesc pso_desc = {};
+                    {
+                        pso_desc.p_vs = shader_set->res_vs.Get();
+                        pso_desc.p_ps = shader_set->res_ps.Get();
 
-        return mtl_pso_set.pass_pso_set[mtl_pso_set.pass_pso_name_index[pass_name]].ref_pso.Get();
+                        // InputLayoutMask.
+                        pso_desc.vs_input_layout_mask = shader_set->vs_require_input_mask;
+                        // TODO. option.
+                    }
+                    // Passに対応したCreatorで生成.
+                    ref_pso = pso_creator_map_[pass_name]->Create(p_device_, pso_desc);
+                    // VS要求入力マスク.
+                    vs_require_input_mask = shader_set->vs_require_input_mask;
+                }
+                if(!ref_pso.IsValid())
+                {
+                    assert(false);
+                    return {};
+                }
+                
+                // Map 登録.
+                p_mtl_pso_set->pso_name_index[pass_name] = static_cast<int>(p_mtl_pso_set->pso_lib.size());
+                p_mtl_pso_set->pso_lib.push_back(new MaterialPassPso());// vector拡張時にアドレス変わらないようにnew.(mutex lockの範囲を狭める都合.
+                auto& new_elem = p_mtl_pso_set->pso_lib.back();
+                {
+                    new_elem->pass_name = pass_name;
+                    new_elem->ref_pso = ref_pso;
+                    new_elem->vs_require_input_mask = vs_require_input_mask;
+                }
+                // 返却.
+                return new_elem->ref_pso.Get();
+            }
+        }
     }
 
+    // VS Input Semantic MaskからInputElementを生成.
+    //  本来は対応するMeshのSemanticに対応するBufferのFormatを参照すべきだが, とりあえずSemantic毎に固定されているものとして記述.
+    template<typename INPUT_ELEMENT_ARRAY>
+    void SetupInputElementArrayDefault(INPUT_ELEMENT_ARRAY& inout_input_elem_data, int& out_num_element, MeshVertexSemanticSlotMask vs_input_mask)
+    {
+        int elem_index = 0;
+        auto mask = vs_input_mask.mask;
+        for(int i = 0; 0 != mask; ++i)
+        {
+            if(mask & (1u << i))
+            {
+                const auto semantic_type = MeshVertexSemantic::k_semantic_slot_info.slot_semantic_type[i];
+                const auto semantic_index = MeshVertexSemantic::k_semantic_slot_info.slot_semantic_index[i];
+            
+                inout_input_elem_data[elem_index].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(semantic_type);
+                inout_input_elem_data[elem_index].semantic_index = semantic_index;
+                inout_input_elem_data[elem_index].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(semantic_type, semantic_index);
+                inout_input_elem_data[elem_index].element_offset = 0;// 非Interleavedなバッファ前提なのでオフセット無し.
+
+                // TODO. formatはMesh側から引かないとわからないが,とりあえず固定パターン.
+                switch(semantic_type)
+                {
+                case ngl::gfx::EMeshVertexSemanticKind::POSITION:
+                    {
+                        inout_input_elem_data[elem_index].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+                        break;
+                    }
+                case ngl::gfx::EMeshVertexSemanticKind::NORMAL:
+                    {
+                        inout_input_elem_data[elem_index].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+                        break;
+                    }
+                case ngl::gfx::EMeshVertexSemanticKind::TANGENT:
+                    {
+                        inout_input_elem_data[elem_index].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+                        break;
+                    }
+                case ngl::gfx::EMeshVertexSemanticKind::BINORMAL:
+                    {
+                        inout_input_elem_data[elem_index].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
+                        break;
+                    }
+                case ngl::gfx::EMeshVertexSemanticKind::TEXCOORD:
+                    {
+                        inout_input_elem_data[elem_index].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
+                        break;
+                    }
+                case ngl::gfx::EMeshVertexSemanticKind::COLOR:
+                    {
+                        inout_input_elem_data[elem_index].format = ngl::rhi::EResourceFormat::Format_R8G8B8A8_UNORM;
+                        break;   
+                    }
+                default:
+                    {
+                        assert(false);
+                        break;
+                    }
+                }
+
+                mask &= ~(1u << i);// ビットを0に.
+                ++elem_index;
+            }
+        }
+
+        out_num_element = elem_index;// 個数書き込み.
+    }
     
     // Depth Pass用PSO生成.
     rhi::GraphicsPipelineStateDep* MaterialPassPsoCreator_depth::Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc)
@@ -340,40 +487,15 @@ namespace gfx
         desc.depth_stencil_format = k_depth_format;
 
         // 入力レイアウト
-        std::array<ngl::rhi::InputElement, 5> input_elem_data;
-        desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-        desc.input_layout.p_input_elements = input_elem_data.data();
+        std::array<ngl::rhi::InputElement, 16> input_elem_data;// 最大数は適当.
         {
-            input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
-            input_elem_data[0].semantic_index = 0;
-            input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-            input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
-            input_elem_data[0].element_offset = 0;
+            int elem_index = 0;
+            SetupInputElementArrayDefault(input_elem_data, elem_index, pass_pso_desc.vs_input_layout_mask);
 
-            input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
-            input_elem_data[1].semantic_index = 0;
-            input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-            input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
-            input_elem_data[1].element_offset = 0;
-						
-            input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
-            input_elem_data[2].semantic_index = 0;
-            input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-            input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
-            input_elem_data[2].element_offset = 0;
-						
-            input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
-            input_elem_data[3].semantic_index = 0;
-            input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-            input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
-            input_elem_data[3].element_offset = 0;
-
-            input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
-            input_elem_data[4].semantic_index = 0;
-            input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
-            input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
-            input_elem_data[4].element_offset = 0;
+            desc.input_layout.p_input_elements = input_elem_data.data();
+            desc.input_layout.num_elements = static_cast<ngl::u32>(elem_index);
         }
+        
         // PSO生成.
         auto p_pso = new rhi::GraphicsPipelineStateDep();
         if (!p_pso->Initialize(p_device, desc))
@@ -404,41 +526,17 @@ namespace gfx
 			desc.depth_stencil_state.stencil_enable = false;
 			desc.depth_stencil_format = k_depth_format;
 		}
-		// 入力レイアウト
-		std::array<ngl::rhi::InputElement, 5> input_elem_data;
-		desc.input_layout.num_elements = static_cast<ngl::u32>(input_elem_data.size());
-		desc.input_layout.p_input_elements = input_elem_data.data();
-		{
-			input_elem_data[0].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::POSITION);
-			input_elem_data[0].semantic_index = 0;
-			input_elem_data[0].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-			input_elem_data[0].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::POSITION, 0);
-			input_elem_data[0].element_offset = 0;
+        
+        // 入力レイアウト
+        std::array<ngl::rhi::InputElement, 16> input_elem_data;// 最大数は適当.
+        {
+            int elem_index = 0;
+            SetupInputElementArrayDefault(input_elem_data, elem_index, pass_pso_desc.vs_input_layout_mask);
 
-			input_elem_data[1].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::NORMAL);
-			input_elem_data[1].semantic_index = 0;
-			input_elem_data[1].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-			input_elem_data[1].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::NORMAL, 0);
-			input_elem_data[1].element_offset = 0;
-			
-			input_elem_data[2].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TANGENT);
-			input_elem_data[2].semantic_index = 0;
-			input_elem_data[2].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-			input_elem_data[2].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TANGENT, 0);
-			input_elem_data[2].element_offset = 0;
-			
-			input_elem_data[3].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::BINORMAL);
-			input_elem_data[3].semantic_index = 0;
-			input_elem_data[3].format = ngl::rhi::EResourceFormat::Format_R32G32B32_FLOAT;
-			input_elem_data[3].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::BINORMAL, 0);
-			input_elem_data[3].element_offset = 0;
+            desc.input_layout.p_input_elements = input_elem_data.data();
+            desc.input_layout.num_elements = static_cast<ngl::u32>(elem_index);
+        }
 
-			input_elem_data[4].semantic_name = ngl::gfx::MeshVertexSemantic::SemanticNameStr(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD);
-			input_elem_data[4].semantic_index = 0;
-			input_elem_data[4].format = ngl::rhi::EResourceFormat::Format_R32G32_FLOAT;
-			input_elem_data[4].stream_slot = ngl::gfx::MeshVertexSemantic::SemanticSlot(ngl::gfx::EMeshVertexSemanticKind::TEXCOORD, 0);
-			input_elem_data[4].element_offset = 0;
-		}
         // PSO生成.
         auto p_pso = new rhi::GraphicsPipelineStateDep();
         if (!p_pso->Initialize(p_device, desc))

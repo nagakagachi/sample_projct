@@ -117,18 +117,41 @@ namespace gfx
 			max_slot_count = offset[EMeshVertexSemanticKind::_MAX-1] + EMeshVertexSemanticKind::Count[EMeshVertexSemanticKind::_MAX - 1];
 		}
 	};
+	// Slot毎の情報.
+	struct MeshVertexSemanticSlotInfo
+	{
+		static constexpr MeshVertexSemanticSlotOffset k_semantic_slot_offset{};
+		// MeshVertexSemanticSlotMaskで保持するため32以下チェック.
+		static_assert(k_semantic_slot_offset.max_slot_count <= 32);
+		
+		EMeshVertexSemanticKind::Type slot_semantic_type[k_semantic_slot_offset.max_slot_count];// slotに対応するSemanticのType. 例 slot[N] -> Normal[M] -> Normal .
+		int slot_semantic_index[k_semantic_slot_offset.max_slot_count];// slotに対応するSemanticのIndex. 例 slot[N] -> [M].
+
+		
+		constexpr MeshVertexSemanticSlotInfo()
+			: slot_semantic_type()
+			, slot_semantic_index()
+		{
+			for(int s = 0; s < EMeshVertexSemanticKind::_MAX; ++s)
+			{
+				for(int local_offset = 0; local_offset < EMeshVertexSemanticKind::Count[s]; ++local_offset)
+				{
+					slot_semantic_type[k_semantic_slot_offset.offset[s] + local_offset] = (EMeshVertexSemanticKind::Type)s;
+					slot_semantic_index[k_semantic_slot_offset.offset[s] + local_offset] = local_offset;
+				}
+			}
+		}
+	};
 
 	// セマンティクス種別とインデックスからマッピングされたSlotインデックスの計算等を提供.
 	struct MeshVertexSemantic
 	{
-		static constexpr MeshVertexSemanticSlotOffset count{};
-		// MeshVertexSemanticSlotMaskで保持するため32以下チェック.
-		static_assert(count.max_slot_count <= 32);
+		static constexpr MeshVertexSemanticSlotInfo k_semantic_slot_info{};
 		
 		// サポートしている最大スロット数.
 		static constexpr int SemanticSlotMaxCount()
 		{
-			return count.max_slot_count;
+			return MeshVertexSemanticSlotInfo::k_semantic_slot_offset.max_slot_count;
 		}
 
 		// セマンティクスとそのインデックスからスロット番号を返す.
@@ -136,7 +159,7 @@ namespace gfx
 		static constexpr int SemanticSlot(EMeshVertexSemanticKind::Type semantic, int semantic_index = 0)
 		{
 			assert(EMeshVertexSemanticKind::Count[semantic] > semantic_index);
-			return count.offset[semantic] + semantic_index;
+			return MeshVertexSemanticSlotInfo::k_semantic_slot_offset.offset[semantic] + semantic_index;
 		}
 		// 各セマンティクスの最大スロット数を返す.
 		static constexpr int SemanticCount(EMeshVertexSemanticKind::Type semantic)
@@ -152,12 +175,25 @@ namespace gfx
 		// セマンティクス名.
 		static const char* SemanticNameStr(EMeshVertexSemanticKind::Type semantic)
 		{
-			//return SemanticName(semantic).str;
 			return SemanticName(semantic).Get();
+		}
+		
+		// セマンティクス名->Type.
+		static const EMeshVertexSemanticKind::Type ConvertSemanticNameToType(const SemanticNameType& name)
+		{
+			for(int i = 0; i < EMeshVertexSemanticKind::_MAX; ++i)
+			{
+				if(name == EMeshVertexSemanticKind::Name[i])
+					return (EMeshVertexSemanticKind::Type)i;
+			}
+			return EMeshVertexSemanticKind::Type::_MAX;
 		}
 	};
 
-	// Meshのセマンティクス有効BitMask. max 32.
+	// Meshの保持頂点Attrを表現するBitMask. max 32.
+	//	Meshが保持する頂点Attrは固定のSemanticと個数で管理されるため, フラット化したIndexでbitmask化している.
+	//		POSITION -> bit 0
+	//		COLOR1 -> bit 5
 	struct MeshVertexSemanticSlotMask
 	{
 		void Clear()
