@@ -14,45 +14,13 @@ namespace ngl
 {
 namespace gfx
 {
-	void RenderMeshWithMaterialPass(rhi::GraphicsCommandListDep& command_list,
-		const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
+	void RenderMeshWithMaterialPass(rhi::GraphicsCommandListDep& command_list
+		, const char* material_name, const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
 	{
-		// MaterialのPsoをPass指定して取得.
-		// Material名はとりあえず不透明標準.
-		const auto&& pass_pso = ngl::gfx::MaterialShaderManager::Instance().CreateMaterialPipeline("opaque_standard", pass_name);
-		if(!pass_pso)
-			return;
-
-		// すべてのMeshを単一PSO描画.
-		RenderMeshSinglePso(command_list, *pass_pso, mesh_instance_array, cbv_sceneview);
-	}
-	
-	// 単一PSOでのメッシュ描画.
-	// RenderTargetやViewport設定が完了している状態で呼び出される前提.
-    void RenderMeshSinglePso(rhi::GraphicsCommandListDep& command_list,
-    	rhi::GraphicsPipelineStateDep& pso, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
-    {
     	auto default_white_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_white->ref_view_;
     	auto default_black_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
     	auto default_normal_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_default_normal->ref_view_;
-
-
-    	// このRenderが要求するInput.
-    	// 本来はPSO側が要求するものを適宜取得してチェックしたい.
-    	MeshVertexSemanticSlotMask require_vtx_input_mask = {};
-    	{
-    		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::POSITION, 0);
-    		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::NORMAL, 0);
-    		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::TANGENT, 0);
-    		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::BINORMAL, 0);
-    		require_vtx_input_mask.AddSlot(EMeshVertexSemanticKind::TEXCOORD, 0);
-    	}
-    	
-
-    	
-    	// ここではすべてPSO同じ.
-		command_list.SetPipelineState(&pso);
-    	
+		
 		for (int mesh_comp_i = 0; mesh_comp_i < mesh_instance_array.size(); ++mesh_comp_i)
 		{
 			const auto* e = mesh_instance_array[mesh_comp_i];
@@ -67,38 +35,44 @@ namespace gfx
 				const auto& shape_mat_index = e->model_.res_mesh_->shape_material_index_array_[gi];
 				const auto& mat_data = e->model_.material_array_[shape_mat_index];
 
-				// 要求する頂点入力が足りない場合はスキップ.
-				if(require_vtx_input_mask.mask != (require_vtx_input_mask.mask & shape.vtx_attr_mask_.mask))
+				MeshVertexSemanticSlotMask tmp_semantic_mask = shape.vtx_attr_mask_;
+				if(mtl_mesh_vs_in_slot_mask_debug)
+				{
+					tmp_semantic_mask.RemoveSlot(EMeshVertexSemanticKind::BINORMAL, 0);// メッシュ側の保持する頂点入力のマスクから, 一部の頂点入力を除去してシェーダを要求するテスト.
+				}
+				const auto&& pso = ngl::gfx::MaterialShaderManager::Instance().CreateMaterialPipeline(material_name, pass_name, tmp_semantic_mask);
+				if(!pso)
 					continue;
+				command_list.SetPipelineState(pso);
 				
 				// Descriptor.
 				{
 					ngl::rhi::DescriptorSetDep desc_set;
 
-					pso.SetView(&desc_set, "ngl_cb_sceneview", &cbv_sceneview);
-					pso.SetView(&desc_set, "ngl_cb_instance", cbv_instance.Get());
+					pso->SetView(&desc_set, "ngl_cb_sceneview", &cbv_sceneview);
+					pso->SetView(&desc_set, "ngl_cb_instance", cbv_instance.Get());
 
-					pso.SetView(&desc_set, "samp_default", GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
+					pso->SetView(&desc_set, "samp_default", GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 					// テクスチャ設定テスト.
 					{
 						auto tex_basecolor = (mat_data.tex_basecolor.IsValid())? mat_data.tex_basecolor->ref_view_ : default_white_tex_srv;
-						pso.SetView(&desc_set, "tex_basecolor", tex_basecolor.Get());
+						pso->SetView(&desc_set, "tex_basecolor", tex_basecolor.Get());
 						
 						auto tex_normal = (mat_data.tex_normal.IsValid())? mat_data.tex_normal->ref_view_ : default_normal_tex_srv;
-						pso.SetView(&desc_set, "tex_normal", tex_normal.Get());
+						pso->SetView(&desc_set, "tex_normal", tex_normal.Get());
 						
 						auto tex_occlusion = (mat_data.tex_occlusion.IsValid())? mat_data.tex_occlusion->ref_view_ : default_white_tex_srv;
-						pso.SetView(&desc_set, "tex_occlusion", tex_occlusion.Get());
+						pso->SetView(&desc_set, "tex_occlusion", tex_occlusion.Get());
 						
 						auto tex_roughness = (mat_data.tex_roughness.IsValid())? mat_data.tex_roughness->ref_view_ : default_white_tex_srv;
-						pso.SetView(&desc_set, "tex_roughness", tex_roughness.Get());
+						pso->SetView(&desc_set, "tex_roughness", tex_roughness.Get());
 						
 						auto tex_metalness = (mat_data.tex_metalness.IsValid())? mat_data.tex_metalness->ref_view_ : default_black_tex_srv;
-						pso.SetView(&desc_set, "tex_metalness", tex_metalness.Get());
+						pso->SetView(&desc_set, "tex_metalness", tex_metalness.Get());
 					}
 
 					// DescriptorSetでViewを設定.
-					command_list.SetDescriptorSet(&pso, &desc_set);
+					command_list.SetDescriptorSet(pso, &desc_set);
 				}
 
 
@@ -121,6 +95,7 @@ namespace gfx
 				command_list.DrawIndexedInstanced(shape.num_primitive_ * 3, 1, 0, 0, 0);
 			}
 		}
-    }
+	}
+	
 }
 }

@@ -4,13 +4,14 @@
 //  <material_config> と </material_config> は行頭に記述され, 余分な改行やスペース等が入っていることは許可されない(Parseの簡易化のため).
 #if 0
 <material_config>
-    <pass name="depth"/>
-    <pass name="gbuffer"/>
+    <pass name="depth" />
+    <pass name="gbuffer" />
 
-    <vs_in_require name="NORMAL"/>
-    <vs_in_require name="TANGENT"/>
-    <vs_in_require name="BINORMAL"/>
-    <vs_in_require name="TEXCOORD" index="0"/>
+    <vs_in name="NORMAL" optional="false" />
+    <vs_in name="TANGENT" optional="true" />
+    <vs_in name="BINORMAL" optional="true" />
+    <vs_in name="TEXCOORD" index="0" optional="true" />
+
 </material_config>
 #endif
 
@@ -50,7 +51,15 @@ MtlPsOutput MtlPsEntryPoint(MtlPsInput input)
     const float metallic = mtl_metalness;
     const float surface_optional = 0.0;
     const float material_id = 0.0;
-    const float3 normal_ws = normalize(input.tangent_ws * mtl_normal.x + input.binormal_ws * mtl_normal.y + input.normal_ws * mtl_normal.z);
+
+    #if defined(NGL_VS_IN_TANGENT0) && defined(NGL_VS_IN_BINORMAL0)
+        // TangentFrameがある場合はNormalMapping.
+        const float3 normal_ws = input.tangent_ws * mtl_normal.x + input.binormal_ws * mtl_normal.y + input.normal_ws * mtl_normal.z;
+    #else
+        // TangentFrameがない場合は頂点法線をそのまま出力.
+        const float3 normal_ws = input.normal_ws;
+    #endif
+
     const float3 emissive = float3(0.0, 0.0, 0.0);
 
     // マテリアル出力.

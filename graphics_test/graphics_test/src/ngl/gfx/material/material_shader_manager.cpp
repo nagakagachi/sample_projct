@@ -4,6 +4,8 @@
 
 #include <filesystem>
 
+#include "material_shader_common.h"
+
 #include "ngl/gfx/resource/resource_shader.h"
 #include "ngl/resource/resource_manager.h"
 #include "ngl/rhi/d3d12/device.d3d12.h"
@@ -33,14 +35,30 @@ namespace gfx
         res::ResourceHandle<ResShader> res_ps = {};
 
         // 頂点シェーダが要求するInputSemanticsMask.
-        MeshVertexSemanticSlotMask vs_require_input_mask = {};
+        MeshVertexSemanticSlotMask vs_in_slot_mask = {};
     };
     struct MaterialShaderSet
     {
         std::string material_name = {};
+
+        // 完全一致でシェーダを検索.
+        int FindPerfectMatching(const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
+        {
+            // 現状は辞書化せずに探索. キーが確定したら辞書化を検討.
+            for(size_t i = 0; i < pass_shader_set.size(); ++i)
+            {
+                const auto& e = pass_shader_set[i];
+                if(e.pass_name != pass_name)
+                    continue;
+                if(e.vs_in_slot_mask.mask != vs_in_slot.mask)
+                    continue;
+
+                return static_cast<int>(i);// 発見.
+            }
+            return -1;
+        }
             
         std::vector<MaterialPassShaderSet> pass_shader_set = {};
-        std::unordered_map<std::string, int> pass_shader_name_index = {};
     };
     
     struct MaterialPassPso
@@ -48,7 +66,7 @@ namespace gfx
         std::string pass_name = {};
         rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = {};
         // 頂点シェーダが要求するInputSemanticsMask.
-        MeshVertexSemanticSlotMask vs_require_input_mask = {};
+        MeshVertexSemanticSlotMask vs_in_slot_mask = {};
     };
     struct MaterialPassPsoSet
     {
@@ -64,10 +82,26 @@ namespace gfx
             }
             pso_lib.clear();
         }
+
+        // 完全一致でPSOを検索.
+        int FindPerfectMatching(const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
+        {
+            // 現状は辞書化せずに探索. キーが確定したら辞書化を検討.
+            for(size_t i = 0; i < pso_lib.size(); ++i)
+            {
+                const auto& e = pso_lib[i];
+                if(e->pass_name != pass_name)
+                    continue;
+                if(e->vs_in_slot_mask.mask != vs_in_slot.mask)
+                    continue;
+
+                return static_cast<int>(i);// 発見.
+            }
+            return -1;
+        }
+        
         std::string material_name = {};
-            
         std::vector<MaterialPassPso*> pso_lib = {};
-        std::unordered_map<std::string, int> pso_name_index = {};
         
         std::mutex pso_lib_mutex_ = {};// Material別のLcok用.
     };
@@ -77,7 +111,7 @@ namespace gfx
     {
     public:
         // ShaderData検索.
-        const MaterialPassShaderSet* FindPassShaderSet(const char* material_name, const char* pass_name) const
+        const MaterialPassShaderSet* FindPassShaderSet(const char* material_name, const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
         {
             // Material検索.
             const auto mtl_shader_it = material_shader_name_index_.find(material_name);
@@ -86,11 +120,12 @@ namespace gfx
 
             // Pass検索.
             const auto& pass_set = material_shader_lib_[mtl_shader_it->second];
-            const auto pass_it = pass_set.pass_shader_name_index.find(pass_name);
-            if(pass_set.pass_shader_name_index.end() == pass_it)
-                return {};
+            
+            const int find_index = pass_set.FindPerfectMatching(pass_name, vs_in_slot);
+            if(0 <= find_index)
+                return &pass_set.pass_shader_set[find_index];
 
-            return &pass_set.pass_shader_set[pass_it->second];
+            return {};
         }
         
         
@@ -196,10 +231,22 @@ namespace gfx
                     assert(false);
                     continue;
                 }
-                
-                const auto material_name = shader_filename_split[EMaterialShaderNamePart::MATERIAL_NAME];
-                const auto pass_name = shader_filename_split[EMaterialShaderNamePart::PASS_NAME];
-                const auto shader_stage_name = shader_filename_split[shader_filename_split.size()-1];// ShaderStage(vs,ps)は末尾.
+
+                // ファイル名から情報収集.
+                const size_t k_stage_name_split_index = shader_filename_split.size()-1;
+                const std::string material_name = shader_filename_split[EMaterialShaderNamePart::MATERIAL_NAME];
+                const std::string pass_name = shader_filename_split[EMaterialShaderNamePart::PASS_NAME];
+                const std::string shader_stage_name = shader_filename_split[k_stage_name_split_index];// ShaderStage(vs,ps)は末尾.
+                MeshVertexSemanticSlotMask vsin_slot_from_filename = {};
+                for(int split_i = EMaterialShaderNamePart::_MAX; split_i < k_stage_name_split_index; ++split_i)
+                {
+                    // vsin mask.
+                    if(0 == shader_filename_split[split_i].compare(0, mtl::k_generate_file_vsin_prefix.Length(), mtl::k_generate_file_vsin_prefix.Get()))
+                    {
+                        std::string vsin_mask_part = shader_filename_split[split_i].substr(mtl::k_generate_file_vsin_prefix.Length());// prefixを除いた部分取得.
+                        vsin_slot_from_filename.mask = stoi(vsin_mask_part);
+                    }
+                }
 
                 // Material毎のデータベース.
                 if(material_shader_name_index.end() == material_shader_name_index.find(material_name))
@@ -216,20 +263,19 @@ namespace gfx
                 const int mtl_index = material_shader_name_index[material_name];
                 auto& mtl_shader_set = material_shader_set[mtl_index];
 
-                // Pass毎のシェーダセット.
-                if(mtl_shader_set.pass_shader_name_index.end() == mtl_shader_set.pass_shader_name_index.find(pass_name))
-                {
-                    // name -> index.
-                    mtl_shader_set.pass_shader_name_index[pass_name] = static_cast<int>(mtl_shader_set.pass_shader_set.size());
 
+                // Pass毎のシェーダセット.
+                if(0 > mtl_shader_set.FindPerfectMatching(pass_name.c_str(), vsin_slot_from_filename))
+                {
                     mtl_shader_set.pass_shader_set.push_back({});
                     auto& new_pass_shader_set = mtl_shader_set.pass_shader_set.back();
                     {
                         // 新規要素初期化.
                         new_pass_shader_set.pass_name = pass_name;
+                        new_pass_shader_set.vs_in_slot_mask = vsin_slot_from_filename;
                     }
                 }
-                const int pass_shader_set_index = mtl_shader_set.pass_shader_name_index[pass_name];
+                const int pass_shader_set_index = mtl_shader_set.FindPerfectMatching(pass_name.c_str(), vsin_slot_from_filename);
                 auto& pass_shader_set = mtl_shader_set.pass_shader_set[pass_shader_set_index];
 
                 // Passを構成するStage毎のShader設定.
@@ -284,7 +330,7 @@ namespace gfx
                             }
                         }
                     }
-                    pass_set.vs_require_input_mask = vs_in_mask;
+                    pass_set.vs_in_slot_mask = vs_in_mask;
                 }
                 if(0 < pass_set.vs_file.size())
                 {
@@ -322,7 +368,7 @@ namespace gfx
     }
 
     // マテリアル名と追加情報からPipeline生成またはCacheから取得.
-    rhi::GraphicsPipelineStateDep* MaterialShaderManager::CreateMaterialPipeline(const char* material_name, const char* pass_name)
+    rhi::GraphicsPipelineStateDep* MaterialShaderManager::CreateMaterialPipeline(const char* material_name, const char* pass_name, MeshVertexSemanticSlotMask vsin_slot)
     {
         // 無効なPassの場合はnullptr.
         if(pso_creator_map_.end() == pso_creator_map_.find(pass_name))
@@ -358,11 +404,12 @@ namespace gfx
         {
             // Material別のLock. 排他範囲が重なりにくくしたい意図.
             std::lock_guard<std::mutex> lock(p_mtl_pso_set->pso_lib_mutex_);
-            
-            if(p_mtl_pso_set->pso_name_index.end() != p_mtl_pso_set->pso_name_index.find(pass_name))
+
+            int find_match_pso_index = p_mtl_pso_set->FindPerfectMatching(pass_name, vsin_slot);
+            if(0 <= find_match_pso_index)
             {
                 // Cacheにあれば即座に返却.
-                return p_mtl_pso_set->pso_lib[p_mtl_pso_set->pso_name_index[pass_name]]->ref_pso.Get();
+                return p_mtl_pso_set->pso_lib[find_match_pso_index]->ref_pso.Get();
             }
             else
             {
@@ -370,7 +417,7 @@ namespace gfx
                 rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = {};
                 MeshVertexSemanticSlotMask  vs_require_input_mask = {};
                 {
-                    auto* shader_set = p_impl_->FindPassShaderSet(material_name, pass_name);
+                    auto* shader_set = p_impl_->FindPassShaderSet(material_name, pass_name, vsin_slot);
                     if(!shader_set)
                         return {};
                     MaterialPassPsoDesc pso_desc = {};
@@ -379,13 +426,13 @@ namespace gfx
                         pso_desc.p_ps = shader_set->res_ps.Get();
 
                         // InputLayoutMask.
-                        pso_desc.vs_input_layout_mask = shader_set->vs_require_input_mask;
+                        pso_desc.vs_input_layout_mask = shader_set->vs_in_slot_mask;
                         // TODO. option.
                     }
                     // Passに対応したCreatorで生成.
                     ref_pso = pso_creator_map_[pass_name]->Create(p_device_, pso_desc);
                     // VS要求入力マスク.
-                    vs_require_input_mask = shader_set->vs_require_input_mask;
+                    vs_require_input_mask = shader_set->vs_in_slot_mask;
                 }
                 if(!ref_pso.IsValid())
                 {
@@ -393,14 +440,12 @@ namespace gfx
                     return {};
                 }
                 
-                // Map 登録.
-                p_mtl_pso_set->pso_name_index[pass_name] = static_cast<int>(p_mtl_pso_set->pso_lib.size());
                 p_mtl_pso_set->pso_lib.push_back(new MaterialPassPso());// vector拡張時にアドレス変わらないようにnew.(mutex lockの範囲を狭める都合.
                 auto& new_elem = p_mtl_pso_set->pso_lib.back();
                 {
                     new_elem->pass_name = pass_name;
                     new_elem->ref_pso = ref_pso;
-                    new_elem->vs_require_input_mask = vs_require_input_mask;
+                    new_elem->vs_in_slot_mask = vs_require_input_mask;
                 }
                 // 返却.
                 return new_elem->ref_pso.Get();

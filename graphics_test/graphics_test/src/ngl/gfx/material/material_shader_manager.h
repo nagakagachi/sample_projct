@@ -150,7 +150,7 @@ namespace gfx
         void Finalize();
 
         // マテリアル名と追加情報からPipeline生成またはCacheから取得.
-        rhi::GraphicsPipelineStateDep* CreateMaterialPipeline(const char* material_name, const char* pass_name);
+        rhi::GraphicsPipelineStateDep* CreateMaterialPipeline(const char* material_name, const char* pass_name, MeshVertexSemanticSlotMask vsin_slot);
     private:
         void RegisterPassPsoCreator(const char* name, IMaterialPassPsoCreator* p_instance);
         // Pass Pso Creator登録用.

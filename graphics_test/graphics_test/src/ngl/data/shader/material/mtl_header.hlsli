@@ -12,10 +12,10 @@
     <pass name="depth"/>
     <pass name="gbuffer"/>
 
-    <vs_in_require name="NORMAL"/>
-    <vs_in_require name="TANGENT"/>
-    <vs_in_require name="BINORMAL"/>
-    <vs_in_require name="TEXCOORD" index="0"/>
+    <vs_in name="NORMAL"/>
+    <vs_in name="TANGENT"/>
+    <vs_in name="BINORMAL"/>
+    <vs_in name="TEXCOORD" index="0"/ optional="true">
 </material_config>
 #endif
  
@@ -110,7 +110,7 @@ ConstantBuffer<SceneViewInfo> ngl_cb_sceneview;
     // 有効/無効な頂点入力に関する処理を隠蔽する目的の整形関数.
     VsInputWrapper ConstructVsInputWrapper(VS_INPUT input)
     {
-        VsInputWrapper output;
+        VsInputWrapper output = (VsInputWrapper)0;
         
         output.pos = input.pos;
         

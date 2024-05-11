@@ -165,6 +165,7 @@
     <ClCompile Include="src\ngl\gfx\material\material_shader_generator.cpp" />
     <ClCompile Include="src\ngl\gfx\material\material_shader_manager.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
+    <ClInclude Include="src\ngl\gfx\material\material_shader_common.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_generator.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_manager.h" />
     <ClInclude Include="third_party\tinyxml2\tinyxml2.h" />
