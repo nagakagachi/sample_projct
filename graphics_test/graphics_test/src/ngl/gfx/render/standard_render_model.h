@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 
+#include "ngl/gfx/material/material_shader_manager.h"
 #include "ngl/gfx/resource/resource_mesh.h"
 #include "ngl/gfx/resource/resource_texture.h"
 #include "ngl/math/math.h"
@@ -28,6 +29,7 @@ namespace gfx
     public:
         res::ResourceHandle<ResMeshData> res_mesh_ = {};
         std::vector<StandardRenderMaterial> material_array_ = {};
+        std::vector<MaterialPsoSet> shape_mtl_pso_set_ = {};
     };
     
 }

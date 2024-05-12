@@ -87,6 +87,7 @@ namespace gfx
         MeshVertexSemanticSlotMask  vs_input_layout_mask = {};
     };
     // Pass Pso Creator Interface.
+    //  Pass毎のPso生成クラスはこのクラスを継承する.
     class IMaterialPassPsoCreator
     {
     public:
@@ -99,6 +100,7 @@ namespace gfx
     class MaterialPassPsoCreator_depth : public IMaterialPassPsoCreator
     {
     public:
+        // Pass識別名, 検索に利用するためマテリアルシェーダなどに記述するPass名と一致している必要がある.
         static constexpr char k_name[] = "depth";
         rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc) override;
         
@@ -112,6 +114,7 @@ namespace gfx
     class MaterialPassPsoCreator_gbuffer : public IMaterialPassPsoCreator
     {
     public:
+        // Pass識別名, 検索に利用するためマテリアルシェーダなどに記述するPass名と一致している必要がある.
         static constexpr char k_name[] = "gbuffer";
         rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc) override;
         
@@ -132,6 +135,21 @@ namespace gfx
 
 
     
+    // Material Instance毎のPsoをまとめて取得するためのオブジェクト.
+    struct MaterialPsoSet
+    {
+        // Pass名でPsoを取得.
+        rhi::GraphicsPipelineStateDep* GetPassPso(const char* pass_name) const
+        {
+            auto find_id = std::find(pass_name_list.begin(), pass_name_list.end(), pass_name);
+            if(pass_name_list.end() == find_id)
+                return {};
+            return p_pso_list[std::distance(pass_name_list.begin(), find_id)];
+        }
+        
+        std::vector<std::string> pass_name_list;
+        std::vector<rhi::GraphicsPipelineStateDep*> p_pso_list;
+    };
     
     // ランタイムでMaterialShaderPSOの問い合わせに対応するクラス.
     class MaterialShaderManager : public Singleton<MaterialShaderManager>
@@ -149,12 +167,19 @@ namespace gfx
         bool Setup(rhi::DeviceDep* p_device, const char* generated_shader_root_dir);
         void Finalize();
 
+        // マテリアルを構成するPassPsoセットを取得する. まだ生成されていない場合は内部で生成.
+        MaterialPsoSet GetMaterialPsoSet(const char* material_name, MeshVertexSemanticSlotMask vsin_slot);
+
+        const std::vector<std::string>& GetRegisteredPassNameList() const { return registered_pass_name_list_; }
+    private:
         // マテリアル名と追加情報からPipeline生成またはCacheから取得.
         rhi::GraphicsPipelineStateDep* CreateMaterialPipeline(const char* material_name, const char* pass_name, MeshVertexSemanticSlotMask vsin_slot);
+
     private:
         void RegisterPassPsoCreator(const char* name, IMaterialPassPsoCreator* p_instance);
         // Pass Pso Creator登録用.
-        std::unordered_map<std::string, IMaterialPassPsoCreator*> pso_creator_map_;
+        std::unordered_map<std::string, IMaterialPassPsoCreator*> registered_pass_pso_creator_map_;
+        std::vector<std::string>    registered_pass_name_list_;
     private:
         rhi::DeviceDep* p_device_ = {};
         // 内部データ隠蔽.

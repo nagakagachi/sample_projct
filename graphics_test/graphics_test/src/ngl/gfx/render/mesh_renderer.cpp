@@ -14,8 +14,8 @@ namespace ngl
 {
 namespace gfx
 {
-	void RenderMeshWithMaterialPass(rhi::GraphicsCommandListDep& command_list
-		, const char* material_name, const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
+	void RenderMeshWithMaterial(rhi::GraphicsCommandListDep& command_list
+		, const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
 	{
     	auto default_white_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_white->ref_view_;
     	auto default_black_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
@@ -28,17 +28,15 @@ namespace gfx
 			auto cbv_instance = e->GetInstanceBufferView();
 
 
-			for (int gi = 0; gi < e->model_.res_mesh_->data_.shape_array_.size(); ++gi)
+			for (int shape_i = 0; shape_i < e->model_.res_mesh_->data_.shape_array_.size(); ++shape_i)
 			{
 				// Geometry.
-				auto& shape = e->model_.res_mesh_->data_.shape_array_[gi];
-				const auto& shape_mat_index = e->model_.res_mesh_->shape_material_index_array_[gi];
+				auto& shape = e->model_.res_mesh_->data_.shape_array_[shape_i];
+				const auto& shape_mat_index = e->model_.res_mesh_->shape_material_index_array_[shape_i];
 				const auto& mat_data = e->model_.material_array_[shape_mat_index];
 
-				MeshVertexSemanticSlotMask tmp_semantic_mask = shape.vtx_attr_mask_;
-				const auto&& pso = ngl::gfx::MaterialShaderManager::Instance().CreateMaterialPipeline(material_name, pass_name, tmp_semantic_mask);
-				if(!pso)
-					continue;
+				// Shapeに対応したMaterial Pass Psoを取得.
+				const auto&& pso = e->model_.shape_mtl_pso_set_[shape_i].GetPassPso(pass_name);
 				command_list.SetPipelineState(pso);
 				
 				// Descriptor.

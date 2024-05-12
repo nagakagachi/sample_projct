@@ -305,7 +305,7 @@ namespace gfx
             }
         }
         
-        // 収集した情報から generated へMaterialPassシェーダを出力する. TODO.
+        // 収集した情報から generated へMaterialPassシェーダを出力する.
         for(size_t mtl_i = 0; mtl_i < per_mtl_shader_seed_list.size(); ++mtl_i)
         {
             const auto& per_mtl_seed = per_mtl_shader_seed_list[mtl_i];
@@ -355,8 +355,10 @@ namespace gfx
 
                         // コード部生成.
                         /*
-                            // 追加マクロ...
-                            
+                            #define NGL_VS_IN_POSITION0
+                            #define NGL_VS_IN_POSITION
+                            #define NGL_VS_IN_NORMAL0
+                            #define NGL_VS_IN_NORMAL
                             #include "../../impl/opaque_standard.hlsli"
                             #include "../../pass/depth.hlsli"
                         */

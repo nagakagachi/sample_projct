@@ -352,26 +352,41 @@ namespace gfx
     void MaterialShaderManager::Finalize()
     {
         p_impl_->Cleanup();
-        pso_creator_map_ = {};
+        registered_pass_pso_creator_map_ = {};
         p_device_ = {};
     }
 
     void MaterialShaderManager::RegisterPassPsoCreator(const char* name, IMaterialPassPsoCreator* p_instance)
     {
-        if(pso_creator_map_.end() != pso_creator_map_.find(name))
+        if(registered_pass_pso_creator_map_.end() != registered_pass_pso_creator_map_.find(name))
         {
             // 二重登録はエラー.
             assert(false);
             return;
         }
-        pso_creator_map_.insert( std::make_pair(name, p_instance));
+        registered_pass_pso_creator_map_.insert( std::make_pair(name, p_instance));
+        // Pass名は別途リスト化.
+        registered_pass_name_list_.push_back(name);
     }
 
+    MaterialPsoSet MaterialShaderManager::GetMaterialPsoSet(const char* material_name, MeshVertexSemanticSlotMask vsin_slot)
+    {
+        MaterialPsoSet ret = {};
+        for(int pass_i = 0; pass_i < registered_pass_name_list_.size(); ++pass_i)
+        {
+            if(auto* p_pso = CreateMaterialPipeline(material_name, registered_pass_name_list_[pass_i].c_str(), vsin_slot))
+            {
+                ret.pass_name_list.push_back(registered_pass_name_list_[pass_i]);
+                ret.p_pso_list.push_back(p_pso);
+            }
+        }
+        return ret;
+    }
     // マテリアル名と追加情報からPipeline生成またはCacheから取得.
     rhi::GraphicsPipelineStateDep* MaterialShaderManager::CreateMaterialPipeline(const char* material_name, const char* pass_name, MeshVertexSemanticSlotMask vsin_slot)
     {
         // 無効なPassの場合はnullptr.
-        if(pso_creator_map_.end() == pso_creator_map_.find(pass_name))
+        if(registered_pass_pso_creator_map_.end() == registered_pass_pso_creator_map_.find(pass_name))
         {
             return {};
         }
@@ -430,7 +445,7 @@ namespace gfx
                         // TODO. option.
                     }
                     // Passに対応したCreatorで生成.
-                    ref_pso = pso_creator_map_[pass_name]->Create(p_device_, pso_desc);
+                    ref_pso = registered_pass_pso_creator_map_[pass_name]->Create(p_device_, pso_desc);
                     // VS要求入力マスク.
                     vs_require_input_mask = shader_set->vs_in_slot_mask;
                 }

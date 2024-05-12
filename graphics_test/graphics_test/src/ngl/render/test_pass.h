@@ -67,7 +67,7 @@ namespace ngl::render
 
 				
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshWithMaterialPass(*gfx_commandlist, "opaque_standard", "depth", *p_mesh_list_, *ref_scene_cbv_);
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, "depth", *p_mesh_list_, *ref_scene_cbv_);
 			}
 		};
 
@@ -173,7 +173,7 @@ namespace ngl::render
 				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshWithMaterialPass(*gfx_commandlist, "opaque_standard", "gbuffer", *p_mesh_list_, *ref_scene_cbv_);
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, "gbuffer", *p_mesh_list_, *ref_scene_cbv_);
 			}
 		};
 

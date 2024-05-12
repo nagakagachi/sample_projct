@@ -1,6 +1,7 @@
 ﻿
 #include "standard_render_model.h"
 
+#include "ngl/gfx/material/material_shader_manager.h"
 #include "ngl/resource/resource_manager.h"
 
 namespace ngl::gfx
@@ -33,6 +34,13 @@ namespace ngl::gfx
             
             if(0 < res_mesh_->material_data_array_[i].tex_metalness.Length())
                 material_array_[i].tex_metalness = res_manager.LoadResource<ResTexture>(p_device, res_mesh_->material_data_array_[i].tex_metalness.Get(), &load_desc);
+        }
+
+        // 標準不透明マテリアルでShape毎のマテリアルPsoを準備.
+        constexpr char material_name[] = "opaque_standard";
+        for(int i = 0; i < res_mesh_->data_.shape_array_.size(); ++i)
+        {
+            shape_mtl_pso_set_.push_back( MaterialShaderManager::Instance().GetMaterialPsoSet(material_name, res_mesh_->data_.shape_array_[i].vtx_attr_mask_));
         }
 
         return true;
