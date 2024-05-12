@@ -553,17 +553,6 @@ bool AppGame::Execute()
 			}
 			prev_mouse_r = mouse_r;
 		}
-
-		// その他デバッグ用キー入力.
-		{
-			static bool s_prev_n_key = false;
-			const bool prev_n_key = s_prev_n_key;
-			s_prev_n_key = window_.Dep().GetVirtualKeyState()[65 + 'n' - 'a'];
-			if(!prev_n_key && s_prev_n_key)
-			{
-				ngl::gfx::mtl_mesh_vs_in_slot_mask_debug = !ngl::gfx::mtl_mesh_vs_in_slot_mask_debug;
-			}
-		}
 	}
 	
 	// オブジェクト操作(適当).

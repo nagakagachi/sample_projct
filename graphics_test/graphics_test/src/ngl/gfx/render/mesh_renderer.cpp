@@ -36,10 +36,6 @@ namespace gfx
 				const auto& mat_data = e->model_.material_array_[shape_mat_index];
 
 				MeshVertexSemanticSlotMask tmp_semantic_mask = shape.vtx_attr_mask_;
-				if(mtl_mesh_vs_in_slot_mask_debug)
-				{
-					tmp_semantic_mask.RemoveSlot(EMeshVertexSemanticKind::BINORMAL, 0);// メッシュ側の保持する頂点入力のマスクから, 一部の頂点入力を除去してシェーダを要求するテスト.
-				}
 				const auto&& pso = ngl::gfx::MaterialShaderManager::Instance().CreateMaterialPipeline(material_name, pass_name, tmp_semantic_mask);
 				if(!pso)
 					continue;

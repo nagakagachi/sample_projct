@@ -39,31 +39,12 @@ namespace gfx
 	};
 
 
-
-	template<int LEN>
-	struct FixSizeName
-	{
-		template<int N>
-		constexpr FixSizeName(const char (&s)[N])
-			: str()
-		{
-			constexpr auto n = (LEN < N) ? LEN : N;
-			str[n] = 0;
-			for (auto i = 0; i < n; ++i)
-				str[i] = s[i];
-		}
-		char str[LEN+1];
-	};
-
-
 	// セマンティクス名.
-	//using SemanticNameType = FixSizeName<32>;
 	using SemanticNameType = text::HashText<32>;
-
-
+	
 	static constexpr int k_mesh_vertex_semantic_texcoord_max_count = 4;
 	static constexpr int k_mesh_vertex_semantic_color_max_count = 4;
-	// サポートしているセマンティクス種別.
+	// Meshでサポートしているセマンティクス種別.
 	struct EMeshVertexSemanticKind
 	{
 		enum Type : int
@@ -86,6 +67,7 @@ namespace gfx
 			"COLOR",
 			"TEXCOORD",
 		};
+		// 各Semanticの許可される個数.
 		static constexpr int Count[] =
 		{
 			1,
