@@ -264,12 +264,13 @@ namespace ngl::render
 					{
 						const float near_z = 1.0f;
 						const float far_z = 10000.0f;
-						const float shadowmap_widht_ws = 100.0f;
+						const float shadowmap_widht_ws = 32.0f;
 
 						
+						//math::Vec3 lookat_pos = {};
 						math::Vec3 lookat_pos = desc.camera_pos;
-						math::Vec3 light_view_dir = desc.directional_light_dir;//math::Vec3::Normalize({0.15f, -1.0f, 0.18f});
-						math::Vec3 light_view_up = math::Vec3::Normalize({0.1f, 1.0f, 0.1f});
+						math::Vec3 light_view_dir = desc.directional_light_dir;
+						math::Vec3 light_view_up = math::Vec3::Normalize({desc.directional_light_dir.z, desc.directional_light_dir.x, desc.directional_light_dir.y});
 						math::Vec3 light_pos = lookat_pos - light_view_dir * 500.0f;
 						
 						ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(light_pos,
@@ -428,18 +429,23 @@ namespace ngl::render
 			rtg::ResourceHandle h_prev_light_{};
 			rtg::ResourceHandle h_light_{};
 			
+			rtg::ResourceHandle h_shadowmap_{};
+			
 			rhi::RefCbvDep ref_scene_cbv_{};
+			rhi::RefCbvDep ref_shadow_cbv_{};
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
 			struct SetupDesc
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
+				rhi::RefCbvDep ref_shadow_cbv{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
 				rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_gb2, rtg::ResourceHandle h_gb3, rtg::ResourceHandle h_velocity,
 				rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
+				rtg::ResourceHandle h_shadowmap,
 				const SetupDesc& desc)
 			{
 				// リソース定義.
@@ -452,6 +458,7 @@ namespace ngl::render
 					h_gb3_ = builder.RecordResourceAccess(*this, h_gb3, rtg::access_type::SHADER_READ);
 					h_velocity_ = builder.RecordResourceAccess(*this, h_velocity, rtg::access_type::SHADER_READ);
 					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
+					h_shadowmap_ = builder.RecordResourceAccess(*this, h_shadowmap, rtg::access_type::SHADER_READ);
 				
 					if(h_prev_light.IsInvalid())
 					{
@@ -468,6 +475,7 @@ namespace ngl::render
 				{
 					// 外部リソース.
 					ref_scene_cbv_ = desc.ref_scene_cbv;
+					ref_shadow_cbv_ = desc.ref_shadow_cbv;
 				}
 				
 				// 
@@ -528,6 +536,8 @@ namespace ngl::render
 				auto res_prev_light = builder.GetAllocatedResource(this, h_prev_light_);// 前回フレームリソースのテスト.
 				auto res_light = builder.GetAllocatedResource(this, h_light_);
 
+				auto res_shadowmap = builder.GetAllocatedResource(this, h_shadowmap_);
+
 				// 本当の前回リソースがまだ無い初回フレームでも適切に仮リソースを登録していれば無効なリソース取得になることはない.
 				if(!res_prev_light.tex_.IsValid())
 				{
@@ -540,6 +550,7 @@ namespace ngl::render
 				assert(res_velocity.tex_.IsValid() && res_velocity.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
 				assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
+				assert(res_shadowmap.tex_.IsValid() && res_shadowmap.srv_.IsValid());
 
 				// Viewport.
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
@@ -554,6 +565,7 @@ namespace ngl::render
 				ngl::rhi::DescriptorSetDep desc_set = {};
 
 				pso_->SetView(&desc_set, "ngl_cb_sceneview", ref_scene_cbv_.Get());
+				pso_->SetView(&desc_set, "ngl_cb_shadowview", ref_shadow_cbv_.Get());
 				
 				pso_->SetView(&desc_set, "tex_lineardepth", res_linear_depth.srv_.Get());
 				pso_->SetView(&desc_set, "tex_gbuffer0", res_gb0.srv_.Get());
@@ -562,6 +574,9 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_gbuffer3", res_gb3.srv_.Get());
 				
 				pso_->SetView(&desc_set, "tex_prev_light", res_prev_light.srv_.Get());
+
+				pso_->SetView(&desc_set, "tex_shadowmap", res_shadowmap.srv_.Get());
+				
 				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 

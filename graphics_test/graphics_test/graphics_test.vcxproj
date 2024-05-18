@@ -166,6 +166,7 @@
     <ClCompile Include="src\ngl\gfx\material\material_shader_manager.cpp" />
     <ClCompile Include="src\ngl\render\rtg\graph_builder.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
+    <ClInclude Include="src\ngl\data\shader\material\pass\d_shadow.hlsli" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_common.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_generator.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_manager.h" />

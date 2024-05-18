@@ -365,6 +365,18 @@ bool AppGame::Initialize()
 
 				mc->transform_ = ngl::math::Mat34(tr);
 			}
+			{
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mesh_comp_array_.push_back(mc);
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
+				
+				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
+				tr.SetDiagonal(ngl::math::Vec4(0.0005f));
+				tr.SetColumn3(ngl::math::Vec4(30.0f, 12.0f, 0.0f, 1.0f));
+
+				mc->transform_ = ngl::math::Mat34(tr);
+			}
 
 			for(int i = 0; i < 100; ++i)
 			{
@@ -790,7 +802,7 @@ bool AppGame::Execute()
 							setup_desc.camera_pos = camera_pos_;
 							setup_desc.camera_front = camera_pose_.GetColumn2();
 
-							setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.15f, -1.0f, 0.15f});
+							setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.15f, -1.0f, 0.11f});
 						}
 						task_d_shadow->Setup(rtg_builder, &device_, setup_desc);
 					}
@@ -801,10 +813,12 @@ bool AppGame::Execute()
 						ngl::render::task::TaskLightPass::SetupDesc setup_desc{};
 						{
 							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+							setup_desc.ref_shadow_cbv = task_d_shadow->ref_d_shadow_cbv_;
 						}
 						task_light->Setup(rtg_builder, &device_,
 							task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
 							task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, h_prev_light,
+							task_d_shadow->h_depth_,
 							setup_desc);
 					}
 					

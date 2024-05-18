@@ -29,6 +29,8 @@ struct SceneViewInfo
 
 
 // ピクセルへのView空間レイ方向を, ピクセルのスクリーン上UVとProjection行列から計算する.
+// ViewZを利用してView空間座標を復元する場合はzが1になるように修正して計算が必要な点に注意( pos_vs.z == ViewZ となるように).
+//		pos_view = ViewSpaceRay.xyz/abs(ViewSpaceRay.z) * ViewZ
 float3 CalcViewSpaceRay(float2 screen_uv, float4x4 proj_mtx)
 {
 	float2 ndc_xy = (screen_uv * 2.0 - 1.0) * float2(1.0, -1.0);
@@ -40,6 +42,16 @@ float3 CalcViewSpaceRay(float2 screen_uv, float4x4 proj_mtx)
 	// View空間でのRay方向. World空間へ変換する場合は InverseViewMatrix * ray_dir_view とすること.
 	return ray_dir_view;
 }
+
+
+// DirectionalShadow定数バッファ構造定義.
+struct SceneDirectionalShadowInfo
+{
+	float3x4 cb_shadow_view_mtx;
+	float3x4 cb_shadow_view_inv_mtx;
+	float4x4 cb_shadow_proj_mtx;
+	float4x4 cb_shadow_proj_inv_mtx;
+};
 
 
 #endif // NGL_SHADER_SCENE_VIEW_STRUCT_H
