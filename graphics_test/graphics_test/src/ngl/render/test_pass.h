@@ -3,13 +3,14 @@
 
 #include<variant>
 
-#include "graph_builder.h"
+#include "rtg/graph_builder.h"
 #include "ngl/gfx/command_helper.h"
 
 #include "ngl/gfx/render/mesh_renderer.h"
 
 #include "ngl/gfx/render/global_render_resource.h"
 #include "ngl/gfx/material/material_shader_manager.h"
+#include "ngl/util/time/timer.h"
 
 
 namespace ngl::render
@@ -32,8 +33,13 @@ namespace ngl::render
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
+			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rhi::RefCbvDep ref_scene_cbv, const std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const SetupDesc& desc)
 			{
 				// リソース定義.
 				//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
@@ -44,8 +50,8 @@ namespace ngl::render
 				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
 
 				{
-					ref_scene_cbv_ = ref_scene_cbv;
-					p_mesh_list_ = &ref_mesh_list;
+					ref_scene_cbv_ = desc.ref_scene_cbv;
+					p_mesh_list_ = desc.p_mesh_list;
 				}
 			}
 
@@ -67,7 +73,11 @@ namespace ngl::render
 
 				
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, "depth", *p_mesh_list_, *ref_scene_cbv_);
+				gfx::RenderMeshResource render_mesh_res = {};
+				{
+					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+				}
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_depth::k_name, *p_mesh_list_, render_mesh_res);
 			}
 		};
 
@@ -93,9 +103,14 @@ namespace ngl::render
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 			
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
+			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex
-				,rhi::RefCbvDep ref_scene_cbv, const std::vector<gfx::StaticMeshComponent*>& ref_mesh_list)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex,
+				const SetupDesc& desc)
 			{
 				// MaterialPassに合わせてFormat設定.
 				constexpr auto k_gbuffer0_format = gfx::MaterialPassPsoCreator_gbuffer::k_gbuffer0_format;
@@ -134,8 +149,8 @@ namespace ngl::render
 				h_velocity_ = builder.RecordResourceAccess(*this, builder.CreateResource(velocity_desc), rtg::access_type::RENDER_TARTGET);
 
 				{
-					ref_scene_cbv_ = ref_scene_cbv;
-					p_mesh_list_ = &ref_mesh_list;
+					ref_scene_cbv_ = desc.ref_scene_cbv;
+					p_mesh_list_ = desc.p_mesh_list;
 				}
 			}
 
@@ -165,6 +180,8 @@ namespace ngl::render
 					res_gb3.rtv_.Get(),
 					res_velocity.rtv_.Get(),
 				};
+
+				// GBufferはクリアせず上書き.
 				
 				// Set RenderTarget.
 				gfx_commandlist->SetRenderTargets(p_targets, (int)std::size(p_targets), res_depth.dsv_.Get());
@@ -173,10 +190,132 @@ namespace ngl::render
 				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
 
 				// Mesh Rendering.
-				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, "gbuffer", *p_mesh_list_, *ref_scene_cbv_);
+				gfx::RenderMeshResource render_mesh_res = {};
+				{
+					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+				}
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_gbuffer::k_name, *p_mesh_list_, render_mesh_res);
 			}
 		};
 
+		
+		struct SceneDirectionalShadowInfo
+		{
+			math::Mat34 cb_shadow_view_mtx;
+			math::Mat34 cb_shadow_view_inv_mtx;
+			math::Mat44 cb_shadow_proj_mtx;
+			math::Mat44 cb_shadow_proj_inv_mtx;
+		};
+		// DirectionalShadowパス.
+		struct TaskDirectionalShadowPass : public rtg::IGraphicsTaskNode
+		{
+			// ノード定義コンストラクタ記述マクロ.
+			ITASK_NODE_DEF_BEGIN(TaskDirectionalShadowPass)
+				ITASK_NODE_HANDLE_REGISTER(h_depth_)
+				ITASK_NODE_DEF_END
+
+				rtg::ResourceHandle h_depth_{};
+
+			rhi::RefCbvDep ref_scene_cbv_{};
+			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
+
+			rhi::RefBufferDep ref_d_shadow_cb_{};
+			rhi::RefCbvDep ref_d_shadow_cbv_{};// 内部用.
+
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
+				
+				math::Vec3 camera_pos{};
+				math::Vec3 camera_front{};
+				math::Vec3 directional_light_dir{};
+			};
+			// リソースとアクセスを定義するプリプロセス.
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
+				const SetupDesc& desc)
+			{
+				constexpr int shadowmap_reso = 1024*2;
+				
+				// リソース定義.
+				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsAbsoluteSize(shadowmap_reso, shadowmap_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+
+				// リソースアクセス定義.
+				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+
+				{
+					ref_scene_cbv_ = desc.ref_scene_cbv;
+					p_mesh_list_ = desc.p_mesh_list;
+				}
+
+				ref_d_shadow_cb_ = new rhi::BufferDep();
+				{
+					rhi::BufferDep::Desc cb_desc{};
+					cb_desc.SetupAsConstantBuffer(sizeof(SceneDirectionalShadowInfo));
+					ref_d_shadow_cb_->Initialize(p_device, cb_desc);
+				}
+				ref_d_shadow_cbv_ = new rhi::ConstantBufferViewDep();
+				{
+					rhi::ConstantBufferViewDep::Desc cbv_desc{};
+					ref_d_shadow_cbv_->Initialize(ref_d_shadow_cb_.Get(), cbv_desc);
+				}
+				
+				{
+					{
+						const float near_z = 1.0f;
+						const float far_z = 10000.0f;
+						const float shadowmap_widht_ws = 100.0f;
+
+						
+						math::Vec3 lookat_pos = desc.camera_pos;
+						math::Vec3 light_view_dir = desc.directional_light_dir;//math::Vec3::Normalize({0.15f, -1.0f, 0.18f});
+						math::Vec3 light_view_up = math::Vec3::Normalize({0.1f, 1.0f, 0.1f});
+						math::Vec3 light_pos = lookat_pos - light_view_dir * 500.0f;
+						
+						ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(light_pos,
+							light_view_dir, light_view_up);
+
+						ngl::math::Mat44 proj_mat = ngl::math::CalcReverseOrthographicMatrix(shadowmap_widht_ws, shadowmap_widht_ws, near_z, far_z);
+						
+						if (auto* mapped = ref_d_shadow_cb_->MapAs<SceneDirectionalShadowInfo>())
+						{
+							mapped->cb_shadow_view_mtx = view_mat;
+							mapped->cb_shadow_proj_mtx = proj_mat;
+							mapped->cb_shadow_view_inv_mtx = ngl::math::Mat34::Inverse(view_mat);
+							mapped->cb_shadow_proj_inv_mtx = ngl::math::Mat44::Inverse(proj_mat);
+							
+							ref_d_shadow_cb_->Unmap();
+						}
+					}
+				}
+			}
+
+			// 実際のレンダリング処理.
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
+			{
+				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
+
+
+				gfx_commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
+
+				// Set RenderTarget.
+				gfx_commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
+
+				// Set Viewport and Scissor.
+				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
+
+				// Mesh Rendering.
+				gfx::RenderMeshResource render_mesh_res = {};
+				{
+					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+					render_mesh_res.cbv_d_shadowview = {"ngl_cb_shadowview", ref_d_shadow_cbv_.Get()};
+				}
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_d_shadow::k_name, *p_mesh_list_, render_mesh_res);
+			}
+		};
+		
 
 		// LinearDepthパス.
 		struct TaskLinearDepthPass : public rtg::IGraphicsTaskNode
@@ -194,8 +333,12 @@ namespace ngl::render
 
 			rhi::RhiRef<rhi::ComputePipelineStateDep> pso_;
 
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, rhi::RefCbvDep ref_scene_cbv)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, const SetupDesc& desc)
 			{
 				{
 					// リソース定義.
@@ -213,7 +356,7 @@ namespace ngl::render
 				}
 
 				{
-					ref_scene_cbv_ = ref_scene_cbv;
+					ref_scene_cbv_ = desc.ref_scene_cbv;
 				}
 
 				{
@@ -289,11 +432,15 @@ namespace ngl::render
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
 				rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_gb2, rtg::ResourceHandle h_gb3, rtg::ResourceHandle h_velocity,
 				rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
-				rhi::RefCbvDep ref_scene_cbv)
+				const SetupDesc& desc)
 			{
 				// リソース定義.
 				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
@@ -320,7 +467,7 @@ namespace ngl::render
 				
 				{
 					// 外部リソース.
-					ref_scene_cbv_ = ref_scene_cbv;
+					ref_scene_cbv_ = desc.ref_scene_cbv;
 				}
 				
 				// 
@@ -446,10 +593,15 @@ namespace ngl::render
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
 			rhi::RefSrvDep ref_raytrace_result_srv,
-			rhi::RefSrvDep ref_res_texture_srv)
+			rhi::RefSrvDep ref_res_texture_srv,
+			const SetupDesc& desc)
 			{
 				{
 					// リソースアクセス定義.
@@ -554,6 +706,7 @@ namespace ngl::render
 			}
 		};
 
+		// AsyncCompute Taskのテスト (IComputeTaskNode派生).
 		class TaskCopmuteTest : public  rtg::IComputeTaskNode
 		{
 		public:
@@ -567,8 +720,12 @@ namespace ngl::render
 
 			ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_ = {};
 
+			struct SetupDesc
+			{
+				rhi::RefCbvDep ref_scene_cbv{};
+			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_input_test)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_input_test, const SetupDesc& desc)
 			{
 				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
 				{

@@ -164,10 +164,13 @@
     <ClCompile Include="src\ngl\boot\win\boot_application.win.cpp" />
     <ClCompile Include="src\ngl\gfx\material\material_shader_generator.cpp" />
     <ClCompile Include="src\ngl\gfx\material\material_shader_manager.cpp" />
+    <ClCompile Include="src\ngl\render\rtg\graph_builder.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_common.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_generator.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_manager.h" />
+    <ClInclude Include="src\ngl\render\rtg\graph_builder.h" />
+    <ClInclude Include="src\ngl\render\rtg\rtg_command_list_pool.h" />
     <ClInclude Include="third_party\tinyxml2\tinyxml2.h" />
     <None Include="packages.config" />
     <None Include="src\ngl\data\shader\df_light_pass_ps.hlsl" />
@@ -188,7 +191,6 @@
     <ClCompile Include="src\ngl\memory\tlsf_allocator_core.cpp" />
     <ClCompile Include="src\ngl\memory\tlsf_memory_pool.cpp" />
     <ClCompile Include="src\ngl\platform\win\window.win.cpp" />
-    <ClCompile Include="src\ngl\render\graph_builder.cpp" />
     <ClCompile Include="src\ngl\resource\resource.cpp" />
     <ClCompile Include="src\ngl\resource\resource_manager.cpp" />
     <ClCompile Include="src\ngl\resource\resource_manager_impl.cpp" />
@@ -235,8 +237,6 @@
     <ClInclude Include="src\ngl\memory\tlsf_memory_pool.h" />
     <ClInclude Include="src\ngl\platform\window.h" />
     <ClInclude Include="src\ngl\platform\win\window.win.h" />
-    <ClInclude Include="src\ngl\render\graph_builder.h" />
-    <ClInclude Include="src\ngl\render\rtg_command_list_pool.h" />
     <ClInclude Include="src\ngl\render\test_pass.h" />
     <ClInclude Include="src\ngl\resource\resource.h" />
     <ClInclude Include="src\ngl\resource\resource_manager.h" />

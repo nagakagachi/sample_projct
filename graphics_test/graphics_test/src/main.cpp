@@ -42,7 +42,7 @@
 #include "ngl/gfx/render/mesh_renderer.h"
 
 
-#include "ngl/render/graph_builder.h"
+#include "ngl/render/rtg/graph_builder.h"
 #include "ngl/render/test_pass.h"
 
 // マテリアルシェーダ関連.
@@ -238,6 +238,7 @@ bool AppGame::Initialize()
 		{
 			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_depth>();
 			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_gbuffer>();
+			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_d_shadow>();
 			// TODO.
 		}
 
@@ -350,7 +351,20 @@ bool AppGame::Initialize()
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_sponza, &loaddesc));
 				// スケール設定.
 				mc->transform_.SetDiagonal(ngl::math::Vec3(sponza_scale));
-				}
+			}
+			
+			{
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mesh_comp_array_.push_back(mc);
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
+				
+				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
+				tr.SetDiagonal(ngl::math::Vec4(0.0005f));
+				tr.SetColumn3(ngl::math::Vec4(4.5f, 12.0f, 0.0f, 1.0f));
+
+				mc->transform_ = ngl::math::Mat34(tr);
+			}
 
 			for(int i = 0; i < 100; ++i)
 			{
@@ -361,6 +375,7 @@ bool AppGame::Initialize()
 
 				constexpr int k_rand_f_div = 10000;
 				const float randx = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
+				const float randy = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 				const float randz = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 				const float randroty = (std::rand() % k_rand_f_div) / (float)k_rand_f_div;
 
@@ -369,7 +384,7 @@ bool AppGame::Initialize()
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
 				tr.SetDiagonal(ngl::math::Vec4(0.0001f));
 				tr = ngl::math::Mat44::RotAxisY(randroty * ngl::math::k_pi_f * 2.0f) * tr;
-				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 0, placement_range* (randz * 2.0f - 1.0f), 1.0f));
+				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 10.0f * randy, placement_range* (randz * 2.0f - 1.0f), 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
 
@@ -411,17 +426,6 @@ bool AppGame::Initialize()
 	//const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
 	const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
 	res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTexture>(&device_, test_load_texture_file_name, &tex_load_desc);
-
-	/*
-	tinyxml2::XMLDocument xml_doc;
-	if(tinyxml2::XMLError::XML_SUCCESS == xml_doc.LoadFile("./src/ngl/data/shader/material/impl/opaque_standard.hlsli"))
-	{
-		auto* xml_root = xml_doc.RootElement();
-
-		std::cout << xml_root->Name() << std::endl;
-		
-	}
-	*/
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
@@ -719,43 +723,103 @@ bool AppGame::Execute()
 #if ASYNC_COMPUTE_TEST
 					// AsyncCompute Pass.
 					auto* task_test_compute1 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
-					task_test_compute1->Setup(rtg_builder, &device_, {});
-					async_compute_tex2 = task_test_compute1->h_work_tex_;
+					{
+						ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+						}
+						task_test_compute1->Setup(rtg_builder, &device_, {}, setup_desc);
+						async_compute_tex2 = task_test_compute1->h_work_tex_;
+					}
 #endif
 					
 					// PreZ Pass.
 					auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
-					task_depth->Setup(rtg_builder, &device_, ref_cbv_sceneview, frame_scene.mesh_instance_array_);
-
+					{
+						ngl::render::task::TaskDepthPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+							setup_desc.p_mesh_list = &frame_scene.mesh_instance_array_;
+						}
+						task_depth->Setup(rtg_builder, &device_, setup_desc);
+					}
+					
 					ngl::rtg::ResourceHandle async_compute_tex = {};
 #if ASYNC_COMPUTE_TEST
 					// AsyncCompute Pass 其の二.
 					auto* task_test_compute2 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
-					task_test_compute2->Setup(rtg_builder, &device_, task_depth->h_depth_);
-					async_compute_tex = task_test_compute2->h_work_tex_;
+					{
+						ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+						}
+						task_test_compute2->Setup(rtg_builder, &device_, task_depth->h_depth_, setup_desc);
+						async_compute_tex = task_test_compute2->h_work_tex_;
+					}
 #endif
 					
 					// GBuffer Pass.
 					auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
-					task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex, ref_cbv_sceneview, frame_scene.mesh_instance_array_);
+					{
+						ngl::render::task::TaskGBufferPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+							setup_desc.p_mesh_list = &frame_scene.mesh_instance_array_;
+						}
+						task_gbuffer->Setup(rtg_builder, &device_, task_depth->h_depth_, async_compute_tex, setup_desc);
+					}
 					
 					// Linear Depth Pass.
 					auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
-					task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_,async_compute_tex2, ref_cbv_sceneview);
+					{
+						ngl::render::task::TaskLinearDepthPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+						}
+						task_linear_depth->Setup(rtg_builder, &device_, task_depth->h_depth_,async_compute_tex2, setup_desc);
+					}
+					
+					// DirectionalShadow Pass.
+					auto* task_d_shadow = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDirectionalShadowPass>();
+					{
+						ngl::render::task::TaskDirectionalShadowPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+							setup_desc.p_mesh_list = &frame_scene.mesh_instance_array_;
 
+							setup_desc.camera_pos = camera_pos_;
+							setup_desc.camera_front = camera_pose_.GetColumn2();
+
+							setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.15f, -1.0f, 0.15f});
+						}
+						task_d_shadow->Setup(rtg_builder, &device_, setup_desc);
+					}
+					
 					// Deferred Lighting Pass.
 					auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
-					task_light->Setup(rtg_builder, &device_,
-						task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
-						task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, h_prev_light,
-						ref_cbv_sceneview);
-
+					{
+						ngl::render::task::TaskLightPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+						}
+						task_light->Setup(rtg_builder, &device_,
+							task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
+							task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, h_prev_light,
+							setup_desc);
+					}
+					
 					// Final Composite to Swapchain.
 					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
-					task_final->Setup(rtg_builder, &device_, h_swapchain,
-						task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-						rt_pass_test.ray_result_srv_, res_texture_->ref_view_);
-
+					{
+						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
+						}
+						task_final->Setup(rtg_builder, &device_, h_swapchain,
+							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
+							rt_pass_test.ray_result_srv_, res_texture_->ref_view_, setup_desc);
+					}
+					
 					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
 					{
 						h_prev_light = rtg_builder.PropagateResouceToNextFrame(task_light->h_light_);

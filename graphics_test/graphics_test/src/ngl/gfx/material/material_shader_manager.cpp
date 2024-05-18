@@ -608,6 +608,38 @@ namespace gfx
         }
         return p_pso;
     }
+    // DirectionalShadow Pass用PSO生成.
+    rhi::GraphicsPipelineStateDep* MaterialPassPsoCreator_d_shadow::Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc)
+    {   
+        ngl::rhi::GraphicsPipelineStateDep::Desc desc = {};
+        desc.vs = &pass_pso_desc.p_vs->data_;
+        desc.ps = &pass_pso_desc.p_ps->data_;
+
+        desc.depth_stencil_state.depth_enable = true;
+        desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Greater; // ReverseZ.
+        desc.depth_stencil_state.depth_write_enable = true;
+        desc.depth_stencil_state.stencil_enable = false;
+        desc.depth_stencil_format = k_depth_format;
+
+        // 入力レイアウト
+        std::array<ngl::rhi::InputElement, 16> input_elem_data;// 最大数は適当.
+        {
+            int elem_index = 0;
+            SetupInputElementArrayDefault(input_elem_data, elem_index, pass_pso_desc.vs_input_layout_mask);
+
+            desc.input_layout.p_input_elements = input_elem_data.data();
+            desc.input_layout.num_elements = static_cast<ngl::u32>(elem_index);
+        }
+        
+        // PSO生成.
+        auto p_pso = new rhi::GraphicsPipelineStateDep();
+        if (!p_pso->Initialize(p_device, desc))
+        {
+            assert(false);
+            return {};
+        }
+        return p_pso;
+    }
     
 }
 }

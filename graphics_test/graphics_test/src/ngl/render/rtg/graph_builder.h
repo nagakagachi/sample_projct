@@ -13,7 +13,7 @@
 #include "ngl/resource/resource_manager.h"
 #include "ngl/gfx/resource/resource_shader.h"
 
-#include "ngl/render/rtg_command_list_pool.h"
+#include "rtg_command_list_pool.h"
 
 namespace ngl
 {

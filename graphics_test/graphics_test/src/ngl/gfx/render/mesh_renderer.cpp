@@ -15,7 +15,7 @@ namespace ngl
 namespace gfx
 {
 	void RenderMeshWithMaterial(rhi::GraphicsCommandListDep& command_list
-		, const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const rhi::ConstantBufferViewDep& cbv_sceneview)
+		, const char* pass_name, const std::vector<gfx::StaticMeshComponent*>& mesh_instance_array, const RenderMeshResource& render_mesh_resouce)
 	{
     	auto default_white_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_white->ref_view_;
     	auto default_black_tex_srv = GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
@@ -43,11 +43,18 @@ namespace gfx
 				{
 					ngl::rhi::DescriptorSetDep desc_set;
 
-					pso->SetView(&desc_set, "ngl_cb_sceneview", &cbv_sceneview);
+					{
+						if(auto* p_view = render_mesh_resouce.cbv_sceneview.p_view)
+							pso->SetView(&desc_set, render_mesh_resouce.cbv_sceneview.slot_name.Get(), p_view);
+					
+						if(auto* p_view = render_mesh_resouce.cbv_d_shadowview.p_view)
+							pso->SetView(&desc_set, render_mesh_resouce.cbv_d_shadowview.slot_name.Get(), p_view);
+					}
+					
 					pso->SetView(&desc_set, "ngl_cb_instance", cbv_instance.Get());
 
 					pso->SetView(&desc_set, "samp_default", GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
-					// テクスチャ設定テスト.
+					// テクスチャ設定テスト. このあたりはDescriptorSetDepに事前にセットしておきたい.
 					{
 						auto tex_basecolor = (mat_data.tex_basecolor.IsValid())? mat_data.tex_basecolor->ref_view_ : default_white_tex_srv;
 						pso->SetView(&desc_set, "tex_basecolor", tex_basecolor.Get());

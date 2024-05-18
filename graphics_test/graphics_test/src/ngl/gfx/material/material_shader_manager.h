@@ -133,6 +133,19 @@ namespace gfx
     private:
     };
 
+    // DirectionalShadow Pass Pso Creator.
+    class MaterialPassPsoCreator_d_shadow : public IMaterialPassPsoCreator
+    {
+    public:
+        // Pass識別名, 検索に利用するためマテリアルシェーダなどに記述するPass名と一致している必要がある.
+        static constexpr char k_name[] = "d_shadow";
+        rhi::GraphicsPipelineStateDep* Create(rhi::DeviceDep* p_device, const MaterialPassPsoDesc& pass_pso_desc) override;
+        
+        // Depth.
+        static constexpr auto k_depth_format = rhi::EResourceFormat::Format_D32_FLOAT;
+        
+    private:
+    };
 
     
     // Material Instance毎のPsoをまとめて取得するためのオブジェクト.

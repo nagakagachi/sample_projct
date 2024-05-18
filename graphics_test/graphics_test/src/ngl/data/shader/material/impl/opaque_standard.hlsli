@@ -6,6 +6,7 @@
 <material_config>
     <pass name="depth" />
     <pass name="gbuffer" />
+    <pass name="d_shadow" />
 
     <vs_in name="NORMAL" optional="false" />
     <vs_in name="TANGENT" optional="true" />
@@ -75,7 +76,7 @@ MtlPsOutput MtlPsEntryPoint(MtlPsInput input)
 
         output.emissive = emissive;
 
-        output.opacity = mtl_base_color.a;//1.0;
+        output.opacity = mtl_base_color.a;
     }
 
     return output;

@@ -32,6 +32,7 @@
             mtl_input.position_ws = pos_ws;
             mtl_input.normal_ws = normal_ws;
         }
+        // マテリアル処理呼び出し.
         MtlVsOutput mtl_output = MtlVsEntryPoint(mtl_input);
         {
             pos_ws = pos_ws + mtl_output.position_offset_ws;
@@ -83,7 +84,7 @@
             mtl_input.binormal_ws = normalize(input.binormal_ws);
         }
 
-        // マテリアル処理実行.
+        // マテリアル処理呼び出し.
         MtlPsOutput mtl_output = MtlPsEntryPoint(mtl_input);
         
         GBufferOutput output = (GBufferOutput)0;
