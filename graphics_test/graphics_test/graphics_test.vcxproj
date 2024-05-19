@@ -129,14 +129,14 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>.\\third_party\assimp\lib\$(Configuration);.\third_party\DirectXTex\lib\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>assimp-vc143-mtd.lib;DirectXTex.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>.\\third_party\assimp\lib\Release;.\third_party\DirectXTex\lib\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc143-mt.lib;DirectXTex.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command></Command>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>copy .\\third_party\assimp\bin\$(Configuration)\\*.dll $(TargetDir)</Command>
+      <Command>copy .\\third_party\assimp\bin\Release\\*.dll $(TargetDir)</Command>
       <Message>third_partyのAssimpからdllをコピーする.</Message>
     </PreBuildEvent>
   </ItemDefinitionGroup>

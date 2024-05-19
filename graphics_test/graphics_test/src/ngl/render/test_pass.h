@@ -267,8 +267,7 @@ namespace ngl::render
 						const float shadowmap_widht_ws = 32.0f;
 
 						
-						//math::Vec3 lookat_pos = {};
-						math::Vec3 lookat_pos = desc.camera_pos;
+						math::Vec3 lookat_pos = desc.camera_pos + (desc.camera_front * 16.0);
 						math::Vec3 light_view_dir = desc.directional_light_dir;
 						math::Vec3 light_view_up = math::Vec3::Normalize({desc.directional_light_dir.z, desc.directional_light_dir.x, desc.directional_light_dir.y});
 						math::Vec3 light_pos = lookat_pos - light_view_dir * 500.0f;

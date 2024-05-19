@@ -340,6 +340,7 @@ bool AppGame::Initialize()
 		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
 		const float sponza_scale = 1.0f;
 
+		// Amazon Lumberyard Bistro.
 		const char* mesh_file_bistro = "C:/Users/nagak/Downloads/Bistro_v5_2/Bistro_v5_2/BistroExterior.fbx";
 		const float bistro_scale = 1.0f;
 
@@ -597,7 +598,7 @@ bool AppGame::Execute()
 
 			auto trans = e->transform_.GetColumn3();
 
-			trans.z += sin_curve * 0.1f;
+			trans.z += sin_curve * 0.075f;
 
 			e->transform_.SetColumn3(trans);
 
@@ -814,8 +815,8 @@ bool AppGame::Execute()
 
 							setup_desc.camera_pos = camera_pos_;
 							setup_desc.camera_front = camera_pose_.GetColumn2();
-
-							setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.15f, -1.0f, 0.11f});
+							// Directionalのライト方向テスト.
+							setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.3f, -1.0f, 0.1f});
 						}
 						task_d_shadow->Setup(rtg_builder, &device_, setup_desc);
 					}

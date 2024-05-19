@@ -9,6 +9,7 @@
 #include "ngl/gfx/resource/resource_shader.h"
 #include "ngl/resource/resource_manager.h"
 #include "ngl/rhi/d3d12/device.d3d12.h"
+#include "ngl/util/bit_operation.h"
 
 namespace ngl
 {
@@ -42,8 +43,10 @@ namespace gfx
         std::string material_name = {};
 
         // 完全一致でシェーダを検索.
+        // セットアップ時のシェーダデータベースから検索する際に利用.
         int FindPerfectMatching(const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
         {
+            
             // 現状は辞書化せずに探索. キーが確定したら辞書化を検討.
             for(size_t i = 0; i < pass_shader_set.size(); ++i)
             {
@@ -56,6 +59,35 @@ namespace gfx
                 return static_cast<int>(i);// 発見.
             }
             return -1;
+        }
+        // 完全一致ではなく, 少なくともシェーダ側が要求するスロットがvs_in_slotにも存在するものを検索.
+        //  ランタイムでのMesh描画用シェーダ検索に利用.
+        int FindMatching(const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
+        {
+            // 現状は辞書化せずに探索. キーが確定したら辞書化を検討.
+            int max_match_bit = -1;
+            int max_match_index = -1;
+            for(size_t i = 0; i < pass_shader_set.size(); ++i)
+            {
+                const auto& e = pass_shader_set[i];
+                if(e.pass_name != pass_name)
+                    continue;
+                
+                const auto match_mask = (e.vs_in_slot_mask.mask & vs_in_slot.mask);
+                // 少なくともシェーダ側が要求するマスクがvs_in_slot側にあるものだけ通過する.
+                if(e.vs_in_slot_mask.mask != match_mask)
+                    continue;
+
+                // 完全一致ではなくても, vs_in_slotのスロットをなるべく使用するものを選択する.
+                // 一致ビットの個数が最大のものにしてみる. 本来はslot毎に優先度もありそうだが...
+                const int match_bit = CountbitAutoType(e.vs_in_slot_mask.mask);
+                if(max_match_bit < match_bit)
+                {
+                    max_match_bit = match_bit;
+                    max_match_index = static_cast<int>(i);
+                }
+            }
+            return max_match_index;
         }
             
         std::vector<MaterialPassShaderSet> pass_shader_set = {};
@@ -83,9 +115,31 @@ namespace gfx
             pso_lib.clear();
         }
 
-        // 完全一致でPSOを検索.
-        int FindPerfectMatching(const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
+        int FindMatching(const char* pass_name, MeshVertexSemanticSlotMask vs_in_slot) const
         {
+#if 1
+            // 完全一致ではなくても, vs_in_slotのスロットをなるべく使用するものを選択する.
+            
+            // 現状は辞書化せずに探索. キーが確定したら辞書化を検討.
+            for(size_t i = 0; i < pso_lib.size(); ++i)
+            {
+                const auto& e = pso_lib[i];
+                if(e->pass_name != pass_name)
+                    continue;
+                
+                const auto match_mask = (e->vs_in_slot_mask.mask & vs_in_slot.mask);
+                // 少なくともシェーダ側が要求するマスクがvs_in_slot側にあるものだけ通過する.
+                if(e->vs_in_slot_mask.mask != match_mask)
+                    continue;
+
+                // TODO.
+
+                return static_cast<int>(i);// 発見.
+            }
+            return -1;
+#else
+            // 完全一致でPSOを検索.
+
             // 現状は辞書化せずに探索. キーが確定したら辞書化を検討.
             for(size_t i = 0; i < pso_lib.size(); ++i)
             {
@@ -98,6 +152,7 @@ namespace gfx
                 return static_cast<int>(i);// 発見.
             }
             return -1;
+#endif
         }
         
         std::string material_name = {};
@@ -121,7 +176,7 @@ namespace gfx
             // Pass検索.
             const auto& pass_set = material_shader_lib_[mtl_shader_it->second];
             
-            const int find_index = pass_set.FindPerfectMatching(pass_name, vs_in_slot);
+            const int find_index = pass_set.FindMatching(pass_name, vs_in_slot);
             if(0 <= find_index)
                 return &pass_set.pass_shader_set[find_index];
 
@@ -420,7 +475,8 @@ namespace gfx
             // Material別のLock. 排他範囲が重なりにくくしたい意図.
             std::lock_guard<std::mutex> lock(p_mtl_pso_set->pso_lib_mutex_);
 
-            int find_match_pso_index = p_mtl_pso_set->FindPerfectMatching(pass_name, vsin_slot);
+            // 生成済みMaterialPsoSetから検索. vs_inの完全一致だと用意されていないシェーダのvs_inパターンが足りないため, 可能な限り一致するものを検索する.
+            int find_match_pso_index = p_mtl_pso_set->FindMatching(pass_name, vsin_slot);
             if(0 <= find_match_pso_index)
             {
                 // Cacheにあれば即座に返却.
@@ -432,6 +488,7 @@ namespace gfx
                 rhi::RhiRef<rhi::GraphicsPipelineStateDep> ref_pso = {};
                 MeshVertexSemanticSlotMask  vs_require_input_mask = {};
                 {
+                    // このMeshを描画可能なシェーダバリエーションを検索. 完全一致ではシェーダデータベース側に存在しない可能性があるため保守的な検索でヒットしたものを利用.
                     auto* shader_set = p_impl_->FindPassShaderSet(material_name, pass_name, vsin_slot);
                     if(!shader_set)
                         return {};

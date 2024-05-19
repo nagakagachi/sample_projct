@@ -24,6 +24,11 @@ namespace ngl
 	// ビットの値が1の個数 64bit
 	s32 Count64bit(u64 v);
 
+	inline s32 CountbitAutoType(u8 v){return Count8bit(v);}
+	inline s32 CountbitAutoType(u16 v){return Count16bit(v);}
+	inline s32 CountbitAutoType(u32 v){return Count32bit(v);}
+	inline s32 CountbitAutoType(u64 v){return Count64bit(v);}
+
 
 	// 最上位ビットの桁を返す
 	// arg==0 の場合は 負数

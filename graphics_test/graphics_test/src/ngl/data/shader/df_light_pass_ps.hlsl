@@ -70,7 +70,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	const float k_pi = 3.141592;
 	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * k_pi;
 	//const float3 lit_dir = normalize(float3(-0.5, -1.0, -0.4));
-	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx._m20_m21_m22);// ShadowViewの向きを利用.
+	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx._m02_m12_m22);// ShadowViewの向きを利用.
 
 	
 	const float shadow_sample_bias_ws = 0.01;// 基準バイアス.
@@ -82,9 +82,16 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	pixel_pos_shadow_uv.y = 1.0 - pixel_pos_shadow_uv.y;// Y反転.
 
 	// Shadowmap Sample.
-	const float shadow_sample = tex_shadowmap.SampleLevel(samp, pixel_pos_shadow_uv.xy, 0).x;
-	const float light_visibility = (shadow_sample <= pixel_pos_shadow_cs_pd.z)? 1.0 : 0.0;
-
+	float light_visibility = 1.0;
+	if(true)
+	{
+		// 範囲外はとりあえず日向.
+		if(all(0.0 < pixel_pos_shadow_uv) && all(1.0 > pixel_pos_shadow_uv))
+		{
+			const float shadow_sample = tex_shadowmap.SampleLevel(samp, pixel_pos_shadow_uv, 0).x;
+			light_visibility = (shadow_sample <= pixel_pos_shadow_cs_pd.z)? 1.0 : 0.0;
+		}
+	}
 	
 	float3 diffuse_term = (1.0/k_pi);
 #if 0
@@ -99,7 +106,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	// ambient term.
 	if(1)
 	{
-		const float3 k_ambient_rate = float3(0.4, 0.5, 1.0)*0.05;
+		const float3 k_ambient_rate = float3(0.7, 0.7, 1.0) * 0.15;
 		lit_color += gb_albedo * diffuse_term * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
 	}
 

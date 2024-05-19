@@ -41,8 +41,14 @@ MtlVsOutput MtlVsEntryPoint(MtlVsInput input)
 MtlPsOutput MtlPsEntryPoint(MtlPsInput input)
 {
     const float4 mtl_base_color = tex_basecolor.Sample(samp_default, input.uv0);
+#if 0
     const float3 mtl_normal = tex_normal.Sample(samp_default, input.uv0).rgb * 2.0 - 1.0;
-	    
+#else
+    const float2 mtl_normal_bc5_sample = tex_normal.Sample(samp_default, input.uv0).rg * 2.0 - 1.0;
+	const float mtl_normal_bc5_z = sqrt(saturate(1.0 - dot(mtl_normal_bc5_sample, mtl_normal_bc5_sample)));
+    const float3 mtl_normal = float3(mtl_normal_bc5_sample.x, mtl_normal_bc5_sample.y, mtl_normal_bc5_z);
+#endif
+    
     const float mtl_occlusion = tex_occlusion.Sample(samp_default, input.uv0).r;	// glTFでは別テクスチャでもチャンネルはORMそれぞれRGBになっている?.
     const float mtl_roughness = tex_roughness.Sample(samp_default, input.uv0).g;	// .
     const float mtl_metalness = tex_metalness.Sample(samp_default, input.uv0).b;	// .
@@ -70,6 +76,7 @@ MtlPsOutput MtlPsEntryPoint(MtlPsInput input)
         output.occlusion = occlusion;
 
         output.normal_ws = normal_ws;
+        
         output.roughness = roughness;
 
         output.metalness = metallic;
