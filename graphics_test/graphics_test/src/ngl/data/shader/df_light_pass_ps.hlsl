@@ -73,8 +73,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx._m02_m12_m22);// ShadowViewの向きを利用.
 
 	
-	const float shadow_sample_bias_ws = 0.01;// 基準バイアス.
-	const float shadow_sample_slope_bias_ws = 1.0 / (saturate(dot(-lit_dir, gb_normal_ws)) + 0.001);// スロープバイアス.
+	const float shadow_sample_bias_ws = 0.001;// 基準バイアス.
+	const float shadow_sample_slope_bias_ws = 5.0 / (saturate(dot(-lit_dir, gb_normal_ws)) + 0.001);// スロープバイアス.
 	const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx, float4(pixel_pos_ws + (-lit_dir * ((1.0 + shadow_sample_slope_bias_ws)*shadow_sample_bias_ws)), 1.0));
 	const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx, float4(pixel_pos_shadow_vs, 1.0));
 	const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz / pixel_pos_shadow_cs.w;
