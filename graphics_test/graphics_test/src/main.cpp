@@ -335,22 +335,35 @@ bool AppGame::Initialize()
 	{
 		const char* mesh_file_box = "./third_party/assimp/test/models/FBX/box.fbx";
 		const char* mesh_file_spider = "./third_party/assimp/test/models/FBX/spider.fbx";
+		const float spider_base_scale = 0.0001f;
 		
 		const char* mesh_file_sponza = "./data/model/sponza_gltf/glTF/Sponza.gltf";
 		const float sponza_scale = 1.0f;
+
+		const char* mesh_file_bistro = "C:/Users/nagak/Downloads/Bistro_v5_2/Bistro_v5_2/BistroExterior.fbx";
+		const float bistro_scale = 1.0f;
+
+		// 基本シーンモデル.
+#if 1
+		const char* mesh_target_scene = mesh_file_sponza;
+		const float target_scene_base_scale = sponza_scale;
+#else
+		const char* mesh_target_scene = mesh_file_bistro;
+		const float target_scene_base_scale = bistro_scale;
+#endif
 		
 		auto& ResourceMan = ngl::res::ResourceManager::Instance();
-
 		// Mesh Component
 		{
+			// 基本シーンモデル読み込み.
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
-				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_sponza, &loaddesc));
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_target_scene, &loaddesc));
 				// スケール設定.
-				mc->transform_.SetDiagonal(ngl::math::Vec3(sponza_scale));
+				mc->transform_.SetDiagonal(ngl::math::Vec3(target_scene_base_scale));
 			}
 			
 			{
@@ -360,7 +373,7 @@ bool AppGame::Initialize()
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(0.0005f));
+				tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 5.0f));
 				tr.SetColumn3(ngl::math::Vec4(4.5f, 12.0f, 0.0f, 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
@@ -372,7 +385,7 @@ bool AppGame::Initialize()
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(0.0005f));
+				tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 5.0f));
 				tr.SetColumn3(ngl::math::Vec4(30.0f, 12.0f, 0.0f, 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
@@ -394,7 +407,7 @@ bool AppGame::Initialize()
 				constexpr float placement_range = 30.0f;
 
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(0.0001f));
+				tr.SetDiagonal(ngl::math::Vec4(spider_base_scale));
 				tr = ngl::math::Mat44::RotAxisY(randroty * ngl::math::k_pi_f * 2.0f) * tr;
 				tr.SetColumn3(ngl::math::Vec4(placement_range* (randx * 2.0f - 1.0f), 10.0f * randy, placement_range* (randz * 2.0f - 1.0f), 1.0f));
 

@@ -135,6 +135,10 @@
     <PostBuildEvent>
       <Command></Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>copy .\\third_party\assimp\bin\$(Configuration)\\*.dll $(TargetDir)</Command>
+      <Message>third_partyのAssimpからdllをコピーする.</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -158,6 +162,10 @@
     <PostBuildEvent>
       <Command></Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>copy .\\third_party\assimp\bin\$(Configuration)\\*.dll $(TargetDir)</Command>
+      <Message>third_partyのAssimpからdllをコピーする.</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
