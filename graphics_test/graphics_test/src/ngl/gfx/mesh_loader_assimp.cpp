@@ -126,6 +126,7 @@ namespace assimp
 
 		unsigned int ai_mesh_read_options = 0u;
 		{
+			
 			ai_mesh_read_options |= aiProcess_CalcTangentSpace;
 			ai_mesh_read_options |= aiProcess_Triangulate;
 			ai_mesh_read_options |= aiProcess_JoinIdenticalVertices;
@@ -136,8 +137,9 @@ namespace assimp
 			//	MeshData は配置情報を含まない単純なジオメトリ情報という役割であるため, ここではすべて変換済みにする.
 			ai_mesh_read_options |= aiProcess_PreTransformVertices;
 
-			// Texture Coord の V の反転ロード. Sponza等のデータを使う場合にこちらが必要.
-			ai_mesh_read_options |= aiProcess_FlipUVs;
+			// アプリ側が左手系採用のため.
+			//	このフラグには 左手座標系へのジオメトリの変換, UVのY反転, TriangleFaceのIndex順反転 が含まれる.
+			ai_mesh_read_options |= aiProcess_ConvertToLeftHanded;
 		}
 		
 		Assimp::Importer asimporter;

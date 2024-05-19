@@ -334,6 +334,7 @@ bool AppGame::Initialize()
 
 	{
 		const char* mesh_file_box = "./third_party/assimp/test/models/FBX/box.fbx";
+		const char* mesh_file_stanford_bunny = "data/model/stanford_bunny/bunny.obj";
 		const char* mesh_file_spider = "./third_party/assimp/test/models/FBX/spider.fbx";
 		const float spider_base_scale = 0.0001f;
 		
@@ -371,11 +372,12 @@ bool AppGame::Initialize()
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
-				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
+				//mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_stanford_bunny, &loaddesc));
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 5.0f));
-				tr.SetColumn3(ngl::math::Vec4(4.5f, 12.0f, 0.0f, 1.0f));
+				tr.SetDiagonal(ngl::math::Vec4(1.0f));
+				tr.SetColumn3(ngl::math::Vec4(0.0f, 12.0f, 0.0f, 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
 			}

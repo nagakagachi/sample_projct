@@ -73,9 +73,10 @@ namespace ngl
 
 		// ------------------------------------------------------------------------------------------------
 		// Utility
+		static constexpr bool k_defalut_right_hand_mode = false;
 		
 		// View Matrix (LeftHand).
-		inline Mat34 CalcViewMatrix(const Vec3& camera_location, const Vec3& forward, const Vec3& up, bool is_right_hand = false)
+		inline Mat34 CalcViewMatrix(const Vec3& camera_location, const Vec3& forward, const Vec3& up, bool is_right_hand = k_defalut_right_hand_mode)
 		{
 			assert(!(forward == Vec3::Zero()));
 			assert(!(up == Vec3::Zero()));
@@ -111,7 +112,7 @@ namespace ngl
 			float aspect_ratio,
 			float near_z,
 			float far_z,
-			bool is_right_hand = false
+			bool is_right_hand = k_defalut_right_hand_mode
 		)
 		{
 			const float fov_y_half = fov_y_radian * 0.5f;
@@ -133,7 +134,7 @@ namespace ngl
 		//		cb_ndc_z_to_view_z_coef = 
 		//			Standard LH: ( far_z * near_z, near_z - far_z, far_z, 0.0)
 		//			Standard RH: (-far_z * near_z, near_z - far_z, far_z, 0.0)
-		inline constexpr Vec4 CalcViewDepthReconstructCoefForStandardPerspective(float near_z, float far_z, bool is_right_hand = false)
+		inline constexpr Vec4 CalcViewDepthReconstructCoefForStandardPerspective(float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode)
 		{
 			const float sign = (!is_right_hand) ? 1.0f : -1.0f;
 			Vec4 coef(sign * far_z * near_z, near_z - far_z, far_z, 0.0);
@@ -148,7 +149,7 @@ namespace ngl
 			float aspect_ratio,
 			float near_z,
 			float far_z,
-			bool is_right_hand = false
+			bool is_right_hand = k_defalut_right_hand_mode
 		)
 		{
 			const float fov_y_half = fov_y_radian * 0.5f;
@@ -170,7 +171,7 @@ namespace ngl
 		//		cb_ndc_z_to_view_z_coef = 
 		//			Reverse LH: ( far_z * near_z, far_z - near_z, near_z, 0.0)
 		//			Reverse RH: (-far_z * near_z, far_z - near_z, near_z, 0.0)
-		inline constexpr Vec4 CalcViewDepthReconstructCoefForReversePerspective(float near_z, float far_z, bool is_right_hand = false)
+		inline constexpr Vec4 CalcViewDepthReconstructCoefForReversePerspective(float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode)
 		{
 			const float sign = (!is_right_hand) ? 1.0f : -1.0f;
 			Vec4 coef(sign * far_z * near_z, far_z - near_z, near_z, 0.0);
@@ -186,7 +187,7 @@ namespace ngl
 			float fov_y_radian,
 			float aspect_ratio,
 			float near_z,
-			bool is_right_hand = false
+			bool is_right_hand = k_defalut_right_hand_mode
 		)
 		{
 			const float fov_y_half = fov_y_radian * 0.5f;
@@ -207,7 +208,7 @@ namespace ngl
 		//		cb_ndc_z_to_view_z_coef = 
 		//			Infinite Far Reverse LH: ( near_z, 1.0, 0.0, 0.0)
 		//			Infinite Far Reverse RH: (-near_z, 1.0, 0.0, 0.0)
-		inline constexpr Vec4 CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(float near_z, bool is_right_hand = false)
+		inline constexpr Vec4 CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(float near_z, bool is_right_hand = k_defalut_right_hand_mode)
 		{
 			const float sign = (!is_right_hand) ? 1.0f : -1.0f;
 			Vec4 coef(sign * near_z, 1.0f, 0.0f, 0.0);
@@ -216,7 +217,7 @@ namespace ngl
 
 
 		// 標準平行投影.
-		inline Mat44 CalcStandardOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = false)
+		inline Mat44 CalcStandardOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode)
 		{
 			const float w = 2.0f / width;
 			const float h = 2.0f / height;
@@ -231,7 +232,7 @@ namespace ngl
 			);
 		}
 		// Reverse平行投影.
-		inline Mat44 CalcReverseOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = false)
+		inline Mat44 CalcReverseOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode)
 		{
 			const float w = 2.0f / width;
 			const float h = 2.0f / height;
