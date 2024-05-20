@@ -11,7 +11,6 @@
 #include "ngl/rhi/d3d12/resource_view.d3d12.h"
 
 #include "ngl/resource/resource_manager.h"
-#include "ngl/gfx/resource/resource_shader.h"
 
 #include "rtg_command_list_pool.h"
 

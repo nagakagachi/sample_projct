@@ -34,15 +34,6 @@
 #include "ngl/gfx/raytrace_scene.h"
 #include "ngl/gfx/mesh_component.h"
 
-#include "ngl/thread/lockfree_stack_intrusive.h"
-#include "ngl/thread/lockfree_stack_intrusive_test.h"
-
-#include "ngl/gfx/command_helper.h"
-
-#include "ngl/gfx/render/mesh_renderer.h"
-
-
-#include "ngl/render/rtg/graph_builder.h"
 #include "ngl/render/test_pass.h"
 
 // マテリアルシェーダ関連.

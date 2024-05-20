@@ -3,7 +3,7 @@
 
 #include<variant>
 
-#include "rtg/graph_builder.h"
+#include "ngl/gfx/rtg/graph_builder.h"
 #include "ngl/gfx/command_helper.h"
 
 #include "ngl/gfx/render/mesh_renderer.h"
