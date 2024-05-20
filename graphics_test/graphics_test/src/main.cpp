@@ -358,6 +358,18 @@ bool AppGame::Initialize()
 				// スケール設定.
 				mc->transform_.SetDiagonal(ngl::math::Vec3(target_scene_base_scale));
 			}
+			{
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mesh_comp_array_.push_back(mc);
+				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
+				
+				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
+				tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 5.0f));
+				tr.SetColumn3(ngl::math::Vec4(30.0f, 12.0f, 0.0f, 1.0f));
+
+				mc->transform_ = ngl::math::Mat34(tr);
+			}
 			
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
@@ -372,18 +384,7 @@ bool AppGame::Initialize()
 
 				mc->transform_ = ngl::math::Mat34(tr);
 			}
-			{
-				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
-				mesh_comp_array_.push_back(mc);
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
-				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
-				
-				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-				tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 5.0f));
-				tr.SetColumn3(ngl::math::Vec4(30.0f, 12.0f, 0.0f, 1.0f));
-
-				mc->transform_ = ngl::math::Mat34(tr);
-			}
+			
 
 			for(int i = 0; i < 100; ++i)
 			{

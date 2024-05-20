@@ -128,8 +128,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		
 		if(true)
 		{
-			const float2 k_lt = float2(0.9, 0.0);
-			const float2 k_size = float2(0.1, 0.5);
+			const float2 k_lt = float2(0.8, 0.0);
+			const float2 k_size = float2(0.2, 0.5);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -137,8 +137,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 		if(true)
 		{
-			const float2 k_lt = float2(0.9, 0.5);
-			const float2 k_size = float2(0.1, 0.5);
+			const float2 k_lt = float2(0.8, 0.5);
+			const float2 k_size = float2(0.2, 0.5);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -147,7 +147,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		if(true)
 		{
 			const float2 k_lt = float2(0.0, 0.0);
-			const float2 k_size = float2(0.1, 0.5);
+			const float2 k_size = float2(0.15, 0.4);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -155,8 +155,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 		if(true)
 		{
-			const float2 k_lt = float2(0.0, 0.5);
-			const float2 k_size = float2(0.1, 0.25);
+			const float2 k_lt = float2(0.0, 0.4);
+			const float2 k_size = float2(0.15, 0.8);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -164,8 +164,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 		if(true)
 		{
-			const float2 k_lt = float2(0.0, 0.75);
-			const float2 k_size = float2(0.1, 0.25);
+			const float2 k_lt = float2(0.0, 0.8);
+			const float2 k_size = float2(0.15, 0.2);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))

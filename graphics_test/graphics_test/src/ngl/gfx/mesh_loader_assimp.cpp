@@ -306,10 +306,36 @@ namespace assimp
 				material_info_array.push_back({});
 				auto& material = material_info_array.back();
 				{
-					func_get_ai_material_texture(material.tex_base_color, ai_scene, ai_material_index, aiTextureType_BASE_COLOR);
+					// BaseColor
+					if(!func_get_ai_material_texture(material.tex_base_color, ai_scene, ai_material_index, aiTextureType_BASE_COLOR))
+					{
+						func_get_ai_material_texture(material.tex_base_color, ai_scene, ai_material_index, aiTextureType_DIFFUSE);// 失敗したら別のBaseColor相当のタイプでリトライ.
+					}
+					
+					// Normal.
 					func_get_ai_material_texture(material.tex_normal, ai_scene, ai_material_index, aiTextureType_NORMALS);
-					func_get_ai_material_texture(material.tex_roughness, ai_scene, ai_material_index, aiTextureType_DIFFUSE_ROUGHNESS);
-					func_get_ai_material_texture(material.tex_metalness, ai_scene, ai_material_index, aiTextureType_METALNESS);
+
+					bool is_specular_texture = true;
+					if(!func_get_ai_material_texture(material.tex_metalness, ai_scene, ai_material_index, aiTextureType_METALNESS))
+					{
+						// Specularとして取れた場合も, RGBにORMが格納されたテクスチャが取れると思われる.
+						// 普通?は aiTextureType_DIFFUSE_ROUGHNESS 等で同じ値が取れるはずだが, Specularとして取得できる場合は aiTextureType_DIFFUSE_ROUGHNESS で有効値がとれない場合がある.
+						// その場合は自前で Roughness(ORM) として利用するように処理を追加する(後段).
+						is_specular_texture = func_get_ai_material_texture(material.tex_metalness, ai_scene, ai_material_index, aiTextureType_SPECULAR);// 失敗したら別のMetalness相当のタイプでリトライ.
+					}
+					bool is_valid_roughness_texture = true;
+					if(!func_get_ai_material_texture(material.tex_roughness, ai_scene, ai_material_index, aiTextureType_DIFFUSE_ROUGHNESS))
+					{
+						is_valid_roughness_texture = func_get_ai_material_texture(material.tex_roughness, ai_scene, ai_material_index, aiTextureType_SHININESS);// 失敗したら別のRoughness相当のタイプでリトライ.
+					}
+					
+					//	METALNESS相当のテクスチャが aiTextureType_SPECULAR が取得できた場合はそのテクスチャのRGBチャンネルが ORM となっている模様(Lumberyard Bistro).
+					//	その場合はaiTextureType_DIFFUSE_ROUGHNESS が有効値(同じORMテクスチャパス)が取得出来ないことがあるため, 自前でRoughnessにSpecular(ORM)を設定する.
+					if(!is_valid_roughness_texture && is_specular_texture)
+					{
+						material.tex_roughness = material.tex_metalness;
+					}
+					
 					func_get_ai_material_texture(material.tex_occlusion, ai_scene, ai_material_index, aiTextureType_AMBIENT_OCCLUSION);
 				}
 			}

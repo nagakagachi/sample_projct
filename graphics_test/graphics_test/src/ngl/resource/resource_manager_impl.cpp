@@ -1,6 +1,9 @@
 ﻿
 #include "resource_manager.h"
 
+// マテリアルテクスチャパスの有効チェック等用.
+#include <filesystem>
+
 #include "ngl/gfx/mesh_loader_assimp.h"
 #include "ngl/gfx/texture_loader_directxtex.h"
 
@@ -70,7 +73,22 @@ namespace res
 				{
 					if(0 < tex_name.length())
 					{
-						return (path_part + tex_name);
+						std::filesystem::path tex_path = tex_name;
+						if(std::filesystem::path(tex_name).is_relative())
+						{
+							// 相対パスの仮解決.
+							tex_path = path_part + tex_name;
+						}
+						
+						{
+							// パスとして無効な場合.
+							if(!exists(tex_path))
+							{
+								return "";// 現状は無効パスとして返す. 相対パスからなんとかして解決してもいいかもしれないが....
+							}
+						}
+						
+						return tex_path.string();
 					}
 					return {};
 				};
