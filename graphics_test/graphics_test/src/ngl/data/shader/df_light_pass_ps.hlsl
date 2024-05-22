@@ -27,6 +27,35 @@ Texture2D tex_prev_light;
 Texture2D tex_shadowmap;
 SamplerState samp;
 
+
+
+#define ngl_PI 3.14159265358979323846
+#define ngl_EPSILON 1e-6
+
+// https://google.github.io/filament/Filament.html
+#define saturate_mediump(x) min(x, 65504.0)
+
+
+float3 brdf_schlick_F(float3 F0, float3 normal, float3 to_view, float3 to_light)
+{
+	const float3 h = normalize(to_view + to_light);
+	
+	const float v_o_h = saturate(dot(to_view, h));
+	const float tmp = (1.0 - v_o_h);
+	const float3 F = F0 + (1.0 - F0) * (tmp*tmp*tmp*tmp*tmp);
+	return F;
+}
+float brdf_trowbridge_reitz_D(float linear_roughness, float3 normal, float3 to_view, float3 to_light)
+{
+	const float3 h = normalize(to_view + to_light);
+	
+	const float a = linear_roughness*linear_roughness;
+	const float n_o_h = dot(normal, h);
+	const float tmp = (1.0 + n_o_h*n_o_h * (a*a - 1.0));
+	const float D = (a*a) / (ngl_PI * tmp*tmp);
+	return D;
+}
+
 float4 main_ps(VS_OUTPUT input) : SV_TARGET
 {
 	// リニアView深度.
@@ -62,6 +91,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 #if 1
 	// 
 	const float3 pixel_pos_ws = mul(ngl_cb_sceneview.cb_view_inv_mtx, float4((to_pixel_ray_vs/abs(to_pixel_ray_vs.z)) * ld, 1.0));
+	const float3 to_pixel_ray_ws = normalize(pixel_pos_ws - ngl_cb_sceneview.cb_view_inv_mtx._m03_m13_m23);
 #else
 	float3 to_pixel_ray_ws = mul(ngl_cb_sceneview.cb_view_inv_mtx, float4(to_pixel_ray_vs/abs(to_pixel_ray_vs.z), 0.0));// View空間Rayのzを1に補正して後段でViewZ乗算する.
 	const float3 pixel_pos_ws = to_pixel_ray_ws * ld + ngl_cb_sceneview.cb_view_inv_mtx._m03_m13_m23;
@@ -93,21 +123,34 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 	}
 	
-	float3 diffuse_term = (1.0/k_pi);
+	float3 diffuse_brdf = (1.0/k_pi);
 #if 0
 	float3 rim_rerm = pow(1.0 - saturate(dot(-to_pixel_ray_ws, gb_normal_ws)), 6);
 #else
 	float3 rim_rerm = (float3)0;
 #endif
+
 	
-	float cos_term = saturate(dot(gb_normal_ws, -lit_dir));
-	float3 lit_color = gb_albedo * (diffuse_term + rim_rerm) * cos_term * lit_intensity * light_visibility;
+	const float cos_term = saturate(dot(gb_normal_ws, -lit_dir));
+	const float3 specular_reflectance =  lerp(0.04, gb_albedo, gb_metalness);
+	const float3 diffuse_reflectance = lerp(gb_albedo, 0.0, gb_metalness);
+	
+	const float3 brdf_F = brdf_schlick_F(specular_reflectance, gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
+	const float brdf_D = brdf_trowbridge_reitz_D(max(0.025, gb_rounghness), gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
+	const float brdf_G = 1.0;// TODO.
+	float3 brdf_ggx = brdf_D * brdf_F * brdf_G / ((4.0 * saturate(dot(gb_normal_ws, -lit_dir)) * saturate(dot(gb_normal_ws, -to_pixel_ray_ws))) + ngl_EPSILON);
+
+	float3 brdf_lambert = (gb_albedo / ngl_PI);
+
+	const float3 brdf = brdf_ggx + (brdf_lambert * saturate(1.0 - brdf_F));
+	
+	float3 lit_color = cos_term * brdf * lit_intensity * light_visibility;
 	
 	// ambient term.
 	if(1)
 	{
 		const float3 k_ambient_rate = float3(0.7, 0.7, 1.0) * 0.15;
-		lit_color += gb_albedo * diffuse_term * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
+		lit_color += gb_albedo * diffuse_brdf * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
 	}
 
 	
@@ -125,11 +168,12 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			float prev_blend_rate = (0.49 < length_from_center)? 1.0 : 0.0;
 			lit_color = lerp(lit_color, prev_light, prev_blend_rate * 0.9);
 		}
-		
+
+		const float debug_area_w = 0.1;
 		if(true)
 		{
-			const float2 k_lt = float2(0.8, 0.0);
-			const float2 k_size = float2(0.2, 0.5);
+			const float2 k_lt = float2(1.0 - debug_area_w, 0.0);
+			const float2 k_size = float2(debug_area_w, 0.5);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -137,8 +181,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 		if(true)
 		{
-			const float2 k_lt = float2(0.8, 0.5);
-			const float2 k_size = float2(0.2, 0.5);
+			const float2 k_lt = float2(1.0 - debug_area_w, 0.5);
+			const float2 k_size = float2(debug_area_w, 0.5);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -147,7 +191,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		if(true)
 		{
 			const float2 k_lt = float2(0.0, 0.0);
-			const float2 k_size = float2(0.15, 0.4);
+			const float2 k_size = float2(debug_area_w, 0.4);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -156,7 +200,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		if(true)
 		{
 			const float2 k_lt = float2(0.0, 0.4);
-			const float2 k_size = float2(0.15, 0.8);
+			const float2 k_size = float2(debug_area_w, 0.8);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
@@ -165,7 +209,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		if(true)
 		{
 			const float2 k_lt = float2(0.0, 0.8);
-			const float2 k_size = float2(0.15, 0.2);
+			const float2 k_size = float2(debug_area_w, 0.2);
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))

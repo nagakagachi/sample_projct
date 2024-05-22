@@ -37,7 +37,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 		// 50% Gray dot. 半分のピクセルが1, 半分のピクセルが0のドットで50%の輝度表現.
 		{
-			const float2 debug_area_size = float2(0.1, 0.1);
+			const float2 debug_area_size = float2(0.1, 0.02);
 			const float2 debug_area_lt = float2(0.5, 0.0);
 			const float2 debug_area_br = debug_area_lt + debug_area_size;
 			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
