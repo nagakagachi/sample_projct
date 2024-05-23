@@ -32,8 +32,19 @@ SamplerState samp;
 #define ngl_PI 3.14159265358979323846
 #define ngl_EPSILON 1e-6
 
+// GGXの知覚的Roughnessの下限制限をしてハイライトを残すための値.
 // https://google.github.io/filament/Filament.html
-#define saturate_mediump(x) min(x, 65504.0)
+#define ngl_MIN_PERCEPTUAL_ROUGHNESS 0.045
+
+// reflectance : 誘電体の場合の正規化反射率[0,1]
+float3 compute_F0(const float3 base_color, float metallic, float reflectance) {
+	return (base_color * metallic) + (0.16 * reflectance * reflectance * (1.0 - metallic));
+}
+// 誘電体の正規化反射率(reflectance)に一般的な値な値を採用して計算.
+float3 compute_F0_default(const float3 base_color, float metallic) {
+	const float k_dielectric_reflectance = 0.5;// compute_F0()の metallic==0 で一般的な誘電体のスペキュラF0である0.04になるような値.
+	return compute_F0(base_color, metallic, k_dielectric_reflectance);
+}
 
 
 float3 brdf_schlick_F(float3 F0, float3 normal, float3 to_view, float3 to_light)
@@ -49,7 +60,7 @@ float brdf_trowbridge_reitz_D(float linear_roughness, float3 normal, float3 to_v
 {
 	const float3 h = normalize(to_view + to_light);
 	
-	const float a = linear_roughness*linear_roughness;
+	const float a = max(ngl_MIN_PERCEPTUAL_ROUGHNESS, linear_roughness*linear_roughness);
 	const float n_o_h = dot(normal, h);
 	const float tmp = (1.0 + n_o_h*n_o_h * (a*a - 1.0));
 	const float D = (a*a) / (ngl_PI * tmp*tmp);
@@ -74,7 +85,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	float4 gb3 = tex_gbuffer3.Load(int3(input.pos.xy, 0));
 
 	// GBuffer Decode.
-	float3 gb_albedo = gb0.xyz;
+	float3 gb_base_color = gb0.xyz;
 	float gb_occlusion = gb0.w;
 	float3 gb_normal_ws = gb1.xyz * 2.0 - 1.0;// gbufferからWorldNormalデコード.
 	float gb_rounghness = gb2.x;
@@ -131,26 +142,25 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 #endif
 
 	
-	const float cos_term = saturate(dot(gb_normal_ws, -lit_dir));
-	const float3 specular_reflectance =  lerp(0.04, gb_albedo, gb_metalness);
-	const float3 diffuse_reflectance = lerp(gb_albedo, 0.0, gb_metalness);
+	const float3 F0 =  compute_F0_default(gb_base_color, gb_metalness);
+	const float3 diffuse_reflectance = lerp(gb_base_color, 0.0, gb_metalness);
 	
-	const float3 brdf_F = brdf_schlick_F(specular_reflectance, gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
+	const float3 brdf_F = brdf_schlick_F(F0, gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
 	const float brdf_D = brdf_trowbridge_reitz_D(max(0.025, gb_rounghness), gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
 	const float brdf_G = 1.0;// TODO.
 	float3 brdf_ggx = brdf_D * brdf_F * brdf_G / ((4.0 * saturate(dot(gb_normal_ws, -lit_dir)) * saturate(dot(gb_normal_ws, -to_pixel_ray_ws))) + ngl_EPSILON);
-
-	float3 brdf_lambert = (gb_albedo / ngl_PI);
-
-	const float3 brdf = brdf_ggx + (brdf_lambert * saturate(1.0 - brdf_F));
+	float3 brdf_lambert = diffuse_reflectance * (1.0 / ngl_PI);
 	
+	const float3 brdf = brdf_ggx + (brdf_lambert);
+	
+	const float cos_term = saturate(dot(gb_normal_ws, -lit_dir));
 	float3 lit_color = cos_term * brdf * lit_intensity * light_visibility;
 	
 	// ambient term.
 	if(1)
 	{
 		const float3 k_ambient_rate = float3(0.7, 0.7, 1.0) * 0.15;
-		lit_color += gb_albedo * diffuse_brdf * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
+		lit_color += gb_base_color * diffuse_brdf * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
 	}
 
 	
@@ -177,7 +187,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 
 			const float2 area_rate = (input.uv - k_lt)/(k_size);
 			if(all(0.0 < area_rate) && all(1.0 > area_rate))
-				lit_color = gb_albedo;
+				lit_color = gb_base_color;
 		}
 		if(true)
 		{
