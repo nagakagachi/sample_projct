@@ -37,8 +37,8 @@ SamplerState samp;
 #define ngl_MIN_PERCEPTUAL_ROUGHNESS 0.045
 
 // reflectance : 誘電体の場合の正規化反射率[0,1]
-float3 compute_F0(const float3 base_color, float metallic, float reflectance) {
-	return (base_color * metallic) + (0.16 * reflectance * reflectance * (1.0 - metallic));
+float3 compute_F0(const float3 base_color, float metallic, float dielectric_reflectance) {
+	return (base_color * metallic) + (0.16 * dielectric_reflectance * dielectric_reflectance * (1.0 - metallic));
 }
 // 誘電体の正規化反射率(reflectance)に一般的な値な値を採用して計算.
 float3 compute_F0_default(const float3 base_color, float metallic) {
@@ -47,24 +47,60 @@ float3 compute_F0_default(const float3 base_color, float metallic) {
 }
 
 
-float3 brdf_schlick_F(float3 F0, float3 normal, float3 to_view, float3 to_light)
+float3 brdf_schlick_F(float3 F0, float3 N, float3 V, float3 L)
 {
-	const float3 h = normalize(to_view + to_light);
-	
-	const float v_o_h = saturate(dot(to_view, h));
+	const float3 h = normalize(V + L);
+	const float v_o_h = saturate(dot(V, h));
 	const float tmp = (1.0 - v_o_h);
 	const float3 F = F0 + (1.0 - F0) * (tmp*tmp*tmp*tmp*tmp);
 	return F;
 }
-float brdf_trowbridge_reitz_D(float linear_roughness, float3 normal, float3 to_view, float3 to_light)
+float brdf_trowbridge_reitz_D(float perceptual_roughness, float3 N, float3 V, float3 L)
 {
-	const float3 h = normalize(to_view + to_light);
+	const float limited_perceptual_roughness = clamp(perceptual_roughness, ngl_MIN_PERCEPTUAL_ROUGHNESS, 1.0);
+	const float a = limited_perceptual_roughness*limited_perceptual_roughness;
+	const float a2 = a*a;
 	
-	const float a = max(ngl_MIN_PERCEPTUAL_ROUGHNESS, linear_roughness*linear_roughness);
-	const float n_o_h = dot(normal, h);
-	const float tmp = (1.0 + n_o_h*n_o_h * (a*a - 1.0));
-	const float D = (a*a) / (ngl_PI * tmp*tmp);
+	const float3 h = normalize(V + L);
+	const float n_o_h = dot(N, h);
+	const float tmp = (1.0 + n_o_h*n_o_h * (a2 - 1.0));
+	const float D = (a2) / (ngl_PI * tmp*tmp);
 	return D;
+}
+// Height-Correlated Smith Masking-Shadowing
+// マイクロファセットBRDFの分母 4*NoV*NoL の項を含み単純化されたもの.
+float brdf_smith_ggx_correlated_G(float perceptual_roughness, float3 N, float3 V, float3 L)
+{
+	const float limited_perceptual_roughness = clamp(perceptual_roughness, ngl_MIN_PERCEPTUAL_ROUGHNESS, 1.0);
+	const float a = limited_perceptual_roughness*limited_perceptual_roughness;
+	const float a2 = a*a;
+	
+	const float ui = saturate(dot(N,L));
+	const float uo = saturate(dot(N,V));
+	
+	const float d0 = uo * sqrt(a2 + ui * (ui - a2 * ui));
+	const float d1 = ui * sqrt(a2 + uo * (uo - a2 * uo));
+	const float G = 0.5 / (d0 + d1 + ngl_EPSILON);// zero divide対策.
+	return G;
+}
+float3 brdf_standard_ggx(float3 base_color, float perceptual_roughness, float metalness, float3 N, float3 V, float3 L)
+{
+	const float3 F0 =  compute_F0_default(base_color, metalness);
+	
+	const float3 brdf_F = brdf_schlick_F(F0, N, V, L);
+	const float brdf_D = brdf_trowbridge_reitz_D(perceptual_roughness, N, V, L);
+	// マイクロファセットBRDFの分母の 4*NoV*NoL 項は式の単純化のためG項に含まれる.[Lagarde].
+	const float brdf_G = brdf_smith_ggx_correlated_G(perceptual_roughness, N, V, L);
+
+	return brdf_D * brdf_F * brdf_G;
+}
+
+float3 brdf_lambert(float3 base_color, float perceptual_roughness, float metalness, float3 N, float3 V, float3 L)
+{
+	const float lambert = 1.0 / ngl_PI;
+
+	const float3 diffuse = lerp(base_color, 0.0, metalness) * lambert;
+	return diffuse;
 }
 
 float4 main_ps(VS_OUTPUT input) : SV_TARGET
@@ -133,25 +169,15 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			light_visibility = (shadow_sample <= pixel_pos_shadow_cs_pd.z)? 1.0 : 0.0;
 		}
 	}
-	
-	float3 diffuse_brdf = (1.0/k_pi);
-#if 0
-	float3 rim_rerm = pow(1.0 - saturate(dot(-to_pixel_ray_ws, gb_normal_ws)), 6);
-#else
-	float3 rim_rerm = (float3)0;
-#endif
 
 	
-	const float3 F0 =  compute_F0_default(gb_base_color, gb_metalness);
-	const float3 diffuse_reflectance = lerp(gb_base_color, 0.0, gb_metalness);
+	const float3 V = -to_pixel_ray_ws;
+	const float3 L = -lit_dir;
 	
-	const float3 brdf_F = brdf_schlick_F(F0, gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
-	const float brdf_D = brdf_trowbridge_reitz_D(max(0.025, gb_rounghness), gb_normal_ws, -to_pixel_ray_ws, -lit_dir);
-	const float brdf_G = 1.0;// TODO.
-	float3 brdf_ggx = brdf_D * brdf_F * brdf_G / ((4.0 * saturate(dot(gb_normal_ws, -lit_dir)) * saturate(dot(gb_normal_ws, -to_pixel_ray_ws))) + ngl_EPSILON);
-	float3 brdf_lambert = diffuse_reflectance * (1.0 / ngl_PI);
+	const float3 specular_term = brdf_standard_ggx(gb_base_color, gb_rounghness, gb_metalness, gb_normal_ws, V, L);
+	const float3 diffuse_term = brdf_lambert(gb_base_color, gb_rounghness, gb_metalness, gb_normal_ws, V, L);
 	
-	const float3 brdf = brdf_ggx + (brdf_lambert);
+	const float3 brdf = specular_term + (diffuse_term);
 	
 	const float cos_term = saturate(dot(gb_normal_ws, -lit_dir));
 	float3 lit_color = cos_term * brdf * lit_intensity * light_visibility;
@@ -160,7 +186,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	if(1)
 	{
 		const float3 k_ambient_rate = float3(0.7, 0.7, 1.0) * 0.15;
-		lit_color += gb_base_color * diffuse_brdf * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
+		lit_color += gb_base_color * (1.0/k_pi) * (abs(dot(gb_normal_ws, lit_dir)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
 	}
 
 	
