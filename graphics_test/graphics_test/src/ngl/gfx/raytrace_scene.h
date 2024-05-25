@@ -386,7 +386,7 @@ namespace ngl
 			// サンプルのため外部からShaderとRaygen情報などを指定する.
 			bool Initialize(rhi::DeviceDep* p_device, uint32_t max_trace_recursion);
 
-			void PreRenderUpdate(class RtSceneManager* p_rt_scene, rhi::GraphicsCommandListDep* p_command_list);
+			void PreRenderUpdate(class RtSceneManager* p_rt_scene);
 			void Render(rhi::GraphicsCommandListDep* p_command_list);
 
 

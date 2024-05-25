@@ -45,6 +45,10 @@ namespace ngl
 		public:
 			void Begin();
 			void End();
+
+			// Begin()状態なら true.
+			bool IsOpen() const {return is_open_;}
+			
 			// Graphics/Compute共通のCompute用PSO設定実装.
 			void SetPipelineState(ComputePipelineStateDep* p_pso);
 			// Graphics/Compute共通のCompute用DescriptorSet設定実装.
@@ -76,6 +80,7 @@ namespace ngl
 		protected:
 			DeviceDep* parent_device_	= nullptr;
 			Desc		desc_ = {};
+			bool		is_open_ = false;// Begin,Closeの状態を保持.
 
 			// Cvb Srv Uav用.
 			FrameCommandListDynamicDescriptorAllocatorInterface	frame_desc_interface_ = {};

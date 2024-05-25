@@ -1633,7 +1633,7 @@ namespace ngl
 
 			return true;
 		}
-		void RtPassTest::PreRenderUpdate(class RtSceneManager* p_rt_scene, rhi::GraphicsCommandListDep* p_command_list)
+		void RtPassTest::PreRenderUpdate(class RtSceneManager* p_rt_scene)
 		{
 			p_rt_scene_ = p_rt_scene;
 			rt_pass_core_.UpdateScene(p_rt_scene);

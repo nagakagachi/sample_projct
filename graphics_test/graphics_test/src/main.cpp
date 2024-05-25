@@ -54,6 +54,9 @@ public:
 	bool Initialize() override;
 	bool Execute() override;
 
+	void SyncRender();
+	void BeginRender();
+
 private:
 	double						app_sec_ = 0.0f;
 	double						frame_sec_ = 0.0f;
@@ -80,7 +83,7 @@ private:
 	
 	ngl::rhi::FenceDep							test_compute_to_gfx_fence_;
 	
-	ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>	gfx_command_list_;
+	ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>	gfx_frame_begin_command_list_;
 	ngl::rhi::RhiRef<ngl::rhi::ComputeCommandListDep>	compute_command_list_;
 
 	// SwapChain
@@ -97,7 +100,7 @@ private:
 
 	
 	// RtScene.
-	ngl::gfx::RtSceneManager					rt_st_;
+	ngl::gfx::RtSceneManager					rt_scene_;
 	// RtPass.
 	ngl::gfx::RtPassTest						rt_pass_test;
 	
@@ -139,7 +142,7 @@ AppGame::~AppGame()
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
 
-	gfx_command_list_.Reset();
+	gfx_frame_begin_command_list_.Reset();
 	compute_command_list_.Reset();
 	swapchain_.Reset();
 
@@ -276,8 +279,8 @@ bool AppGame::Initialize()
 		}
 	}
 
-	gfx_command_list_ = new ngl::rhi::GraphicsCommandListDep();
-	if (!gfx_command_list_->Initialize(&device_))
+	gfx_frame_begin_command_list_ = new ngl::rhi::GraphicsCommandListDep();
+	if (!gfx_frame_begin_command_list_->Initialize(&device_))
 	{
 		std::cout << "[ERROR] Graphics CommandList Initialize" << std::endl;
 		assert(false);
@@ -403,7 +406,7 @@ bool AppGame::Initialize()
 	{
 
 		// AS他.
-		if (!rt_st_.Initialize(&device_))
+		if (!rt_scene_.Initialize(&device_))
 		{
 			std::cout << "[ERROR] Create gfx::RtSceneManager" << std::endl;
 			assert(false);
@@ -428,6 +431,29 @@ bool AppGame::Initialize()
 	
 	ngl::time::Timer::Instance().StartTimer("app_frame_sec");
 	return true;
+}
+
+void AppGame::SyncRender()
+{
+	// FrameのGame-Render同期処理.
+
+	// TODO. Wait Game Thread.
+	
+	// Graphics Deviceのフレーム準備
+	device_.ReadyToNewFrame();
+	
+	// RTGのフレーム開始処理.
+	rtg_manager_.BeginFrame();
+}
+
+void AppGame::BeginRender()
+{
+	// システム用のフレーム先頭CommandListを準備.
+	gfx_frame_begin_command_list_->Begin();
+	
+	// ResourceManagerのRenderThread処理.
+	//	TextureLinearBufferや MeshBufferのUploadなど.
+	ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_frame_begin_command_list_.Get());
 }
 
 // メインループから呼ばれる
@@ -589,49 +615,34 @@ bool AppGame::Execute()
 	}
 
 	// RaytraceSceneにカメラ設定.
-	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
+	rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
 	
 
 	// Render Frame.
+	// Sync Render.
+	SyncRender();
 	{
-		// フレーム開始のGame-Render同期処理.
-		{
-			// -------------------------------------------------------
-			// Deviceのフレーム準備
-			device_.ReadyToNewFrame();
-		
-			// RTGのフレーム開始処理.
-			rtg_manager_.BeginFrame();
-			// -------------------------------------------------------
-		}
+		// Begin Render.
+		BeginRender();
 
+		
 		// フレームのSwapchainインデックス.
 		const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 		
-		// Renderのシステム用コマンド生成.
+		// Raytracingテスト.
 		{
-			gfx_command_list_->Begin();
-			
-			// ResourceManager のCommandList生成.
-			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_command_list_.Get());
-			
-			// Raytracingテスト.
-			{
-				// RtScene更新. AS更新とそのCommand生成.
-				rt_st_.UpdateOnRender(&device_, gfx_command_list_.Get(), frame_scene);
+			// RtScene更新. AS更新とそのCommand生成.
+			rt_scene_.UpdateOnRender(&device_, gfx_frame_begin_command_list_.Get(), frame_scene);
 				
-				// RtPass 更新.
-				rt_pass_test.PreRenderUpdate(&rt_st_, gfx_command_list_.Get());
+			// RtPass 更新.
+			rt_pass_test.PreRenderUpdate(&rt_scene_);
 				
-				// RtPass Render.
-				rt_pass_test.Render(gfx_command_list_.Get());
-			}
-			
-			gfx_command_list_->End();
+			// RtPass Render.
+			rt_pass_test.Render(gfx_frame_begin_command_list_.Get());
 		}
 		
-		// ここからシーンのレンダリング.
 		
+		// ここからRTGを使ったシーンのレンダリング.
 		
 		static ngl::rtg::ResourceHandle h_prev_light = {};// 前回フレームハンドルのテスト.
 		// Pathが構築したCommandListの出力先.
@@ -673,15 +684,14 @@ bool AppGame::Execute()
 			
 			h_prev_light = render_frame_out.h_propagate_lit;// Pathの一部を次フレームに伝搬する.
 		}
+
 		
+		// AsyncComputeテスト.
 		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
 		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
-		// AsyncComputeテスト.
 		{
 			// テストのためPoolから取得したCommandListに積み込み.
 			rtg_compute_command_list->Begin();
-
-			// 仮で適当なAsyncComputeタスクを生成.
 			// GraphicsQueueがComputeQueueをWaitする状況のテスト用.
 			{
 				auto ref_cpso = ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep>(new ngl::rhi::ComputePipelineStateDep());
@@ -701,16 +711,15 @@ bool AppGame::Execute()
 				}
 					
 				ngl::rhi::DescriptorSetDep desc_set = {};
-				//ref_cpso->SetDescriptorHandle(&desc_set, "rwtex_out", tex_rw_uav_->GetView().cpu_handle);
 				ref_cpso->SetView(&desc_set, "rwtex_out", tex_rw_uav_.Get());
 				rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
 				rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
 				ref_cpso->DispatchHelper(rtg_compute_command_list, tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
 			}
-
 			rtg_compute_command_list->End();
 		}
 
+		
 		// CommandList Submit
 		{
 #if 1
@@ -727,9 +736,12 @@ bool AppGame::Execute()
 			
 			// システム用のGraphics CommandListをSubmit.
 			{
+				if(gfx_frame_begin_command_list_->IsOpen())
+					gfx_frame_begin_command_list_->End();
+				
 				ngl::rhi::CommandListBaseDep* submit_list[]=
 				{
-					gfx_command_list_.Get()
+					gfx_frame_begin_command_list_.Get()
 				};
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
 			}

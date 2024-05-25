@@ -48,6 +48,7 @@ namespace ngl
 
 			// 初回クローズ. これがないと初回フレームの開始時ResetでComError発生.
 			p_command_list_->Close();
+			is_open_ = false;// Close状態.
 
 			// フレームでのDescriptor確保用インターフェイス初期化
 			FrameCommandListDynamicDescriptorAllocatorInterface::Desc fdi_desc = {};
@@ -73,10 +74,14 @@ namespace ngl
 		}
 		void CommandListBaseDep::Begin()
 		{
+			// 二重Begin禁止.
+			assert(!is_open_);
+			
 			// アロケータリセット
 			p_command_allocator_->Reset();
 			// コマンドリストリセット
 			p_command_list_->Reset(p_command_allocator_, nullptr);
+			is_open_ = true;
 
 			// 新しいフレームのためのFrameDescriptorの準備.
 			// インデックスはDeviceから取得するグローバルなフレームインデックス.
@@ -84,7 +89,11 @@ namespace ngl
 		}
 		void CommandListBaseDep::End()
 		{
+			// 二重Close禁止.
+			assert(is_open_);
+			
 			p_command_list_->Close();
+			is_open_ = false;
 		}
 		void CommandListBaseDep::Dispatch(u32 x, u32 y, u32 z)
 		{
