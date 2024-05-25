@@ -1,4 +1,96 @@
 ﻿#pragma once
+/*
+
+	// IGraphicsTaskNode を継承してPreZPassを実装する例.
+	struct TaskDepthPass : public rtg::IGraphicsTaskNode
+	{
+		rtg::ResourceHandle h_depth_{};// RTGリソースハンドル保持.
+		
+		// リソースとアクセスを定義するプリプロセス.
+		void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const SetupDesc& desc)
+		{
+			// リソース定義.
+			rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+			// 新規作成したDepthBufferリソースをDepthTarget使用としてレコード.
+			h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+		}
+		// 実際のレンダリング処理.
+		void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
+		{
+			// ハンドルからリソース取得. 必要なBarrier/ステート遷移はRTGシステムが担当するため, 個々のTaskは必要な状態になっているリソースを使用できる.
+			auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+			assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
+
+			// 例:クリア
+			gfx_commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
+
+			// 例:DepthRenderTagetとして設定してレンダリング.
+			gfx_commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
+			ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
+			// TODO. 描画.
+			// ....
+		}
+	};
+
+	// IGraphicsTaskNode を継承してHardwareDepthからLinearDepthを計算するPass例.
+	//	先行するPreZPass(DepthPass)の書き込み先リソースハンドルを読み取り使用し, LinearDepthを出力する.
+	//	別のTaskのリソースハンドルを利用する例.
+	struct TaskLinearDepthPass : public rtg::IGraphicsTaskNode
+	{
+		rtg::ResourceHandle h_depth_{};
+		rtg::ResourceHandle h_linear_depth_{};
+
+		// リソースとアクセスを定義するプリプロセス.
+		void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, const SetupDesc& desc)
+		{
+			// LinearDepth出力用のバッファを新規に作成してUAV使用としてレコード.
+			rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
+			h_linear_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::UAV);
+			
+			// 先行するDepth書き込みTaskの出力先リソースハンドルを利用し, 読み取り使用としてレコード.
+			h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
+		}
+		// 実際のレンダリング処理.
+		void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
+		{
+			// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+			auto res_depth = builder.GetAllocatedResource(this, h_depth_);
+			auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
+			// TODO. depthからlinear_depthを生成するシェーダディスパッチ.
+			// ...
+		}
+	};
+
+
+	// ------------------------------------------
+	// BuilderによるPassグラフの定義例.
+	// 最初にDepthPass
+	auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
+	// ...
+
+	auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
+	// 先行するDepthPassの出力Depthハンドルを読み取り使用でレコードするため引数にとる.
+	task_linear_depth->Setup(..., task_depth->h_depth_, ...);
+
+
+	// 次回フレームへの伝搬. このGraphで生成されたハンドルとそのリソースを次フレームでも利用できるようにする. ヒストリバッファ用の機能.
+	h_propagate_lit = rtg_builder.PropagateResouceToNextFrame(task_light->h_light_);
+
+
+	// Compile.
+	//	ManagerでCompileを実行する. ここで内部リソースプールからのリソース割り当てやTask間のリソースステート遷移スケジュールを確定.
+	//	Compileによって各種スケジューリングが決定されるため, 必ずExecuteとGPU-Submitをして実行をしなければリソース整合性が破綻する点に注意.
+	//		また複数のGraphをCompileした場合はその順番でGpu-Submitしなければならない
+	rtg_manager.Compile(rtg_builder);
+		
+	// Graphを構成するTaskの Run() を実行して, CommandListを生成する.
+	rtg_builder.Execute(out_graphics_cmd, out_compute_cmd);
+
+	// out_graphics_cmd と out_compute_cmd は非同期コンピュートを考慮したコマンドリスト列.
+	// Managerのヘルパー関数でGPUへSubmitする.
+	ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, out_graphics_cmd, out_compute_cmd);
+	
+ */
 
 #include <unordered_map>
 #include <mutex>
@@ -17,7 +109,7 @@
 namespace ngl
 {
 
-	// Render Task Graph 検証実装.
+	// Render Task Graph.
 	namespace rtg
 	{
 		class RenderTaskGraphBuilder;
@@ -260,41 +352,7 @@ namespace ngl
 				};
 		// -------------------------------------------------------------
 		
-		/*
 		// 生成はRenderTaskGraphBuilder経由.
-		// 派生クラスでは基本情報の簡易定義とハンドルのデバッグ情報登録のために専用のマクロを利用する.
-
-			struct TaskSamplePass : public rtg::ITaskNode
-			{
-				// ノード定義コンストラクタ記述マクロ.
-				ITASK_NODE_DEF_BEGIN(TaskSamplePass)
-					ITASK_NODE_HANDLE_REGISTER(h_depth_)
-				ITASK_NODE_DEF_END
-
-				rtg::ResourceHandle h_depth_{};// メンバハンドル.
-			}
-
-
-		// 他のNodeのハンドルを参照して利用したり一時リソースの登録が可能.
-
-			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1)
-			{
-				// リソース定義.
-				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R16G16B16A16_FLOAT);
-
-				// リソースアクセス定義.
-				h_depth_ =	builder.RegisterResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
-				h_gb0_ =	builder.RegisterResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
-				h_gb1_ =	builder.RegisterResourceAccess(*this, h_gb1, rtg::access_type::SHADER_READ);
-				h_light_=	builder.RegisterResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// 他のNodeのものではなく新規リソースを要求する.
-
-
-				// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-				rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_R11G11B10_FLOAT);
-				auto temp_res0 = builder.RegisterResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
-			}
-		*/
 		// GraphicsTaskの基底クラス.
 		struct IGraphicsTaskNode : public ITaskNode
 		{

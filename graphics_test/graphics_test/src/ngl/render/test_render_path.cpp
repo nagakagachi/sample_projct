@@ -78,8 +78,8 @@ namespace ngl::test
 				
 			// Append External Resource Info.
 			ngl::rtg::ResourceHandle h_swapchain = {};
+			if(render_frame_desc.ref_swapchain.IsValid())
 			{
-				constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
 				// 外部リソース登録.
 				h_swapchain = rtg_builder.AppendExternalResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
 			}
@@ -178,17 +178,20 @@ namespace ngl::test
 						task_d_shadow->h_depth_,
 						setup_desc);
 				}
-					
+
 				// Final Composite to Swapchain.
-				auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
+				if(!h_swapchain.IsInvalid())
 				{
-					ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
+					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
 					{
-						setup_desc.ref_scene_cbv = sceneview_cbv;
+						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
+						{
+							setup_desc.ref_scene_cbv = sceneview_cbv;
+						}
+						task_final->Setup(rtg_builder, p_device, h_swapchain,
+							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
+							render_frame_desc.ref_test_tex_srv0, render_frame_desc.ref_test_tex_srv1, setup_desc);
 					}
-					task_final->Setup(rtg_builder, p_device, h_swapchain,
-						task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-						render_frame_desc.ref_test_tex_srv0, render_frame_desc.ref_test_tex_srv1, setup_desc);
 				}
 					
 				// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
@@ -200,8 +203,9 @@ namespace ngl::test
 			// Compile. ManagerでCompileを実行する.
 			rtg_manager.Compile(rtg_builder);
 				
-			// GraphのCommandListを生成する.
+			// Graphを構成するTaskの Run() を実行し, CommandListを生成する.
 			//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
+			//	各TaskのRun()はそれぞれ別スレッドで並列実行される可能性がある.
 			rtg_builder.Execute(out_graphics_cmd, out_compute_cmd);
 		}
 	}

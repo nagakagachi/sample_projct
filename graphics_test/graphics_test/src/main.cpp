@@ -320,9 +320,11 @@ bool AppGame::Initialize()
 
 		// 基本シーンモデル.
 #if 1
+		// Sponza.
 		const char* mesh_target_scene = mesh_file_sponza;
 		const float target_scene_base_scale = sponza_scale;
 #else
+		// Bistro.
 		const char* mesh_target_scene = mesh_file_bistro;
 		const float target_scene_base_scale = bistro_scale;
 #endif
@@ -618,11 +620,11 @@ bool AppGame::Execute()
 	rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
 	
 
-	// Render Frame.
-	// Sync Render.
+	// -------------------------------------------------------
+	// Sync Render Thread.
 	SyncRender();
 	{
-		// Begin Render.
+		// Start Frame Rendering.
 		BeginRender();
 
 		
@@ -643,11 +645,53 @@ bool AppGame::Execute()
 		
 		
 		// ここからRTGを使ったシーンのレンダリング.
+
+		// Pathが構築したCommandListの出力先.
+		struct RtgGenerateCommandListSet
+		{
+			std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> graphics = {};
+			std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> compute = {};
+		};
+		std::vector<RtgGenerateCommandListSet> rtg_gen_command = {};
+
+		// SubViewの描画テスト.
+		if(true)
+		{
+		#if 0
+			constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
+
+			// Pathの設定.
+			ngl::test::RenderFrameDesc render_frame_desc = {};
+			{
+				render_frame_desc.p_device = &device_;
+				
+				render_frame_desc.screen_w = screen_w;
+				render_frame_desc.screen_h = screen_h;
+
+				render_frame_desc.camera_pos = camera_pos_;
+				render_frame_desc.camera_pose = camera_pose_;
+				render_frame_desc.camera_fov_y = camera_fov_y;
+
+				render_frame_desc.p_scene = &frame_scene;
+				
+				render_frame_desc.ref_test_tex_srv0 = rt_pass_test.ray_result_srv_;
+				render_frame_desc.ref_test_tex_srv1 = res_texture_->ref_view_;
+
+				render_frame_desc.h_prev_lit = {};// SubViewではヒストリ無効.
+			}
+			
+			swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
+
+			rtg_gen_command.push_back({});
+			RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
+			// Pathの実行 (RenderTaskGraphの構築と実行).
+			ngl::test::RenderFrameOut render_frame_out = {};
+			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
+		#endif
+		}
 		
 		static ngl::rtg::ResourceHandle h_prev_light = {};// 前回フレームハンドルのテスト.
-		// Pathが構築したCommandListの出力先.
-		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_graphics_commands = {};
-		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_compute_commands = {};
+		// MainViewの描画.
 		{
 			constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
 
@@ -658,7 +702,8 @@ bool AppGame::Execute()
 				
 				render_frame_desc.screen_w = screen_w;
 				render_frame_desc.screen_h = screen_h;
-				
+
+				// MainViewはSwapchain書き込みPassを動かすため情報設定.
 				render_frame_desc.ref_swapchain = swapchain_;
 				render_frame_desc.ref_swapchain_rtv = swapchain_rtvs_[swapchain_index];
 				render_frame_desc.swapchain_state_prev = swapchain_resource_state_[swapchain_index];
@@ -673,14 +718,16 @@ bool AppGame::Execute()
 				render_frame_desc.ref_test_tex_srv0 = rt_pass_test.ray_result_srv_;
 				render_frame_desc.ref_test_tex_srv1 = res_texture_->ref_view_;
 
-				render_frame_desc.h_prev_lit = h_prev_light;
+				render_frame_desc.h_prev_lit = h_prev_light;// MainViewはヒストリ有効.
 			}
 			
 			swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
-
-			ngl::test::RenderFrameOut render_frame_out = {};
+			
+			rtg_gen_command.push_back({});
+			RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
 			// Pathの実行 (RenderTaskGraphの構築と実行).
-			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_graphics_commands, rtg_compute_commands);
+			ngl::test::RenderFrameOut render_frame_out = {};
+			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
 			
 			h_prev_light = render_frame_out.h_propagate_lit;// Pathの一部を次フレームに伝搬する.
 		}
@@ -747,7 +794,10 @@ bool AppGame::Execute()
 			}
 			
 			// RTGのCommaandをSubmit.
-			ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, rtg_graphics_commands, rtg_compute_commands);
+			for(auto& e : rtg_gen_command)
+			{
+				ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, e.graphics, e.compute);
+			}
 		}
 		
 		// Present
