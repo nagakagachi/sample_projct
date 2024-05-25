@@ -183,8 +183,8 @@ namespace ngl
 			rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 			rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{
-			handle_imported_swapchain_ = AppendExternalResourceCommon(tex, {}, rtv, {}, {}, {}, curr_state, nesesary_end_state);
-			return handle_imported_swapchain_;
+			ResourceHandle h = AppendExternalResourceCommon(tex, {}, rtv, dsv, srv, uav, curr_state, nesesary_end_state);
+			return h;
 		}
 		
 		// 外部リソースの登録. Swapchain.

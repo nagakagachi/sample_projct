@@ -30,11 +30,11 @@
 
 
 // gfx
-#include "ngl/gfx/common_struct.h"
+#include "ngl/gfx/render/global_render_resource.h"
 #include "ngl/gfx/raytrace_scene.h"
 #include "ngl/gfx/mesh_component.h"
 
-#include "ngl/render/test_pass.h"
+#include "ngl/render/test_render_path.h"
 
 // マテリアルシェーダ関連.
 #include "ngl/gfx/material/material_shader_generator.h"
@@ -152,7 +152,7 @@ AppGame::~AppGame()
 bool AppGame::Initialize()
 {
 	constexpr auto scree_h = 1080;
-	constexpr auto scree_w = scree_h * 16/9;;
+	constexpr auto scree_w = scree_h * 16/9;
 
 	// ウィンドウ作成
 	if (!window_.Initialize(_T("ToyRenderer"), scree_w, scree_h))
@@ -564,17 +564,12 @@ bool AppGame::Execute()
 		for (int i = 0; i < test_move_mesh_comp_array_.size(); ++i)
 		{
 			auto* e = test_move_mesh_comp_array_[i];
-
 			float move_range = (i % 10) / 10.0f;
-
 			const float sin_curve = sinf((float)app_sec_ * 2.0f * ngl::math::k_pi_f * 0.1f * (move_range + 1.0f));
 
 			auto trans = e->transform_.GetColumn3();
-
 			trans.z += sin_curve * 0.075f;
-
 			e->transform_.SetColumn3(trans);
-
 		}
 	}
 
@@ -593,29 +588,9 @@ bool AppGame::Execute()
 		}
 	}
 
-	// カメラ設定.
+	// RaytraceSceneにカメラ設定.
 	rt_st_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
-
-
-	// RhiRefによるガベコレテスト.
-	if(false)
-	{
-		for (int i = 0; i < 10; ++i)
-		{
-			// RhiRefで保持してそのまま破棄することで安全に遅延破棄される(はず).
-			ngl::rhi::RhiRef<ngl::rhi::BufferDep> buffer_ref(new ngl::rhi::BufferDep());
-
-			// ConstantBuffer作成
-			ngl::rhi::BufferDep::Desc buffer_desc = {};
-			buffer_desc.heap_type = ngl::rhi::EResourceHeapType::Upload;
-			buffer_desc.bind_flag = (int)ngl::rhi::ResourceBindFlag::ConstantBuffer;
-			buffer_desc.element_byte_size = 1024;// テスト用に大きめで確保.
-			buffer_desc.element_count = 1;
-
-			buffer_ref->Initialize(&device_, buffer_desc);
-		}
-	}
-
+	
 
 	// Render Frame.
 	{
@@ -654,243 +629,19 @@ bool AppGame::Execute()
 			
 			gfx_command_list_->End();
 		}
-
 		
 		// ここからシーンのレンダリング.
-
-		struct RenderFrameDesc
-		{
-			ngl::rhi::DeviceDep* p_device = {};
-			
-			ngl::u32 screen_w = 0;
-			ngl::u32 screen_h = 0;
-			
-			ngl::rhi::RhiRef<ngl::rhi::SwapChainDep> ref_swapchain = {};
-			ngl::rhi::RefRtvDep		ref_swapchain_rtv = {};
-			ngl::rhi::EResourceState	swapchain_state_prev = {};
-			ngl::rhi::EResourceState	swapchain_state_next = {};
-
-			ngl::math::Vec3		camera_pos = {};
-			ngl::math::Mat33	camera_pose = ngl::math::Mat33::Identity();
-			float				camera_fov_y = ngl::math::Deg2Rad(60.0f);
-			
-			const ngl::gfx::SceneRepresentation* p_scene = {};
-
-			ngl::rhi::RefSrvDep ref_test_tex_srv0 = {};
-			ngl::rhi::RefSrvDep ref_test_tex_srv1 = {};
-			
-			ngl::rtg::ResourceHandle h_prev_lit = {};
-		};
-		struct RenderFrameOut
-		{
-			ngl::rtg::ResourceHandle h_propagate_lit = {};
-		};
-		auto RenderFrameFunc =[](
-				const RenderFrameDesc& render_frame_desc,
-				RenderFrameOut& out_frame_out,
-				ngl::rtg::RenderTaskGraphManager& rtg_manager,
-				std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& out_graphics_cmd,
-				std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& out_compute_cmd
-			)
-		{
-			auto* p_device = render_frame_desc.p_device;
-				
-			const auto screen_w = render_frame_desc.screen_w;
-			const auto screen_h = render_frame_desc.screen_h;
-			ngl::math::Vec3		camera_pos = render_frame_desc.camera_pos;
-			ngl::math::Mat33	camera_pose = render_frame_desc.camera_pose;
-			float				camera_fov_y = render_frame_desc.camera_fov_y;
-				
-			const ngl::gfx::SceneRepresentation* p_scene = render_frame_desc.p_scene;
-
-				
-			// Update View Constant Buffer.
-			ngl::rhi::RefBufferDep sceneview_buffer = new ngl::rhi::BufferDep();
-			ngl::rhi::RefCbvDep sceneview_cbv = new ngl::rhi::ConstantBufferViewDep();
-			{
-				ngl::rhi::BufferDep::Desc buffer_desc{};
-				buffer_desc.SetupAsConstantBuffer(sizeof(ngl::gfx::CbSceneView));
-				sceneview_buffer->Initialize(p_device, buffer_desc);
-
-				ngl::rhi::ConstantBufferViewDep::Desc cbv_desc{};
-				sceneview_cbv->Initialize(sceneview_buffer.Get(), cbv_desc);
-			}
-			{
-				ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(camera_pos, camera_pose.GetColumn2(), camera_pose.GetColumn1());
-
-				const float screen_aspect_ratio = (float)screen_w / (float)screen_h;
-				
-				const float fov_y = camera_fov_y;
-				const float aspect_ratio = screen_aspect_ratio;
-				const float near_z = 0.1f;
-				const float far_z = 10000.0f;
-
-				// Infinite Far Reverse Perspective
-				ngl::math::Mat44 proj_mat = ngl::math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, aspect_ratio, near_z);
-				ngl::math::Vec4 ndc_z_to_view_z_coef = ngl::math::CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(near_z);
-
-				if (auto* mapped = sceneview_buffer->MapAs<ngl::gfx::CbSceneView>())
-				{
-					mapped->cb_view_mtx = view_mat;
-					mapped->cb_proj_mtx = proj_mat;
-					mapped->cb_view_inv_mtx = ngl::math::Mat34::Inverse(view_mat);
-					mapped->cb_proj_inv_mtx = ngl::math::Mat44::Inverse(proj_mat);
-
-					mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
-
-					mapped->cb_time_sec = std::fmodf(static_cast<float>(ngl::time::Timer::Instance().GetElapsedSec("AppGameTime")), 60.0f*60.0f*24.0f);
-
-					sceneview_buffer->Unmap();
-				}
-			}
-				
-			// RenderTaskGraphによるレンダリングパス.
-			{
-				// RTG Build.
-				// 現在の設計ではBuilderは使い捨てとなる.
-				ngl::rtg::RenderTaskGraphBuilder rtg_builder(screen_w, screen_h);
-				
-				// Append External Resource Info.
-				ngl::rtg::ResourceHandle h_swapchain = {};
-				{
-					constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
-					// 外部リソース登録.
-					h_swapchain = rtg_builder.AppendExternalResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
-				}
-				
-				// Build Rendering Pass.
-				{
-					auto ref_cbv_sceneview = sceneview_cbv;
-					
-#define ASYNC_COMPUTE_TEST 1
-					// AsyncComputeの依存関係の追い越しパターンテスト用.
-					ngl::rtg::ResourceHandle async_compute_tex2 = {};
-#if ASYNC_COMPUTE_TEST
-					// AsyncCompute Pass.
-					auto* task_test_compute1 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
-					{
-						ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-						}
-						task_test_compute1->Setup(rtg_builder, p_device, {}, setup_desc);
-						async_compute_tex2 = task_test_compute1->h_work_tex_;
-					}
-#endif
-					
-					// PreZ Pass.
-					auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
-					{
-						ngl::render::task::TaskDepthPass::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-							setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
-						}
-						task_depth->Setup(rtg_builder, p_device, setup_desc);
-					}
-					
-					ngl::rtg::ResourceHandle async_compute_tex = {};
-#if ASYNC_COMPUTE_TEST
-					// AsyncCompute Pass 其の二.
-					auto* task_test_compute2 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
-					{
-						ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-						}
-						task_test_compute2->Setup(rtg_builder, p_device, task_depth->h_depth_, setup_desc);
-						async_compute_tex = task_test_compute2->h_work_tex_;
-					}
-#endif
-					
-					// GBuffer Pass.
-					auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
-					{
-						ngl::render::task::TaskGBufferPass::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-							setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
-						}
-						task_gbuffer->Setup(rtg_builder, p_device, task_depth->h_depth_, async_compute_tex, setup_desc);
-					}
-					
-					// Linear Depth Pass.
-					auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
-					{
-						ngl::render::task::TaskLinearDepthPass::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-						}
-						task_linear_depth->Setup(rtg_builder, p_device, task_depth->h_depth_,async_compute_tex2, setup_desc);
-					}
-					
-					// DirectionalShadow Pass.
-					auto* task_d_shadow = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDirectionalShadowPass>();
-					{
-						ngl::render::task::TaskDirectionalShadowPass::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-							setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
-
-							setup_desc.camera_pos = camera_pos;
-							setup_desc.camera_front = camera_pose.GetColumn2();
-							// Directionalのライト方向テスト.
-							setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.25f, -1.0f, 0.4f});
-						}
-						task_d_shadow->Setup(rtg_builder, p_device, setup_desc);
-					}
-					
-					// Deferred Lighting Pass.
-					auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
-					{
-						ngl::render::task::TaskLightPass::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-							setup_desc.ref_shadow_cbv = task_d_shadow->ref_d_shadow_cbv_;
-						}
-						task_light->Setup(rtg_builder, p_device,
-							task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
-							task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, render_frame_desc.h_prev_lit,
-							task_d_shadow->h_depth_,
-							setup_desc);
-					}
-					
-					// Final Composite to Swapchain.
-					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
-					{
-						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
-						{
-							setup_desc.ref_scene_cbv = ref_cbv_sceneview;
-						}
-						task_final->Setup(rtg_builder, p_device, h_swapchain,
-							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-							render_frame_desc.ref_test_tex_srv0, render_frame_desc.ref_test_tex_srv1, setup_desc);
-					}
-					
-					// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.
-					{
-						out_frame_out.h_propagate_lit = rtg_builder.PropagateResouceToNextFrame(task_light->h_light_);
-					}
-				}
-
-				// Compile. ManagerでCompileを実行する.
-				rtg_manager.Compile(rtg_builder);
-				
-				// GraphのCommandListを生成する.
-				//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
-				rtg_builder.Execute(out_graphics_cmd, out_compute_cmd);
-			}
-		};
-
-
-		// 前回フレームハンドルのテスト.
-		static ngl::rtg::ResourceHandle h_prev_light = {};
+		
+		
+		static ngl::rtg::ResourceHandle h_prev_light = {};// 前回フレームハンドルのテスト.
+		// Pathが構築したCommandListの出力先.
 		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_graphics_commands = {};
 		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> rtg_compute_commands = {};
 		{
 			constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
 
-			RenderFrameDesc render_frame_desc = {};
+			// Pathの設定.
+			ngl::test::RenderFrameDesc render_frame_desc = {};
 			{
 				render_frame_desc.p_device = &device_;
 				
@@ -916,10 +667,11 @@ bool AppGame::Execute()
 			
 			swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
 
-			RenderFrameOut render_frame_out = {};
-			RenderFrameFunc(render_frame_desc, render_frame_out, rtg_manager_, rtg_graphics_commands, rtg_compute_commands);
+			ngl::test::RenderFrameOut render_frame_out = {};
+			// Pathの実行 (RenderTaskGraphの構築と実行).
+			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_graphics_commands, rtg_compute_commands);
 			
-			h_prev_light = render_frame_out.h_propagate_lit;
+			h_prev_light = render_frame_out.h_propagate_lit;// Pathの一部を次フレームに伝搬する.
 		}
 		
 		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
