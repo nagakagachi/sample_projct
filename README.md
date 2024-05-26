@@ -1,11 +1,24 @@
 # sample_projct
 
-DirectX12 Test (WIP).
-Rasterize.
-DXR.
+DirectX12 Toy Renderer (WIP).
 
-load MeshData using Assimp. build the submodule.
+![d3d12_sample_img00](https://github.com/nagakagachi/sample_projct/assets/25050933/a756e23e-f47d-4291-ab49-fed4edb95f81)
 
-![image](https://user-images.githubusercontent.com/25050933/217268529-e03bfca9-6a85-4fd9-8e4a-28aabaebed8a.png)
+This repository is currently implementing the RenderGraph mechanism ( Render Task Graph, rtg ). </br>
+The following reference materials are available on RenderGraph. </br>
+https://nagakagachi.notion.site/RenderGraph-54f0cf4284c7466697b99cc0df81be80
 
 
+</br>
+
+- Third Party
+  - Assimp
+  - DirectXTex
+  - tinyxml2
+ 
+- Build
+  - clone
+  - build third_party/asimp (cmake)
+  - build third_party/DirectXTex (cmake)
+  - build graphics_test.sln (Visual Studio 2022)
+    
