@@ -22,3 +22,6 @@ https://nagakagachi.notion.site/RenderGraph-54f0cf4284c7466697b99cc0df81be80
   - build third_party/DirectXTex (cmake)
   - build graphics_test.sln (Visual Studio 2022)
     
+- Runtime
+  - camera operation
+    - Fly-through camera operation with right mouse button down and WASD (UE5-like)
