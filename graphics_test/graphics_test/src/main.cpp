@@ -96,7 +96,7 @@ private:
 	ngl::rhi::RefUavDep							tex_rw_uav_;
 	
 	// Loaded Texture.
-	ngl::res::ResourceHandle<ngl::gfx::ResTexture> res_texture_ = {};
+	ngl::res::ResourceHandle<ngl::gfx::ResTexture> res_texture_{};
 
 	
 	// RtScene.
@@ -164,7 +164,7 @@ bool AppGame::Initialize()
 	}
 
 
-	ngl::rhi::DeviceDep::Desc device_desc = {};
+	ngl::rhi::DeviceDep::Desc device_desc{};
 #if _DEBUG
 	device_desc.enable_debug_layer = true;	// デバッグレイヤ
 #endif
@@ -215,7 +215,7 @@ bool AppGame::Initialize()
 	// MaterialShaderFile生成.
 	//	実際は事前生成すべきだが起動時にテスト実行.
 	constexpr char k_material_shader_file_dir[] = "./src/ngl/data/shader/material/generated";
-	ngl::gfx::MaterialShaderFileGenerator mtl_gen = {};
+	ngl::gfx::MaterialShaderFileGenerator mtl_gen{};
 	mtl_gen.GenerateMaterialShaderFiles(
 		"./src/ngl/data/shader/material/impl",
 		"./src/ngl/data/shader/material/pass",
@@ -251,7 +251,7 @@ bool AppGame::Initialize()
 
 	// UnorderedAccess Texture.
 	{
-		ngl::rhi::TextureDep::Desc desc = {};
+		ngl::rhi::TextureDep::Desc desc{};
 		desc.bind_flag = ngl::rhi::ResourceBindFlag::UnorderedAccess | ngl::rhi::ResourceBindFlag::ShaderResource;
 		desc.format = ngl::rhi::EResourceFormat::Format_R16G16B16A16_FLOAT;
 		desc.type = ngl::rhi::ETextureType::Texture2D;
@@ -337,7 +337,7 @@ bool AppGame::Initialize()
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_target_scene, &loaddesc));
 				// スケール設定.
 				mc->transform_.SetDiagonal(ngl::math::Vec3(target_scene_base_scale));
@@ -345,7 +345,7 @@ bool AppGame::Initialize()
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
@@ -358,7 +358,7 @@ bool AppGame::Initialize()
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
 				//mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_stanford_bunny, &loaddesc));
 				
@@ -374,7 +374,7 @@ bool AppGame::Initialize()
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 
 				constexpr int k_rand_f_div = 10000;
@@ -398,7 +398,7 @@ bool AppGame::Initialize()
 
 			{
 				// 即時破棄をしても内部でのRenderThread初期化処理リストでの参照保持等が正常に動作するか確認するため.
-				ngl::gfx::ResMeshData::LoadDesc loaddesc = {};
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
 				auto immediate_destroy_resmesh = ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_box, &loaddesc);
 				immediate_destroy_resmesh = {};
 			}
@@ -425,7 +425,7 @@ bool AppGame::Initialize()
 	ngl_test::TestFunc00(&device_);
 	
 	// Texture Rexource読み込みのテスト.
-	ngl::gfx::ResTexture::LoadDesc tex_load_desc = {};
+	ngl::gfx::ResTexture::LoadDesc tex_load_desc{};
 	
 	//const char test_load_texture_file_name[] = "./data/model/sponza_gltf/glTF/6772804448157695701.jpg";
 	const char test_load_texture_file_name[] = "./data/texture/sample_dds/test-dxt1.dds";
@@ -604,7 +604,7 @@ bool AppGame::Execute()
 	const float screen_aspect_ratio = (float)swapchain_->GetWidth() / swapchain_->GetHeight();
 
 	// 描画用シーン情報.
-	ngl::gfx::SceneRepresentation frame_scene = {};
+	ngl::gfx::SceneRepresentation frame_scene{};
 	{
 		for (auto& e : mesh_comp_array_)
 		{
@@ -649,54 +649,48 @@ bool AppGame::Execute()
 		// Pathが構築したCommandListの出力先.
 		struct RtgGenerateCommandListSet
 		{
-			std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> graphics = {};
-			std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> compute = {};
+			std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> graphics{};
+			std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> compute{};
 		};
-		std::vector<RtgGenerateCommandListSet> rtg_gen_command = {};
+		std::vector<RtgGenerateCommandListSet> rtg_gen_command{};
 
 		// SubViewの描画テスト.
-		if(true)
+		//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
+		ngl::test::RenderFrameOut subview_render_frame_out {};
+		if(false)
 		{
-		#if 0
-			constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
-
+		#if 1
 			// Pathの設定.
-			ngl::test::RenderFrameDesc render_frame_desc = {};
+			ngl::test::RenderFrameDesc render_frame_desc{};
 			{
 				render_frame_desc.p_device = &device_;
 				
 				render_frame_desc.screen_w = screen_w;
 				render_frame_desc.screen_h = screen_h;
 
-				render_frame_desc.camera_pos = camera_pos_;
-				render_frame_desc.camera_pose = camera_pose_;
+				render_frame_desc.camera_pos = camera_pos_ + ngl::math::Vec3(0.0f, 5.0f, 0.0f);
+				render_frame_desc.camera_pose = camera_pose_ * ngl::math::Mat33::RotAxisX(ngl::math::Deg2Rad(75.0f));
 				render_frame_desc.camera_fov_y = camera_fov_y;
 
 				render_frame_desc.p_scene = &frame_scene;
-				
-				render_frame_desc.ref_test_tex_srv0 = rt_pass_test.ray_result_srv_;
-				render_frame_desc.ref_test_tex_srv1 = res_texture_->ref_view_;
 
-				render_frame_desc.h_prev_lit = {};// SubViewではヒストリ無効.
+				// SubViewは最低限の設定.
 			}
 			
-			swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
-
 			rtg_gen_command.push_back({});
 			RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
 			// Pathの実行 (RenderTaskGraphの構築と実行).
-			ngl::test::RenderFrameOut render_frame_out = {};
-			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
+			TestFrameRenderingPath(render_frame_desc, subview_render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
 		#endif
 		}
 		
-		static ngl::rtg::ResourceHandle h_prev_light = {};// 前回フレームハンドルのテスト.
+		static ngl::rtg::ResourceHandle h_prev_light{};// 前回フレームハンドルのテスト.
 		// MainViewの描画.
 		{
 			constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
 
 			// Pathの設定.
-			ngl::test::RenderFrameDesc render_frame_desc = {};
+			ngl::test::RenderFrameDesc render_frame_desc{};
 			{
 				render_frame_desc.p_device = &device_;
 				
@@ -719,6 +713,8 @@ bool AppGame::Execute()
 				render_frame_desc.ref_test_tex_srv1 = res_texture_->ref_view_;
 
 				render_frame_desc.h_prev_lit = h_prev_light;// MainViewはヒストリ有効.
+
+				render_frame_desc.h_other_graph_out_tex = subview_render_frame_out.h_propagate_lit;
 			}
 			
 			swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
@@ -726,7 +722,7 @@ bool AppGame::Execute()
 			rtg_gen_command.push_back({});
 			RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
 			// Pathの実行 (RenderTaskGraphの構築と実行).
-			ngl::test::RenderFrameOut render_frame_out = {};
+			ngl::test::RenderFrameOut render_frame_out{};
 			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
 			
 			h_prev_light = render_frame_out.h_propagate_lit;// Pathの一部を次フレームに伝搬する.
@@ -734,7 +730,7 @@ bool AppGame::Execute()
 
 		
 		// AsyncComputeテスト.
-		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list = {};
+		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list{};
 		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
 		{
 			// テストのためPoolから取得したCommandListに積み込み.
@@ -743,9 +739,9 @@ bool AppGame::Execute()
 			{
 				auto ref_cpso = ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep>(new ngl::rhi::ComputePipelineStateDep());
 				{
-					ngl::rhi::ComputePipelineStateDep::Desc cpso_desc = {};
+					ngl::rhi::ComputePipelineStateDep::Desc cpso_desc{};
 					{
-						ngl::gfx::ResShader::LoadDesc cs_load_desc = {};
+						ngl::gfx::ResShader::LoadDesc cs_load_desc{};
 						cs_load_desc.stage = ngl::rhi::EShaderStage::Compute;
 						cs_load_desc.shader_model_version = "6_3";
 						cs_load_desc.entry_point_name = "main_cs";
@@ -757,7 +753,7 @@ bool AppGame::Execute()
 					ref_cpso->Initialize(&device_, cpso_desc);
 				}
 					
-				ngl::rhi::DescriptorSetDep desc_set = {};
+				ngl::rhi::DescriptorSetDep desc_set{};
 				ref_cpso->SetView(&desc_set, "rwtex_out", tex_rw_uav_.Get());
 				rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
 				rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
@@ -771,7 +767,7 @@ bool AppGame::Execute()
 		{
 #if 1
 			// フレーム先頭からAcyncComputeのテストSubmit.
-			ngl::u64 compute_end_fence_value = {};
+			ngl::u64 compute_end_fence_value{};
 			{
 				ngl::rhi::CommandListBaseDep* p_command_lists[] =
 				{

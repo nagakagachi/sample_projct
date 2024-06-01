@@ -31,13 +31,16 @@ namespace ngl::test
         ngl::rhi::RefRtvDep		ref_swapchain_rtv = {};
         ngl::rhi::EResourceState	swapchain_state_prev = {};
         ngl::rhi::EResourceState	swapchain_state_next = {};
-			
+    	
         const ngl::gfx::SceneRepresentation* p_scene = {};
 
         ngl::rhi::RefSrvDep ref_test_tex_srv0 = {};
         ngl::rhi::RefSrvDep ref_test_tex_srv1 = {};
-			
-        ngl::rtg::ResourceHandle h_prev_lit = {};
+
+    	// 前フレームでの結果ヒストリ.
+        ngl::rtg::ResourceHandle	h_prev_lit = {};
+    	// 先行する別のrtgの出力をPropagateして使うテスト.
+    	ngl::rtg::ResourceHandle	h_other_graph_out_tex = {};
     };
 	
     struct RenderFrameOut

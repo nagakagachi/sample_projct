@@ -31,10 +31,22 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			const float2 debug_area_br = debug_area_lt + debug_area_size;
 			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
 			{
-				float4 rt_color = tex_rt.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
-				color = rt_color;
+				float4 sample_color = tex_rt.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
+				color = sample_color;
 			}
 		}
+
+		{
+			const float2 debug_area_size = float2(1.0, 1.0) * 0.4;
+			const float2 debug_area_lt = float2(0.6, 0.6);
+			const float2 debug_area_br = debug_area_lt + debug_area_size;
+			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
+			{
+				float4 sample_color = tex_res_data.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
+				color = sample_color;
+			}
+		}
+		
 		// 50% Gray dot. 半分のピクセルが1, 半分のピクセルが0のドットで50%の輝度表現.
 		{
 			const float2 debug_area_size = float2(0.1, 0.02);

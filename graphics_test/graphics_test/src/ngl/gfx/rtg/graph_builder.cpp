@@ -1353,8 +1353,13 @@ namespace ngl
 		void RenderTaskGraphManager::BeginFrame()
 		{
 			// フレーム開始でフレーム伝搬リソースのMapフリップとクリア.
-			flip_propagate_next_handle_next_ = 1 - flip_propagate_next_handle_next_;// このフレームから伝搬するハンドル用.
-			propagate_next_handle_[flip_propagate_next_handle_next_].clear();
+			{
+				flip_propagate_next_handle_next_ = 1 - flip_propagate_next_handle_next_;// このフレームから伝搬するハンドル用.
+				propagate_next_handle_[flip_propagate_next_handle_next_].clear();
+
+				// フレーム内の後段で前段rtgの伝搬リソースを参照するためのテンポラルMapをクリア.
+				propagate_next_handle_temporal_.clear();
+			}
 
 			// 未使用リソースの破棄.
 			{
@@ -1411,9 +1416,16 @@ namespace ngl
 				e.last_access_stage_ = TaskStage::k_frontmost_stage();// 次のCompileのために最終アクセスを負の最大にリセット.
 			}
 			// 伝搬リソースの最終アクセスステージを最終端に書き換えて通常の割当から除外.
+			// 
 			{
 				const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
 				for(auto e : propagate_next_handle_[flip_index_propagated])
+				{
+					assert(internal_resource_pool_[e.second].IsValid());// 伝搬しているなら存在するはず.
+					internal_resource_pool_[e.second].last_access_stage_ = TaskStage::k_endmost_stage();// 最終端.
+				}
+				// このフレームですでにCompileされているrtgで伝搬されたリソースをそのフレームの後段rtgで利用できるようにする.
+				for(auto e : propagate_next_handle_temporal_)
 				{
 					assert(internal_resource_pool_[e.second].IsValid());// 伝搬しているなら存在するはず.
 					internal_resource_pool_[e.second].last_access_stage_ = TaskStage::k_endmost_stage();// 最終端.
@@ -1673,16 +1685,33 @@ namespace ngl
 		{
 			const int flip_index_next = flip_propagate_next_handle_next_;
 			propagate_next_handle_[flip_index_next][handle] = resource_id;
+
+			// このフレームの後段rtgで伝搬リソースとしてアクセスするためにテンポラルなMapにも登録. このMapは二重化せずフレーム最初にクリアされる.
+			propagate_next_handle_temporal_[handle] = resource_id;
 		}
 		int RenderTaskGraphManager::FindPropagatedResourceId(ResourceHandle handle)
 		{
-			const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
-			const auto find_it = propagate_next_handle_[flip_index_propagated].find(handle);
-			if(propagate_next_handle_[flip_index_propagated].end() != find_it)
+			// 前フレームから伝搬されたリソース探索.
 			{
-				// 前フレームで伝搬指定されたものが発見できた.
-				return find_it->second;
+				const int flip_index_propagated = 1 - flip_propagate_next_handle_next_;
+				const auto find_it = propagate_next_handle_[flip_index_propagated].find(handle);
+				if(propagate_next_handle_[flip_index_propagated].end() != find_it)
+				{
+					// 前フレームで伝搬指定されたものが発見できた.
+					return find_it->second;
+				}
 			}
+
+			// このフレームでの前段で登録されている可能性のある伝搬リソースも後段で利用できるように探索.
+			{
+				const auto find_it = propagate_next_handle_temporal_.find(handle);
+				if(propagate_next_handle_temporal_.end() != find_it)
+				{
+					// 前フレームで伝搬指定されたものが発見できた.
+					return find_it->second;
+				}
+			}
+			
 			// 未登録のため無効値.
 			return -1;
 		}

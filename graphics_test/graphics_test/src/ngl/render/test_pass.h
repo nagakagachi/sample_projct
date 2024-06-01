@@ -595,10 +595,13 @@ namespace ngl::render
 				ITASK_NODE_HANDLE_REGISTER(h_light_)
 				ITASK_NODE_DEF_END
 
-				rtg::ResourceHandle h_depth_{};
+			rtg::ResourceHandle h_depth_{};
 			rtg::ResourceHandle h_linear_depth_{};
 			rtg::ResourceHandle h_light_{};
-			rtg::ResourceHandle h_swapchain_{}; // 一時リソーステスト. マクロにも登録しない.
+			rtg::ResourceHandle h_swapchain_{};
+
+			rtg::ResourceHandle h_other_rtg_out_{};// 先行する別rtgがPropagateしたハンドルをそのフレームの後段のrtgで使用するテスト.
+
 			
 			rhi::RefSrvDep ref_raytrace_result_srv_;
 			rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
@@ -612,10 +615,12 @@ namespace ngl::render
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
-			rhi::RefSrvDep ref_raytrace_result_srv,
-			rhi::RefSrvDep ref_res_texture_srv,
-			const SetupDesc& desc)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
+				rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
+				rtg::ResourceHandle h_other_rtg_out,
+				rhi::RefSrvDep ref_raytrace_result_srv,
+				rhi::RefSrvDep ref_res_texture_srv,
+				const SetupDesc& desc)
 			{
 				{
 					// リソースアクセス定義.
@@ -625,6 +630,14 @@ namespace ngl::render
 
 					h_swapchain_ = builder.RecordResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
 
+					if(!h_other_rtg_out.IsInvalid())
+					{
+						h_other_rtg_out_ = builder.RecordResourceAccess(*this, h_other_rtg_out, rtg::access_type::SHADER_READ);
+					}
+					else
+					{
+						h_other_rtg_out_ = {};
+					}
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
@@ -633,9 +646,23 @@ namespace ngl::render
 				}
 				
 				{
-					ref_raytrace_result_srv_ = ref_raytrace_result_srv;
+					if(ref_raytrace_result_srv.IsValid())
+					{
+						ref_raytrace_result_srv_ = ref_raytrace_result_srv;
+					}
+					else
+					{
+						ref_raytrace_result_srv_ = gfx::GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
+					}
 
-					ref_res_texture_srv_ = ref_res_texture_srv;
+					if(ref_res_texture_srv.IsValid())
+					{
+						ref_res_texture_srv_ = ref_res_texture_srv;
+					}
+					else
+					{
+						ref_res_texture_srv_ = gfx::GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
+					}
 				}
 
 				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
@@ -690,6 +717,7 @@ namespace ngl::render
 				auto res_light = builder.GetAllocatedResource(this, h_light_);
 				auto res_swapchain = builder.GetAllocatedResource(this, h_swapchain_);
 				auto res_tmp = builder.GetAllocatedResource(this, h_tmp_);
+				auto res_other_rtg_out = builder.GetAllocatedResource(this, h_other_rtg_out_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
@@ -697,6 +725,15 @@ namespace ngl::render
 				assert(res_swapchain.swapchain_.IsValid() && res_swapchain.rtv_.IsValid());
 				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
+				rhi::RefSrvDep ref_other_rtg_out{};
+				if(res_other_rtg_out.srv_.IsValid())
+				{
+					ref_other_rtg_out = res_other_rtg_out.srv_;
+				}
+				else
+				{
+					ref_other_rtg_out = gfx::GlobalRenderResource::Instance().default_resource_.tex_red->ref_view_;
+				}
 
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
 
@@ -710,7 +747,8 @@ namespace ngl::render
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "tex_light", res_light.srv_.Get());
 				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
-				pso_->SetView(&desc_set, "tex_res_data", ref_res_texture_srv_.Get());// テクスチャリソースのテスト.
+				//pso_->SetView(&desc_set, "tex_res_data", ref_res_texture_srv_.Get());
+				pso_->SetView(&desc_set, "tex_res_data", ref_other_rtg_out.Get());
 				
 				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);

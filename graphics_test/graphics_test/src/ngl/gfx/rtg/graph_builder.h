@@ -733,6 +733,7 @@ namespace ngl
 			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_[2] = {};
 			// 次のフレームへ伝搬するハンドル登録用FlipIndex. 前回フレームから伝搬されたハンドルは 1-flip_propagate_next_handle_next_ のMapが対応.
 			int flip_propagate_next_handle_next_ = 0;
+			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_temporal_ = {};
 
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.

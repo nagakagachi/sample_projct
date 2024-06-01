@@ -195,6 +195,7 @@ namespace ngl::test
 						}
 						task_final->Setup(rtg_builder, p_device, h_swapchain,
 							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
+							render_frame_desc.h_other_graph_out_tex,
 							render_frame_desc.ref_test_tex_srv0, render_frame_desc.ref_test_tex_srv1, setup_desc);
 					}
 				}
