@@ -1125,7 +1125,7 @@ namespace ngl
 				std::vector<rhi::RhiRef<rhi::FenceDep>> sync_fences;
 				{
 					sync_fences.clear();
-					for(auto&& e : node_dependency_fence_)
+					for(const auto& e : node_dependency_fence_)
 					{
 						if(0 > e.fence_id)
 							continue;

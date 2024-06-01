@@ -78,10 +78,15 @@ namespace ngl::test
 				
 			// Append External Resource Info.
 			ngl::rtg::ResourceHandle h_swapchain = {};
-			if(render_frame_desc.ref_swapchain.IsValid())
 			{
-				// 外部リソース登録.
-				h_swapchain = rtg_builder.AppendExternalResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
+				if(render_frame_desc.ref_swapchain.IsValid())
+				{
+					// 外部リソース登録.
+					// このGraphの開始時点のStateと終了時にあるべきStateを指定.
+					h_swapchain = rtg_builder.AppendExternalResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
+				}
+				// TODO. any other.
+				// ...
 			}
 				
 			// Build Rendering Path.
