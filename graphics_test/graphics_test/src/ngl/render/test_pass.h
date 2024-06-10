@@ -577,6 +577,8 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_shadowmap", res_shadowmap.srv_.Get());
 				
 				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
+				pso_->SetView(&desc_set, "samp_shadow", gfx::GlobalRenderResource::Instance().default_resource_.sampler_shadow_linear.Get());
+				
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				gfx_commandlist->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);

@@ -69,18 +69,54 @@ namespace ngl::gfx
 
         // Sampler.
         {
-            default_resource_.sampler_linear_wrap = new rhi::SamplerDep();
-            
+            // Linear.
             ngl::rhi::SamplerDep::Desc samp_desc = {};
             samp_desc.Filter = ngl::rhi::ETextureFilterMode::Min_Linear_Mag_Linear_Mip_Linear;
             samp_desc.AddressU = ngl::rhi::ETextureAddressMode::Repeat;
             samp_desc.AddressV = ngl::rhi::ETextureAddressMode::Repeat;
             samp_desc.AddressW = ngl::rhi::ETextureAddressMode::Repeat;
+            
+            default_resource_.sampler_linear_wrap = new rhi::SamplerDep();
             if (!default_resource_.sampler_linear_wrap->Initialize(p_device_, samp_desc))
             {
                 std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
                 assert(false);
                 return false;
+            }
+        }
+        
+        {
+            // Comparison Sampler for Shadow.
+            ngl::rhi::SamplerDep::Desc samp_desc = {};
+            samp_desc.Filter = ngl::rhi::ETextureFilterMode::Comp_Min_Linear_Mag_Linear_Mip_Linear;
+            samp_desc.ComparisonFunc = rhi::ECompFunc::GreaterEqual;
+            samp_desc.AddressU = ngl::rhi::ETextureAddressMode::Clamp;
+            samp_desc.AddressV = ngl::rhi::ETextureAddressMode::Clamp;
+            samp_desc.AddressW = ngl::rhi::ETextureAddressMode::Clamp;
+
+            {
+                // Linear.
+                samp_desc.Filter = ngl::rhi::ETextureFilterMode::Comp_Min_Linear_Mag_Linear_Mip_Linear;
+                
+                default_resource_.sampler_shadow_linear = new rhi::SamplerDep();
+                if (!default_resource_.sampler_shadow_linear->Initialize(p_device_, samp_desc))
+                {
+                    std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
+                    assert(false);
+                    return false;
+                }
+            }
+            {
+                // Point.
+                samp_desc.Filter = ngl::rhi::ETextureFilterMode::Comp_Min_Point_Mag_Point_Mip_Point;
+                
+                default_resource_.sampler_shadow_point = new rhi::SamplerDep();
+                if (!default_resource_.sampler_shadow_point->Initialize(p_device_, samp_desc))
+                {
+                    std::cout << "[ERROR] Create rhi::SamplerDep" << std::endl;
+                    assert(false);
+                    return false;
+                }
             }
         }
 

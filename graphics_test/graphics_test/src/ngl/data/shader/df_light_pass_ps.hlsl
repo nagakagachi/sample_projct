@@ -26,6 +26,7 @@ Texture2D tex_gbuffer3;
 Texture2D tex_prev_light;
 Texture2D tex_shadowmap;
 SamplerState samp;
+SamplerComparisonState samp_shadow;
 
 
 
@@ -76,9 +77,11 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	float light_visibility = 1.0;
 	{
 		// Shadowmap Sample.
-		const float shadow_sample_bias_ws = 0.001;// 基準バイアス.
-		const float shadow_sample_slope_bias_ws = 5.0 / (saturate(dot(L, gb_normal_ws)) + 0.001);// スロープバイアス.
-		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx, float4(pixel_pos_ws + (L * ((1.0 + shadow_sample_slope_bias_ws)*shadow_sample_bias_ws)), 1.0));
+		const float shadow_sample_bias_ws = 0.01;// 基準バイアス.
+		const float k_max_shadow_sample_slope_bias_ws = 0.05;
+		const float shadow_sample_slope_bias_ws = k_max_shadow_sample_slope_bias_ws * pow(1.0 - saturate(dot(L, gb_normal_ws)), 1.0/8.0);// スロープバイアス.
+
+		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx, float4(pixel_pos_ws + (L * (shadow_sample_slope_bias_ws + shadow_sample_bias_ws)), 1.0));
 		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx, float4(pixel_pos_shadow_vs, 1.0));
 		const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz / pixel_pos_shadow_cs.w;
 		float2 pixel_pos_shadow_uv = pixel_pos_shadow_cs_pd.xy * 0.5 + 0.5;
@@ -89,8 +92,21 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			// 範囲外はとりあえず日向.
 			if(all(0.0 < pixel_pos_shadow_uv) && all(1.0 > pixel_pos_shadow_uv))
 			{
-				const float shadow_sample = tex_shadowmap.SampleLevel(samp, pixel_pos_shadow_uv, 0).x;
-				light_visibility = (shadow_sample <= pixel_pos_shadow_cs_pd.z)? 1.0 : 0.0;
+				// PCF.
+#if 1
+				// Bruteforce
+				const int k_pcf_radius = 1;
+				const int k_pcf_normalizer = (k_pcf_radius*2+1)*(k_pcf_radius*2+1);
+				float shadow_comp_accum = 0.0;
+				for(int oy = -k_pcf_radius; oy <= k_pcf_radius; ++oy)
+					for(int ox = -k_pcf_radius; ox <= k_pcf_radius; ++ox)
+						shadow_comp_accum += tex_shadowmap.SampleCmpLevelZero(samp_shadow, pixel_pos_shadow_uv, pixel_pos_shadow_cs_pd.z, int2(ox, oy)).x;
+				
+				light_visibility = shadow_comp_accum / float(k_pcf_normalizer); 
+#else
+				// Single.
+				light_visibility = tex_shadowmap.SampleCmpLevelZero(samp_shadow, pixel_pos_shadow_uv, pixel_pos_shadow_cs_pd.z).x;
+#endif
 			}
 		}
 	}
@@ -105,7 +121,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	if(1)
 	{
 		const float3 k_ambient_rate = float3(0.7, 0.7, 1.0) * 0.15;
-		lit_color += gb_base_color * (1.0/ngl_PI) * (abs(dot(gb_normal_ws, -L)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
+		lit_color += gb_base_color * (1.0/ngl_PI) * ((dot(gb_normal_ws, -L)) * 0.5 + 0.5) * lit_intensity * k_ambient_rate;
 	}
 
 	

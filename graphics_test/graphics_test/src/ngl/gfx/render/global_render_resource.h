@@ -19,6 +19,8 @@ namespace ngl::gfx
         struct DefaultReource
         {
             rhi::RefSampDep sampler_linear_wrap = {};
+            rhi::RefSampDep sampler_shadow_point = {};
+            rhi::RefSampDep sampler_shadow_linear = {};
             
             res::ResourceHandle<ResTexture> tex_white = {};         // 1.0, 1.0, 1.0, 1.0
             res::ResourceHandle<ResTexture> tex_gray50_a50 = {};    // 0.5, 0.5, 0.5, 0.5
