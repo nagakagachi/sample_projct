@@ -176,6 +176,7 @@
     <ClCompile Include="src\ngl\render\test_render_path.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
     <ClInclude Include="src\ngl\data\shader\include\brdf.hlsli" />
+    <ClInclude Include="src\ngl\data\shader\include\tonemap.hlsli" />
     <ClInclude Include="src\ngl\data\shader\material\pass\d_shadow.hlsli" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_common.h" />
     <ClInclude Include="src\ngl\gfx\material\material_shader_generator.h" />

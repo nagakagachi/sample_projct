@@ -84,6 +84,13 @@ MtlPsOutput MtlPsEntryPoint(MtlPsInput input)
         output.emissive = emissive;
 
         output.opacity = mtl_base_color.a;
+
+        // デバッグ
+        if(false)
+        {
+            output.roughness = 0.3;
+            output.metalness = 1.0;
+        }
     }
 
     return output;

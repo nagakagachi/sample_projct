@@ -5,6 +5,8 @@
 		sRGB OETF も兼ねている.
 #endif
 
+#include "include/tonemap.hlsli"
+
 struct VS_OUTPUT
 {
 	float4 pos	:	SV_POSITION;
@@ -19,8 +21,20 @@ SamplerState samp;
 
 float4 main_ps(VS_OUTPUT input) : SV_TARGET
 {
-	// リニア深度.
+	// Lighting Buffer.
 	float4 color = tex_light.SampleLevel(samp, input.uv, 0);
+
+	// Tonemap Test.
+	{
+		if(0.5 > input.uv.x)
+		{
+			color.rgb = Tonempa_Clamp(color.rgb);
+		}
+		else
+		{
+			color.rgb = Tonempa_Reinhard(color.rgb);
+		}
+	}
 
 	if(true)
 	{
@@ -37,8 +51,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		}
 
 		{
-			const float2 debug_area_size = float2(1.0, 1.0) * 0.4;
-			const float2 debug_area_lt = float2(0.6, 0.6);
+			const float2 debug_area_size = float2(1.0, 1.0) * 0.3;
+			const float2 debug_area_lt = float2(0.7, 0.7);
 			const float2 debug_area_br = debug_area_lt + debug_area_size;
 			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
 			{
