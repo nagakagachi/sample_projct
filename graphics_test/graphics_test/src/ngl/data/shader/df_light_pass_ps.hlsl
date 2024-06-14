@@ -66,7 +66,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	const float3 to_pixel_ray_ws = normalize(pixel_pos_ws - ngl_cb_sceneview.cb_view_inv_mtx._m03_m13_m23);
 
 	
-	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * ngl_PI * 1.0;
+	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * ngl_PI * 2.0;
 	//const float3 lit_dir = normalize(float3(-0.5, -1.0, -0.4));
 	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx._m02_m12_m22);// ShadowViewの向きを利用.
 

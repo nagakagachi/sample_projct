@@ -164,7 +164,7 @@ namespace ngl::test
 						setup_desc.camera_pos = camera_pos;
 						setup_desc.camera_front = camera_pose.GetColumn2();
 						// Directionalのライト方向テスト.
-						setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.25f, -1.0f, 0.4f});
+						setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.2f, -1.0f, 0.3f});
 					}
 					task_d_shadow->Setup(rtg_builder, p_device, setup_desc);
 				}
