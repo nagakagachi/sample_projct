@@ -26,21 +26,16 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 
 	// Tonemap Test.
 	{
-		if(0.4 > input.uv.y)
-		{
-			color.rgb = Tonempa_Clamp(color.rgb);
-		}
-		else
-		{
-			if(0.5 > input.uv.x)
-			{
-				color.rgb = Tonemap_AcesFilm_Approx(color.rgb);
-			}
-			else
-			{
-				color.rgb = Tonemap_Uncharted2_Filmic(color.rgb);
-			}
-		}
+#if 1
+		// Aces Approx.
+		color.rgb = Tonemap_AcesFilm_Approx(color.rgb);
+#elif 1
+		// Uncharted2.
+		color.rgb = Tonemap_Uncharted2_Filmic(color.rgb);
+#else
+		// Clamp.
+		color.rgb = Tonempa_Clamp(color.rgb);
+#endif
 	}
 
 	if(true)
