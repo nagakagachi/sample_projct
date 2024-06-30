@@ -210,7 +210,7 @@ namespace ngl::render
 			}
 		};
 
-		
+		// DirectionalShadow用.
 		struct SceneDirectionalShadowInfo
 		{
 			math::Mat34 cb_shadow_view_mtx;
@@ -218,6 +218,18 @@ namespace ngl::render
 			math::Mat44 cb_shadow_proj_mtx;
 			math::Mat44 cb_shadow_proj_inv_mtx;
 		};
+		
+		struct CascadeShadowMapParameter
+		{
+			static constexpr int k_cascade_count = 3;
+
+			float split_distance_ws[k_cascade_count];
+			float split_rate[k_cascade_count];
+			
+			math::Mat34 light_view_mtx[k_cascade_count];
+			math::Mat34 light_ortho_mtx[k_cascade_count];
+		};
+		
 		// DirectionalShadowパス.
 		struct TaskDirectionalShadowPass : public rtg::IGraphicsTaskNode
 		{
@@ -246,6 +258,11 @@ namespace ngl::render
 				const SetupDesc& desc)
 			{
 				constexpr int shadowmap_reso = 1024*2;
+				const float shadowmap_far_range = 1000.0f;
+				
+				const float near_z = 1.0f;
+				const float far_z = 10000.0f;
+				const float shadowmap_widht_ws = 16.0f;
 				
 				// リソース定義.
 				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsAbsoluteSize(shadowmap_reso, shadowmap_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
@@ -272,24 +289,36 @@ namespace ngl::render
 
 				const auto view_forward_dir = view_info.camera_pose.GetColumn2();
 				const auto view_up_dir = view_info.camera_pose.GetColumn1();
-				const auto view_right_dir = -view_info.camera_pose.GetColumn0();// LeftHandとしてSideAxis(右)ベクトル.
+				const auto view_right_dir = view_info.camera_pose.GetColumn0();// LeftHandとしてSideAxis(右)ベクトル.
+
 				
-				/*
-				// CascadeShadowの検証用.
-				math::Frustum view_frustum;
-				math::CreateFrustum(view_frustum,
-					view_info.camera_pos, view_forward_dir, view_up_dir, view_right_dir,
-					view_info.near_z, view_info.far_z, view_info.camera_fov_y, view_info.aspect_ratio );
-				*/
+				// 単位Frustumの頂点へのベクトル.
+				math::ViewPositionRelativeFrustumCorners frustum_corners;
+				math::CreateFrustumCorners(frustum_corners,
+					view_info.camera_pos, view_forward_dir, view_up_dir, view_right_dir, view_info.camera_fov_y, view_info.aspect_ratio);
+				
+				CascadeShadowMapParameter csm_param;
+				const float cascade_split_lambda = 0.5f;
+				const float mainview_min_z = view_info.near_z;
+				const float mainview_max_z = shadowmap_far_range;
+				const float mainview_z_range = mainview_max_z - mainview_min_z;
+				const float mainview_z_rate = mainview_min_z / mainview_max_z;
+				for(int ci = 0; ci < csm_param.k_cascade_count; ++ci)
+				{
+					const float rate = static_cast<float>(ci + 1) / static_cast<float>(csm_param.k_cascade_count);
+
+					const float split_rate = rate*rate;// 適当な対数分割.
+
+					csm_param.split_rate[ci] = split_rate;
+					csm_param.split_distance_ws[ci] = split_rate * mainview_z_range + mainview_min_z;
+
+					// TODO.
+					// frustum_corners を利用して分割面の位置計算.
+				}
+
 				
 				{
 					{
-						const float near_z = 1.0f;
-						const float far_z = 10000.0f;
-						const float shadowmap_widht_ws = 16.0f;
-
-						
-						
 						math::Vec3 lookat_pos = view_info.camera_pos + (view_forward_dir * 4.0);
 						math::Vec3 light_view_dir = desc.directional_light_dir;
 						math::Vec3 light_view_up = math::Vec3::Normalize({desc.directional_light_dir.z, desc.directional_light_dir.x, desc.directional_light_dir.y});
