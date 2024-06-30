@@ -22,12 +22,22 @@ namespace ngl::test
 				
 		const auto screen_w = render_frame_desc.screen_w;
 		const auto screen_h = render_frame_desc.screen_h;
-		ngl::math::Vec3		camera_pos = render_frame_desc.camera_pos;
-		ngl::math::Mat33	camera_pose = render_frame_desc.camera_pose;
-		float				camera_fov_y = render_frame_desc.camera_fov_y;
+		const float k_near_z = 0.1f;
+		const float k_far_z = 10000.0f;
 				
 		const ngl::gfx::SceneRepresentation* p_scene = render_frame_desc.p_scene;
 
+		// PassにわたすためのView情報.
+		render::task::RenderPassViewInfo view_info;
+		{
+			view_info.camera_pos = render_frame_desc.camera_pos;
+			view_info.camera_pose = render_frame_desc.camera_pose;
+			view_info.near_z = k_near_z;
+			view_info.far_z = k_far_z;
+			view_info.camera_fov_y = render_frame_desc.camera_fov_y;
+			view_info.aspect_ratio = (float)screen_w / (float)screen_h;
+		}
+		
 				
 		// Update View Constant Buffer.
 		ngl::rhi::RefBufferDep sceneview_buffer = new ngl::rhi::BufferDep();
@@ -42,18 +52,11 @@ namespace ngl::test
 		}
 		// SceneView ConstantBuffer内容更新.
 		{
-			ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(camera_pos, camera_pose.GetColumn2(), camera_pose.GetColumn1());
-
-			const float screen_aspect_ratio = (float)screen_w / (float)screen_h;
-				
-			const float fov_y = camera_fov_y;
-			const float aspect_ratio = screen_aspect_ratio;
-			const float near_z = 0.1f;
-			const float far_z = 10000.0f;
+			ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(view_info.camera_pos, view_info.camera_pose.GetColumn2(), view_info.camera_pose.GetColumn1());
 
 			// Infinite Far Reverse Perspective
-			ngl::math::Mat44 proj_mat = ngl::math::CalcReverseInfiniteFarPerspectiveMatrix(fov_y, aspect_ratio, near_z);
-			ngl::math::Vec4 ndc_z_to_view_z_coef = ngl::math::CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(near_z);
+			ngl::math::Mat44 proj_mat = ngl::math::CalcReverseInfiniteFarPerspectiveMatrix(view_info.camera_fov_y, view_info.aspect_ratio, view_info.near_z);
+			ngl::math::Vec4 ndc_z_to_view_z_coef = ngl::math::CalcViewDepthReconstructCoefForInfiniteFarReversePerspective(view_info.near_z);
 
 			if (auto* mapped = sceneview_buffer->MapAs<ngl::gfx::CbSceneView>())
 			{
@@ -90,7 +93,8 @@ namespace ngl::test
 			}
 				
 			// Build Rendering Path.
-			{		
+			{
+				
 #define ASYNC_COMPUTE_TEST 1
 				// AsyncComputeの依存関係の追い越しパターンテスト用.
 				ngl::rtg::ResourceHandle async_compute_tex2 = {};
@@ -102,7 +106,7 @@ namespace ngl::test
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
-					task_test_compute1->Setup(rtg_builder, p_device, {}, setup_desc);
+					task_test_compute1->Setup(rtg_builder, p_device, view_info, {}, setup_desc);
 					async_compute_tex2 = task_test_compute1->h_work_tex_;
 				}
 #endif
@@ -115,7 +119,7 @@ namespace ngl::test
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
 					}
-					task_depth->Setup(rtg_builder, p_device, setup_desc);
+					task_depth->Setup(rtg_builder, p_device, view_info, setup_desc);
 				}
 					
 				ngl::rtg::ResourceHandle async_compute_tex = {};
@@ -127,7 +131,7 @@ namespace ngl::test
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
-					task_test_compute2->Setup(rtg_builder, p_device, task_depth->h_depth_, setup_desc);
+					task_test_compute2->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, setup_desc);
 					async_compute_tex = task_test_compute2->h_work_tex_;
 				}
 #endif
@@ -140,7 +144,7 @@ namespace ngl::test
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
 					}
-					task_gbuffer->Setup(rtg_builder, p_device, task_depth->h_depth_, async_compute_tex, setup_desc);
+					task_gbuffer->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, async_compute_tex, setup_desc);
 				}
 					
 				// Linear Depth Pass.
@@ -150,7 +154,7 @@ namespace ngl::test
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
-					task_linear_depth->Setup(rtg_builder, p_device, task_depth->h_depth_,async_compute_tex2, setup_desc);
+					task_linear_depth->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_,async_compute_tex2, setup_desc);
 				}
 					
 				// DirectionalShadow Pass.
@@ -160,13 +164,11 @@ namespace ngl::test
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
-
-						setup_desc.camera_pos = camera_pos;
-						setup_desc.camera_front = camera_pose.GetColumn2();
+						
 						// Directionalのライト方向テスト.
 						setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.2f, -1.0f, 0.3f});
 					}
-					task_d_shadow->Setup(rtg_builder, p_device, setup_desc);
+					task_d_shadow->Setup(rtg_builder, p_device, view_info, setup_desc);
 				}
 					
 				// Deferred Lighting Pass.
@@ -177,7 +179,7 @@ namespace ngl::test
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.ref_shadow_cbv = task_d_shadow->ref_d_shadow_cbv_;
 					}
-					task_light->Setup(rtg_builder, p_device,
+					task_light->Setup(rtg_builder, p_device, view_info,
 						task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
 						task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, render_frame_desc.h_prev_lit,
 						task_d_shadow->h_depth_,
@@ -193,7 +195,7 @@ namespace ngl::test
 						{
 							setup_desc.ref_scene_cbv = sceneview_cbv;
 						}
-						task_final->Setup(rtg_builder, p_device, h_swapchain,
+						task_final->Setup(rtg_builder, p_device, view_info, h_swapchain,
 							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
 							render_frame_desc.h_other_graph_out_tex,
 							render_frame_desc.ref_test_tex_srv0, render_frame_desc.ref_test_tex_srv1, setup_desc);

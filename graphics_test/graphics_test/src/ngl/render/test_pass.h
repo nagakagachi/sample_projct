@@ -20,6 +20,17 @@ namespace ngl::render
 	{
 		static constexpr char k_shader_model[] = "6_3";
 
+		// Pass用のView情報.
+		struct RenderPassViewInfo
+		{
+			ngl::math::Vec3		camera_pos = {};
+			ngl::math::Mat33	camera_pose = ngl::math::Mat33::Identity();
+			float				near_z{};
+			float				far_z{};
+			float				aspect_ratio{};
+			float				camera_fov_y = ngl::math::Deg2Rad(60.0f);
+		};
+		
 		// PreZパス.
 		struct TaskDepthPass : public rtg::IGraphicsTaskNode
 		{
@@ -39,7 +50,7 @@ namespace ngl::render
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const SetupDesc& desc)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info, const SetupDesc& desc)
 			{
 				// リソース定義.
 				//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
@@ -109,7 +120,8 @@ namespace ngl::render
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex,
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
+				rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex,
 				const SetupDesc& desc)
 			{
 				// MaterialPassに合わせてFormat設定.
@@ -226,13 +238,11 @@ namespace ngl::render
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
-				
-				math::Vec3 camera_pos{};
-				math::Vec3 camera_front{};
+
 				math::Vec3 directional_light_dir{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				const SetupDesc& desc)
 			{
 				constexpr int shadowmap_reso = 1024*2;
@@ -259,6 +269,18 @@ namespace ngl::render
 					rhi::ConstantBufferViewDep::Desc cbv_desc{};
 					ref_d_shadow_cbv_->Initialize(ref_d_shadow_cb_.Get(), cbv_desc);
 				}
+
+				const auto view_forward_dir = view_info.camera_pose.GetColumn2();
+				const auto view_up_dir = view_info.camera_pose.GetColumn1();
+				const auto view_right_dir = -view_info.camera_pose.GetColumn0();// LeftHandとしてSideAxis(右)ベクトル.
+				
+				/*
+				// CascadeShadowの検証用.
+				math::Frustum view_frustum;
+				math::CreateFrustum(view_frustum,
+					view_info.camera_pos, view_forward_dir, view_up_dir, view_right_dir,
+					view_info.near_z, view_info.far_z, view_info.camera_fov_y, view_info.aspect_ratio );
+				*/
 				
 				{
 					{
@@ -267,7 +289,8 @@ namespace ngl::render
 						const float shadowmap_widht_ws = 16.0f;
 
 						
-						math::Vec3 lookat_pos = desc.camera_pos + (desc.camera_front * 4.0);
+						
+						math::Vec3 lookat_pos = view_info.camera_pos + (view_forward_dir * 4.0);
 						math::Vec3 light_view_dir = desc.directional_light_dir;
 						math::Vec3 light_view_up = math::Vec3::Normalize({desc.directional_light_dir.z, desc.directional_light_dir.x, desc.directional_light_dir.y});
 						math::Vec3 light_pos = lookat_pos - light_view_dir * 500.0f;
@@ -275,7 +298,7 @@ namespace ngl::render
 						ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(light_pos,
 							light_view_dir, light_view_up);
 
-						ngl::math::Mat44 proj_mat = ngl::math::CalcReverseOrthographicMatrix(shadowmap_widht_ws, shadowmap_widht_ws, near_z, far_z);
+						ngl::math::Mat44 proj_mat = ngl::math::CalcReverseOrthographicMatrixSymmetric(shadowmap_widht_ws, shadowmap_widht_ws, near_z, far_z);
 						
 						if (auto* mapped = ref_d_shadow_cb_->MapAs<SceneDirectionalShadowInfo>())
 						{
@@ -338,7 +361,8 @@ namespace ngl::render
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, const SetupDesc& desc)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
+				rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, const SetupDesc& desc)
 			{
 				{
 					// リソース定義.
@@ -441,7 +465,7 @@ namespace ngl::render
 				rhi::RefCbvDep ref_shadow_cbv{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_gb2, rtg::ResourceHandle h_gb3, rtg::ResourceHandle h_velocity,
 				rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
 				rtg::ResourceHandle h_shadowmap,
@@ -617,7 +641,7 @@ namespace ngl::render
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device,
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
 				rtg::ResourceHandle h_other_rtg_out,
 				rhi::RefSrvDep ref_raytrace_result_srv,
@@ -779,7 +803,8 @@ namespace ngl::render
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
 			// リソースとアクセスを定義するプリプロセス.
-			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_input_test, const SetupDesc& desc)
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
+				rtg::ResourceHandle h_input_test, const SetupDesc& desc)
 			{
 				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
 				{

@@ -7,6 +7,7 @@
 
 #include "detail/math_vector.h"
 #include "detail/math_matrix.h"
+#include "detail/math_util.h"
 
 namespace ngl
 {
@@ -75,60 +76,20 @@ namespace ngl
 		// Utility
 		static constexpr bool k_defalut_right_hand_mode = false;
 		
-		// View Matrix (LeftHand).
-		inline Mat34 CalcViewMatrix(const Vec3& camera_location, const Vec3& forward, const Vec3& up, bool is_right_hand = k_defalut_right_hand_mode)
-		{
-			assert(!(forward == Vec3::Zero()));
-			assert(!(up == Vec3::Zero()));
-
-			Vec3 r2 = Vec3::Normalize(forward);
-			if (is_right_hand)
-				r2 = -r2;
-
-			Vec3 r0 = Vec3::Cross(up, r2);
-			r0 = Vec3::Normalize(r0);
-
-			Vec3 r1 = Vec3::Cross(r2, r0);
-
-			Vec3 neg_camera_location = -camera_location;
-			float d0 = Vec3::Dot(r0, neg_camera_location);
-			float d1 = Vec3::Dot(r1, neg_camera_location);
-			float d2 = Vec3::Dot(r2, neg_camera_location);
-
-			Mat34 M(
-				Vec4(r0, d0),
-				Vec4(r1, d1),
-				Vec4(r2, d2)
-			);
-
-			return M;
-		}
+		// View Matrix.
+		Mat34 CalcViewMatrix(const Vec3& camera_location, const Vec3& forward, const Vec3& up, bool is_right_hand = k_defalut_right_hand_mode);
 		
 		// Standard Perspective Projection Matrix (default:LeftHand).
 		//	fov_y_radian : full angle of Vertical FOV.
-		inline Mat44 CalcStandardPerspectiveMatrix
+		Mat44 CalcStandardPerspectiveMatrix
 		(
 			float fov_y_radian,
 			float aspect_ratio,
 			float near_z,
 			float far_z,
 			bool is_right_hand = k_defalut_right_hand_mode
-		)
-		{
-			const float fov_y_half = fov_y_radian * 0.5f;
-			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
-			const float h = 1.0f / fov_tan;
-			const float w = h / aspect_ratio;
-			const float range_term = far_z / (far_z - near_z);
-			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
-
-			return Mat44(
-				w,	0,	0,	0,
-				0,	h,	0,	0,
-				0,	0, z_sign * range_term, -near_z * range_term,
-				0,	0, z_sign,	0
-			);
-		}
+		);
+		
 		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
 		//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
 		//		cb_ndc_z_to_view_z_coef = 
@@ -141,31 +102,17 @@ namespace ngl
 			return coef;
 		}
 
-		// Reverse Perspective Projection Matrix (default:LeftHand).
+		// Reverse Perspective Projection Matrix.
 		//	fov_y_radian : full angle of Vertical FOV.
-		inline Mat44 CalcReversePerspectiveMatrix
+		Mat44 CalcReversePerspectiveMatrix
 		(
 			float fov_y_radian,
 			float aspect_ratio,
 			float near_z,
 			float far_z,
 			bool is_right_hand = k_defalut_right_hand_mode
-		)
-		{
-			const float fov_y_half = fov_y_radian * 0.5f;
-			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
-			const float h = 1.0f / fov_tan;
-			const float w = h / aspect_ratio;
-			const float range_term = far_z / (near_z - far_z);
-			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
-
-			return Mat44(
-				w, 0, 0, 0,
-				0, h, 0, 0,
-				0, 0, z_sign * range_term, -near_z * range_term,
-				0, 0, z_sign, 0
-			);
-		}
+		);
+		
 		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
 		//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
 		//		cb_ndc_z_to_view_z_coef = 
@@ -178,31 +125,18 @@ namespace ngl
 			return coef;
 		}
 
-		// InfiniteFar and Reverse Z Perspective Projection Matrix (default:LeftHand).
+		// InfiniteFar and Reverse Z Perspective Projection Matrix.
 		//	fov_y_radian : full angle of Vertical FOV.
 		//	Z-> near:1, far:0
 		//	https://thxforthefish.com/posts/reverse_z/
-		inline Mat44 CalcReverseInfiniteFarPerspectiveMatrix
+		Mat44 CalcReverseInfiniteFarPerspectiveMatrix
 		(
 			float fov_y_radian,
 			float aspect_ratio,
 			float near_z,
 			bool is_right_hand = k_defalut_right_hand_mode
-		)
-		{
-			const float fov_y_half = fov_y_radian * 0.5f;
-			const float fov_tan = std::sinf(fov_y_half) / std::cosf(fov_y_half); // std::tanf(fov_y_half);
-			const float h = 1.0f / fov_tan;
-			const float w = h / aspect_ratio;
-			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
-			
-			return Mat44(
-				w, 0, 0, 0,
-				0, h, 0, 0,
-				0, 0, 0, near_z,
-				0, 0, z_sign, 0
-			);
-		}
+		);
+		
 		// 正規化デバイス座標(NDC)のZ値からView空間Z値を計算するための係数. PerspectiveProjectionMatrixの方式によってCPU側で計算される値を変えることでシェーダ側は同一コード化.
 		//	view_z = cb_ndc_z_to_view_z_coef.x / ( ndc_z * cb_ndc_z_to_view_z_coef.y + cb_ndc_z_to_view_z_coef.z )
 		//		cb_ndc_z_to_view_z_coef = 
@@ -217,35 +151,13 @@ namespace ngl
 
 
 		// 標準平行投影.
-		inline Mat44 CalcStandardOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode)
-		{
-			const float w = 2.0f / width;
-			const float h = 2.0f / height;
-			const float range_term = 1.0f / (far_z - near_z);
-			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
-
-			return Mat44(
-				w, 0, 0, 0,
-				0, h, 0, 0,
-				0, 0, z_sign * range_term, -near_z * range_term,
-				0, 0, 0, 1
-			);
-		}
+		Mat44 CalcStandardOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode);
+		
 		// Reverse平行投影.
-		inline Mat44 CalcReverseOrthographicMatrix(float width, float height, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode)
-		{
-			const float w = 2.0f / width;
-			const float h = 2.0f / height;
-			const float range_term = 1.0f / (near_z - far_z);// Reverse.
-			const float z_sign = (!is_right_hand) ? 1.0f : -1.0f;
-
-			return Mat44(
-				w, 0, 0, 0,
-				0, h, 0, 0,
-				0, 0, z_sign * range_term, -far_z * range_term,
-				0, 0, 0, 1
-			);
-		}
+		Mat44 CalcReverseOrthographicMatrix(float left, float right, float bottom, float top, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode);
+		
+		// Reverse平行投影.
+		Mat44 CalcReverseOrthographicMatrixSymmetric(float width, float height, float near_z, float far_z, bool is_right_hand = k_defalut_right_hand_mode);
 
 
 		// ------------------------------------------------------------------------------------------------

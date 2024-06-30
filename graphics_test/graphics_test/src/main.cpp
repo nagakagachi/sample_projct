@@ -65,7 +65,7 @@ private:
 
 	ngl::math::Vec3		camera_pos_ = {0.0f, 2.0f, -1.0f};
 	ngl::math::Mat33	camera_pose_ = ngl::math::Mat33::Identity();
-	float				camera_fov_y = ngl::math::Deg2Rad(60.0f);
+	float				camera_fov_y = ngl::math::Deg2Rad(60.0f);// not half fov.
 
 
 	ngl::rhi::DeviceDep							device_;

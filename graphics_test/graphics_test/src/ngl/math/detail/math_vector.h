@@ -291,6 +291,9 @@ namespace ngl
 		using Vec3 = VecN<3>;
 		using Vec4 = VecN<4>;
 
+		static constexpr auto k_sizeof_Vec2 = sizeof(Vec2);
+		static constexpr auto k_sizeof_Vec3 = sizeof(Vec3);
+		static constexpr auto k_sizeof_Vec4 = sizeof(Vec4);
 
 		namespace
 		{
