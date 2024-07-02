@@ -251,9 +251,13 @@ namespace ngl
 						v0.x * v1.y - v1.x * v0.y);
 				}
 			}
+			static float LengthSq(const VecN& v)
+			{
+				return Dot(v, v);
+			}
 			static float Length(const VecN& v)
 			{
-				return std::sqrt(Dot(v, v));
+				return std::sqrt(LengthSq(v));
 			}
 
 			static VecN Normalize(const VecN& v)

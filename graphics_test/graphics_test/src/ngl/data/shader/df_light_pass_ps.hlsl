@@ -68,7 +68,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	
 	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * ngl_PI * 2.0;
 	//const float3 lit_dir = normalize(float3(-0.5, -1.0, -0.4));
-	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx._m02_m12_m22);// ShadowViewの向きを利用.
+	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx[0]._m02_m12_m22);// ShadowViewの向きを利用.
 
 
 	const float3 V = -to_pixel_ray_ws;
@@ -81,8 +81,8 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 		const float k_max_shadow_sample_slope_bias_ws = 0.05;
 		const float shadow_sample_slope_bias_ws = k_max_shadow_sample_slope_bias_ws * pow(1.0 - saturate(dot(L, gb_normal_ws)), 1.0/8.0);// スロープバイアス.
 
-		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx, float4(pixel_pos_ws + (L * (shadow_sample_slope_bias_ws + shadow_sample_bias_ws)), 1.0));
-		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx, float4(pixel_pos_shadow_vs, 1.0));
+		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[0], float4(pixel_pos_ws + (L * (shadow_sample_slope_bias_ws + shadow_sample_bias_ws)), 1.0));
+		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[0], float4(pixel_pos_shadow_vs, 1.0));
 		const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz / pixel_pos_shadow_cs.w;
 		float2 pixel_pos_shadow_uv = pixel_pos_shadow_cs_pd.xy * 0.5 + 0.5;
 		pixel_pos_shadow_uv.y = 1.0 - pixel_pos_shadow_uv.y;// Y反転.

@@ -38,8 +38,8 @@
             pos_ws = pos_ws + mtl_output.position_offset_ws;
             // 再計算.
             // Shadowの場合はMaterial計算用はSceneView, 最終的な変換はShadowViewで変換する.
-            pos_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx, float4(pos_ws, 1.0));
-            pos_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx, float4(pos_vs, 1.0));
+            pos_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[0], float4(pos_ws, 1.0));
+            pos_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[0], float4(pos_vs, 1.0));
         }
         
         VS_OUTPUT output = (VS_OUTPUT)0;

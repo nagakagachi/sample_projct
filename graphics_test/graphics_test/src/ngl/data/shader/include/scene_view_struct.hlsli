@@ -43,14 +43,15 @@ float3 CalcViewSpaceRay(float2 screen_uv, float4x4 proj_mtx)
 	return ray_dir_view;
 }
 
-
+// 十分なサイズ指定.
+#define k_directional_shadow_cascade_cb_max 8
 // DirectionalShadow定数バッファ構造定義.
 struct SceneDirectionalShadowInfo
 {
-	float3x4 cb_shadow_view_mtx;
-	float3x4 cb_shadow_view_inv_mtx;
-	float4x4 cb_shadow_proj_mtx;
-	float4x4 cb_shadow_proj_inv_mtx;
+	float3x4 cb_shadow_view_mtx[k_directional_shadow_cascade_cb_max];
+	float3x4 cb_shadow_view_inv_mtx[k_directional_shadow_cascade_cb_max];
+	float4x4 cb_shadow_proj_mtx[k_directional_shadow_cascade_cb_max];
+	float4x4 cb_shadow_proj_inv_mtx[k_directional_shadow_cascade_cb_max];
 };
 
 
