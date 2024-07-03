@@ -16,6 +16,7 @@ namespace gfx
     {
         // Commandlistに指定サイズのフルスクリーンViewportとScissorを設定する.
         void SetFullscreenViewportAndScissor(rhi::GraphicsCommandListDep* p_command_list, int width, int height);
+        void SetFullscreenViewportAndScissor(rhi::GraphicsCommandListDep* p_command_list, int left, int top, int width, int height);
 
     }
 }

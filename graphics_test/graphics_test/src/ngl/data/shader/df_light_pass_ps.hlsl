@@ -15,7 +15,7 @@ struct VS_OUTPUT
 
 #include "include/scene_view_struct.hlsli"
 ConstantBuffer<SceneViewInfo> ngl_cb_sceneview;
-ConstantBuffer<SceneDirectionalShadowInfo> ngl_cb_shadowview;
+ConstantBuffer<SceneDirectionalShadowSampleInfo> ngl_cb_shadowview;
 
 
 Texture2D tex_lineardepth;// Linear View Depth.
@@ -59,16 +59,17 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	float3 gb_emissive = gb3.xyz;
 
 	
+	const float3 camera_dir = normalize(ngl_cb_sceneview.cb_view_inv_mtx._m02_m12_m22);// InvShadowViewMtxから向きベクトルを取得.
 
 	// ピクセルへのワールド空間レイを計算.
 	const float3 to_pixel_ray_vs = CalcViewSpaceRay(input.uv, ngl_cb_sceneview.cb_proj_mtx);
 	const float3 pixel_pos_ws = mul(ngl_cb_sceneview.cb_view_inv_mtx, float4((to_pixel_ray_vs/abs(to_pixel_ray_vs.z)) * ld, 1.0));
-	const float3 to_pixel_ray_ws = normalize(pixel_pos_ws - ngl_cb_sceneview.cb_view_inv_mtx._m03_m13_m23);
+	const float3 to_pixel_vec_ws = pixel_pos_ws - ngl_cb_sceneview.cb_view_inv_mtx._m03_m13_m23;
+	const float3 to_pixel_ray_ws = normalize(to_pixel_vec_ws);
 
 	
 	const float3 lit_intensity = float3(1.0, 1.0, 1.0) * ngl_PI * 2.0;
-	//const float3 lit_dir = normalize(float3(-0.5, -1.0, -0.4));
-	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx[0]._m02_m12_m22);// ShadowViewの向きを利用.
+	const float3 lit_dir = normalize(ngl_cb_shadowview.cb_shadow_view_inv_mtx[0]._m02_m12_m22);// InvShadowViewMtxから向きベクトルを取得.
 
 
 	const float3 V = -to_pixel_ray_ws;
@@ -76,16 +77,42 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	
 	float light_visibility = 1.0;
 	{
+#if 1
+		// Cascade Index.
+		const float view_depth = dot(to_pixel_vec_ws, camera_dir);
+		int sample_cascade_index = ngl_cb_shadowview.cb_valid_cascade_count - 1;
+		for(int i = 0; i < ngl_cb_shadowview.cb_valid_cascade_count ; ++i)
+		{
+			if(view_depth < ngl_cb_shadowview.cb_cascade_far_distance[i])
+			{
+				sample_cascade_index = i;
+				break;
+			}
+		}
+		
+#else	
+		const int sample_cascade_index = 0;
+#endif
+		
 		// Shadowmap Sample.
 		const float shadow_sample_bias_ws = 0.01;// 基準バイアス.
 		const float k_max_shadow_sample_slope_bias_ws = 0.05;
 		const float shadow_sample_slope_bias_ws = k_max_shadow_sample_slope_bias_ws * pow(1.0 - saturate(dot(L, gb_normal_ws)), 1.0/8.0);// スロープバイアス.
 
-		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[0], float4(pixel_pos_ws + (L * (shadow_sample_slope_bias_ws + shadow_sample_bias_ws)), 1.0));
-		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[0], float4(pixel_pos_shadow_vs, 1.0));
+		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[sample_cascade_index], float4(pixel_pos_ws + (L * (shadow_sample_slope_bias_ws + shadow_sample_bias_ws)), 1.0));
+		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[sample_cascade_index], float4(pixel_pos_shadow_vs, 1.0));
 		const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz / pixel_pos_shadow_cs.w;
+		
 		float2 pixel_pos_shadow_uv = pixel_pos_shadow_cs_pd.xy * 0.5 + 0.5;
 		pixel_pos_shadow_uv.y = 1.0 - pixel_pos_shadow_uv.y;// Y反転.
+
+		// Atlas対応.
+		if(true)
+		{
+			pixel_pos_shadow_uv *= ngl_cb_shadowview.cb_cascade_tile_uvoffset_uvscale[sample_cascade_index].zw;
+			pixel_pos_shadow_uv += ngl_cb_shadowview.cb_cascade_tile_uvoffset_uvscale[sample_cascade_index].xy;
+		}
+		
 
 		if(true)
 		{

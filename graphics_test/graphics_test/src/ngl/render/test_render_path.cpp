@@ -177,12 +177,12 @@ namespace ngl::test
 					ngl::render::task::TaskLightPass::SetupDesc setup_desc{};
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
-						setup_desc.ref_shadow_cbv = task_d_shadow->ref_d_shadow_cbv_;
+						setup_desc.ref_shadow_cbv = task_d_shadow->ref_d_shadow_sample_cbv_;
 					}
 					task_light->Setup(rtg_builder, p_device, view_info,
 						task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
 						task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, render_frame_desc.h_prev_lit,
-						task_d_shadow->h_depth_,
+						task_d_shadow->h_shadow_depth_atlas_,
 						setup_desc);
 				}
 

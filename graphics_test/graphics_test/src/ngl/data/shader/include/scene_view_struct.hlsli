@@ -43,15 +43,27 @@ float3 CalcViewSpaceRay(float2 screen_uv, float4x4 proj_mtx)
 	return ray_dir_view;
 }
 
+
 // 十分なサイズ指定.
 #define k_directional_shadow_cascade_cb_max 8
-// DirectionalShadow定数バッファ構造定義.
-struct SceneDirectionalShadowInfo
+// Directional Cascade Shadow Sampling用 定数バッファ構造定義.
+struct SceneDirectionalShadowSampleInfo
 {
 	float3x4 cb_shadow_view_mtx[k_directional_shadow_cascade_cb_max];
 	float3x4 cb_shadow_view_inv_mtx[k_directional_shadow_cascade_cb_max];
 	float4x4 cb_shadow_proj_mtx[k_directional_shadow_cascade_cb_max];
 	float4x4 cb_shadow_proj_inv_mtx[k_directional_shadow_cascade_cb_max];
+
+	float4 cb_cascade_tile_uvoffset_uvscale[k_directional_shadow_cascade_cb_max];
+	
+	int cb_valid_cascade_count;
+
+	float cb_pad0;
+	float cb_pad1;
+	float cb_pad2;
+	
+	float cb_cascade_far_distance[k_directional_shadow_cascade_cb_max];
+	
 };
 
 

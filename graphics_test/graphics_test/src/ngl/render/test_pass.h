@@ -219,15 +219,29 @@ namespace ngl::render
 			float split_distance_ws[k_cascade_count];
 			float split_rate[k_cascade_count];
 			
-			math::Vec3 split_frustum_bound_center[k_cascade_count];
-			float split_frustum_bound_radius[k_cascade_count];
+			int cascade_tile_offset_x[k_cascade_count];
+			int cascade_tile_offset_y[k_cascade_count];
+			int cascade_tile_size_x[k_cascade_count];
+			int cascade_tile_size_y[k_cascade_count];
+			
+			int atlas_resolution;
 			
 			math::Mat34 light_view_mtx[k_cascade_count];
 			math::Mat44 light_ortho_mtx[k_cascade_count];
 		};
+
 		
-		// DirectionalShadow用.
-		struct SceneDirectionalShadowInfo
+		// Directional Cascade Shadow Rendering用 定数バッファ構造定義.
+		struct SceneDirectionalShadowRenderInfo
+		{
+			math::Mat34 cb_shadow_view_mtx;
+			math::Mat34 cb_shadow_view_inv_mtx;
+			math::Mat44 cb_shadow_proj_mtx;
+			math::Mat44 cb_shadow_proj_inv_mtx;
+		};
+		
+		// DirectionalShadow Sampling用.
+		struct SceneDirectionalShadowSampleInfo
 		{
 			static constexpr int k_directional_shadow_cascade_cb_max = 8;
 			
@@ -235,6 +249,16 @@ namespace ngl::render
 			math::Mat34 cb_shadow_view_inv_mtx[k_directional_shadow_cascade_cb_max];
 			math::Mat44 cb_shadow_proj_mtx[k_directional_shadow_cascade_cb_max];
 			math::Mat44 cb_shadow_proj_inv_mtx[k_directional_shadow_cascade_cb_max];
+			
+			math::Vec4 cb_cascade_tile_uvoffset_uvscale[k_directional_shadow_cascade_cb_max];
+			
+			int cb_valid_cascade_count;// float配列の後ろだとCBアライメントでずれるのでここに.
+			
+			float cb_pad0;
+			float cb_pad1;
+			float cb_pad2;
+
+			float cb_cascade_far_distance[k_directional_shadow_cascade_cb_max];// 各Cascadeの遠方側境界のView距離.
 		};
 		
 		
@@ -243,16 +267,19 @@ namespace ngl::render
 		{
 			// ノード定義コンストラクタ記述マクロ.
 			ITASK_NODE_DEF_BEGIN(TaskDirectionalShadowPass)
-				ITASK_NODE_HANDLE_REGISTER(h_depth_)
+				ITASK_NODE_HANDLE_REGISTER(h_shadow_depth_atlas_)
 				ITASK_NODE_DEF_END
 
-				rtg::ResourceHandle h_depth_{};
+				rtg::ResourceHandle h_shadow_depth_atlas_{};
 
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 
-			rhi::RefBufferDep ref_d_shadow_cb_{};
-			rhi::RefCbvDep ref_d_shadow_cbv_{};// 内部用.
+			rhi::RefBufferDep ref_d_shadow_sample_cb_{};
+			rhi::RefCbvDep ref_d_shadow_sample_cbv_{};// 内部用.
+
+			// Cascade情報. Setupで計算.
+			CascadeShadowMapParameter csm_param_{};
 
 			struct SetupDesc
 			{
@@ -265,66 +292,138 @@ namespace ngl::render
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				const SetupDesc& desc)
 			{
-				constexpr int shadowmap_reso = 1024*2;
-				const float shadowmap_far_range = 400.0f;
+				const float shadowmap_far_range = 100.0f;
 				
+				constexpr int shadowmap_single_reso = 1024*2;
+				// Atlasで1枚に4Cascade分確保.
+				constexpr int shadowmap_atlas_reso = shadowmap_single_reso * 2;
 				// リソース定義.
-				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsAbsoluteSize(shadowmap_reso, shadowmap_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+				rtg::ResourceDesc2D depth_desc =
+					rtg::ResourceDesc2D::CreateAsAbsoluteSize(shadowmap_atlas_reso, shadowmap_atlas_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
 
 				// リソースアクセス定義.
-				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+				h_shadow_depth_atlas_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
 
 				{
 					ref_scene_cbv_ = desc.ref_scene_cbv;
 					p_mesh_list_ = desc.p_mesh_list;
 				}
 
-				ref_d_shadow_cb_ = new rhi::BufferDep();
+				// ShadowSample用の定数バッファ.
+				ref_d_shadow_sample_cb_ = new rhi::BufferDep();
 				{
 					rhi::BufferDep::Desc cb_desc{};
-					cb_desc.SetupAsConstantBuffer(sizeof(SceneDirectionalShadowInfo));
-					ref_d_shadow_cb_->Initialize(p_device, cb_desc);
+					cb_desc.SetupAsConstantBuffer(sizeof(SceneDirectionalShadowSampleInfo));
+					ref_d_shadow_sample_cb_->Initialize(p_device, cb_desc);
 				}
-				ref_d_shadow_cbv_ = new rhi::ConstantBufferViewDep();
+				ref_d_shadow_sample_cbv_ = new rhi::ConstantBufferViewDep();
 				{
 					rhi::ConstantBufferViewDep::Desc cbv_desc{};
-					ref_d_shadow_cbv_->Initialize(ref_d_shadow_cb_.Get(), cbv_desc);
+					ref_d_shadow_sample_cbv_->Initialize(ref_d_shadow_sample_cb_.Get(), cbv_desc);
 				}
 
+				// ----------------------------------
+				// Cascade情報セットアップ.
+				csm_param_ = {};
+				csm_param_.atlas_resolution = shadowmap_atlas_reso;
+				
 				const auto view_forward_dir = view_info.camera_pose.GetColumn2();
 				const auto view_up_dir = view_info.camera_pose.GetColumn1();
 				const auto view_right_dir = view_info.camera_pose.GetColumn0();// LeftHandとしてSideAxis(右)ベクトル.
 
-				
 				// 単位Frustumの頂点へのベクトル.
 				math::ViewPositionRelativeFrustumCorners frustum_corners;
 				math::CreateFrustumCorners(frustum_corners,
 					view_info.camera_pos, view_forward_dir, view_up_dir, view_right_dir, view_info.camera_fov_y, view_info.aspect_ratio);
 				
-				CascadeShadowMapParameter csm_param;
-				const float cascade_split_lambda = 0.5f;
 				const float mainview_min_z = view_info.near_z;
-				const float mainview_max_z = shadowmap_far_range;
-				const float mainview_z_range = mainview_max_z - mainview_min_z;
-				const float mainview_z_rate = mainview_min_z / mainview_max_z;
-				for(int ci = 0; ci < csm_param.k_cascade_count; ++ci)
+				const float mainview_z_range = shadowmap_far_range - mainview_min_z;
+				/*
+				constexpr float k_direct_split_rate_array[] =
 				{
-					const float rate = static_cast<float>(ci + 1) / static_cast<float>(csm_param.k_cascade_count);
+					0.03f,
+					0.04f,
+					1.0f
+				};
+				static_assert(std::size(k_direct_split_rate_array) == csm_param_.k_cascade_count);
+				*/
+				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
+				{
+					const float rate = static_cast<float>(ci + 1) / static_cast<float>(csm_param_.k_cascade_count);
+					//const float split_rate = std::powf(rate, 4.0f);// 適当な対数分割.
+					const float split_rate = std::powf(rate, 2.0f);// 適当な対数分割.
 
-					const float split_rate = rate*rate*rate*rate;// 適当な対数分割.
+					//const float split_rate = k_direct_split_rate_array[ci];
 					
 					// 分割位置割合とワールド距離.
-					csm_param.split_rate[ci] = split_rate;
-					csm_param.split_distance_ws[ci] = split_rate * mainview_z_range + mainview_min_z;
+					csm_param_.split_rate[ci] = split_rate;
+					csm_param_.split_distance_ws[ci] = split_rate * mainview_z_range + mainview_min_z;
 				}
 				
-				for(int ci = 0; ci < csm_param.k_cascade_count; ++ci)
+				const math::Vec3 lightview_forward = desc.directional_light_dir;
+				const math::Vec3 lightview_helper_side_unit = (0.9f > std::abs(lightview_forward.x))? math::Vec3::UnitX() : math::Vec3::UnitZ();
+				const math::Vec3 lightview_up = math::Vec3::Normalize(math::Vec3::Cross(lightview_forward, lightview_helper_side_unit));
+				const math::Vec3 lightview_side = math::Vec3::Normalize(math::Vec3::Cross(lightview_up, lightview_forward));
+
+				// 原点位置のLitght ViewMtx.
+				const math::Mat34 lightview_view_mtx = math::CalcViewMatrix(math::Vec3::Zero(), lightview_forward, lightview_up);
+
+				
+				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
 				{
 					// TODO.
 					// frustum_corners を利用して分割面の位置計算.
-					const float near_dist_ws = (0 == ci)? view_info.near_z : csm_param.split_distance_ws[ci-1];
-					const float far_dist_ws = csm_param.split_distance_ws[ci];
+					const float near_dist_ws = (0 == ci)? view_info.near_z : csm_param_.split_distance_ws[ci-1];
+					const float far_dist_ws = csm_param_.split_distance_ws[ci];
+#if 1
+					math::Vec3 split_frustum_near4_far4_ws[] =
+					{
+						frustum_corners.corner_vec[0] * near_dist_ws + frustum_corners.view_pos,
+						frustum_corners.corner_vec[1] * near_dist_ws + frustum_corners.view_pos,
+						frustum_corners.corner_vec[2] * near_dist_ws + frustum_corners.view_pos,
+						frustum_corners.corner_vec[3] * near_dist_ws + frustum_corners.view_pos,
+						
+						frustum_corners.corner_vec[0] * far_dist_ws + frustum_corners.view_pos,
+						frustum_corners.corner_vec[1] * far_dist_ws + frustum_corners.view_pos,
+						frustum_corners.corner_vec[2] * far_dist_ws + frustum_corners.view_pos,
+						frustum_corners.corner_vec[3] * far_dist_ws + frustum_corners.view_pos,
+					};
 
+					// TODO.
+					// LightViewでのAABBからOrthoを計算しようとしている.
+					//	しかしViewDistanceとLightViewAABBの範囲がうまく重ならずCascade境界が空白になる問題.
+					{
+						math::Vec3 lightview_vtx_pos_min = math::Vec3(FLT_MAX);
+						math::Vec3 lightview_vtx_pos_max = math::Vec3(-FLT_MAX);
+						for(int fvi = 0; fvi < std::size(split_frustum_near4_far4_ws); ++fvi)
+						{
+							const math::Vec3 lightview_vtx_pos(
+								math::Vec3::Dot(split_frustum_near4_far4_ws[fvi], lightview_side),
+								math::Vec3::Dot(split_frustum_near4_far4_ws[fvi], lightview_up),
+								math::Vec3::Dot(split_frustum_near4_far4_ws[fvi], lightview_forward)
+							);
+
+							lightview_vtx_pos_min.x = std::min(lightview_vtx_pos_min.x, lightview_vtx_pos.x);
+							lightview_vtx_pos_min.y = std::min(lightview_vtx_pos_min.y, lightview_vtx_pos.y);
+							lightview_vtx_pos_min.z = std::min(lightview_vtx_pos_min.z, lightview_vtx_pos.z);
+							
+							lightview_vtx_pos_max.x = std::max(lightview_vtx_pos_max.x, lightview_vtx_pos.x);
+							lightview_vtx_pos_max.y = std::max(lightview_vtx_pos_max.y, lightview_vtx_pos.y);
+							lightview_vtx_pos_max.z = std::max(lightview_vtx_pos_max.z, lightview_vtx_pos.z);
+						}
+						
+						constexpr float shadow_near_far_offset = 200.0f;
+						const math::Mat44 lightview_ortho = math::CalcReverseOrthographicMatrix(
+							lightview_vtx_pos_min.x, lightview_vtx_pos_max.x,
+							lightview_vtx_pos_min.y, lightview_vtx_pos_max.y,
+							lightview_vtx_pos_min.z - shadow_near_far_offset, lightview_vtx_pos_max.z + shadow_near_far_offset
+							);
+
+						csm_param_.light_view_mtx[ci] = lightview_view_mtx;
+						csm_param_.light_ortho_mtx[ci] = lightview_ortho;
+					}
+
+#else
 					math::Vec3 split_frustum_offset_near4_far4[] =
 					{
 						frustum_corners.corner_vec[0] * near_dist_ws,
@@ -337,7 +436,7 @@ namespace ngl::render
 						frustum_corners.corner_vec[2] * far_dist_ws,
 						frustum_corners.corner_vec[3] * far_dist_ws,
 					};
-
+					
 					math::Vec3 split_frustum_com =
 						std::reduce(std::begin(split_frustum_offset_near4_far4), std::end(split_frustum_offset_near4_far4));
 					split_frustum_com /= static_cast<float>(std::size(split_frustum_offset_near4_far4));
@@ -351,25 +450,8 @@ namespace ngl::render
 					const float split_frustum_bound_radius = std::sqrt(max_dist_sq);
 					const math::Vec3 split_frustum_bound_center = split_frustum_com + frustum_corners.view_pos;
 
-					// 分割Frustum毎のバウンディングスフィア.
-					csm_param.split_frustum_bound_center[ci] = split_frustum_bound_center;
-					csm_param.split_frustum_bound_radius[ci] = split_frustum_bound_radius;
-				}
-
-				
-					
-				const math::Vec3 lightview_forward = desc.directional_light_dir;
-				const math::Vec3 lightview_helper_side_unit = (0.9f > std::abs(lightview_forward.x))? math::Vec3::UnitX() : math::Vec3::UnitZ();
-				const math::Vec3 lightview_up = math::Vec3::Normalize(math::Vec3::Cross(lightview_forward, lightview_helper_side_unit));
-				const math::Vec3 lightview_side = math::Vec3::Normalize(math::Vec3::Cross(lightview_up, lightview_forward));
-
-				// 原点位置のLitght ViewMtx.
-				const math::Mat34 lightview_view_mtx = math::CalcViewMatrix(math::Vec3::Zero(), lightview_forward, lightview_up);
-				
-				for(int ci = 0; ci < csm_param.k_cascade_count; ++ci)
-				{
-					const auto center = csm_param.split_frustum_bound_center[ci];
-					const auto radius = csm_param.split_frustum_bound_radius[ci];
+					const auto center = split_frustum_bound_center;
+					const auto radius = split_frustum_bound_radius;
 
 					const math::Vec3 lightview_center = {math::Vec3::Dot(center, lightview_side), math::Vec3::Dot(center, lightview_up), math::Vec3::Dot(center, lightview_forward)};
 
@@ -380,36 +462,49 @@ namespace ngl::render
 						lightview_center.z - radius - shadow_near_far_offset, lightview_center.z + radius + shadow_near_far_offset
 						);
 
-					csm_param.light_view_mtx[ci] = lightview_view_mtx;
-					csm_param.light_ortho_mtx[ci] = lightview_ortho;
+					csm_param_.light_view_mtx[ci] = lightview_view_mtx;
+					csm_param_.light_ortho_mtx[ci] = lightview_ortho;
+#endif
 				}
 
-				
+				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
 				{
-					{
-#if 0
-						math::Vec3 lookat_pos = view_info.camera_pos + (view_forward_dir * 4.0);
-						math::Vec3 light_view_dir = desc.directional_light_dir;
-						math::Vec3 light_view_up = math::Vec3::Normalize({desc.directional_light_dir.z, desc.directional_light_dir.x, desc.directional_light_dir.y});
-						math::Vec3 light_pos = lookat_pos - light_view_dir * 500.0f;
+					// 2x2 Atlas のTileのマッピングを決定.
+					assert((2*2) > csm_param_.k_cascade_count);// 現状は 2x2 のAtlas固定で各所の実装をしているのでチェック.
+					const int cascade_tile_x = ci & 0x01;
+					const int cascade_tile_y = (ci >> 1) & 0x01;
+					csm_param_.cascade_tile_offset_x[ci] = shadowmap_single_reso * cascade_tile_x;
+					csm_param_.cascade_tile_offset_y[ci] = shadowmap_single_reso * cascade_tile_y;
+					csm_param_.cascade_tile_size_x[ci] = shadowmap_single_reso;
+					csm_param_.cascade_tile_size_y[ci] = shadowmap_single_reso;
+				}
 
-						ngl::math::Mat34 view_mat = ngl::math::CalcViewMatrix(light_pos, light_view_dir, light_view_up);
-						ngl::math::Mat44 proj_mat = ngl::math::CalcReverseOrthographicMatrixSymmetric(shadowmap_widht_ws, shadowmap_widht_ws, near_z, far_z);
-#endif						
-						if (auto* mapped = ref_d_shadow_cb_->MapAs<SceneDirectionalShadowInfo>())
-						{
-							assert(csm_param.k_cascade_count < mapped->k_directional_shadow_cascade_cb_max);// バッファサイズが足りているか.
-							for(int ci = 0; ci < csm_param.k_cascade_count; ++ci)
-							{
-								mapped->cb_shadow_view_mtx[ci] = csm_param.light_view_mtx[ci];
-								mapped->cb_shadow_proj_mtx[ci] = csm_param.light_ortho_mtx[ci];
-								mapped->cb_shadow_view_inv_mtx[ci] = ngl::math::Mat34::Inverse(csm_param.light_view_mtx[ci]);
-								mapped->cb_shadow_proj_inv_mtx[ci] = ngl::math::Mat44::Inverse(csm_param.light_ortho_mtx[ci]);
-							}
-							
-							ref_d_shadow_cb_->Unmap();
-						}
+				if (auto* mapped = ref_d_shadow_sample_cb_->MapAs<SceneDirectionalShadowSampleInfo>())
+				{
+					assert(csm_param_.k_cascade_count < mapped->k_directional_shadow_cascade_cb_max);// バッファサイズが足りているか.
+
+					mapped->cb_valid_cascade_count = csm_param_.k_cascade_count;
+					
+					for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
+					{
+						mapped->cb_shadow_view_mtx[ci] = csm_param_.light_view_mtx[ci];
+						mapped->cb_shadow_proj_mtx[ci] = csm_param_.light_ortho_mtx[ci];
+						mapped->cb_shadow_view_inv_mtx[ci] = ngl::math::Mat34::Inverse(csm_param_.light_view_mtx[ci]);
+						mapped->cb_shadow_proj_inv_mtx[ci] = ngl::math::Mat44::Inverse(csm_param_.light_ortho_mtx[ci]);
+
+						// Sample用のAtlas上のUV情報.
+						const auto tile_offset_x_f = static_cast<float>(csm_param_.cascade_tile_offset_x[ci]);
+						const auto tile_offset_y_f = static_cast<float>(csm_param_.cascade_tile_offset_y[ci]);
+						const auto tile_size_x_f = static_cast<float>(csm_param_.cascade_tile_size_x[ci]);
+						const auto tile_size_y_f = static_cast<float>(csm_param_.cascade_tile_size_y[ci]);
+						const auto atlas_size_f = static_cast<float>(csm_param_.atlas_resolution);
+						mapped->cb_cascade_tile_uvoffset_uvscale[ci] =
+							math::Vec4(tile_offset_x_f, tile_offset_y_f, tile_size_x_f, tile_size_y_f) / atlas_size_f;
+						
+						mapped->cb_cascade_far_distance[ci] = csm_param_.split_distance_ws[ci];
 					}
+					
+					ref_d_shadow_sample_cb_->Unmap();
 				}
 			}
 
@@ -417,25 +512,70 @@ namespace ngl::render
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
-				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
-				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
+				auto res_shadow_depth_atlas = builder.GetAllocatedResource(this, h_shadow_depth_atlas_);
+				assert(res_shadow_depth_atlas.tex_.IsValid() && res_shadow_depth_atlas.dsv_.IsValid());
 
-
-				gfx_commandlist->ClearDepthTarget(res_depth.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
+				// Atlas全域クリア.
+				gfx_commandlist->ClearDepthTarget(res_shadow_depth_atlas.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
 
 				// Set RenderTarget.
-				gfx_commandlist->SetRenderTargets(nullptr, 0, res_depth.dsv_.Get());
-
-				// Set Viewport and Scissor.
-				ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_depth.tex_->GetWidth(), res_depth.tex_->GetHeight());
-
-				// Mesh Rendering.
-				gfx::RenderMeshResource render_mesh_res = {};
+				gfx_commandlist->SetRenderTargets(nullptr, 0, res_shadow_depth_atlas.dsv_.Get());
+				
+				// 描画するCascadeIndex.
+				for(int cascade_index = 0; cascade_index < csm_param_.k_cascade_count; ++cascade_index)
 				{
-					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
-					render_mesh_res.cbv_d_shadowview = {"ngl_cb_shadowview", ref_d_shadow_cbv_.Get()};
+					// Cascade用の定数バッファを都度生成.
+					rhi::RefBufferDep ref_shadow_render_cb = new rhi::BufferDep();
+					rhi::RefCbvDep ref_shadow_render_cbv = new rhi::ConstantBufferViewDep();
+					{
+						rhi::BufferDep::Desc cb_desc{};
+						cb_desc.SetupAsConstantBuffer(sizeof(SceneDirectionalShadowRenderInfo));
+						ref_shadow_render_cb->Initialize(gfx_commandlist->GetDevice(), cb_desc);
+					}
+					{
+						rhi::ConstantBufferViewDep::Desc cbv_desc{};
+						ref_shadow_render_cbv->Initialize(ref_shadow_render_cb.Get(), cbv_desc);
+					}
+					if (auto* mapped = ref_shadow_render_cb->MapAs<SceneDirectionalShadowRenderInfo>())
+					{
+						const auto csm_info_index = cascade_index;
+						
+						assert(csm_info_index < csm_param_.k_cascade_count);// 不正なIndexでないか.
+						mapped->cb_shadow_view_mtx = csm_param_.light_view_mtx[csm_info_index];
+						mapped->cb_shadow_proj_mtx = csm_param_.light_ortho_mtx[csm_info_index];
+						mapped->cb_shadow_view_inv_mtx = ngl::math::Mat34::Inverse(csm_param_.light_view_mtx[csm_info_index]);
+						mapped->cb_shadow_proj_inv_mtx = ngl::math::Mat44::Inverse(csm_param_.light_ortho_mtx[csm_info_index]);
+					
+						ref_d_shadow_sample_cb_->Unmap();
+					}
+
+					/*
+					// 2x2 Atlas の1Tile位置.
+					const auto csm_tile_index = cascade_index;
+					const int cascade_tile_x = csm_tile_index & 0x01;
+					const int cascade_tile_y = (csm_tile_index >> 1) & 0x01;
+
+					// Set Viewport and Scissor.
+					// 2x2 の1Tileのサイズ.
+					const auto cascade_tile_w = res_shadow_depth_atlas.tex_->GetWidth() / 2;
+					const auto cascade_tile_h = res_shadow_depth_atlas.tex_->GetHeight() / 2;
+					const auto cascade_tile_offset_x = cascade_tile_x * cascade_tile_w;
+					const auto cascade_tile_offset_y = cascade_tile_y * cascade_tile_h;
+					*/
+					const auto cascade_tile_w = csm_param_.cascade_tile_size_x[cascade_index];
+					const auto cascade_tile_h = csm_param_.cascade_tile_size_y[cascade_index];
+					const auto cascade_tile_offset_x = csm_param_.cascade_tile_offset_x[cascade_index];
+					const auto cascade_tile_offset_y = csm_param_.cascade_tile_offset_y[cascade_index];
+					ngl::gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, cascade_tile_offset_x, cascade_tile_offset_y, cascade_tile_w, cascade_tile_h);
+
+					// Mesh Rendering.
+					gfx::RenderMeshResource render_mesh_res = {};
+					{
+						render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+						render_mesh_res.cbv_d_shadowview = {"ngl_cb_shadowview", ref_shadow_render_cbv.Get()};
+					}
+					ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_d_shadow::k_name, *p_mesh_list_, render_mesh_res);
 				}
-				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_d_shadow::k_name, *p_mesh_list_, render_mesh_res);
 			}
 		};
 		
