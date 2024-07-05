@@ -257,8 +257,8 @@ namespace ngl::render
 			float cb_pad0;
 			float cb_pad1;
 			float cb_pad2;
-
-			float cb_cascade_far_distance[k_directional_shadow_cascade_cb_max];// 各Cascadeの遠方側境界のView距離.
+			// 各Cascadeの遠方側境界のView距離. 格納はアライメント対策で4要素ずつ.
+			math::Vec4 cb_cascade_far_distance4[k_directional_shadow_cascade_cb_max/4];
 		};
 		
 		
@@ -501,7 +501,7 @@ namespace ngl::render
 						mapped->cb_cascade_tile_uvoffset_uvscale[ci] =
 							math::Vec4(tile_offset_x_f, tile_offset_y_f, tile_size_x_f, tile_size_y_f) / atlas_size_f;
 						
-						mapped->cb_cascade_far_distance[ci] = csm_param_.split_distance_ws[ci];
+						mapped->cb_cascade_far_distance4[ci/4].data[ci%4] = csm_param_.split_distance_ws[ci];
 					}
 					
 					ref_d_shadow_sample_cb_->Unmap();

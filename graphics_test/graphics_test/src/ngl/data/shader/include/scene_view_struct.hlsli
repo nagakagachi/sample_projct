@@ -61,8 +61,10 @@ struct SceneDirectionalShadowSampleInfo
 	float cb_pad0;
 	float cb_pad1;
 	float cb_pad2;
-	
-	float cb_cascade_far_distance[k_directional_shadow_cascade_cb_max];
+
+	// // 各Cascadeの遠方側境界のView距離. 格納はアライメント対策で4要素ずつ. アライメント対策で4単位.
+	// シーケンシャルアクセスする場合は インデックスiについて cb_cascade_far_distance4[i/4][i%4] という記述で可能.
+	float4 cb_cascade_far_distance4[k_directional_shadow_cascade_cb_max/4];
 	
 };
 
