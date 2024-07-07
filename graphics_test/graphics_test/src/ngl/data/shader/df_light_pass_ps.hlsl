@@ -94,7 +94,6 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 	float light_visibility = 1.0;
 	int sample_cascade_index_debug = 0;
 	{
-#if 1
 		// Cascade Index.
 		const float view_depth = dot(to_pixel_vec_ws, camera_dir);
 		int sample_cascade_index = ngl_cb_shadowview.cb_valid_cascade_count - 1;
@@ -107,17 +106,26 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			}
 		}
 		
-#else	
-		const int sample_cascade_index = 1;
-#endif
 		sample_cascade_index_debug = sample_cascade_index;
 		
 		// Shadowmap Sample.
-		const float shadow_sample_bias_ws = 0.01;// 基準バイアス.
-		const float k_max_shadow_sample_slope_bias_ws = 0.05;
-		const float shadow_sample_slope_bias_ws = k_max_shadow_sample_slope_bias_ws * pow(1.0 - saturate(dot(L, gb_normal_ws)), 1.0/8.0);// スロープバイアス.
+		const float k_coef_constant_bias_ws = 0.01;
+		const float k_coef_slope_bias_ws = 0.02;
+		const float k_coef_normal_bias_ws = 0.03;
+		
+		const int sample_prev_cascade_index = sample_cascade_index - 1;
+		const float prev_cascade_distance = (0 < sample_cascade_index)? ngl_cb_shadowview.cb_cascade_far_distance4[sample_prev_cascade_index/4][sample_prev_cascade_index%4] : 0.0;
+		const float cascade_size_rate_based_on_c0 = (ngl_cb_shadowview.cb_cascade_far_distance4[sample_cascade_index/4][sample_cascade_index%4]) / ngl_cb_shadowview.cb_cascade_far_distance4[0][0];
 
-		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[sample_cascade_index], float4(pixel_pos_ws + (L * (shadow_sample_slope_bias_ws + shadow_sample_bias_ws)), 1.0));
+		const float slope_rate = (1.0 - saturate(dot(L, gb_normal_ws)));
+		const float slope_bias_ws = k_coef_slope_bias_ws * slope_rate;
+		const float normal_bias_ws = k_coef_normal_bias_ws * slope_rate;
+		float shadow_sample_bias = max(k_coef_constant_bias_ws, slope_bias_ws);
+
+		float3 shadow_sample_bias_vec_ws = (L * shadow_sample_bias) + (gb_normal_ws * normal_bias_ws);
+		shadow_sample_bias_vec_ws *= cascade_size_rate_based_on_c0;// Cascadeのサイズによる補正項.
+		
+		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[sample_cascade_index], float4(pixel_pos_ws + shadow_sample_bias_vec_ws, 1.0));
 		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[sample_cascade_index], float4(pixel_pos_shadow_vs, 1.0));
 		const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz;;
 		

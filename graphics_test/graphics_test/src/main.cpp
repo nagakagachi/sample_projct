@@ -319,7 +319,7 @@ bool AppGame::Initialize()
 		const float bistro_scale = 1.0f;
 
 		// 基本シーンモデル.
-#if 1
+#if 0
 		// Sponza.
 		const char* mesh_target_scene = mesh_file_sponza;
 		const float target_scene_base_scale = sponza_scale;

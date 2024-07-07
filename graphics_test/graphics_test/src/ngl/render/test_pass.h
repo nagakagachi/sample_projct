@@ -252,13 +252,10 @@ namespace ngl::render
 			
 			math::Vec4 cb_cascade_tile_uvoffset_uvscale[k_directional_shadow_cascade_cb_max];
 			
-			int cb_valid_cascade_count;// float配列の後ろだとCBアライメントでずれるのでここに.
-			
-			float cb_pad0;
-			float cb_pad1;
-			float cb_pad2;
 			// 各Cascadeの遠方側境界のView距離. 格納はアライメント対策で4要素ずつ.
 			math::Vec4 cb_cascade_far_distance4[k_directional_shadow_cascade_cb_max/4];
+			
+			int cb_valid_cascade_count;// float配列の後ろだとCBアライメントでずれるのでここに.
 		};
 		
 		
@@ -292,10 +289,15 @@ namespace ngl::render
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				const SetupDesc& desc)
 			{
-				const float shadowmap_far_range = 100.0f;
-				
+				// Cascade Shadowの最遠方距離.
+				const float shadowmap_far_range = 160.0f;
+				// Cascade Shadowの最近接Cascadeのカバー距離.
+				const float shadowmap_nearest_cascade_range = 20.0f;
+				// Cascade Shadowの最近接より遠方のCascadeの分割用指数.
+				const float shadowmap_cascade_split_power = 2.8f;
+				// Cascade 1つのサイズ.
 				constexpr int shadowmap_single_reso = 1024*2;
-				// Atlasで1枚に4Cascade分確保.
+				// CascadeをAtlas管理する際のトータルサイズ.
 				constexpr int shadowmap_atlas_reso = shadowmap_single_reso * 2;
 				// リソース定義.
 				rtg::ResourceDesc2D depth_desc =
@@ -335,31 +337,21 @@ namespace ngl::render
 				math::ViewPositionRelativeFrustumCorners frustum_corners;
 				math::CreateFrustumCorners(frustum_corners,
 					view_info.camera_pos, view_forward_dir, view_up_dir, view_right_dir, view_info.camera_fov_y, view_info.aspect_ratio);
-				
-				const float mainview_min_z = view_info.near_z;
-				const float mainview_z_range = shadowmap_far_range - mainview_min_z;
-				/*
-				constexpr float k_direct_split_rate_array[] =
-				{
-					0.03f,
-					0.04f,
-					1.0f
-				};
-				static_assert(std::size(k_direct_split_rate_array) == csm_param_.k_cascade_count);
-				*/
+
+				// 最近接Cascade距離を安全のためクランプ. 等間隔分割の場合を上限とする.
+				const float first_cascade_distance = std::min(shadowmap_nearest_cascade_range, shadowmap_far_range / static_cast<float>(csm_param_.k_cascade_count));
+				const float first_cascade_split_rate = first_cascade_distance / shadowmap_far_range;
 				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
 				{
-					const float rate = static_cast<float>(ci + 1) / static_cast<float>(csm_param_.k_cascade_count);
-					//const float split_rate = std::powf(rate, 4.0f);// 適当な対数分割.
-					const float split_rate = std::powf(rate, 2.0f);// 適当な対数分割.
-
-					//const float split_rate = k_direct_split_rate_array[ci];
+					const float cascade_rate = static_cast<float>(ci) / static_cast<float>(csm_param_.k_cascade_count - 1);
+					// 最近接Cascadeより後ろは指数分割.
+					const float remain_rate_term = (1.0f - first_cascade_split_rate) * std::powf(cascade_rate, shadowmap_cascade_split_power);
+					const float split_rate = first_cascade_split_rate + remain_rate_term;
 					
 					// 分割位置割合とワールド距離.
 					csm_param_.split_rate[ci] = split_rate;
-					csm_param_.split_distance_ws[ci] = split_rate * mainview_z_range + mainview_min_z;
+					csm_param_.split_distance_ws[ci] = split_rate * shadowmap_far_range;
 				}
-				
 				const math::Vec3 lightview_forward = desc.directional_light_dir;
 				const math::Vec3 lightview_helper_side_unit = (0.9f > std::abs(lightview_forward.x))? math::Vec3::UnitX() : math::Vec3::UnitZ();
 				const math::Vec3 lightview_up = math::Vec3::Normalize(math::Vec3::Cross(lightview_forward, lightview_helper_side_unit));
@@ -375,7 +367,7 @@ namespace ngl::render
 					// frustum_corners を利用して分割面の位置計算.
 					const float near_dist_ws = (0 == ci)? view_info.near_z : csm_param_.split_distance_ws[ci-1];
 					const float far_dist_ws = csm_param_.split_distance_ws[ci];
-#if 1
+
 					math::Vec3 split_frustum_near4_far4_ws[] =
 					{
 						frustum_corners.corner_vec[0] * near_dist_ws + frustum_corners.view_pos,
@@ -389,7 +381,6 @@ namespace ngl::render
 						frustum_corners.corner_vec[3] * far_dist_ws + frustum_corners.view_pos,
 					};
 
-					// TODO.
 					// LightViewでのAABBからOrthoを計算しようとしている.
 					//	しかしViewDistanceとLightViewAABBの範囲がうまく重ならずCascade境界が空白になる問題.
 					{
@@ -422,49 +413,6 @@ namespace ngl::render
 						csm_param_.light_view_mtx[ci] = lightview_view_mtx;
 						csm_param_.light_ortho_mtx[ci] = lightview_ortho;
 					}
-
-#else
-					math::Vec3 split_frustum_offset_near4_far4[] =
-					{
-						frustum_corners.corner_vec[0] * near_dist_ws,
-						frustum_corners.corner_vec[1] * near_dist_ws,
-						frustum_corners.corner_vec[2] * near_dist_ws,
-						frustum_corners.corner_vec[3] * near_dist_ws,
-						
-						frustum_corners.corner_vec[0] * far_dist_ws,
-						frustum_corners.corner_vec[1] * far_dist_ws,
-						frustum_corners.corner_vec[2] * far_dist_ws,
-						frustum_corners.corner_vec[3] * far_dist_ws,
-					};
-					
-					math::Vec3 split_frustum_com =
-						std::reduce(std::begin(split_frustum_offset_near4_far4), std::end(split_frustum_offset_near4_far4));
-					split_frustum_com /= static_cast<float>(std::size(split_frustum_offset_near4_far4));
-
-					float max_dist_sq = 0.0f;
-					for(int fvi = 0; fvi < std::size(split_frustum_offset_near4_far4); ++fvi)
-					{
-						max_dist_sq = std::max(max_dist_sq, math::Vec3::LengthSq(split_frustum_offset_near4_far4[fvi] - split_frustum_com));
-					}
-
-					const float split_frustum_bound_radius = std::sqrt(max_dist_sq);
-					const math::Vec3 split_frustum_bound_center = split_frustum_com + frustum_corners.view_pos;
-
-					const auto center = split_frustum_bound_center;
-					const auto radius = split_frustum_bound_radius;
-
-					const math::Vec3 lightview_center = {math::Vec3::Dot(center, lightview_side), math::Vec3::Dot(center, lightview_up), math::Vec3::Dot(center, lightview_forward)};
-
-					constexpr float shadow_near_far_offset = 500.0f;
-					const math::Mat44 lightview_ortho = math::CalcReverseOrthographicMatrix(
-						lightview_center.x - radius, lightview_center.x + radius,
-						lightview_center.y - radius, lightview_center.y + radius,
-						lightview_center.z - radius - shadow_near_far_offset, lightview_center.z + radius + shadow_near_far_offset
-						);
-
-					csm_param_.light_view_mtx[ci] = lightview_view_mtx;
-					csm_param_.light_ortho_mtx[ci] = lightview_ortho;
-#endif
 				}
 
 				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
@@ -549,19 +497,6 @@ namespace ngl::render
 						ref_d_shadow_sample_cb_->Unmap();
 					}
 
-					/*
-					// 2x2 Atlas の1Tile位置.
-					const auto csm_tile_index = cascade_index;
-					const int cascade_tile_x = csm_tile_index & 0x01;
-					const int cascade_tile_y = (csm_tile_index >> 1) & 0x01;
-
-					// Set Viewport and Scissor.
-					// 2x2 の1Tileのサイズ.
-					const auto cascade_tile_w = res_shadow_depth_atlas.tex_->GetWidth() / 2;
-					const auto cascade_tile_h = res_shadow_depth_atlas.tex_->GetHeight() / 2;
-					const auto cascade_tile_offset_x = cascade_tile_x * cascade_tile_w;
-					const auto cascade_tile_offset_y = cascade_tile_y * cascade_tile_h;
-					*/
 					const auto cascade_tile_w = csm_param_.cascade_tile_size_x[cascade_index];
 					const auto cascade_tile_h = csm_param_.cascade_tile_size_y[cascade_index];
 					const auto cascade_tile_offset_x = csm_param_.cascade_tile_offset_x[cascade_index];
