@@ -105,61 +105,71 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 				break;
 			}
 		}
-		
 		sample_cascade_index_debug = sample_cascade_index;
+
 		
 		// Shadowmap Sample.
 		const float k_coef_constant_bias_ws = 0.01;
 		const float k_coef_slope_bias_ws = 0.02;
 		const float k_coef_normal_bias_ws = 0.03;
 		
-		const int sample_prev_cascade_index = sample_cascade_index - 1;
-		const float prev_cascade_distance = (0 < sample_cascade_index)? ngl_cb_shadowview.cb_cascade_far_distance4[sample_prev_cascade_index/4][sample_prev_cascade_index%4] : 0.0;
-		const float cascade_size_rate_based_on_c0 = (ngl_cb_shadowview.cb_cascade_far_distance4[sample_cascade_index/4][sample_cascade_index%4]) / ngl_cb_shadowview.cb_cascade_far_distance4[0][0];
-
-		const float slope_rate = (1.0 - saturate(dot(L, gb_normal_ws)));
-		const float slope_bias_ws = k_coef_slope_bias_ws * slope_rate;
-		const float normal_bias_ws = k_coef_normal_bias_ws * slope_rate;
-		float shadow_sample_bias = max(k_coef_constant_bias_ws, slope_bias_ws);
-
-		float3 shadow_sample_bias_vec_ws = (L * shadow_sample_bias) + (gb_normal_ws * normal_bias_ws);
-		shadow_sample_bias_vec_ws *= cascade_size_rate_based_on_c0;// Cascadeのサイズによる補正項.
+		const float k_cascade_blend_range_ws = 5.0;
 		
-		const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[sample_cascade_index], float4(pixel_pos_ws + shadow_sample_bias_vec_ws, 1.0));
-		const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[sample_cascade_index], float4(pixel_pos_shadow_vs, 1.0));
-		const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz;;
+		// 補間用の次のCascade.
+		const int cascade_blend_count = max(2, ngl_cb_shadowview.cb_valid_cascade_count - sample_cascade_index);
+		//const int cascade_blend_count = 1;// デバッグ用にブレンドしない.
+
+		// 近い方のCascadeの末端で, 次のCascadeとブレンドする.
+		const float cascade_blend_rate =
+			(1 < cascade_blend_count)? 1.0 - saturate((ngl_cb_shadowview.cb_cascade_far_distance4[sample_cascade_index/4][sample_cascade_index%4] - view_depth) / k_cascade_blend_range_ws) : 0.0;
 		
-		float2 pixel_pos_shadow_uv = pixel_pos_shadow_cs_pd.xy * 0.5 + 0.5;
-		pixel_pos_shadow_uv.y = 1.0 - pixel_pos_shadow_uv.y;// Y反転.
-		// Atlas対応.
+		// ブレンド対象のCascade2つに関するLitVisibility. デフォルトは影なし(1.0).
+		float2 cascade_blend_lit_sample = float2(1.0, 1.0);
+		for(int cascade_i = 0; cascade_i < cascade_blend_count; ++cascade_i)
 		{
-			pixel_pos_shadow_uv *= ngl_cb_shadowview.cb_cascade_tile_uvoffset_uvscale[sample_cascade_index].zw;
-			pixel_pos_shadow_uv += ngl_cb_shadowview.cb_cascade_tile_uvoffset_uvscale[sample_cascade_index].xy;
-		}
+			const int cascade_index = sample_cascade_index + cascade_i;
+			const float cascade_size_rate_based_on_c0 = (ngl_cb_shadowview.cb_cascade_far_distance4[cascade_index/4][cascade_index%4]) / ngl_cb_shadowview.cb_cascade_far_distance4[0][0];
 		
+			const float slope_rate = (1.0 - saturate(dot(L, gb_normal_ws)));
+			const float slope_bias_ws = k_coef_slope_bias_ws * slope_rate;
+			const float normal_bias_ws = k_coef_normal_bias_ws * slope_rate;
+			float shadow_sample_bias = max(k_coef_constant_bias_ws, slope_bias_ws);
 
-		if(true)
-		{
-			// 範囲外はとりあえず日向.
-			if(all(0.0 < pixel_pos_shadow_uv) && all(1.0 > pixel_pos_shadow_uv))
+			float3 shadow_sample_bias_vec_ws = (L * shadow_sample_bias) + (gb_normal_ws * normal_bias_ws);
+			shadow_sample_bias_vec_ws *= cascade_size_rate_based_on_c0;// Cascadeのサイズによる補正項.
+		
+			const float3 pixel_pos_shadow_vs = mul(ngl_cb_shadowview.cb_shadow_view_mtx[cascade_index], float4(pixel_pos_ws + shadow_sample_bias_vec_ws, 1.0));
+			const float4 pixel_pos_shadow_cs = mul(ngl_cb_shadowview.cb_shadow_proj_mtx[cascade_index], float4(pixel_pos_shadow_vs, 1.0));
+			const float3 pixel_pos_shadow_cs_pd = pixel_pos_shadow_cs.xyz;;
+			
+			const float2 cascade_uv_lt = ngl_cb_shadowview.cb_cascade_tile_uvoffset_uvscale[cascade_index].xy;
+			const float2 cascade_uv_size = ngl_cb_shadowview.cb_cascade_tile_uvoffset_uvscale[cascade_index].zw;
+		
+			float2 pixel_pos_shadow_uv = pixel_pos_shadow_cs_pd.xy * 0.5 + 0.5;
+			pixel_pos_shadow_uv.y = 1.0 - pixel_pos_shadow_uv.y;// Y反転.
+			// Atlas対応.
+			pixel_pos_shadow_uv = pixel_pos_shadow_uv * cascade_uv_size + cascade_uv_lt;
+
+			if(all(cascade_uv_lt < pixel_pos_shadow_uv) && all((cascade_uv_size+cascade_uv_lt) > pixel_pos_shadow_uv))
 			{
-				// PCF.
+				float shadow_comp_accum = 0.0;
 #if 1
-				// Bruteforce
+				// PCF.
 				const int k_pcf_radius = 1;
 				const int k_pcf_normalizer = (k_pcf_radius*2+1)*(k_pcf_radius*2+1);
-				float shadow_comp_accum = 0.0;
 				for(int oy = -k_pcf_radius; oy <= k_pcf_radius; ++oy)
 					for(int ox = -k_pcf_radius; ox <= k_pcf_radius; ++ox)
 						shadow_comp_accum += tex_shadowmap.SampleCmpLevelZero(samp_shadow, pixel_pos_shadow_uv, pixel_pos_shadow_cs_pd.z, int2(ox, oy)).x;
-				
-				light_visibility = shadow_comp_accum / float(k_pcf_normalizer); 
+			
+				shadow_comp_accum = shadow_comp_accum / float(k_pcf_normalizer);
 #else
-				// Single.
-				light_visibility = tex_shadowmap.SampleCmpLevelZero(samp_shadow, pixel_pos_shadow_uv, pixel_pos_shadow_cs_pd.z).x;
+				shadow_comp_accum = tex_shadowmap.SampleCmpLevelZero(samp_shadow, pixel_pos_shadow_uv, pixel_pos_shadow_cs_pd.z, int2(0, 0)).x;
 #endif
+				
+				cascade_blend_lit_sample[cascade_i] = shadow_comp_accum;
 			}
 		}
+		light_visibility = lerp(cascade_blend_lit_sample[0], cascade_blend_lit_sample[1], cascade_blend_rate);
 	}
 	
 	const float3 specular_term = brdf_standard_ggx(gb_base_color, gb_rounghness, gb_metalness, gb_normal_ws, V, L);

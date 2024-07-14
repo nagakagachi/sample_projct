@@ -292,9 +292,11 @@ namespace ngl::render
 				// Cascade Shadowの最遠方距離.
 				const float shadowmap_far_range = 160.0f;
 				// Cascade Shadowの最近接Cascadeのカバー距離.
-				const float shadowmap_nearest_cascade_range = 20.0f;
+				const float shadowmap_nearest_cascade_range = 12.0f;
 				// Cascade Shadowの最近接より遠方のCascadeの分割用指数.
-				const float shadowmap_cascade_split_power = 2.8f;
+				const float shadowmap_cascade_split_power = 2.4f;
+				// Cascade間ブレンド幅.
+				const float k_cascade_blend_width_ws = 5.0f;
 				// Cascade 1つのサイズ.
 				constexpr int shadowmap_single_reso = 1024*2;
 				// CascadeをAtlas管理する際のトータルサイズ.
@@ -364,8 +366,8 @@ namespace ngl::render
 				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
 				{
 					// TODO.
-					// frustum_corners を利用して分割面の位置計算.
-					const float near_dist_ws = (0 == ci)? view_info.near_z : csm_param_.split_distance_ws[ci-1];
+					// frustum_corners を利用して分割面の位置計算. Cascade間ブレンド用にnear側を拡張.
+					const float near_dist_ws = (0 == ci)? view_info.near_z : std::max(0.0f, csm_param_.split_distance_ws[ci-1] - k_cascade_blend_width_ws);
 					const float far_dist_ws = csm_param_.split_distance_ws[ci];
 
 					math::Vec3 split_frustum_near4_far4_ws[] =
