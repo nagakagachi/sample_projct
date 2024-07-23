@@ -67,7 +67,7 @@ namespace ngl
 			}
 			void Unmap();
 
-			bool IsValid() const { return (nullptr != resource_.p); }
+			bool IsValid() const { return (nullptr != resource_.Get()); }
 
 			const Desc& GetDesc() const { return desc_; }
 
@@ -84,7 +84,7 @@ namespace ngl
 
 			void*		map_ptr_ = nullptr;
 
-			CComPtr<ID3D12Resource> resource_;
+			Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
 		};
 
 
@@ -158,7 +158,7 @@ namespace ngl
 			void* Map();
 			void Unmap();
 
-			bool IsValid() const { return (nullptr != resource_.p); }
+			bool IsValid() const { return (nullptr != resource_.Get()); }
 
 			const Desc& GetDesc() const { return desc_; }
 
@@ -209,7 +209,7 @@ namespace ngl
 
 			void* map_ptr_ = nullptr;
 
-			CComPtr<ID3D12Resource> resource_;
+			Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
 		};
 
 

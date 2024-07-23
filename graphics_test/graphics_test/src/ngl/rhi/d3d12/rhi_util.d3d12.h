@@ -18,7 +18,8 @@
 #include <dxgi1_4.h>
 #endif
 
-#include <atlbase.h>
+//#include <atlbase.h>
+#include <wrl/client.h>
 
 namespace ngl
 {

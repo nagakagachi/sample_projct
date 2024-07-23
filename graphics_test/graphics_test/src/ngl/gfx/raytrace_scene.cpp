@@ -714,16 +714,19 @@ namespace ngl
 				void* GetData() override
 				{
 					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
-					return &p_root_signature_.p;
+					//return &p_root_signature_;
+					return &p_ref_;
 				}
 
 			public:
-				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
+				void Setup(Microsoft::WRL::ComPtr<ID3D12RootSignature> p_root_signature)
 				{
 					p_root_signature_ = p_root_signature;
+					p_ref_ = p_root_signature_.Get();
 				}
 			private:
-				CComPtr<ID3D12RootSignature> p_root_signature_;
+				Microsoft::WRL::ComPtr<ID3D12RootSignature> p_root_signature_;
+				ID3D12RootSignature*		p_ref_ = {};
 			};
 
 			// Local Root Signature.
@@ -740,16 +743,19 @@ namespace ngl
 				void* GetData() override
 				{
 					// NOTE. RootSignatureのポインタではなく, RootSignatureのポインタ変数のアドレス であることに注意 (これで2日溶かした).
-					return &p_root_signature_.p;
+					//return &p_root_signature_;
+					return &p_ref_;
 				}
 
 			public:
-				void Setup(CComPtr<ID3D12RootSignature> p_root_signature)
+				void Setup(Microsoft::WRL::ComPtr<ID3D12RootSignature> p_root_signature)
 				{
 					p_root_signature_ = p_root_signature;
+					p_ref_ = p_root_signature_.Get();
 				}
 			private:
-				CComPtr<ID3D12RootSignature> p_root_signature_;
+				Microsoft::WRL::ComPtr<ID3D12RootSignature> p_root_signature_;
+				ID3D12RootSignature*		p_ref_ = {};
 			};
 
 			// Association
@@ -1237,7 +1243,7 @@ namespace ngl
 		bool CreateShaderTable(RtShaderTable& out, rhi::DeviceDep* p_device,
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
 			const RtTlas& tlas, 
-			const RtStateObject& state_object, const char* raygen_name, const char* miss_name)
+			const RtStateObject& state_object, const char* raygen_name)
 		{
 			out = {};
 
@@ -1296,7 +1302,7 @@ namespace ngl
 			// レコード書き込み.
 			if (auto* mapped = static_cast<uint8_t*>(out.shader_table_->Map()))
 			{
-				CComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
+				Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> p_rt_so_prop;
 				if (FAILED(state_object.GetStateObject()->QueryInterface(IID_PPV_ARGS(&p_rt_so_prop))))
 				{
 					assert(false);
@@ -1316,17 +1322,18 @@ namespace ngl
 				}
 
 				out.table_miss_offset_ = (shader_record_byte_size * table_cnt);
-				out.table_miss_count_ = 1;
+
+				// 初期化時にSOに登録したMissShaderを全て設定.
+				const int num_registered_miss_shader = state_object.NumMissShader();
+				for(int mi = 0; mi < num_registered_miss_shader; ++mi)
 				{
-					// miss
+					const void* shader_identifire = p_rt_so_prop->GetShaderIdentifier(str_to_wstr(state_object.GetMissShaderName(mi)).c_str());
+					if(shader_identifire)
 					{
-						memcpy(mapped + (shader_record_byte_size * table_cnt), p_rt_so_prop->GetShaderIdentifier(str_to_wstr(miss_name).c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-						// TODO. Local Root Signature で設定するリソースがある場合はここでGPU Descriptor Handleを書き込む.
+						memcpy(mapped + (shader_record_byte_size * table_cnt), shader_identifire, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+						++table_cnt;
 					}
-					++table_cnt;
 				}
-
 
 				// HitGroup
 				/// マテリアル分存在するHitGroupは連続領域でInstanceに指定したインデックスでアクセスされるためここ以降に順序に気をつけて書き込み.
@@ -1495,7 +1502,7 @@ namespace ngl
 			if (!CreateShaderTable(shader_table_,
 				p_device_,
 				desc_alloc_interface_,
-				*p_tlas, state_object_, "rayGen", "miss"))
+				*p_tlas, state_object_, "rayGen"))
 			{
 				assert(false);
 				return false;

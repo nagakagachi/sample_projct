@@ -257,11 +257,11 @@ namespace ngl
 			}
 			ID3D12DescriptorHeap* GetD3D12()
 			{
-				return p_heap_;
+				return p_heap_.Get();
 			}
 			const ID3D12DescriptorHeap* GetD3D12() const
 			{
-				return p_heap_;
+				return p_heap_.Get();
 			}
 			u32 GetHandleIncrementSize() const
 			{
@@ -281,7 +281,7 @@ namespace ngl
 			Desc		desc_ = {};
 
 			// Heap本体
-			CComPtr<ID3D12DescriptorHeap>	p_heap_ = nullptr;
+			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>	p_heap_ = nullptr;
 			// Headの定義情報
 			D3D12_DESCRIPTOR_HEAP_DESC		heap_desc_{};
 			// Heap上の要素アドレスサイズ
@@ -464,7 +464,7 @@ namespace ngl
 			}
 			ID3D12DescriptorHeap* GetD3D12DescriptorHeap()
 			{
-				return p_heap_;
+				return p_heap_.Get();
 			}
 
 			DeviceDep* GetDevice() { return parent_device_; }
@@ -477,7 +477,7 @@ namespace ngl
 			DeviceDep*							parent_device_ = nullptr;
 
 			// Heap本体
-			CComPtr<ID3D12DescriptorHeap>		p_heap_ = nullptr;
+			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>		p_heap_ = nullptr;
 			D3D12_DESCRIPTOR_HEAP_DESC			heap_desc_{};
 			// Heap上の要素アドレスサイズ
 			u32									handle_increment_size_ = 0;
@@ -622,7 +622,7 @@ namespace ngl
 			u32 handle_increment_size_[k_num_heap_types] = {};
 
 			// 生成したHeapは解放のためにすべてスマートポインタで保持.
-			std::vector<CComPtr<ID3D12DescriptorHeap>>	created_pool_[k_num_heap_types];
+			std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>>	created_pool_[k_num_heap_types];
 			std::queue<ID3D12DescriptorHeap*>			available_pool_[k_num_heap_types];
 			// 返却時のフレームインデックスをペアで格納.
 			std::queue<std::pair<u64, ID3D12DescriptorHeap*>> retired_pool_[k_num_heap_types];

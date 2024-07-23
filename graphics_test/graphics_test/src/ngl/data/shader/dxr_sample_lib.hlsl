@@ -84,7 +84,7 @@ void rayGen()
 	// BLAS中のSubGeometryIndexがそれぞれ別のHitGroupを利用する場合は1等, BLAS中のすべてが同じHitGroupなら0を指定するなどが考えられる.
 	// 1に設定する場合はShaderTable構築時にBLAS内Geom分考慮したEntry登録が必要.
 	const int multiplier_for_subgeometry_index = 1;
-	const int miss_shader_index = 0;
+	const int miss_shader_index = (launch_index.x/20+launch_index.y/20)&1;//0;// ２つMissShaderが登録されている体で適当に切り替え.
 	TraceRay(rt_as, ray_flag, 0xff, ray_contribution_to_hitgroup, multiplier_for_subgeometry_index, miss_shader_index, ray, payload );
 
 	float3 col = payload.color.xyz;

@@ -64,12 +64,12 @@ namespace ngl
 			// CommandListの標準Interfaceを取得.
 			ID3D12GraphicsCommandList* GetD3D12GraphicsCommandList()
 			{
-				return p_command_list_;
+				return p_command_list_.Get();
 			}
 			// CommandListのDxr対応Interfaceを取得.
 			ID3D12GraphicsCommandList4* GetD3D12GraphicsCommandListForDxr()
 			{
-				return p_command_list4_;
+				return p_command_list4_.Get();
 			}
 		public:
 			FrameCommandListDynamicDescriptorAllocatorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
@@ -87,11 +87,11 @@ namespace ngl
 			// Sampler用.
 			FrameDescriptorHeapPageInterface	frame_desc_page_interface_for_sampler_ = {};
 
-			CComPtr<ID3D12CommandAllocator>		p_command_allocator_;
+			Microsoft::WRL::ComPtr<ID3D12CommandAllocator>		p_command_allocator_;
 
-			CComPtr<ID3D12GraphicsCommandList>	p_command_list_;
+			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>	p_command_list_;
 			// For Dxr Interface.
-			CComPtr<ID3D12GraphicsCommandList4>	p_command_list4_;
+			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4>	p_command_list4_;
 		};
 
 		

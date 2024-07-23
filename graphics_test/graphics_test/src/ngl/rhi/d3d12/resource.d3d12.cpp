@@ -250,7 +250,7 @@ namespace ngl
 		}
 		ID3D12Resource* BufferDep::GetD3D12Resource() const
 		{
-			return resource_;
+			return resource_.Get();
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -487,7 +487,7 @@ namespace ngl
 		
 		ID3D12Resource* TextureDep::GetD3D12Resource() const
 		{
-			return resource_;
+			return resource_.Get();
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 

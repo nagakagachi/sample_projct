@@ -242,19 +242,28 @@ namespace ngl
 				const std::vector<RtShaderRegisterInfo>& shader_info_array, 
 				uint32_t payload_byte_size = sizeof(float) * 4, uint32_t attribute_byte_size = sizeof(float) * 2, uint32_t max_trace_recursion = 1);
 
-			CComPtr<ID3D12StateObject> GetStateObject() const
+			ID3D12StateObject* GetStateObject() const
 			{
-				return state_oject_;
+				return state_oject_.Get();
 			}
-			CComPtr<ID3D12RootSignature> GetGlobalRootSignature() const
+			ID3D12RootSignature* GetGlobalRootSignature() const
 			{
-				return global_root_signature_;
+				return global_root_signature_.Get();
 			}
 
 			const char* GetHitgroupName(uint32_t hitgroup_id) const 
 			{
 				assert(hitgroup_database_.size() > hitgroup_id);
 				return hitgroup_database_[hitgroup_id].hitgorup_name.c_str();
+			}
+
+			int NumMissShader() const
+			{
+				return static_cast<int>(miss_database_.size());
+			}
+			const char* GetMissShaderName(int i) const
+			{
+				return  miss_database_[i].miss_name.c_str();				
 			}
 
 		private:
@@ -296,9 +305,9 @@ namespace ngl
 			uint32_t						attribute_byte_size_ = sizeof(float) * 2;
 			uint32_t						max_trace_recursion_ = 1;
 
-			CComPtr<ID3D12RootSignature>	global_root_signature_ = {};
-			CComPtr<ID3D12RootSignature>	local_root_signature_fixed_ = {};
-			CComPtr<ID3D12StateObject>		state_oject_ = {};
+			Microsoft::WRL::ComPtr<ID3D12RootSignature>	global_root_signature_ = {};
+			Microsoft::WRL::ComPtr<ID3D12RootSignature>	local_root_signature_fixed_ = {};
+			Microsoft::WRL::ComPtr<ID3D12StateObject>		state_oject_ = {};
 		};
 
 		class RtShaderTable
@@ -319,11 +328,12 @@ namespace ngl
 			uint32_t		table_hitgroup_count_ = 0;
 		};
 		// 引数のTLASはSetupでRHIリソース確保等がされていれば良い(Build不要).
+		//	エントリとするRayGenシェーダ名を指定する. HitGroupやMissShaderはStateObjectに登録されているものがすべて利用される.
 		static bool CreateShaderTable(
 			RtShaderTable& out,
 			rhi::DeviceDep* p_device,
 			rhi::DynamicDescriptorStackAllocatorInterface& desc_alloc_interface,
-			const RtTlas& tlas, const RtStateObject& state_object, const char* raygen_name, const char* miss_name);
+			const RtTlas& tlas, const RtStateObject& state_object, const char* raygen_name);
 
 
 		// Raytraceの基本部分を担当するクラス.

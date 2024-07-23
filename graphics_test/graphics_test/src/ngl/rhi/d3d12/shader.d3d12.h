@@ -267,7 +267,7 @@ namespace rhi
 		const ID3D12RootSignature* GetD3D12RootSignature() const;
 
 	private:
-		CComPtr<ID3D12RootSignature>	root_signature_;
+		Microsoft::WRL::ComPtr<ID3D12RootSignature>	root_signature_;
 
 		// 頂点シェーダリフレクションは入力レイアウト情報などのために保持する
 		ShaderReflectionDep		vs_reflection_;
@@ -309,7 +309,7 @@ namespace rhi
 		const ID3D12RootSignature* GetD3D12RootSignature() const;
 	protected:
 		PipelineResourceViewLayoutDep			view_layout_;
-		CComPtr<ID3D12PipelineState>			pso_;
+		Microsoft::WRL::ComPtr<ID3D12PipelineState>			pso_;
 	};
 	
 	// パイプラインステート Graphics.

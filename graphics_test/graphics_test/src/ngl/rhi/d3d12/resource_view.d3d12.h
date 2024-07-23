@@ -162,7 +162,7 @@ namespace ngl
 			}
 		private:
 			// 現状のRTVやDSVはHeapをそれぞれ専有する. 問題があればグローバルな専用Heapから確保する.
-			CComPtr<ID3D12DescriptorHeap> p_heap_;
+			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
 		// DepthStencilView
@@ -183,7 +183,7 @@ namespace ngl
 			}
 		private:
 			// 現状のRTVやDSVはHeapをそれぞれ専有する. 問題があればグローバルな専用Heapから確保する.
-			CComPtr<ID3D12DescriptorHeap> p_heap_;
+			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> p_heap_;
 		};
 
 		// UnorderedAccessViewDep

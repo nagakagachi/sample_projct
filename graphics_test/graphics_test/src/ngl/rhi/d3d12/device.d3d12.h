@@ -45,10 +45,10 @@ namespace ngl
 
 		namespace helper
 		{
-			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, CComPtr<ID3D12RootSignature>& out_root_signature);
+			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, Microsoft::WRL::ComPtr<ID3D12RootSignature>& out_root_signature);
 
-			bool SerializeAndCreateRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_NONE);
-			bool SerializeAndCreateLocalRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_NONE);
+			bool SerializeAndCreateRootSignature(Microsoft::WRL::ComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_NONE);
+			bool SerializeAndCreateLocalRootSignature(Microsoft::WRL::ComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag = D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_NONE);
 		}
 
 
@@ -133,11 +133,11 @@ namespace ngl
 			D3D12_RAYTRACING_TIER device_dxr_tier_ = {};
 			
 			// base device.
-			CComPtr<ID3D12Device> p_device_;
+			Microsoft::WRL::ComPtr<ID3D12Device> p_device_;
 			// For Dxr Interface.
-			CComPtr<ID3D12Device5> p_device5_;
+			Microsoft::WRL::ComPtr<ID3D12Device5> p_device5_;
 
-			CComPtr<DXGI_FACTORY_TYPE> p_factory_;
+			Microsoft::WRL::ComPtr<DXGI_FACTORY_TYPE> p_factory_;
 
 			// テスト中. フレームインデックス処理用.
 			u64 frame_index_ = 0;
@@ -184,7 +184,7 @@ namespace ngl
 			
 			ID3D12CommandQueue* GetD3D12CommandQueue();
 		protected:
-			CComPtr<ID3D12CommandQueue> p_command_queue_;
+			Microsoft::WRL::ComPtr<ID3D12CommandQueue> p_command_queue_;
 		};
 		
 		// Graphics Command Queue.
@@ -242,7 +242,7 @@ namespace ngl
 				return tmp;
 			}
 		private:
-			CComPtr<ID3D12Fence> p_fence_;
+			Microsoft::WRL::ComPtr<ID3D12Fence> p_fence_;
 			ngl::types::u64 fence_value_ = 1;// FenceValue初期値が0であるため意図通りにSignalWaitするために1開始.
 		};
 
@@ -294,9 +294,9 @@ namespace ngl
 			uint32_t width_ = 0;
 			uint32_t height_ = 0;
 
-			CComPtr<DXGI_SWAPCHAIN_TYPE> p_swapchain_;
+			Microsoft::WRL::ComPtr<DXGI_SWAPCHAIN_TYPE> p_swapchain_;
 
-			CComPtr<ID3D12Resource>* p_resources_ = nullptr;
+			Microsoft::WRL::ComPtr<ID3D12Resource>* p_resources_ = nullptr;
 			unsigned int num_resource_ = 0;
 		};
 

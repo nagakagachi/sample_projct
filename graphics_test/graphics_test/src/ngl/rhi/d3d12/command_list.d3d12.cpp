@@ -30,14 +30,14 @@ namespace ngl
 			}
 
 			// Command List
-			if (FAILED(p_device->GetD3D12Device()->CreateCommandList(0, command_list_type, p_command_allocator_, nullptr, IID_PPV_ARGS(&p_command_list_))))
+			if (FAILED(p_device->GetD3D12Device()->CreateCommandList(0, command_list_type, p_command_allocator_.Get(), nullptr, IID_PPV_ARGS(&p_command_list_))))
 			{
 				std::cout << "[ERROR] Create Command List" << std::endl;
 				return false;
 			}
 
 			// DXR対応Interfaceを取得(Deviceが対応しているなら).
-			p_command_list4_ = {};
+			p_command_list4_ = nullptr;
 			if (p_device->IsSupportDxr())
 			{
 				if (FAILED(p_command_list_->QueryInterface(IID_PPV_ARGS(&p_command_list4_))))
@@ -80,7 +80,7 @@ namespace ngl
 			// アロケータリセット
 			p_command_allocator_->Reset();
 			// コマンドリストリセット
-			p_command_list_->Reset(p_command_allocator_, nullptr);
+			p_command_list_->Reset(p_command_allocator_.Get(), nullptr);
 			is_open_ = true;
 
 			// 新しいフレームのためのFrameDescriptorの準備.
@@ -111,12 +111,12 @@ namespace ngl
 		// UAV同期Barrier.
 		void CommandListBaseDep::ResourceUavBarrier(TextureDep* p_texture)
 		{
-			_UavBarrier(p_command_list_, p_texture->GetD3D12Resource());
+			_UavBarrier(p_command_list_.Get(), p_texture->GetD3D12Resource());
 		}
 		// UAV同期Barrier.
 		void CommandListBaseDep::ResourceUavBarrier(BufferDep* p_buffer)
 		{
-			_UavBarrier(p_command_list_, p_buffer->GetD3D12Resource());
+			_UavBarrier(p_command_list_.Get(), p_buffer->GetD3D12Resource());
 		}
 		
 		void CommandListBaseDep::SetPipelineState(ComputePipelineStateDep* pso)
@@ -344,7 +344,7 @@ namespace ngl
 			if (!p_swapchain || prev == next)
 				return;
 			auto* resource = p_swapchain->GetD3D12Resource(buffer_index);
-			_Barrier(p_command_list_, resource, prev, next);
+			_Barrier(p_command_list_.Get(), resource, prev, next);
 		}
 		// バリア Texture.
 		void GraphicsCommandListDep::ResourceBarrier(TextureDep* p_texture, EResourceState prev, EResourceState next)
@@ -352,7 +352,7 @@ namespace ngl
 			if (!p_texture || prev == next)
 				return;
 			auto* resource = p_texture->GetD3D12Resource();
-			_Barrier(p_command_list_, resource, prev, next);
+			_Barrier(p_command_list_.Get(), resource, prev, next);
 		}
 		// バリア Buffer.
 		void GraphicsCommandListDep::ResourceBarrier(BufferDep* p_buffer, EResourceState prev, EResourceState next)
@@ -360,7 +360,7 @@ namespace ngl
 			if (!p_buffer || prev == next)
 				return;
 			auto* resource = p_buffer->GetD3D12Resource();
-			_Barrier(p_command_list_, resource, prev, next);
+			_Barrier(p_command_list_.Get(), resource, prev, next);
 		}
 
 		void GraphicsCommandListDep::SetViewports(u32 num, const  D3D12_VIEWPORT* p_viewports)

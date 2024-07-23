@@ -355,7 +355,7 @@ namespace ngl
 		}
 		void DescriptorHeapWrapper::Finalize()
 		{
-			// CComPtrで解放
+			// ComPtrで解放
 			p_heap_ = nullptr;
 		}
 
@@ -987,7 +987,7 @@ namespace ngl
 				// このHeap上のDescriptorは描画に利用するためVISIBLE設定. シェーダから可視.
 				heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-				CComPtr<ID3D12DescriptorHeap> p_heap;
+				Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> p_heap;
 				if (FAILED(p_device_->GetD3D12Device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&p_heap))))
 				{
 					std::cout << "[ERROR] Create DescriptorHeap" << std::endl;
@@ -997,7 +997,7 @@ namespace ngl
 				created_pool_[type_index].push_back(p_heap);
 
 				// 確保したものを返す.
-				return p_heap.p;
+				return p_heap.Get();
 			}
 		}
 

@@ -102,7 +102,7 @@ namespace rhi
 			: public IDxcIncludeHandler
 		{
 		public:
-			DefaultIncludeHandler(CComPtr<IDxcUtils> dxc_library)
+			DefaultIncludeHandler(Microsoft::WRL::ComPtr<IDxcUtils> dxc_library)
 			{
 				dxc_library_ = dxc_library;
 			}
@@ -157,7 +157,7 @@ namespace rhi
 				return E_NOINTERFACE;
 			}
 		private:
-			CComPtr<IDxcUtils>	dxc_library_;
+			Microsoft::WRL::ComPtr<IDxcUtils>	dxc_library_;
 			u32					ref_ = 0;
 		};
 
@@ -265,7 +265,7 @@ namespace rhi
 				mbs_to_wcs(shader_entry_point_name_w, (int)std::size(shader_entry_point_name_w), desc.entry_point_name);
 			}
 
-			CComPtr<IDxcUtils> dxc_library;
+			Microsoft::WRL::ComPtr<IDxcUtils> dxc_library;
 			HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxc_library));
 			if (FAILED(hr))
 			{
@@ -275,7 +275,7 @@ namespace rhi
 				compile_success &= false;
 			}
 
-			CComPtr<IDxcCompiler> dxc_compiler;
+			Microsoft::WRL::ComPtr<IDxcCompiler> dxc_compiler;
 			if (compile_success)
 			{
 				hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
@@ -288,11 +288,11 @@ namespace rhi
 				}
 			}
 
-			CComPtr<IDxcIncludeHandler> dxc_incHandler;
+			Microsoft::WRL::ComPtr<IDxcIncludeHandler> dxc_incHandler;
 			// 自前のハンドラ.
 			dxc_incHandler = new DefaultIncludeHandler(dxc_library);
 
-			CComPtr<IDxcBlobEncoding> sourceBlob;
+			Microsoft::WRL::ComPtr<IDxcBlobEncoding> sourceBlob;
 			if (compile_success)
 			{
 				uint32_t codePage = CP_UTF8;
@@ -306,11 +306,11 @@ namespace rhi
 				}
 			}
 
-			CComPtr<IDxcOperationResult> dxc_result;
+			Microsoft::WRL::ComPtr<IDxcOperationResult> dxc_result;
 			if (compile_success)
 			{
 				hr = dxc_compiler->Compile(
-					sourceBlob,
+					sourceBlob.Get(),
 					shader_file_path_ws,
 					shader_entry_point_name_w,
 					shader_model_name_w,	// "PS_6_0"
@@ -318,7 +318,7 @@ namespace rhi
 					NULL, 0,				// pArguments, argCount
 
 					NULL, 0,				// pDefines, defineCount
-					dxc_incHandler,			// pIncludeHandler
+					dxc_incHandler.Get(),			// pIncludeHandler
 					&dxc_result				// ppResult
 				);
 
@@ -328,7 +328,7 @@ namespace rhi
 				{
 					if (dxc_result)
 					{
-						CComPtr<IDxcBlobEncoding> errorsBlob;
+						Microsoft::WRL::ComPtr<IDxcBlobEncoding> errorsBlob;
 						hr = dxc_result->GetErrorBuffer(&errorsBlob);
 						if (SUCCEEDED(hr) && errorsBlob)
 						{
@@ -343,7 +343,7 @@ namespace rhi
 			if (compile_success)
 			{
 				// 成功
-				CComPtr<IDxcBlob> code;
+				Microsoft::WRL::ComPtr<IDxcBlob> code;
 				dxc_result->GetResult(&code);
 				compile_success = Initialize(p_device, desc.stage, code->GetBufferPointer(), (u32)code->GetBufferSize());
 			}
@@ -364,8 +364,8 @@ namespace rhi
 			// フラグ.
 			const int commpile_flag = flag_debug | flag_validation | flag_optimization | flag_matrix_row_major;
 
-			CComPtr<ID3DBlob> p_compile_data;
-			CComPtr<ID3DBlob>  error_blob;
+			Microsoft::WRL::ComPtr<ID3DBlob> p_compile_data;
+			Microsoft::WRL::ComPtr<ID3DBlob>  error_blob;
 			auto hr = D3DCompileFromFile(shader_file_path_ws, nullptr, include_object, desc.entry_point_name, shader_model_name, commpile_flag, 0, &p_compile_data, &error_blob);
 			if (FAILED(hr))
 			{
@@ -445,22 +445,22 @@ namespace rhi
 
 
 		// ShaderReflectionかLibraryReflectionのどちらか.
-		CComPtr<ID3D12ShaderReflection> shader_reflect;
-		CComPtr<ID3D12LibraryReflection> lib_reflect;
+		Microsoft::WRL::ComPtr<ID3D12ShaderReflection> shader_reflect;
+		Microsoft::WRL::ComPtr<ID3D12LibraryReflection> lib_reflect;
 		{
 			bool hresult = true;
 
 			// 最初にDxcApiを試行する
 			// ShaderModel6以降はDxcAPIを利用する
-			CComPtr<IDxcUtils> lib;
+			Microsoft::WRL::ComPtr<IDxcUtils> lib;
 			hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&lib)));
 
-			CComPtr<IDxcBlobEncoding> binBlob{};
+			Microsoft::WRL::ComPtr<IDxcBlobEncoding> binBlob{};
 			if (hresult)
 			{
 				hresult = SUCCEEDED(lib->CreateBlob(bin_ptr, bin_size, CP_ACP, &binBlob));
 			}
-			CComPtr<IDxcContainerReflection> refl;
+			Microsoft::WRL::ComPtr<IDxcContainerReflection> refl;
 			if (hresult)
 			{
 				hresult = SUCCEEDED(DxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&refl)));
@@ -469,7 +469,7 @@ namespace rhi
 			if (hresult)
 			{
 				// シェーダーバイナリデータをロードし、DXILチャンクブロック（のインデックス）を得る.
-				hresult = SUCCEEDED(refl->Load(binBlob));
+				hresult = SUCCEEDED(refl->Load(binBlob.Get()));
 				if (hresult)
 				{
 #ifndef MAKEFOURCC
@@ -542,7 +542,7 @@ namespace rhi
 
 		// ----------------------------------------------------------------
 		// ID3D12ShaderReflectionが取得できればそこから情報取得
-		if (shader_reflect.p)
+		if (shader_reflect.Get())
 		{
 			D3D12_SHADER_DESC shader_desc = {};
 			bool hresult = SUCCEEDED(shader_reflect->GetDesc(&shader_desc));
@@ -1233,11 +1233,11 @@ namespace rhi
 
 	ID3D12RootSignature* PipelineResourceViewLayoutDep::GetD3D12RootSignature()
 	{
-		return root_signature_;
+		return root_signature_.Get();
 	}
 	const ID3D12RootSignature* PipelineResourceViewLayoutDep::GetD3D12RootSignature() const
 	{
-		return root_signature_;
+		return root_signature_.Get();
 	}
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1264,7 +1264,7 @@ namespace rhi
 	
 	ID3D12PipelineState* PipelineStateBaseDep::GetD3D12PipelineState()
 	{
-		return pso_;
+		return pso_.Get();
 	}
 	ID3D12RootSignature* PipelineStateBaseDep::GetD3D12RootSignature()
 	{
@@ -1272,7 +1272,7 @@ namespace rhi
 	}
 	const ID3D12PipelineState* PipelineStateBaseDep::GetD3D12PipelineState() const
 	{
-		return pso_;
+		return pso_.Get();
 	}
 	const ID3D12RootSignature* PipelineStateBaseDep::GetD3D12RootSignature() const
 	{

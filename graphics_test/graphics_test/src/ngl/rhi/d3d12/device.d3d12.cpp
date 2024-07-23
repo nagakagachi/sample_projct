@@ -23,11 +23,11 @@ namespace ngl
 	{
 		namespace helper
 		{
-			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, CComPtr<ID3D12RootSignature>& out_root_signature)
+			bool SerializeAndCreateRootSignature(DeviceDep* p_device, const D3D12_ROOT_SIGNATURE_DESC& desc, Microsoft::WRL::ComPtr<ID3D12RootSignature>& out_root_signature)
 			{
 				auto device = p_device->GetD3D12Device();
-				CComPtr<ID3DBlob> blob;
-				CComPtr<ID3DBlob> error;
+				Microsoft::WRL::ComPtr<ID3DBlob> blob;
+				Microsoft::WRL::ComPtr<ID3DBlob> error;
 
 				if (FAILED(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)))
 				{
@@ -45,7 +45,7 @@ namespace ngl
 				return true;
 			}
 
-			bool SerializeAndCreateRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag)
+			bool SerializeAndCreateRootSignature(Microsoft::WRL::ComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag)
 			{
 				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 				root_signature_desc.NumParameters = num_param;
@@ -53,7 +53,7 @@ namespace ngl
 				root_signature_desc.Flags = flag; // Global (Not Local).
 				return SerializeAndCreateRootSignature(p_device, root_signature_desc, out_root_signature);
 			}
-			bool SerializeAndCreateLocalRootSignature(CComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag)
+			bool SerializeAndCreateLocalRootSignature(Microsoft::WRL::ComPtr<ID3D12RootSignature>& out_root_signature, DeviceDep* p_device, D3D12_ROOT_PARAMETER* p_param_array, uint32_t num_param, D3D12_ROOT_SIGNATURE_FLAGS flag)
 			{
 				D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
 				root_signature_desc.NumParameters = num_param;
@@ -84,7 +84,7 @@ namespace ngl
 			// DebugLayer有効化
 			if (desc_.enable_debug_layer)
 			{
-				CComPtr<ID3D12Debug> debugController;
+				Microsoft::WRL::ComPtr<ID3D12Debug> debugController;
 				if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
 				{
 					debugController->EnableDebugLayer();
@@ -130,13 +130,13 @@ namespace ngl
 
 			device_feature_level_ = {};
 			device_dxr_tier_ = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
-			p_device5_ = {};
+			p_device5_.Reset();
 
 			{
 				bool end_create_device = false;
 
 				// Find the HW adapter
-				CComPtr<IDXGIAdapter1> pAdapter;
+				Microsoft::WRL::ComPtr<IDXGIAdapter1> pAdapter;
 				for (uint32_t i = 0; !end_create_device && DXGI_ERROR_NOT_FOUND != p_factory_->EnumAdapters1(i, &pAdapter); i++)
 				{
 					DXGI_ADAPTER_DESC1 desc;
@@ -148,7 +148,7 @@ namespace ngl
 
 					for (auto l : feature_levels)
 					{
-						if (SUCCEEDED(D3D12CreateDevice(pAdapter, l, IID_PPV_ARGS(&p_device_))))
+						if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), l, IID_PPV_ARGS(&p_device_))))
 						{
 							D3D12_FEATURE_DATA_D3D12_OPTIONS5 features5;
 							HRESULT hr = p_device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features5, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
@@ -275,15 +275,15 @@ namespace ngl
 
 		ID3D12Device* DeviceDep::GetD3D12Device()
 		{
-			return p_device_;
+			return p_device_.Get();
 		}
 		ID3D12Device5* DeviceDep::GetD3D12DeviceForDxr()
 		{
-			return p_device5_;
+			return p_device5_.Get();
 		}
 		DeviceDep::DXGI_FACTORY_TYPE* DeviceDep::GetDxgiFactory()
 		{
-			return p_factory_;
+			return p_factory_.Get();
 		}
 		bool DeviceDep::IsSupportDxr() const
 		{
@@ -352,7 +352,7 @@ namespace ngl
 
 			// Resource取得
 			num_resource_ = device_desc.swapchain_buffer_count;
-			p_resources_ = new CComPtr<ID3D12Resource> [num_resource_];
+			p_resources_ = new Microsoft::WRL::ComPtr<ID3D12Resource> [num_resource_];
 			for (auto i = 0u; i < num_resource_; ++i)
 			{
 				if (FAILED(p_swapchain_->GetBuffer(i, IID_PPV_ARGS(&p_resources_[i]))))
@@ -382,7 +382,7 @@ namespace ngl
 		}
 		SwapChainDep::DXGI_SWAPCHAIN_TYPE* SwapChainDep::GetDxgiSwapChain()
 		{
-			return p_swapchain_;
+			return p_swapchain_.Get();
 		}
 		unsigned int SwapChainDep::NumResource() const
 		{
@@ -392,7 +392,7 @@ namespace ngl
 		{
 			if (num_resource_ <= index)
 				return nullptr;
-			return p_resources_[index];
+			return p_resources_[index].Get();
 		}
 
 		unsigned int SwapChainDep::GetCurrentBufferIndex() const
@@ -461,7 +461,7 @@ namespace ngl
 
 		ID3D12CommandQueue* CommandQueueBaseDep::GetD3D12CommandQueue()
 		{
-			return p_command_queue_;
+			return p_command_queue_.Get();
 		}
 		
 		
@@ -572,7 +572,7 @@ namespace ngl
 		}
 		ID3D12Fence* FenceDep::GetD3D12Fence()
 		{
-			return p_fence_;
+			return p_fence_.Get();
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
