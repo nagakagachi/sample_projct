@@ -1484,7 +1484,7 @@ namespace ngl
 			// shader table解放.
 			shader_table_ = {};
 		}
-		bool RtPassCore::UpdateScene(RtSceneManager* p_rt_scene)
+		bool RtPassCore::UpdateScene(RtSceneManager* p_rt_scene, const char* ray_gen_name)
 		{
 			// Scene用にShaderTable生成.
 			assert(p_device_);
@@ -1502,7 +1502,7 @@ namespace ngl
 			if (!CreateShaderTable(shader_table_,
 				p_device_,
 				desc_alloc_interface_,
-				*p_tlas, state_object_, "rayGen"))
+				*p_tlas, state_object_, ray_gen_name))
 			{
 				assert(false);
 				return false;
@@ -1643,7 +1643,7 @@ namespace ngl
 		void RtPassTest::PreRenderUpdate(class RtSceneManager* p_rt_scene)
 		{
 			p_rt_scene_ = p_rt_scene;
-			rt_pass_core_.UpdateScene(p_rt_scene);
+			rt_pass_core_.UpdateScene(p_rt_scene, "rayGen");
 		}
 		void RtPassTest::Render(rhi::GraphicsCommandListDep* p_command_list)
 		{

@@ -350,7 +350,7 @@ namespace ngl
 				uint32_t payload_byte_size = sizeof(float) * 4, uint32_t attribute_byte_size = sizeof(float) * 2, uint32_t max_trace_recursion = 1);
 			
 			// ShaderTable再生成等.
-			bool UpdateScene(class RtSceneManager* p_rt_scene);
+			bool UpdateScene(class RtSceneManager* p_rt_scene, const char* ray_gen_name);
 			
 			struct DispatchRayParam
 			{
