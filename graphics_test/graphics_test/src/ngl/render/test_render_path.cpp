@@ -80,13 +80,13 @@ namespace ngl::test
 			ngl::rtg::RenderTaskGraphBuilder rtg_builder(screen_w, screen_h);
 				
 			// Append External Resource Info.
-			ngl::rtg::ResourceHandle h_swapchain = {};
+			ngl::rtg::RtgResourceHandle h_swapchain = {};
 			{
 				if(render_frame_desc.ref_swapchain.IsValid())
 				{
 					// 外部リソース登録.
 					// このGraphの開始時点のStateと終了時にあるべきStateを指定.
-					h_swapchain = rtg_builder.AppendExternalResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
+					h_swapchain = rtg_builder.RegisterSwapchainResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
 				}
 				// TODO. any other.
 				// ...
@@ -97,10 +97,10 @@ namespace ngl::test
 				
 #define ASYNC_COMPUTE_TEST 1
 				// AsyncComputeの依存関係の追い越しパターンテスト用.
-				ngl::rtg::ResourceHandle async_compute_tex2 = {};
+				ngl::rtg::RtgResourceHandle async_compute_tex2 = {};
 #if ASYNC_COMPUTE_TEST
 				// AsyncCompute Pass.
-				auto* task_test_compute1 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
+				auto* task_test_compute1 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
 					{
@@ -112,7 +112,7 @@ namespace ngl::test
 #endif
 					
 				// PreZ Pass.
-				auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
+				auto* task_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskDepthPass>();
 				{
 					ngl::render::task::TaskDepthPass::SetupDesc setup_desc{};
 					{
@@ -122,10 +122,10 @@ namespace ngl::test
 					task_depth->Setup(rtg_builder, p_device, view_info, setup_desc);
 				}
 					
-				ngl::rtg::ResourceHandle async_compute_tex = {};
+				ngl::rtg::RtgResourceHandle async_compute_tex = {};
 #if ASYNC_COMPUTE_TEST
 				// AsyncCompute Pass 其の二.
-				auto* task_test_compute2 = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskCopmuteTest>();
+				auto* task_test_compute2 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
 					{
@@ -137,7 +137,7 @@ namespace ngl::test
 #endif
 					
 				// GBuffer Pass.
-				auto* task_gbuffer = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskGBufferPass>();
+				auto* task_gbuffer = rtg_builder.AppendTaskNode<ngl::render::task::TaskGBufferPass>();
 				{
 					ngl::render::task::TaskGBufferPass::SetupDesc setup_desc{};
 					{
@@ -148,7 +148,7 @@ namespace ngl::test
 				}
 					
 				// Linear Depth Pass.
-				auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
+				auto* task_linear_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskLinearDepthPass>();
 				{
 					ngl::render::task::TaskLinearDepthPass::SetupDesc setup_desc{};
 					{
@@ -158,7 +158,7 @@ namespace ngl::test
 				}
 					
 				// DirectionalShadow Pass.
-				auto* task_d_shadow = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDirectionalShadowPass>();
+				auto* task_d_shadow = rtg_builder.AppendTaskNode<ngl::render::task::TaskDirectionalShadowPass>();
 				{
 					ngl::render::task::TaskDirectionalShadowPass::SetupDesc setup_desc{};
 					{
@@ -172,7 +172,7 @@ namespace ngl::test
 				}
 					
 				// Deferred Lighting Pass.
-				auto* task_light = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLightPass>();
+				auto* task_light = rtg_builder.AppendTaskNode<ngl::render::task::TaskLightPass>();
 				{
 					ngl::render::task::TaskLightPass::SetupDesc setup_desc{};
 					{
@@ -189,7 +189,7 @@ namespace ngl::test
 				// Final Composite to Swapchain.
 				if(!h_swapchain.IsInvalid())
 				{
-					auto* task_final = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskFinalPass>();
+					auto* task_final = rtg_builder.AppendTaskNode<ngl::render::task::TaskFinalPass>();
 					{
 						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
 						{

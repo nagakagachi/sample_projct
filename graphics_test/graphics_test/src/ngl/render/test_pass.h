@@ -36,12 +36,7 @@ namespace ngl::render
 		// PreZパス.
 		struct TaskDepthPass : public rtg::IGraphicsTaskNode
 		{
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskDepthPass)
-				ITASK_NODE_HANDLE_REGISTER(h_depth_)
-				ITASK_NODE_DEF_END
-
-				rtg::ResourceHandle h_depth_{};
+			rtg::RtgResourceHandle h_depth_{};
 
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
@@ -55,9 +50,7 @@ namespace ngl::render
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info, const SetupDesc& desc)
 			{
 				// リソース定義.
-				//rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::ResourceFormat::Format_D32_FLOAT_S8X24_UINT);// このフォーマットはRHI対応が必要なので後回し.
-				// MaterialPassに合わせてFormat設定.
-				rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+				rtg::RtgResourceDesc2D depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
 
 				// リソースアクセス定義.
 				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
@@ -68,7 +61,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -98,20 +91,12 @@ namespace ngl::render
 		// GBufferパス.
 		struct TaskGBufferPass : public rtg::IGraphicsTaskNode
 		{
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskGBufferPass)
-				ITASK_NODE_HANDLE_REGISTER(h_depth_)
-				ITASK_NODE_HANDLE_REGISTER(h_gb0_)
-				ITASK_NODE_HANDLE_REGISTER(h_gb1_)
-				ITASK_NODE_DEF_END
-			;
-
-			rtg::ResourceHandle h_depth_{};
-			rtg::ResourceHandle h_gb0_{};
-			rtg::ResourceHandle h_gb1_{};
-			rtg::ResourceHandle h_gb2_{};
-			rtg::ResourceHandle h_gb3_{};
-			rtg::ResourceHandle h_velocity_{};
+			rtg::RtgResourceHandle h_depth_{};
+			rtg::RtgResourceHandle h_gb0_{};
+			rtg::RtgResourceHandle h_gb1_{};
+			rtg::RtgResourceHandle h_gb2_{};
+			rtg::RtgResourceHandle h_gb3_{};
+			rtg::RtgResourceHandle h_velocity_{};
 			
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
@@ -123,7 +108,7 @@ namespace ngl::render
 			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
-				rtg::ResourceHandle h_depth, rtg::ResourceHandle h_async_write_tex,
+				rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_async_write_tex,
 				const SetupDesc& desc)
 			{
 				// MaterialPassに合わせてFormat設定.
@@ -135,15 +120,15 @@ namespace ngl::render
 				
 				// リソース定義.
 				// GBuffer0 BaseColor.xyz, Occlusion.w
-				rtg::ResourceDesc2D gbuffer0_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer0_format);
+				rtg::RtgResourceDesc2D gbuffer0_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer0_format);
 				// GBuffer1 WorldNormal.xyz, 1bitOption.w
-				rtg::ResourceDesc2D gbuffer1_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer1_format);
+				rtg::RtgResourceDesc2D gbuffer1_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer1_format);
 				// GBuffer2 Roughness, Metallic, Optional, MaterialId
-				rtg::ResourceDesc2D gbuffer2_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer2_format);
+				rtg::RtgResourceDesc2D gbuffer2_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer2_format);
 				// GBuffer3 Emissive.xyz, Unused.w
-				rtg::ResourceDesc2D gbuffer3_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer3_format);
+				rtg::RtgResourceDesc2D gbuffer3_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer3_format);
 				// Velocity xy
-				rtg::ResourceDesc2D velocity_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_velocity_format);
+				rtg::RtgResourceDesc2D velocity_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_velocity_format);
 
 				// DepthのFormat取得.
 				const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
@@ -168,7 +153,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -262,12 +247,7 @@ namespace ngl::render
 		// DirectionalShadowパス.
 		struct TaskDirectionalShadowPass : public rtg::IGraphicsTaskNode
 		{
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskDirectionalShadowPass)
-				ITASK_NODE_HANDLE_REGISTER(h_shadow_depth_atlas_)
-				ITASK_NODE_DEF_END
-
-				rtg::ResourceHandle h_shadow_depth_atlas_{};
+			rtg::RtgResourceHandle h_shadow_depth_atlas_{};
 
 			rhi::RefCbvDep ref_scene_cbv_{};
 			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
@@ -302,8 +282,8 @@ namespace ngl::render
 				// CascadeをAtlas管理する際のトータルサイズ.
 				constexpr int shadowmap_atlas_reso = shadowmap_single_reso * 2;
 				// リソース定義.
-				rtg::ResourceDesc2D depth_desc =
-					rtg::ResourceDesc2D::CreateAsAbsoluteSize(shadowmap_atlas_reso, shadowmap_atlas_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+				rtg::RtgResourceDesc2D depth_desc =
+					rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(shadowmap_atlas_reso, shadowmap_atlas_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
 
 				// リソースアクセス定義.
 				h_shadow_depth_atlas_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
@@ -458,7 +438,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -520,14 +500,8 @@ namespace ngl::render
 		// LinearDepthパス.
 		struct TaskLinearDepthPass : public rtg::IGraphicsTaskNode
 		{
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskLinearDepthPass)
-				ITASK_NODE_HANDLE_REGISTER(h_depth_)
-				ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
-				ITASK_NODE_DEF_END
-
-				rtg::ResourceHandle h_depth_{};
-			rtg::ResourceHandle h_linear_depth_{};
+			rtg::RtgResourceHandle h_depth_{};
+			rtg::RtgResourceHandle h_linear_depth_{};
 
 			rhi::RefCbvDep ref_scene_cbv_{};
 
@@ -539,11 +513,11 @@ namespace ngl::render
 			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
-				rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, const SetupDesc& desc)
+				rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_tex_compute, const SetupDesc& desc)
 			{
 				{
 					// リソース定義.
-					rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
+					rtg::RtgResourceDesc2D linear_depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
 
 					// テスト用
 					if(!h_tex_compute.IsInvalid())
@@ -579,7 +553,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -607,29 +581,16 @@ namespace ngl::render
 		// Lightingパス.
 		struct TaskLightPass : public rtg::IGraphicsTaskNode
 		{
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskLightPass)
-				ITASK_NODE_HANDLE_REGISTER(h_gb0_)
-				ITASK_NODE_HANDLE_REGISTER(h_gb1_)
-				ITASK_NODE_HANDLE_REGISTER(h_gb2_)
-				ITASK_NODE_HANDLE_REGISTER(h_gb3_)
-				ITASK_NODE_HANDLE_REGISTER(h_velocity_)
-				ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
-				ITASK_NODE_HANDLE_REGISTER(h_prev_light_)
-				ITASK_NODE_HANDLE_REGISTER(h_light_)
-				ITASK_NODE_DEF_END
-
+			rtg::RtgResourceHandle h_gb0_{};
+			rtg::RtgResourceHandle h_gb1_{};
+			rtg::RtgResourceHandle h_gb2_{};
+			rtg::RtgResourceHandle h_gb3_{};
+			rtg::RtgResourceHandle h_velocity_{};
+			rtg::RtgResourceHandle h_linear_depth_{};
+			rtg::RtgResourceHandle h_prev_light_{};
+			rtg::RtgResourceHandle h_light_{};
 			
-			rtg::ResourceHandle h_gb0_{};
-			rtg::ResourceHandle h_gb1_{};
-			rtg::ResourceHandle h_gb2_{};
-			rtg::ResourceHandle h_gb3_{};
-			rtg::ResourceHandle h_velocity_{};
-			rtg::ResourceHandle h_linear_depth_{};
-			rtg::ResourceHandle h_prev_light_{};
-			rtg::ResourceHandle h_light_{};
-			
-			rtg::ResourceHandle h_shadowmap_{};
+			rtg::RtgResourceHandle h_shadowmap_{};
 			
 			rhi::RefCbvDep ref_scene_cbv_{};
 			rhi::RefCbvDep ref_shadow_cbv_{};
@@ -643,13 +604,13 @@ namespace ngl::render
 			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
-				rtg::ResourceHandle h_gb0, rtg::ResourceHandle h_gb1, rtg::ResourceHandle h_gb2, rtg::ResourceHandle h_gb3, rtg::ResourceHandle h_velocity,
-				rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_prev_light,
-				rtg::ResourceHandle h_shadowmap,
+				rtg::RtgResourceHandle h_gb0, rtg::RtgResourceHandle h_gb1, rtg::RtgResourceHandle h_gb2, rtg::RtgResourceHandle h_gb3, rtg::RtgResourceHandle h_velocity,
+				rtg::RtgResourceHandle h_linear_depth, rtg::RtgResourceHandle h_prev_light,
+				rtg::RtgResourceHandle h_shadowmap,
 				const SetupDesc& desc)
 			{
 				// リソース定義.
-				rtg::ResourceDesc2D light_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+				rtg::RtgResourceDesc2D light_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 				{
 					// リソースアクセス定義.
 					h_gb0_ = builder.RecordResourceAccess(*this, h_gb0, rtg::access_type::SHADER_READ);
@@ -722,7 +683,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -791,25 +752,16 @@ namespace ngl::render
 		// 最終パス.
 		struct TaskFinalPass : public rtg::IGraphicsTaskNode
 		{
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskFinalPass)
-				ITASK_NODE_HANDLE_REGISTER(h_depth_)
-				ITASK_NODE_HANDLE_REGISTER(h_linear_depth_)
-				ITASK_NODE_HANDLE_REGISTER(h_light_)
-				ITASK_NODE_DEF_END
+			rtg::RtgResourceHandle h_depth_{};
+			rtg::RtgResourceHandle h_linear_depth_{};
+			rtg::RtgResourceHandle h_light_{};
+			rtg::RtgResourceHandle h_swapchain_{};
 
-			rtg::ResourceHandle h_depth_{};
-			rtg::ResourceHandle h_linear_depth_{};
-			rtg::ResourceHandle h_light_{};
-			rtg::ResourceHandle h_swapchain_{};
-
-			rtg::ResourceHandle h_other_rtg_out_{};// 先行する別rtgがPropagateしたハンドルをそのフレームの後段のrtgで使用するテスト.
+			rtg::RtgResourceHandle h_other_rtg_out_{};// 先行する別rtgがPropagateしたハンドルをそのフレームの後段のrtgで使用するテスト.
 
 			
 			rhi::RefSrvDep ref_raytrace_result_srv_;
-			rtg::ResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
-
-			rhi::RefSrvDep ref_res_texture_srv_ = {};// テクスチャリソーステスト.
+			rtg::RtgResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
@@ -819,8 +771,8 @@ namespace ngl::render
 			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
-				rtg::ResourceHandle h_swapchain, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_linear_depth, rtg::ResourceHandle h_light,
-				rtg::ResourceHandle h_other_rtg_out,
+				rtg::RtgResourceHandle h_swapchain, rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_linear_depth, rtg::RtgResourceHandle h_light,
+				rtg::RtgResourceHandle h_other_rtg_out,
 				rhi::RefSrvDep ref_raytrace_result_srv,
 				rhi::RefSrvDep ref_res_texture_srv,
 				const SetupDesc& desc)
@@ -843,7 +795,7 @@ namespace ngl::render
 					}
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-					rtg::ResourceDesc2D temp_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
+					rtg::RtgResourceDesc2D temp_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RecordResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 					h_tmp_ = temp_res0;
 				}
@@ -856,15 +808,6 @@ namespace ngl::render
 					else
 					{
 						ref_raytrace_result_srv_ = gfx::GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
-					}
-
-					if(ref_res_texture_srv.IsValid())
-					{
-						ref_res_texture_srv_ = ref_res_texture_srv;
-					}
-					else
-					{
-						ref_res_texture_srv_ = gfx::GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
 					}
 				}
 
@@ -911,7 +854,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -950,7 +893,6 @@ namespace ngl::render
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "tex_light", res_light.srv_.Get());
 				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
-				//pso_->SetView(&desc_set, "tex_res_data", ref_res_texture_srv_.Get());
 				pso_->SetView(&desc_set, "tex_res_data", ref_other_rtg_out.Get());
 				
 				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
@@ -961,17 +903,10 @@ namespace ngl::render
 			}
 		};
 
-		// AsyncCompute Taskのテスト (IComputeTaskNode派生).
-		class TaskCopmuteTest : public  rtg::IComputeTaskNode
+		// AsyncComputeテスト用タスク (IComputeTaskNode派生).
+		struct TaskCopmuteTest : public  rtg::IComputeTaskNode
 		{
-		public:
-			
-			// ノード定義コンストラクタ記述マクロ.
-			ITASK_NODE_DEF_BEGIN(TaskCopmuteTest)
-				ITASK_NODE_HANDLE_REGISTER(h_work_tex_)
-			ITASK_NODE_DEF_END
-
-			rtg::ResourceHandle h_work_tex_{};
+			rtg::RtgResourceHandle h_work_tex_{};
 
 			ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_ = {};
 
@@ -981,12 +916,12 @@ namespace ngl::render
 			};
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
-				rtg::ResourceHandle h_input_test, const SetupDesc& desc)
+				rtg::RtgResourceHandle h_input_test, const SetupDesc& desc)
 			{
 				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
 				{
 					// リソース定義.
-					rtg::ResourceDesc2D work_tex_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+					rtg::RtgResourceDesc2D work_tex_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 
 					// リソースアクセス定義.
 					h_work_tex_ = builder.RecordResourceAccess(*this, builder.CreateResource(work_tex_desc), rtg::access_type::UAV);
@@ -1015,7 +950,7 @@ namespace ngl::render
 				}
 			}
 
-			// 実際のレンダリング処理.
+			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) override
 			{
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.

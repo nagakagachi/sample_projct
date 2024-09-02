@@ -141,12 +141,10 @@ AppGame::~AppGame()
 	// リソースマネージャから全て破棄.
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
-
 	gfx_frame_begin_command_list_.Reset();
 	compute_command_list_.Reset();
 	swapchain_.Reset();
-
-
+	
 	graphics_queue_.Finalize();
 	compute_queue_.Finalize();
 	device_.Finalize();
@@ -306,7 +304,6 @@ bool AppGame::Initialize()
 	}
 	
 	{
-		const char* mesh_file_box = "./third_party/assimp/test/models/FBX/box.fbx";
 		const char* mesh_file_stanford_bunny = "data/model/stanford_bunny/bunny.obj";
 		const char* mesh_file_spider = "./third_party/assimp/test/models/FBX/spider.fbx";
 		const float spider_base_scale = 0.0001f;
@@ -359,7 +356,6 @@ bool AppGame::Initialize()
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
 				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
-				//mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_spider, &loaddesc));
 				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_stanford_bunny, &loaddesc));
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
@@ -369,7 +365,6 @@ bool AppGame::Initialize()
 				mc->transform_ = ngl::math::Mat34(tr);
 			}
 			
-
 			for(int i = 0; i < 100; ++i)
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
@@ -392,15 +387,8 @@ bool AppGame::Initialize()
 
 				mc->transform_ = ngl::math::Mat34(tr);
 
-				// 移動テスト用に追加.
+				// 移動テスト用.
 				test_move_mesh_comp_array_.push_back(mc.get());
-			}
-
-			{
-				// 即時破棄をしても内部でのRenderThread初期化処理リストでの参照保持等が正常に動作するか確認するため.
-				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
-				auto immediate_destroy_resmesh = ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_box, &loaddesc);
-				immediate_destroy_resmesh = {};
 			}
 		}
 	}
@@ -478,9 +466,7 @@ bool AppGame::Execute()
 	ngl::u32 screen_w, screen_h;
 	window_.Impl()->GetScreenSize(screen_w, screen_h);
 
-
-
-
+	
 	// 操作系.
 	{
 		float camera_translate_speed = 10.0f;
@@ -586,7 +572,7 @@ bool AppGame::Execute()
 		}
 	}
 	
-	// オブジェクト操作(適当).
+	// オブジェクト移動.
 	if(true)
 	{
 		for (int i = 0; i < test_move_mesh_comp_array_.size(); ++i)
@@ -659,7 +645,6 @@ bool AppGame::Execute()
 		ngl::test::RenderFrameOut subview_render_frame_out {};
 		if(false)
 		{
-		#if 1
 			// Pathの設定.
 			ngl::test::RenderFrameDesc render_frame_desc{};
 			{
@@ -681,10 +666,9 @@ bool AppGame::Execute()
 			RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
 			// Pathの実行 (RenderTaskGraphの構築と実行).
 			TestFrameRenderingPath(render_frame_desc, subview_render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
-		#endif
 		}
 		
-		static ngl::rtg::ResourceHandle h_prev_light{};// 前回フレームハンドルのテスト.
+		static ngl::rtg::RtgResourceHandle h_prev_light{};// 前回フレームハンドルのテスト.
 		// MainViewの描画.
 		{
 			constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
