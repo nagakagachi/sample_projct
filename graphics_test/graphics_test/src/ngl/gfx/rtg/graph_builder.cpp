@@ -16,46 +16,32 @@ namespace ngl
 		// オペレータ.
 		constexpr bool TaskStage::operator<(const TaskStage arg) const
 		{
-			if(stage_ < arg.stage_)
-				return true;
-			else if(stage_ == arg.stage_)
-				return step_ < arg.step_;
-			return false;
+			return step_ < arg.step_;
 		}
 		constexpr bool TaskStage::operator>(const TaskStage arg) const
 		{
-			if(stage_ > arg.stage_)
-				return true;
-			else if(stage_ == arg.stage_)
-				return step_ > arg.step_;
-			return false;
+			return step_ > arg.step_;
 		}
 		constexpr bool TaskStage::operator<=(const TaskStage arg) const
 		{
-			if(stage_ < arg.stage_)
-				return true;
-			else if(stage_ == arg.stage_)
-				return step_ <= arg.step_;
-			return false;
+			return step_ <= arg.step_;
 		}
 		constexpr bool TaskStage::operator>=(const TaskStage arg) const
 		{
-			if(stage_ > arg.stage_)
-				return true;
-			else if(stage_ == arg.stage_)
-				return step_ >= arg.step_;
-			return false;
+			return step_ >= arg.step_;
 		}
 
 		
-
 		// リソースハンドルを生成.
-		ResourceHandle RenderTaskGraphBuilder::CreateResource(ResourceDesc2D res_desc)
+		RtgResourceHandle RenderTaskGraphBuilder::CreateResource(RtgResourceDesc2D res_desc)
 		{
+			// Compile前のRecordフェーズでのみ許可.
+			assert(IsRecordable());
+			
 			// ID確保.
 			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
 			
-			ResourceHandle handle{};
+			RtgResourceHandle handle{};
 			handle.detail.unique_id = new_handle_id;// ユニークID割当.
 
 			if(handle_2_desc_.end() != handle_2_desc_.find(handle))
@@ -73,15 +59,18 @@ namespace ngl
 
 		// 次のフレームへ寿命を延長する.
 		//	前回フレームのハンドルのリソースを利用する場合に, この関数で寿命を延長した上で次フレームで同じハンドルを使うことでアクセス可能にする予定.
-		ResourceHandle RenderTaskGraphBuilder::PropagateResouceToNextFrame(ResourceHandle handle)
+		RtgResourceHandle RenderTaskGraphBuilder::PropagateResouceToNextFrame(RtgResourceHandle handle)
 		{
+			// Compile前のRecordフェーズでのみ許可.
+			assert(IsRecordable());
+			
 			propagate_next_handle_[handle] = 0;
 
 			return handle;
 		}
 		
 		// 外部リソースを登録共通部.
-		ResourceHandle RenderTaskGraphBuilder::AppendExternalResourceCommon(
+		RtgResourceHandle RenderTaskGraphBuilder::RegisterExternalResourceCommon(
 			rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 			rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{	
@@ -126,7 +115,7 @@ namespace ngl
 			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
 			
 			// ハンドルセットアップ.
-			ResourceHandle new_handle = {};
+			RtgResourceHandle new_handle = {};
 			{
 				new_handle.detail.is_external = 1;// 外部リソースマーク.
 				new_handle.detail.is_swapchain = (swapchain.IsValid())? 1 : 0;// Swapchainマーク.
@@ -134,15 +123,15 @@ namespace ngl
 			}
 			
 			// ResourceのDescをHandleから引けるように登録.
-			ResourceDesc2D res_desc = {};
+			RtgResourceDesc2D res_desc = {};
 			{
 				if(swapchain.IsValid())
 				{
-					res_desc = ResourceDesc2D::CreateAsAbsoluteSize(swapchain->GetWidth(), swapchain->GetHeight(), swapchain->GetDesc().format);
+					res_desc = RtgResourceDesc2D::CreateAsAbsoluteSize(swapchain->GetWidth(), swapchain->GetHeight(), swapchain->GetDesc().format);
 				}
 				else
 				{
-					res_desc = ResourceDesc2D::CreateAsAbsoluteSize(tex->GetWidth(), tex->GetHeight(), tex->GetDesc().format);
+					res_desc = RtgResourceDesc2D::CreateAsAbsoluteSize(tex->GetWidth(), tex->GetHeight(), tex->GetDesc().format);
 				}
 				handle_2_desc_[new_handle] = res_desc;// desc記録.
 			}
@@ -179,29 +168,33 @@ namespace ngl
 		}
 
 		// 外部リソースの登録. 一般.
-		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(
+		RtgResourceHandle RenderTaskGraphBuilder::RegisterExternalResource(
 			rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 			rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{
-			ResourceHandle h = AppendExternalResourceCommon(tex, {}, rtv, dsv, srv, uav, curr_state, nesesary_end_state);
+			// Compile前のRecordフェーズでのみ許可.
+			assert(IsRecordable());
+			RtgResourceHandle h = RegisterExternalResourceCommon(tex, {}, rtv, dsv, srv, uav, curr_state, nesesary_end_state);
 			return h;
 		}
 		
 		// 外部リソースの登録. Swapchain.
-		ResourceHandle RenderTaskGraphBuilder::AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
+		RtgResourceHandle RenderTaskGraphBuilder::RegisterSwapchainResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state)
 		{
-			handle_imported_swapchain_ = AppendExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
+			// Compile前のRecordフェーズでのみ許可.
+			assert(IsRecordable());
+			handle_imported_swapchain_ = RegisterExternalResourceCommon({}, swapchain, rtv, {}, {}, {}, curr_state, nesesary_end_state);
 			return handle_imported_swapchain_;
 		}
 
 		// Swapchainリソースハンドルを取得. RegisterExternalResourceで登録しておく必要がある.
-		ResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle() const
+		RtgResourceHandle RenderTaskGraphBuilder::GetSwapchainResourceHandle() const
 		{
 			return handle_imported_swapchain_;
 		}
 		
 		// Descを取得.
-		ResourceDesc2D RenderTaskGraphBuilder::GetResourceHandleDesc(ResourceHandle handle) const
+		RtgResourceDesc2D RenderTaskGraphBuilder::GetResourceHandleDesc(RtgResourceHandle handle) const
 		{
 			const auto find_it = handle_2_desc_.find(handle);
 			if(handle_2_desc_.end() == find_it)
@@ -215,7 +208,7 @@ namespace ngl
 
 		// Nodeからのリソースアクセスを記録.
 		// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-		ResourceHandle RenderTaskGraphBuilder::RecordResourceAccess(const ITaskNode& node, const ResourceHandle res_handle, const ACCESS_TYPE access_type)
+		RtgResourceHandle RenderTaskGraphBuilder::RecordResourceAccess(const ITaskNode& node, const RtgResourceHandle res_handle, const ACCESS_TYPE access_type)
 		{
 			if(!IsRecordable())
 			{
@@ -424,18 +417,10 @@ namespace ngl
 			
 			std::vector<TaskStage> node_stage_array = {};// Sequence上のインデックスからタスクステージ情報を引く.
 			{
-				int stage_counter = 0;
 				int step_counter = 0;
 				for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 				{
-					// Fence等でStageが分かれる場合はここ
-					if(false)
-					{
-						++stage_counter;
-						step_counter = 0;
-					}
 					TaskStage node_stage = {};
-					node_stage.stage_ = stage_counter;
 					node_stage.step_ = step_counter;
 					node_stage_array.push_back(node_stage);
 
@@ -516,8 +501,8 @@ namespace ngl
 			std::vector<TaskStage> handle_life_last_array(handle_count);
 			for(auto handle_index = 0; handle_index < handle_access_info_array.size(); ++handle_index)
 			{
-				TaskStage stage_first = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};// 最大値初期化.
-				TaskStage stage_last = {std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};// 最小値初期化.
+				TaskStage stage_first = {std::numeric_limits<int>::max()};// 最大値初期化.
+				TaskStage stage_last = {std::numeric_limits<int>::min()};// 最小値初期化.
 
 				for(const auto access_node : handle_access_info_array[handle_index].from_node_)
 				{
@@ -537,7 +522,7 @@ namespace ngl
 				{
 					const int handle_index = handle_2_compiled_index_[e.first];
 					// グラフ終端までアクセスがあるものとして延長.
-					constexpr TaskStage stage_end = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+					constexpr TaskStage stage_end = {std::numeric_limits<int>::max()};
 					handle_life_last_array[handle_index] = stage_end;
 				}
 			}
@@ -550,7 +535,7 @@ namespace ngl
 			// MEMO. handle_2_compiled_index_はunordered_mapのためイテレートに使うと順序がNodeSequence順にならずにいきなり終端の最終アクセスPassへの割当が発生して正しい再利用が働かない.
 			for(int handle_index = 0; handle_index < compiled_index_handle_.size(); ++handle_index)
 			{
-				const ResourceHandle res_handle = compiled_index_handle_[handle_index];
+				const RtgResourceHandle res_handle = compiled_index_handle_[handle_index];
 				const auto handle_id = handle_index;
 
 					
@@ -791,7 +776,7 @@ namespace ngl
 			// Managerに次フレームへ伝搬するリソースを指示する.
 			for(auto e : propagate_next_handle_)
 			{
-				const ResourceHandle handle(e.first);
+				const RtgResourceHandle handle(e.first);
 				if(handle_2_compiled_index_.end() == handle_2_compiled_index_.find(handle))
 				{
 					// ありえないのでassert.
@@ -817,15 +802,15 @@ namespace ngl
 				std::cout << "-Access Flow Debug" << std::endl;
 				for(auto handle_index : handle_2_compiled_index_)
 				{
-					const auto handle = ResourceHandle(handle_index.first);
+					const auto handle = RtgResourceHandle(handle_index.first);
 					const auto handle_id = handle_index.second;
 					
 					const auto& lifetime_first = handle_life_first_array[handle_id];
 					const auto& lifetime_last = handle_life_last_array[handle_id];
 
-					std::cout << "	-ResourceHandle ID " << handle << std::endl;
-					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << "/" << static_cast<int>(lifetime_first.stage_) << std::endl;
-					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << "/" << static_cast<int>(lifetime_last.stage_) << std::endl;
+					std::cout << "	-RtgResourceHandle ID " << handle << std::endl;
+					std::cout << "		-FirstAccess " << static_cast<int>(lifetime_first.step_) << std::endl;
+					std::cout << "		-LastAccess " << static_cast<int>(lifetime_last.step_) << std::endl;
 
 					std::cout << "		-Resource" << std::endl;
 					
@@ -834,7 +819,7 @@ namespace ngl
 					{
 						std::cout << "			-Internal" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.resource_id)? p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id] : InternalResourceInstanceInfo();
+						const auto res = (0 <= res_id.detail.resource_id)? p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id] : InternalResourceInstanceInfo{};
 						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
 					}
@@ -842,7 +827,7 @@ namespace ngl
 					{
 						std::cout << "			-External" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.resource_id)? imported_resource_[res_id.detail.resource_id] : ExternalResourceInfo();
+						const auto res = (0 <= res_id.detail.resource_id)? imported_resource_[res_id.detail.resource_id] : ExternalResourceInfo{};
 						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						if(res.tex_.IsValid())
 							std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
@@ -868,7 +853,7 @@ namespace ngl
 			return true;
 		}
 
-		RenderTaskGraphBuilder::AllocatedHandleResourceInfo RenderTaskGraphBuilder::GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle) const
+		RtgAllocatedResourceInfo RenderTaskGraphBuilder::GetAllocatedResource(const ITaskNode* node, RtgResourceHandle res_handle) const
 		{	
 			// Compileされていないかチェック.
 			if (state_ != EBuilderState::COMPILED)
@@ -919,7 +904,7 @@ namespace ngl
 			const NodeHandleState state_transition = it_handle_state->second;
 			
 			// 返却情報構築.
-			AllocatedHandleResourceInfo ret_info = {};
+			RtgAllocatedResourceInfo ret_info = {};
 			ret_info.prev_state_ = state_transition.prev_;
 			ret_info.curr_state_ = state_transition.curr_;
 
@@ -964,7 +949,7 @@ namespace ngl
 				const auto& node_handle_access = node_handle_usage_list_[p_node];
 				for (const auto& handle_access : node_handle_access)
 				{
-					AllocatedHandleResourceInfo handle_res = GetAllocatedResource(p_node, handle_access.handle);
+					RtgAllocatedResourceInfo handle_res = GetAllocatedResource(p_node, handle_access.handle);
 					if (handle_res.tex_.IsValid() && (handle_res.prev_state_ != handle_res.curr_state_))
 					{
 						// 通常テクスチャリソースの場合.
@@ -986,7 +971,7 @@ namespace ngl
 				const auto& node_handle_access = node_handle_usage_list_[p_node];
 				for (const auto& handle_access : node_handle_access)
 				{
-					AllocatedHandleResourceInfo handle_res = GetAllocatedResource(p_node, handle_access.handle);
+					RtgAllocatedResourceInfo handle_res = GetAllocatedResource(p_node, handle_access.handle);
 					if (handle_res.tex_.IsValid())
 					{
 						// 通常テクスチャリソースの場合.
@@ -1035,7 +1020,8 @@ namespace ngl
 			std::vector<std::vector<rhi::CommandListBaseDep*>> node_commandlists = {};
 			node_commandlists.resize(node_sequence_.size());
 			
-			// Taskのレンダリング実行.
+			// TaskのレンダリングタスクのJob実行リスト.
+			std::vector< std::function<void(void)> > render_jobs{}; 
 			for (const auto& e : node_sequence_)
 			{
 				const int node_index = GetNodeSequencePosition(e);
@@ -1047,53 +1033,67 @@ namespace ngl
 					// CommandList積み込みJob部分.
 					{
 						// このNode用にCommandList確保. Graphics板を取得.
-						rhi::GraphicsCommandListDep* ref_cmdlist = {};
-						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
-						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
+						rhi::GraphicsCommandListDep* p_cmdlist = {};
+						p_compiled_manager_->GetNewFrameCommandList(p_cmdlist);
+						node_commandlists[node_index].push_back(p_cmdlist);// Node別CommandListArrayに登録.
 						
-						// CommandLList Begin. Endは最後にまとめて実行される.
-						ref_cmdlist->Begin();
-						// Taskに割り当てられたリソースのバリア.
-						generate_barrier_command(e, ref_cmdlist);
-					
-						// Barrier発行後にレンダリングコマンド生成.
-						e->Run(*this, ref_cmdlist);
+						// CommandLList Begin. Endは別途実行.
+						p_cmdlist->Begin();
+						generate_barrier_command(e, p_cmdlist);
+						
+						auto render_func = [this, e, p_cmdlist]()
+						{
+							e->Run(*this, p_cmdlist);
+						};
+						// JobリストにTaskのレンダリング処理を登録.
+						render_jobs.push_back(render_func);
 					}
 				}
 				else if(ETASK_TYPE::COMPUTE == e->TaskType())
 				{
 					// Compute.
-					// 最初に状態遷移が必要なリソースがあれば, GraphicsCommandListを取得してバリアを発行する.
+					
+					//	Compute側で必要なリソースバリアを発行するためのCommandList.
 					if(check_exist_state_transition(e))
 					{
 						// 状態遷移コマンド発行用にGraphics板を取得.
-						rhi::GraphicsCommandListDep* ref_cmdlist = {};
-						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
-						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
+						rhi::GraphicsCommandListDep* p_cmdlist = {};
+						p_compiled_manager_->GetNewFrameCommandList(p_cmdlist);
+						node_commandlists[node_index].push_back(p_cmdlist);// Node別CommandListArrayに登録.
 						
-						// CommandLList Begin. Endは最後にまとめて実行される.
-						ref_cmdlist->Begin();
-						// Taskに割り当てられたリソースのバリア.
-						generate_barrier_command(e, ref_cmdlist);
+						// CommandLList Begin. Endは別途実行.
+						p_cmdlist->Begin();
+						generate_barrier_command(e, p_cmdlist);
 					}
+					
 					// ComputeTaskのCommandを発行する.
 					{
-						rhi::ComputeCommandListDep* ref_cmdlist = {};
-						p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist);
-						node_commandlists[node_index].push_back(ref_cmdlist);// Node別CommandListArrayに登録.
+						rhi::ComputeCommandListDep* p_cmdlist = {};
+						p_compiled_manager_->GetNewFrameCommandList(p_cmdlist);
+						node_commandlists[node_index].push_back(p_cmdlist);// Node別CommandListArrayに登録.
 						
-						// CommandLList Begin. Endは最後にまとめて実行される.
-						ref_cmdlist->Begin();
+						// CommandLList Begin. Endは別途実行.
+						p_cmdlist->Begin();
 					
-						// Barrier発行後にレンダリングコマンド生成.
-						e->Run(*this, ref_cmdlist);
+						auto render_func = [this, e, p_cmdlist]()
+						{
+							e->Run(*this, p_cmdlist);
+						};
+						// JobリストにTaskのレンダリング処理を登録.
+						render_jobs.push_back(render_func);
 					}
 				}
 				else
 				{
-					// ありえない.
 					assert(false);
 				}
+			}
+
+			// Taskの処理部を実行.
+			// MEMO このJobは並列実行可能(Task実装側に注意).
+			for(auto& job : render_jobs)
+			{
+				job();
 			}
 
 			// Taskが積み込みをした全CommandListをEnd.
@@ -1110,10 +1110,8 @@ namespace ngl
 			p_compiled_manager_->GetNewFrameCommandList(ref_cmdlist_final);
 			{
 				ref_cmdlist_final->Begin();
-
 				// 外部リソースの最終リソース解決バリア発行.
 				generate_final_barrier_for_imported_resource(imported_resource_, ref_cmdlist_final);
-				
 				ref_cmdlist_final->End();
 			}
 
@@ -1312,6 +1310,57 @@ namespace ngl
 			return EBuilderState::COMPILED == state_;
 		}
 		
+		// RtgのExecute() で構築して生成したComandListのSequenceをGPUへSubmitするヘルパー関数.
+		void RenderTaskGraphBuilder::SubmitCommand(
+			rhi::GraphicsCommandQueueDep& graphics_queue, rhi::ComputeCommandQueueDep& compute_queue,
+			std::vector<RtgSubmitCommandSequenceElem>& graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& compute_commands)
+		{
+			//	連続したCommandListをなるべく一度のExecuteにまとめ, 必要な箇所でFenceを張る.
+			auto submit_sequence = [](std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& sequence, ngl::rhi::CommandQueueBaseDep& graphics_queue)
+			{
+				std::vector<ngl::rhi::CommandListBaseDep*> exec_command_list_reservoir = {};
+				for(auto&& e : sequence)
+				{
+					if(ngl::rtg::ERtgSubmitCommandType::CommandList == e.type)
+					{
+						exec_command_list_reservoir.push_back(e.command_list);
+					}
+					else
+					{
+						// Fenceが現れたらそれまでのCommandListをまとめてSubmit.
+						if(0u < exec_command_list_reservoir.size())
+						{
+							graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_reservoir.size()), exec_command_list_reservoir.data());
+							exec_command_list_reservoir.clear();
+						}
+						assert(e.fence.IsValid());
+						
+						if(ngl::rtg::ERtgSubmitCommandType::Signal == e.type)
+						{
+							graphics_queue.Signal(e.fence.Get(), e.fence_value);
+						}
+						else if(ngl::rtg::ERtgSubmitCommandType::Wait == e.type)
+						{
+							graphics_queue.Wait(e.fence.Get(), e.fence_value);
+						}
+						else
+						{
+							assert(false);// ありえない.
+						}
+					}
+				}
+				// 残ったCommandListをSubmit.
+				if(0u < exec_command_list_reservoir.size())
+				{
+					graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_reservoir.size()), exec_command_list_reservoir.data());
+					exec_command_list_reservoir.clear();
+				}
+			};
+			
+			// QueueにSubmit.
+			submit_sequence(graphics_commands, graphics_queue);
+			submit_sequence(compute_commands, compute_queue);
+		}
 		// --------------------------------------------------------------------------------------------------------------------
 		uint32_t RenderTaskGraphManager::s_res_handle_id_counter_ = 0;
 
@@ -1681,7 +1730,7 @@ namespace ngl
 			return &internal_resource_pool_[resource_id];
 		}
 		
-		void RenderTaskGraphManager::PropagateResourceToNextFrame(ResourceHandle handle, int resource_id)
+		void RenderTaskGraphManager::PropagateResourceToNextFrame(RtgResourceHandle handle, int resource_id)
 		{
 			const int flip_index_next = flip_propagate_next_handle_next_;
 			propagate_next_handle_[flip_index_next][handle] = resource_id;
@@ -1689,7 +1738,7 @@ namespace ngl
 			// このフレームの後段rtgで伝搬リソースとしてアクセスするためにテンポラルなMapにも登録. このMapは二重化せずフレーム最初にクリアされる.
 			propagate_next_handle_temporal_[handle] = resource_id;
 		}
-		int RenderTaskGraphManager::FindPropagatedResourceId(ResourceHandle handle)
+		int RenderTaskGraphManager::FindPropagatedResourceId(RtgResourceHandle handle)
 		{
 			// 前フレームから伝搬されたリソース探索.
 			{

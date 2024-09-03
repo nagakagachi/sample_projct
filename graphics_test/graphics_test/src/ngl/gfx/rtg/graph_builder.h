@@ -65,10 +65,10 @@
 	// ------------------------------------------
 	// BuilderによるPassグラフの定義例.
 	// 最初にDepthPass
-	auto* task_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskDepthPass>();
+	auto* task_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskDepthPass>();
 	// ...
 
-	auto* task_linear_depth = rtg_builder.AppendNodeToSequence<ngl::render::task::TaskLinearDepthPass>();
+	auto* task_linear_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskLinearDepthPass>();
 	// 先行するDepthPassの出力Depthハンドルを読み取り使用でレコードするため引数にとる.
 	task_linear_depth->Setup(..., task_depth->h_depth_, ...);
 
@@ -89,7 +89,6 @@
 	// out_graphics_cmd と out_compute_cmd は非同期コンピュートを考慮したコマンドリスト列.
 	// Managerのヘルパー関数でGPUへSubmitする.
 	ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, out_graphics_cmd, out_compute_cmd);
-	
  */
 
 #include <unordered_map>
@@ -146,7 +145,7 @@ namespace ngl
 		
 
 		// Passが必要とするリソースの定義.
-		struct ResourceDesc2D
+		struct RtgResourceDesc2D
 		{
 			struct Desc
 			{
@@ -169,17 +168,17 @@ namespace ngl
 
 
 				// サイズ直接指定. その他データはEmpty.
-				static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h)
+				static constexpr RtgResourceDesc2D CreateAsAbsoluteSize(int w, int h)
 				{
-					ResourceDesc2D v{};
+					RtgResourceDesc2D v{};
 					v.desc.is_relative = false;
 					v.desc.abs_size = { w, h };
 					return v;
 				}
 				// 相対サイズ指定. その他データはEmpty.
-				static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate)
+				static constexpr RtgResourceDesc2D CreateAsRelative(float w_rate, float h_rate)
 				{
-					ResourceDesc2D v{};
+					RtgResourceDesc2D v{};
 					v.desc.is_relative = true;
 					v.desc.rel_size = { w_rate, h_rate };
 					return v;
@@ -202,18 +201,16 @@ namespace ngl
 			};
 
 			// サイズ直接指定.
-			static constexpr ResourceDesc2D CreateAsAbsoluteSize(int w, int h, rhi::EResourceFormat format)
+			static constexpr RtgResourceDesc2D CreateAsAbsoluteSize(int w, int h, rhi::EResourceFormat format)
 			{
-				ResourceDesc2D v = Desc::CreateAsAbsoluteSize(w, h);
-
+				RtgResourceDesc2D v = Desc::CreateAsAbsoluteSize(w, h);
 				v.desc.format = format;
 				return v;
 			}
 			// 相対サイズ指定.
-			static constexpr ResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::EResourceFormat format)
+			static constexpr RtgResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::EResourceFormat format)
 			{
-				ResourceDesc2D v = Desc::CreateAsRelative(w_rate, h_rate);
-
+				RtgResourceDesc2D v = Desc::CreateAsRelative(w_rate, h_rate);
 				v.desc.format = format;
 				return v;
 			}
@@ -235,20 +232,20 @@ namespace ngl
 			}
 		};
 		// StorageをHashKey扱いするためStorageがオブジェクト全体を包括するサイズである必要がある.
-		static_assert(sizeof(ResourceDesc2D) == sizeof(ResourceDesc2D::Storage));
-		static constexpr auto sizeof_ResourceDesc2D_Desc = sizeof(ResourceDesc2D::Desc);
-		static constexpr auto sizeof_ResourceDesc2D_Storage = sizeof(ResourceDesc2D::Storage);
-		static constexpr auto sizeof_ResourceDesc2D = sizeof(ResourceDesc2D);
+		static_assert(sizeof(RtgResourceDesc2D) == sizeof(RtgResourceDesc2D::Storage));
+		static constexpr auto sizeof_ResourceDesc2D_Desc = sizeof(RtgResourceDesc2D::Desc);
+		static constexpr auto sizeof_ResourceDesc2D_Storage = sizeof(RtgResourceDesc2D::Storage);
+		static constexpr auto sizeof_ResourceDesc2D = sizeof(RtgResourceDesc2D);
 
 		
 		// RTGのノードが利用するリソースハンドル.
 		// 識別IDやSwapchain識別等の情報を保持.
 		// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
-		using ResourceHandleKeyType = uint64_t;
-		struct ResourceHandle
+		using RtgResourceHandleKeyType = uint64_t;
+		struct RtgResourceHandle
 		{
-			constexpr ResourceHandle() = default;
-			constexpr ResourceHandle(ResourceHandleKeyType data)
+			constexpr RtgResourceHandle() = default;
+			constexpr RtgResourceHandle(RtgResourceHandleKeyType data)
 			{
 				this->data = data;
 			}
@@ -256,7 +253,7 @@ namespace ngl
 			union
 			{
 				// (u64)0は特殊IDで無効扱い. unique_idが0でもswapchainビットが1であれば有効.
-				ResourceHandleKeyType data = 0;
+				RtgResourceHandleKeyType data = 0;
 				struct Detail
 				{
 					uint32_t unique_id;
@@ -267,21 +264,21 @@ namespace ngl
 				}detail;
 			};
 
-			static constexpr ResourceHandle InvalidHandle()
+			static constexpr RtgResourceHandle InvalidHandle()
 			{
-				return ResourceHandle({});
+				return RtgResourceHandle({});
 			}
 			// 無効はHandleか.
 			bool IsInvalid() const
 			{
 				return detail.unique_id == InvalidHandle().detail.unique_id;
 			}
-			operator ResourceHandleKeyType() const
+			operator RtgResourceHandleKeyType() const
 			{
 				return data;
 			}
 		};
-		static constexpr auto sizeof_ResourceHandle = sizeof(ResourceHandle);
+		static constexpr auto sizeof_ResourceHandle = sizeof(RtgResourceHandle);
 
 		
 		// Taskの基底.
@@ -295,62 +292,16 @@ namespace ngl
 			// Type.
 			virtual ETASK_TYPE TaskType() const = 0;
 			
-			// レンダリングの実装部. 一旦動的にGraphicsとComputeを分ける.
-			// GraphicsTaskの実装用.
+			// レンダリングの実装部.
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
-
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
 
-			
-			// ------------------------------------------------------------------------------------------------------------------
-			// デバッグ用
 		public:
-			struct DebugHandleRef
-			{
-				RtgNameType name{};
-				ResourceHandle* p_handle{};
-			};
-			void RegisterSelfHandle(const char* name, ResourceHandle& handle)
-			{
-				DebugHandleRef elem = { name , &handle};
-				debug_ref_handles_.push_back(elem);
-			}
-			// Debug用途でメンバとしてHandleを持つ. 名前などを付けたい場合はResourceHandle経由でアクセスできる場所に登録すべきか.
-			// Node固有のハンドル情報. ITASK_NODE_HANDLE_REGISTERマクロ経由で登録される.
-			// 注意! 一時ハンドルなど, ITASK_NODE_HANDLE_REGISTERを使わないハンドルは登録されないことに注意(このNodeが参照する全てのHandleを網羅する情報ではない).
-			std::vector<DebugHandleRef> debug_ref_handles_{};
-			
 			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
 		protected:
 			void SetDebugNodeName(const char* name){ debug_node_name_ = name; }
 			RtgNameType debug_node_name_{};
-			// デバッグ用
-			// ------------------------------------------------------------------------------------------------------------------
 		};
-		
-		// -------------------------------------------------------------
-		// Nodeクラスのコンストラクタ定義開始マクロ. デバッグ名登録等も自動化.
-		#		define ITASK_NODE_DEF_BEGIN(CLASS_NAME) CLASS_NAME()\
-				{\
-				SetDebugNodeName( #CLASS_NAME );
-		// -------------------------------------------------------------
-
-		// -------------------------------------------------------------
-		// Nodeのメンバハンドル定義. 
-		// ITASK_NODE_DEF_BEGIN と ITASK_NODE_DEF_END の間に記述.
-		// マクロで登録処理などを隠蔽.
-		#define ITASK_NODE_HANDLE_REGISTER(name)\
-				{\
-				DebugHandleRef elem = { #name , &name};\
-				debug_ref_handles_.push_back(elem);\
-				};
-		// -------------------------------------------------------------
-
-		// -------------------------------------------------------------
-		// Nodeクラスのコンストラクタ定義終端マクロ.
-		#define ITASK_NODE_DEF_END\
-				};
-		// -------------------------------------------------------------
 		
 		// 生成はRenderTaskGraphBuilder経由.
 		// GraphicsTaskの基底クラス.
@@ -386,27 +337,41 @@ namespace ngl
 			};
 		};
 
+		// -------------------------------------------------------------------------------------------
+		// Compileで割り当てられたHandleのリソース情報.
+		struct RtgAllocatedResourceInfo
+		{
+			RtgAllocatedResourceInfo() = default;
+
+			rhi::EResourceState	prev_state_ = rhi::EResourceState::Common;// NodeからResourceHandleでアクセスした際の直前のリソースステート.
+			rhi::EResourceState	curr_state_ = rhi::EResourceState::Common;// NodeからResourceHandleでアクセスした際の現在のリソースステート. RTGによって自動的にステート遷移コマンドが発行される.
+
+			rhi::RefTextureDep				tex_ = {};
+			rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};// Swapchainの場合はこちらに参照が設定される.
+
+			rhi::RefRtvDep		rtv_ = {};
+			rhi::RefDsvDep		dsv_ = {};
+			rhi::RefUavDep		uav_ = {};
+			rhi::RefSrvDep		srv_ = {};
+		};
 
 
 		// ハンドル毎のタイムライン上での位置を示す情報を生成.
-		// AsyncComputeのFenceを考慮して, 同期で区切られる Stage番号 と Stage内の順序である Step番号 の2つにする予定.
-		// [GraphicsとAsyncComputeの間でのリソース再利用やリソース読み書きはstageをまたぐ必要が有る]などのチェックや制御に使う
 		struct TaskStage
 		{
+			int step_ = 0;
+			
 			constexpr TaskStage() = default;
 			
-			int stage_ = 0;// Stage番号. Sequence先頭である0からみてさらに以前を表現したいため符号付き.
-			int step_ = 0;// Stage内でのローカル番号. Sequence先頭 0 からみてさらに以前を表現したいため符号付き.
-
 			// Stage 0 に対して常に前となるようなStage. リソースプール側リソースのリセットや新規生成リソースのステージとして利用.
 			static constexpr TaskStage k_frontmost_stage()
 			{
-				return TaskStage{std::numeric_limits<int>::min(), std::numeric_limits<int>::min()};
+				return TaskStage{std::numeric_limits<int>::min()};
 			};
 			// 最終端のStage.
 			static constexpr TaskStage k_endmost_stage()
 			{
-				return TaskStage{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+				return TaskStage{std::numeric_limits<int>::max()};
 			};
 			
 			// オペレータ.
@@ -470,8 +435,8 @@ namespace ngl
 			ERtgSubmitCommandType type = ERtgSubmitCommandType::CommandList;
 
 			// ERtgSubmitCommandType == CommandList
-			//	Rtg管理化のPoolから現在フレームのみの寿命として割り当てられたCommandList.
-			rhi::CommandListBaseDep* command_list = {};// 内部プールの関係でRefではなくポインタにしている.
+			//	Rtg管理化のPoolから現在フレームのみの寿命として割り当てられたCommandList. 内部プール利用の関係でRefではなくポインタ.
+			rhi::CommandListBaseDep* command_list = {};
 
 			// ERtgSubmitCommandType == Signal or Wait
 			//	Rtg管理化のPoolから現在フレームのみの寿命として割り当てられたFence.
@@ -479,10 +444,9 @@ namespace ngl
 			//	Rtgがスケジュールした同期のためのSignalまたはWaitで使用するFenceValue.
 			u64							fence_value = 0;
 		};
-		
-		// レンダリング処理をもつTaskNode列を記録し, リソースの割当やリソース状態遷移を解決してTaskNodeの並列CommandList構築を実現する.
+
+		// レンダリングパスのシーケンスとそれらのリソース依存関係解決.
 		//	このクラスのインスタンスは　TaskNodeのRecord, Compile, Execute の一連の処理の後に使い捨てとなる. これは使いまわしのための状態リセットの実装ミスを避けるため.
-		//	
 		//  TaskNode内部の一時リソースやTaskNode間のリソースフローはHandleを介して記録し, Compileによって実際のリソース割当や状態遷移の解決をする.
 		// 	CommandListはCreateされたTaskNodeの順序となる.
 		//	AsyncComputeのTaskNodeもサポート予定で, Fence風のSignalとWeightによってGPU側での同期を記述することを検討中.
@@ -502,8 +466,11 @@ namespace ngl
 			// ITaskBase派生クラスをシーケンスの末尾に新規生成する.
 			// GraphicsおよびAsyncCompute両方を登録する. それぞれのタイプ毎での実行順は登録順となる. GraphicsとAsyncComputeの同期ポイントは別途指示する予定.
 			template<typename TTaskNode>
-			TTaskNode* AppendNodeToSequence()
+			TTaskNode* AppendTaskNode()
 			{
+				// Compile前のRecordフェーズでのみ許可.
+				assert(IsRecordable());
+				
 				auto new_node = new TTaskNode();
 				node_sequence_.push_back(new_node);
 				return new_node;
@@ -512,67 +479,55 @@ namespace ngl
 		public:
 			// リソースハンドルを生成.
 			//	Graph内リソースを確保してハンドルを取得する.
-			ResourceHandle CreateResource(ResourceDesc2D res_desc);
+			RtgResourceHandle CreateResource(RtgResourceDesc2D res_desc);
 
 			// 次のフレームへ寿命を延長する.
 			//	前回フレームのハンドルのリソースを利用する場合に, この関数で寿命を延長した上で次フレームで同じハンドルを使うことでアクセス可能にする予定.
-			ResourceHandle PropagateResouceToNextFrame(ResourceHandle handle);
+			RtgResourceHandle PropagateResouceToNextFrame(RtgResourceHandle handle);
 
 			// 外部リソースを登録してハンドルを生成. 一般.
 			//	rtv,dsv,srv,uavはそれぞれ登録するものだけ有効な参照を指定する.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
-			ResourceHandle AppendExternalResource(rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
+			RtgResourceHandle RegisterExternalResource(rhi::RefTextureDep tex, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 				rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state);
 			
 			// 外部リソースを登録してハンドルを生成. Swapchain用.
 			// curr_state			: 外部リソースのGraph開始時点のステート.
 			// nesesary_end_state	: 外部リソースのGraph実行完了時点で遷移しているべきステート. 外部から要求する最終ステート遷移.
-			ResourceHandle AppendExternalResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
+			RtgResourceHandle RegisterSwapchainResource(rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep swapchain_rtv,
 				rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state);
 			
 			// Swapchainリソースハンドルを取得. 外部リソースとしてSwapchainは特別扱い.
-			ResourceHandle GetSwapchainResourceHandle() const;
+			RtgResourceHandle GetSwapchainResourceHandle() const;
 			
 			// Handleのリソース定義情報を取得.
-			ResourceDesc2D GetResourceHandleDesc(ResourceHandle handle) const;
+			RtgResourceDesc2D GetResourceHandleDesc(RtgResourceHandle handle) const;
 
 			
 			// Nodeからのリソースアクセスを記録.
 			// NodeのRender実行順と一致する順序で登録をする必要がある. この順序によってリソースステート遷移の確定や実リソースの割当等をする.
-			ResourceHandle RecordResourceAccess(const ITaskNode& node, const ResourceHandle res_handle, const ACCESS_TYPE access_type);
+			RtgResourceHandle RecordResourceAccess(const ITaskNode& node, const RtgResourceHandle res_handle, const ACCESS_TYPE access_type);
+
+		public:
+			// CompileはRenderTaskGraphManager経由で実行する
+			// RenderTaskGraphManager::Compile( RenderTaskGraphBuilder* )
 			
 			// Graph実行.
-			// Compileしたグラフを実行しCommandListを構築する (RenderTaskGraphManager::Compile).
+			// Compile済みのGraphを実行しCommandListを構築する.
 			// 結果はQueueへSubmitするCommandListとFenceのSequence.
 			// 結果のSequenceは外部でQueueに直接Submitすることも可能であるが, ヘルパ関数SubmitCommand()を利用することを推奨する.
 			void Execute(std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands);
 
-			// RTGのExecute() で構築したが生成したComandListのSequenceをGPUへSubmitするヘルパー関数.
-			static inline void SubmitCommand(
+			// RtgのExecute() で構築して生成したComandListのSequenceをGPUへSubmitするヘルパー関数.
+			static void SubmitCommand(
 				rhi::GraphicsCommandQueueDep& graphics_queue, rhi::ComputeCommandQueueDep& compute_queue,
 				std::vector<RtgSubmitCommandSequenceElem>& graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& compute_commands);
 			
-			// -------------------------------------------------------------------------------------------
-			// Compileで割り当てられたHandleのリソース情報.
-			struct AllocatedHandleResourceInfo
-			{
-				AllocatedHandleResourceInfo() = default;
-
-				rhi::EResourceState	prev_state_ = rhi::EResourceState::Common;// NodeからResourceHandleでアクセスした際の直前のリソースステート.
-				rhi::EResourceState	curr_state_ = rhi::EResourceState::Common;// NodeからResourceHandleでアクセスした際の現在のリソースステート. RTGによって自動的にステート遷移コマンドが発行される.
-
-				rhi::RefTextureDep				tex_ = {};
-				rhi::RhiRef<rhi::SwapChainDep>	swapchain_ = {};// Swapchainの場合はこちらに参照が設定される.
-
-				rhi::RefRtvDep		rtv_ = {};
-				rhi::RefDsvDep		dsv_ = {};
-				rhi::RefUavDep		uav_ = {};
-				rhi::RefSrvDep		srv_ = {};
-			};
+		public:
 			// NodeのHandleに対して割り当て済みリソースを取得する.
 			// Graphシステム側で必要なBarrierコマンドを発効するため基本的にNode実装側ではBarrierコマンドは不要.
-			AllocatedHandleResourceInfo GetAllocatedResource(const ITaskNode* node, ResourceHandle res_handle) const;
+			RtgAllocatedResourceInfo GetAllocatedResource(const ITaskNode* node, RtgResourceHandle res_handle) const;
 			// -------------------------------------------------------------------------------------------
 			
 		private:
@@ -592,25 +547,25 @@ namespace ngl
 			int res_base_width_ = static_cast<int>( static_cast<float>(k_base_height) * 16.0f/9.0f);
 			
 			std::vector<ITaskNode*> node_sequence_{};// Graph構成ノードシーケンス. 生成順がGPU実行順で, AsyncComputeもFenceで同期をする以外は同様.
-			std::unordered_map<ResourceHandleKeyType, ResourceDesc2D> handle_2_desc_{};// Handleからその定義のMap.
+			std::unordered_map<RtgResourceHandleKeyType, RtgResourceDesc2D> handle_2_desc_{};// Handleからその定義のMap.
 			
 			struct NodeHandleUsageInfo
 			{
-				ResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
+				RtgResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
 				ACCESS_TYPE				access{};// あるNodeから上記Handleがどのアクセスタイプで利用されたか.
 			};
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_list_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Importリソース用.
 			std::vector<ExternalResourceInfo> imported_resource_ = {};
-			std::unordered_map<ResourceHandleKeyType, int> imported_handle_2_index_ = {};
+			std::unordered_map<RtgResourceHandleKeyType, int> imported_handle_2_index_ = {};
 
 			// ImportしたSwapchainは何かとアクセスするためHandle保持.
-			ResourceHandle	handle_imported_swapchain_ = {};
+			RtgResourceHandle	handle_imported_swapchain_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			
 			// 次フレームまで寿命を延長するハンドル.
-			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_ = {};
+			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			
@@ -620,15 +575,14 @@ namespace ngl
 				{
 					int from = -1;
 					int to = -1;
-
 					int fence_id = -1;// Wait側に格納されるFence. Signal側はtoの指すIndexが持つこのIDを利用する.
 				};
 				// Queue違いのNode間のfence依存関係.
 				std::vector<NodeDependency> node_dependency_fence_ = {};
 				// HandleからリニアインデックスへのMap.
-				std::unordered_map<ResourceHandleKeyType, int> handle_2_compiled_index_ = {};
+				std::unordered_map<RtgResourceHandleKeyType, int> handle_2_compiled_index_ = {};
 				// NodeSequenceの順序に沿ったHandle配列.
-				std::vector<ResourceHandle>						compiled_index_handle_ = {};
+				std::vector<RtgResourceHandle>						compiled_index_handle_ = {};
 
 				// Compileで構築される情報.
 				// Handleに割り当てられたリソースのPool上のIndex.
@@ -671,9 +625,8 @@ namespace ngl
 					rhi::EResourceState prev_ = {};
 					rhi::EResourceState curr_ = {};
 				};
-				// Compileで構築される情報.
 				// NodeのHandle毎のリソース状態遷移.
-				std::unordered_map<const ITaskNode*, std::unordered_map<ResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
+				std::unordered_map<const ITaskNode*, std::unordered_map<RtgResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 		private:
@@ -691,7 +644,7 @@ namespace ngl
 			
 			// ------------------------------------------
 			// 外部リソースを登録共通部.
-			ResourceHandle AppendExternalResourceCommon(
+			RtgResourceHandle RegisterExternalResourceCommon(
 				rhi::RefTextureDep tex, rhi::RhiRef<rhi::SwapChainDep> swapchain, rhi::RefRtvDep rtv, rhi::RefDsvDep dsv, rhi::RefSrvDep srv, rhi::RefUavDep uav,
 				rhi::EResourceState curr_state, rhi::EResourceState nesesary_end_state);
 		};
@@ -699,7 +652,8 @@ namespace ngl
 
 
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------
-		// RenderTaskGraphBuilderのCompileや, それらが利用するリソースの永続的なプール管理.
+		// Rtg core system.
+		// RenderTaskGraphBuilderのCompileやそれらが利用するリソースの永続的なプール管理.
 		class RenderTaskGraphManager
 		{
 			friend class RenderTaskGraphBuilder;
@@ -730,10 +684,10 @@ namespace ngl
 			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
 			
 			// 次のフレームへ伝搬するハンドルとリソースIDのMap.
-			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_[2] = {};
+			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_[2] = {};
 			// 次のフレームへ伝搬するハンドル登録用FlipIndex. 前回フレームから伝搬されたハンドルは 1-flip_propagate_next_handle_next_ のMapが対応.
 			int flip_propagate_next_handle_next_ = 0;
-			std::unordered_map<ResourceHandleKeyType, int> propagate_next_handle_temporal_ = {};
+			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_temporal_ = {};
 
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
@@ -745,18 +699,17 @@ namespace ngl
 			InternalResourceInstanceInfo* GetInternalResourcePtr(int resource_id);
 
 			// BuilderからハンドルとリソースIDを紐づけて次のフレームへ伝搬する.
-			void PropagateResourceToNextFrame(ResourceHandle handle, int resource_id);
+			void PropagateResourceToNextFrame(RtgResourceHandle handle, int resource_id);
 			// 伝搬されたハンドルに紐付けられたリソースIDを検索.
-			int FindPropagatedResourceId(ResourceHandle handle);
+			int FindPropagatedResourceId(RtgResourceHandle handle);
 			
 		public:
-			// 本来はこれらはBuilder側で隠蔽する予定(CommandListの確保もスケジューリングする).
-			// Builderが利用するCommandListの新規取得.
+			// Builderが利用するCommandListをPoolから取得(Graphics).
 			void GetNewFrameCommandList(rhi::GraphicsCommandListDep*& out_ref)
 			{
 				commandlist_pool_.GetFrameCommandList(out_ref);
 			}
-			// Builderが利用するCommandListの新規取得.
+			// Builderが利用するCommandListをPoolから取得(Compute).
 			void GetNewFrameCommandList(rhi::ComputeCommandListDep*& out_ref)
 			{
 				commandlist_pool_.GetFrameCommandList(out_ref);
@@ -766,67 +719,11 @@ namespace ngl
 			
 		private:
 			// ユニークなハンドルIDを取得.
-			//	64bitにするかもしれない.
+			//	TODO. 64bit.
 			static uint32_t GetNewHandleId();
 			static uint32_t	s_res_handle_id_counter_;// リソースハンドルユニークID. 生成のたびに加算しユニーク識別.
 		};
 		
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-		// RTGのExecute() で構築したが生成したComandListのSequenceをGPUへSubmitする.
-		void RenderTaskGraphBuilder::SubmitCommand(
-			rhi::GraphicsCommandQueueDep& graphics_queue, rhi::ComputeCommandQueueDep& compute_queue,
-			std::vector<RtgSubmitCommandSequenceElem>& graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& compute_commands)
-		{
-			//	連続したCommandListをなるべく一度のExecuteにまとめ, 必要な箇所でFenceを張る.
-			auto submit_sequence = [](std::vector<ngl::rtg::RtgSubmitCommandSequenceElem>& sequence, ngl::rhi::CommandQueueBaseDep& graphics_queue)
-			{
-				std::vector<ngl::rhi::CommandListBaseDep*> exec_command_list_reservoir = {};
-				for(auto&& e : sequence)
-				{
-					if(ngl::rtg::ERtgSubmitCommandType::CommandList == e.type)
-					{
-						exec_command_list_reservoir.push_back(e.command_list);
-					}
-					else
-					{
-						// Fenceが現れたらそれまでのCommandListをまとめてSubmit.
-						if(0u < exec_command_list_reservoir.size())
-						{
-							graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_reservoir.size()), exec_command_list_reservoir.data());
-							exec_command_list_reservoir.clear();
-						}
-						assert(e.fence.IsValid());
-						
-						if(ngl::rtg::ERtgSubmitCommandType::Signal == e.type)
-						{
-							graphics_queue.Signal(e.fence.Get(), e.fence_value);
-						}
-						else if(ngl::rtg::ERtgSubmitCommandType::Wait == e.type)
-						{
-							graphics_queue.Wait(e.fence.Get(), e.fence_value);
-						}
-						else
-						{
-							assert(false);// ありえない.
-						}
-					}
-				}
-				// 残ったCommandListをSubmit.
-				if(0u < exec_command_list_reservoir.size())
-				{
-					graphics_queue.ExecuteCommandLists(static_cast<unsigned int>(exec_command_list_reservoir.size()), exec_command_list_reservoir.data());
-					exec_command_list_reservoir.clear();
-				}
-			};
-			
-			// QueueにSubmit.
-			submit_sequence(graphics_commands, graphics_queue);
-			submit_sequence(compute_commands, compute_queue);
-		}
-
-		
 	}
 }
