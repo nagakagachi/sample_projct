@@ -8,6 +8,7 @@
 namespace ngl::gfx
 {
 	class SceneRepresentation;
+	class RtSceneManager;
 }
 
 namespace ngl::test
@@ -34,8 +35,10 @@ namespace ngl::test
     	
         const ngl::gfx::SceneRepresentation* p_scene = {};
 
-        ngl::rhi::RefSrvDep ref_test_tex_srv0 = {};
-        ngl::rhi::RefSrvDep ref_test_tex_srv1 = {};
+    	// RaytraceScene.
+    	gfx::RtSceneManager* p_rt_scene = {};
+
+        ngl::rhi::RefSrvDep ref_test_tex_srv = {};
 
     	// 前フレームでの結果ヒストリ.
         ngl::rtg::RtgResourceHandle	h_prev_lit = {};

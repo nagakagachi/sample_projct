@@ -205,6 +205,21 @@ namespace ngl
 			int tlas_byte_size_ = 0;
 		};
 
+		
+		// Dxr用にRootSigなどを保持して適切に遅延破棄が必要なため
+		class RtDxrObjectHolder : public rhi::RhiObjectBase
+		{
+		public:
+			RtDxrObjectHolder();
+			~RtDxrObjectHolder();
+
+			bool Initialize(rhi::DeviceDep* p_device);
+		
+			Microsoft::WRL::ComPtr<ID3D12RootSignature>	global_root_signature_ = {};
+			Microsoft::WRL::ComPtr<ID3D12RootSignature>	local_root_signature_fixed_ = {};
+			Microsoft::WRL::ComPtr<ID3D12StateObject>	state_oject_ = {};
+		};
+		using RefRtDxrObjectHolder = rhi::RhiRef<RtDxrObjectHolder>;
 
 		// RaytraceStateObjectの初期化用シェーダ情報.
 		struct RtShaderRegisterInfo
@@ -244,11 +259,11 @@ namespace ngl
 
 			ID3D12StateObject* GetStateObject() const
 			{
-				return state_oject_.Get();
+				return ref_shader_object_set_->state_oject_.Get();
 			}
 			ID3D12RootSignature* GetGlobalRootSignature() const
 			{
-				return global_root_signature_.Get();
+				return ref_shader_object_set_->global_root_signature_.Get();
 			}
 
 			const char* GetHitgroupName(uint32_t hitgroup_id) const 
@@ -305,9 +320,7 @@ namespace ngl
 			uint32_t						attribute_byte_size_ = sizeof(float) * 2;
 			uint32_t						max_trace_recursion_ = 1;
 
-			Microsoft::WRL::ComPtr<ID3D12RootSignature>	global_root_signature_ = {};
-			Microsoft::WRL::ComPtr<ID3D12RootSignature>	local_root_signature_fixed_ = {};
-			Microsoft::WRL::ComPtr<ID3D12StateObject>		state_oject_ = {};
+			RefRtDxrObjectHolder	ref_shader_object_set_;
 		};
 
 		class RtShaderTable
@@ -383,9 +396,8 @@ namespace ngl
 
 			class RtSceneManager* p_rt_scene_ = {};
 		};
-
-
-		// Passの実装テスト.
+		
+		// RtPassCoreを使用したRaytracePassのサンプル.
 		class RtPassTest
 		{
 		public:
@@ -398,7 +410,6 @@ namespace ngl
 
 			void PreRenderUpdate(class RtSceneManager* p_rt_scene);
 			void Render(rhi::GraphicsCommandListDep* p_command_list);
-
 
 			ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_lib_;
 			RtPassCore	rt_pass_core_ = {};

@@ -102,7 +102,7 @@ private:
 	// RaytraceScene.
 	ngl::gfx::RtSceneManager					rt_scene_;
 	// Raytrace Test Pass.
-	ngl::gfx::RtPassTest						rt_pass_test;
+	//ngl::gfx::RtPassTest						rt_pass_test;
 
 	// Meshオブジェクト管理.
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
@@ -409,11 +409,13 @@ bool AppGame::Initialize()
 			assert(false);
 		}
 
+		/*
 		// RtPass.
 		if(!rt_pass_test.Initialize(&device_, 1))
 		{
 			assert(false);
 		}
+		*/
 	}
 	
 	// テストコード
@@ -628,12 +630,6 @@ bool AppGame::Execute()
 		{
 			// RtScene更新. AS更新とそのCommand生成.
 			rt_scene_.UpdateOnRender(&device_, gfx_frame_begin_command_list_.Get(), frame_scene);
-				
-			// RtPass 更新.
-			rt_pass_test.PreRenderUpdate(&rt_scene_);
-				
-			// RtPass Render.
-			rt_pass_test.Render(gfx_frame_begin_command_list_.Get());
 		}
 		
 		
@@ -650,7 +646,7 @@ bool AppGame::Execute()
 		// SubViewの描画テスト.
 		//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
 		ngl::test::RenderFrameOut subview_render_frame_out {};
-		if(false)
+		if(true)
 		{
 			// Pathの設定.
 			ngl::test::RenderFrameDesc render_frame_desc{};
@@ -700,8 +696,9 @@ bool AppGame::Execute()
 
 				render_frame_desc.p_scene = &frame_scene;
 				
-				render_frame_desc.ref_test_tex_srv0 = rt_pass_test.ray_result_srv_;
-				render_frame_desc.ref_test_tex_srv1 = res_texture_->ref_view_;
+				render_frame_desc.p_rt_scene = &rt_scene_;
+				
+				render_frame_desc.ref_test_tex_srv = res_texture_->ref_view_;
 
 				render_frame_desc.h_prev_lit = h_prev_light;// MainViewはヒストリ有効.
 

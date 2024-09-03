@@ -110,7 +110,24 @@ namespace ngl::test
 					async_compute_tex2 = task_test_compute1->h_work_tex_;
 				}
 #endif
-					
+
+#if 1
+				rtg::RtgResourceHandle h_rt_result = {};
+				if(render_frame_desc.p_rt_scene)
+				{
+					// Raytrace Pass.
+					auto* task_rt_test = rtg_builder.AppendTaskNode<render::task::TaskRtDispatch>();
+					{
+						render::task::TaskRtDispatch::SetupDesc setup_desc{};
+						{
+							setup_desc.p_rt_scene = render_frame_desc.p_rt_scene;
+						}
+						task_rt_test->Setup(rtg_builder, p_device, view_info, setup_desc);
+
+						h_rt_result = task_rt_test->h_rt_result_;
+					}
+				}
+#endif			
 				// PreZ Pass.
 				auto* task_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskDepthPass>();
 				{
@@ -187,6 +204,7 @@ namespace ngl::test
 				}
 
 				// Final Composite to Swapchain.
+				// Swapchainが指定されている場合のみ最終Passを登録.
 				if(!h_swapchain.IsInvalid())
 				{
 					auto* task_final = rtg_builder.AppendTaskNode<ngl::render::task::TaskFinalPass>();
@@ -195,10 +213,11 @@ namespace ngl::test
 						{
 							setup_desc.ref_scene_cbv = sceneview_cbv;
 						}
+						
 						task_final->Setup(rtg_builder, p_device, view_info, h_swapchain,
 							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
-							render_frame_desc.h_other_graph_out_tex,
-							render_frame_desc.ref_test_tex_srv0, render_frame_desc.ref_test_tex_srv1, setup_desc);
+							render_frame_desc.h_other_graph_out_tex, h_rt_result,
+							render_frame_desc.ref_test_tex_srv, setup_desc);
 					}
 				}
 					

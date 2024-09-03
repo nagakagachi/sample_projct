@@ -483,7 +483,24 @@ namespace ngl
 		}
 		// -------------------------------------------------------------------------------
 
+		
+		// -------------------------------------------------------------------------------
+		// DXRのShaderTable用のRootSigやShaderObjectを遅延破棄するためだけのオブジェクト.
+		// RefRtDxrObjectHolderで保持することで参照カウントによって遅延破棄へ送られる.
+		RtDxrObjectHolder::RtDxrObjectHolder()
+		{
+		}
+		RtDxrObjectHolder::~RtDxrObjectHolder()
+		{
+		}
+		bool RtDxrObjectHolder::Initialize(rhi::DeviceDep* p_device)
+		{
+			InitializeRhiObject(p_device);
+			return true;
+		}
+		
 
+		// -------------------------------------------------------------------------------
 		// Raytrace用のStateObject生成のためのSubobject関連ヘルパー.
 		namespace subobject
 		{
@@ -943,6 +960,8 @@ namespace ngl
 			attribute_byte_size_ = attribute_byte_size;
 			max_trace_recursion_ = max_trace_recursion;
 
+			ref_shader_object_set_ = new RtDxrObjectHolder();
+			ref_shader_object_set_->Initialize(p_device);
 
 			std::unordered_map<const rhi::ShaderDep*, int> shader_map;
 			// これらの名前はStateObject内で重複禁止のためMapでチェック.
@@ -1144,14 +1163,14 @@ namespace ngl
 					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[i];
 				}
 
-				if (!rhi::helper::SerializeAndCreateRootSignature(global_root_signature_, p_device, root_param.data(), (uint32_t)root_param.size()))
+				if (!rhi::helper::SerializeAndCreateRootSignature(ref_shader_object_set_->global_root_signature_, p_device, root_param.data(), (uint32_t)root_param.size()))
 				{
 					assert(false);
 					return false;
 				}
 			}
 			auto* p_so_grs = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingGlobalRootSignature>();
-			p_so_grs->Setup(global_root_signature_);
+			p_so_grs->Setup(ref_shader_object_set_->global_root_signature_);
 
 			// Local Root Signature.
 			{
@@ -1184,14 +1203,14 @@ namespace ngl
 					parame_elem.DescriptorTable.pDescriptorRanges = &range_array[i];
 				}
 
-				if (!rhi::helper::SerializeAndCreateLocalRootSignature(local_root_signature_fixed_, p_device, root_param.data(), (uint32_t)root_param.size()))
+				if (!rhi::helper::SerializeAndCreateLocalRootSignature(ref_shader_object_set_->local_root_signature_fixed_, p_device, root_param.data(), (uint32_t)root_param.size()))
 				{
 					assert(false);
 					return false;
 				}
 			}
 			auto* p_so_lrs = subobject_builder.CreateSubobjectSetting<subobject::SubobjectSettingLocalRootSignature>();
-			p_so_lrs->Setup(local_root_signature_fixed_);
+			p_so_lrs->Setup(ref_shader_object_set_->local_root_signature_fixed_);
 
 
 			// Local Root SignatureとHitGroupの関連付け.
@@ -1227,7 +1246,7 @@ namespace ngl
 			state_object_desc.pSubobjects = subobject_builder.GetSubobject();
 
 			// 生成.
-			if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&state_oject_))))
+			if (FAILED(p_device->GetD3D12DeviceForDxr()->CreateStateObject(&state_object_desc, IID_PPV_ARGS(&(ref_shader_object_set_->state_oject_)))))
 			{
 				assert(false);
 				return false;
@@ -1490,9 +1509,7 @@ namespace ngl
 			// Scene用にShaderTable生成.
 			assert(p_device_);
 			assert(p_rt_scene);
-			auto p_tlas = p_rt_scene->GetSceneTlas();
-			if (!p_tlas)
-				return false;
+			assert(p_rt_scene->GetSceneTlas());
 
 			p_rt_scene_ = p_rt_scene;
 
@@ -1503,7 +1520,7 @@ namespace ngl
 			if (!CreateShaderTable(shader_table_,
 				p_device_,
 				desc_alloc_interface_,
-				*p_tlas, state_object_, ray_gen_name))
+				*p_rt_scene->GetSceneTlas(), state_object_, ray_gen_name))
 			{
 				assert(false);
 				return false;

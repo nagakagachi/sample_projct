@@ -10,6 +10,8 @@
 
 #include "ngl/gfx/render/mesh_renderer.h"
 
+#include "ngl/gfx/raytrace_scene.h"
+
 #include "ngl/gfx/render/global_render_resource.h"
 #include "ngl/gfx/material/material_shader_manager.h"
 #include "ngl/util/time/timer.h"
@@ -758,9 +760,8 @@ namespace ngl::render
 			rtg::RtgResourceHandle h_swapchain_{};
 
 			rtg::RtgResourceHandle h_other_rtg_out_{};// 先行する別rtgがPropagateしたハンドルをそのフレームの後段のrtgで使用するテスト.
-
+			rtg::RtgResourceHandle h_rt_result_{};
 			
-			rhi::RefSrvDep ref_raytrace_result_srv_;
 			rtg::RtgResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
@@ -772,8 +773,7 @@ namespace ngl::render
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_swapchain, rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_linear_depth, rtg::RtgResourceHandle h_light,
-				rtg::RtgResourceHandle h_other_rtg_out,
-				rhi::RefSrvDep ref_raytrace_result_srv,
+				rtg::RtgResourceHandle h_other_rtg_out, rtg::RtgResourceHandle h_rt_result,
 				rhi::RefSrvDep ref_res_texture_srv,
 				const SetupDesc& desc)
 			{
@@ -785,13 +785,14 @@ namespace ngl::render
 
 					h_swapchain_ = builder.RecordResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
 
+					if(!h_rt_result.IsInvalid())
+					{
+						h_rt_result_ = builder.RecordResourceAccess(*this, h_rt_result, rtg::access_type::SHADER_READ);
+					}
+					
 					if(!h_other_rtg_out.IsInvalid())
 					{
 						h_other_rtg_out_ = builder.RecordResourceAccess(*this, h_other_rtg_out, rtg::access_type::SHADER_READ);
-					}
-					else
-					{
-						h_other_rtg_out_ = {};
 					}
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
@@ -800,17 +801,6 @@ namespace ngl::render
 					h_tmp_ = temp_res0;
 				}
 				
-				{
-					if(ref_raytrace_result_srv.IsValid())
-					{
-						ref_raytrace_result_srv_ = ref_raytrace_result_srv;
-					}
-					else
-					{
-						ref_raytrace_result_srv_ = gfx::GlobalRenderResource::Instance().default_resource_.tex_black->ref_view_;
-					}
-				}
-
 				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
 				const auto render_target_desc = builder.GetResourceHandleDesc(h_swapchain);
 
@@ -864,6 +854,7 @@ namespace ngl::render
 				auto res_swapchain = builder.GetAllocatedResource(this, h_swapchain_);
 				auto res_tmp = builder.GetAllocatedResource(this, h_tmp_);
 				auto res_other_rtg_out = builder.GetAllocatedResource(this, h_other_rtg_out_);
+				auto res_rt_result = builder.GetAllocatedResource(this, h_rt_result_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
@@ -880,6 +871,16 @@ namespace ngl::render
 				{
 					ref_other_rtg_out = gfx::GlobalRenderResource::Instance().default_resource_.tex_red->ref_view_;
 				}
+				
+				rhi::RefSrvDep ref_rt_result{};
+				if(res_rt_result.srv_.IsValid())
+				{
+					ref_rt_result = res_rt_result.srv_;
+				}
+				else
+				{
+					ref_rt_result = gfx::GlobalRenderResource::Instance().default_resource_.tex_green->ref_view_;
+				}
 
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
 
@@ -892,7 +893,9 @@ namespace ngl::render
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "tex_light", res_light.srv_.Get());
-				pso_->SetView(&desc_set, "tex_rt", ref_raytrace_result_srv_.Get());
+
+				pso_->SetView(&desc_set, "tex_rt", ref_rt_result.Get());
+				
 				pso_->SetView(&desc_set, "tex_res_data", ref_other_rtg_out.Get());
 				
 				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
@@ -966,6 +969,132 @@ namespace ngl::render
 				
 				pso_->DispatchHelper(commandlist, res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
 			}
+		};
+
+		
+		// Passの実装テスト.
+		struct TaskRtDispatch : public rtg::IGraphicsTaskNode
+		{
+			rtg::RtgResourceHandle h_rt_result_{};
+			
+			struct SetupDesc
+			{
+				class gfx::RtSceneManager* p_rt_scene{};
+			};
+			// リソースとアクセスを定義するプリプロセス.
+			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info, const SetupDesc& desc)
+			{
+				// リソース定義.
+				rtg::RtgResourceDesc2D res_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+				// リソースアクセス定義.
+				h_rt_result_ = builder.RecordResourceAccess(*this, builder.CreateResource(res_desc), rtg::access_type::UAV);
+
+				// Raytrace Pipelineセットアップ.
+				{
+					p_rt_scene_ = desc.p_rt_scene;
+					
+					{
+						auto& ResourceMan = ngl::res::ResourceManager::Instance();
+
+						ngl::gfx::ResShader::LoadDesc loaddesc = {};
+						loaddesc.stage = ngl::rhi::EShaderStage::ShaderLibrary;
+						loaddesc.shader_model_version = "6_3";
+						res_shader_lib_ = ResourceMan.LoadResource<ngl::gfx::ResShader>(p_device, "./src/ngl/data/shader/dxr_sample_lib.hlsl", &loaddesc);
+					}
+
+					// StateObject生成.
+					std::vector<ngl::gfx::RtShaderRegisterInfo> shader_reg_info_array = {};
+					{
+						// Shader登録エントリ新規.
+						auto shader_index = shader_reg_info_array.size();
+						shader_reg_info_array.push_back({});
+
+						// ShaderLibバイナリ.
+						shader_reg_info_array[shader_index].p_shader_library = &res_shader_lib_->data_;
+
+						// シェーダから公開するRayGen名.
+						shader_reg_info_array[shader_index].ray_generation_shader_array.push_back("rayGen");
+
+						// シェーダから公開するMissShader名.
+						shader_reg_info_array[shader_index].miss_shader_array.push_back("miss");
+						shader_reg_info_array[shader_index].miss_shader_array.push_back("miss2");
+
+						// HitGroup関連情報.
+						{
+							auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+							shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+							shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup";
+							// このHitGroupはClosestHitのみ.
+							shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit";
+						}
+						{
+							auto hg_index = shader_reg_info_array[shader_index].hitgroup_array.size();
+							shader_reg_info_array[shader_index].hitgroup_array.push_back({});
+
+							shader_reg_info_array[shader_index].hitgroup_array[hg_index].hitgorup_name = "hitGroup2";
+							// このHitGroupはClosestHitのみ.
+							shader_reg_info_array[shader_index].hitgroup_array[hg_index].closest_hit_name = "closestHit2";
+						}
+					}
+
+					const uint32_t payload_byte_size = sizeof(float) * 4;// Payloadのサイズ.
+					const uint32_t attribute_byte_size = sizeof(float) * 2;// BuiltInTriangleIntersectionAttributes の固定サイズ.
+					constexpr uint32_t max_trace_recursion = 1;
+					if (!rt_pass_core_.InitializeBase(p_device, shader_reg_info_array, payload_byte_size, attribute_byte_size, max_trace_recursion ))
+					{
+						assert(false);
+					}
+				}
+			}
+
+			// レンダリング処理.
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
+			{
+				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
+				auto res_rt_result = builder.GetAllocatedResource(this, h_rt_result_);
+				assert(res_rt_result.tex_.IsValid() && res_rt_result.uav_.IsValid());
+
+				// Rt ShaderTable更新.
+				rt_pass_core_.UpdateScene(p_rt_scene_, "rayGen");
+
+				// Ray Dispatch.
+				{
+					gfx::RtPassCore::DispatchRayParam param = {};
+					param.count_x = res_rt_result.tex_->GetWidth();
+					param.count_y = res_rt_result.tex_->GetHeight();
+					// global resourceのセット.
+					{
+						param.cbv_slot[0] = p_rt_scene_->GetSceneViewCbv();// View.
+					}
+					{
+						param.srv_slot;
+					}
+					{
+						param.uav_slot[0] = res_rt_result.uav_.Get();//出力UAV.
+					}
+					{
+						param.sampler_slot;
+					}
+
+					// dispatch.
+					rt_pass_core_.DispatchRay(gfx_commandlist, param);
+				}
+
+			}
+
+			
+			// Pass毎に自由.
+			// サンプルのため外部からShaderとRaygen情報などを指定する.
+			bool Initialize(rhi::DeviceDep* p_device, uint32_t max_trace_recursion);
+
+			void PreRenderUpdate(class RtSceneManager* p_rt_scene);
+			void Render(rhi::GraphicsCommandListDep* p_command_list);
+
+
+			ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_lib_;
+			gfx::RtPassCore	rt_pass_core_ = {};
+			class gfx::RtSceneManager* p_rt_scene_ = {};
 		};
 
 		
