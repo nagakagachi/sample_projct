@@ -1277,11 +1277,13 @@ namespace ngl
 			const uint32_t shader_record_byte_size = rhi::align_to(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, k_shader_identifier_byte_size + shader_record_resource_byte_size);
 
 			// 現状は全Instanceが別Table.
-			// RayGenとMissが一つずつとする(Missは一応複数登録可だが簡易化のため一旦1つに).
+			// RayGenは一つ.
 			constexpr uint32_t num_raygen = 1;
-			const uint32_t num_miss = 1;
+			// Missは複数登録可能とする.
+			const uint32_t num_miss = state_object.NumMissShader();
 			// Hitgroupのrecordは全Instanceの全Geometry分としている.
 			const uint32_t shader_table_byte_size = shader_record_byte_size * (num_raygen + num_miss + num_all_instance_geometry);
+
 
 			// あとで書き込み位置調整に使うので保存.
 			out.table_entry_byte_size_ = shader_record_byte_size;
@@ -1324,8 +1326,7 @@ namespace ngl
 				out.table_miss_offset_ = (shader_record_byte_size * table_cnt);
 
 				// 初期化時にSOに登録したMissShaderを全て設定.
-				const int num_registered_miss_shader = state_object.NumMissShader();
-				for(int mi = 0; mi < num_registered_miss_shader; ++mi)
+				for(uint32_t mi = 0; mi < num_miss; ++mi)
 				{
 					const void* shader_identifire = p_rt_so_prop->GetShaderIdentifier(str_to_wstr(state_object.GetMissShaderName(mi)).c_str());
 					if(shader_identifire)
