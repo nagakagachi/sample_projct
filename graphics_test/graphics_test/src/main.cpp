@@ -99,11 +99,12 @@ private:
 	ngl::res::ResourceHandle<ngl::gfx::ResTexture> res_texture_{};
 
 	
-	// RtScene.
+	// RaytraceScene.
 	ngl::gfx::RtSceneManager					rt_scene_;
-	// RtPass.
+	// Raytrace Test Pass.
 	ngl::gfx::RtPassTest						rt_pass_test;
-	
+
+	// Meshオブジェクト管理.
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
 	std::vector<ngl::gfx::StaticMeshComponent*>	test_move_mesh_comp_array_;
 };
@@ -210,27 +211,33 @@ bool AppGame::Initialize()
 		}
 	}
 
-	// MaterialShaderFile生成.
-	//	実際は事前生成すべきだが起動時にテスト実行.
-	constexpr char k_material_shader_file_dir[] = "./src/ngl/data/shader/material/generated";
-	ngl::gfx::MaterialShaderFileGenerator mtl_gen{};
-	mtl_gen.GenerateMaterialShaderFiles(
-		"./src/ngl/data/shader/material/impl",
-		"./src/ngl/data/shader/material/pass",
-		k_material_shader_file_dir);
-	
-	// Material Shader Manager Setup.
+	// Material Shader.
 	{
-		// Material PSO Creatorを登録.
+		constexpr char k_material_shader_file_dir[] = "./src/ngl/data/shader/material/generated";
+	
+		// MaterialShaderFile生成.
+		//	実際は事前生成すべきだが起動時に生成.
 		{
-			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_depth>();
-			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_gbuffer>();
-			ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_d_shadow>();
-			// TODO.
+			ngl::gfx::MaterialShaderFileGenerator mtl_gen{};
+			mtl_gen.GenerateMaterialShaderFiles(
+				"./src/ngl/data/shader/material/impl",
+				"./src/ngl/data/shader/material/pass",
+				k_material_shader_file_dir);
 		}
+		
+		// Material Shader Manager Setup.
+		{
+			// Material PSO Creatorを登録.
+			{
+				ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_depth>();
+				ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_gbuffer>();
+				ngl::gfx::MaterialShaderManager::Instance().RegisterPassPsoCreator<ngl::gfx::MaterialPassPsoCreator_d_shadow>();
+				// TODO other pass.
+			}
 
-		// 本体のセットアップ.
-		ngl::gfx::MaterialShaderManager::Instance().Setup(&device_, k_material_shader_file_dir);
+			// 本体のセットアップ.
+			ngl::gfx::MaterialShaderManager::Instance().Setup(&device_, k_material_shader_file_dir);
+		}
 	}
 
 	// デフォルトテクスチャ等の簡易アクセス用クラス初期化.
@@ -607,10 +614,10 @@ bool AppGame::Execute()
 	
 
 	// -------------------------------------------------------
-	// Sync Render Thread.
+	// Sync Render Thread の想定.
 	SyncRender();
 	{
-		// Start Frame Rendering.
+		// Start Frame Rendering Thread の想定.
 		BeginRender();
 
 		
@@ -709,7 +716,7 @@ bool AppGame::Execute()
 			ngl::test::RenderFrameOut render_frame_out{};
 			TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
 			
-			h_prev_light = render_frame_out.h_propagate_lit;// Pathの一部を次フレームに伝搬する.
+			h_prev_light = render_frame_out.h_propagate_lit;// Rtgリソースの一部を次フレームに伝搬する.
 		}
 
 		
@@ -773,7 +780,7 @@ bool AppGame::Execute()
 				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
 			}
 			
-			// RTGのCommaandをSubmit.
+			// RtgのCommaandをSubmit.
 			for(auto& e : rtg_gen_command)
 			{
 				ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, e.graphics, e.compute);

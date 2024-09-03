@@ -82,7 +82,7 @@ namespace ngl
 			}
 
 			// Debugでは二重登録チェック.
-#if defined(_DEBUG)
+#			if defined(_DEBUG)
 			if(tex.IsValid())
 			{
 				for(const auto& e : imported_resource_)
@@ -109,7 +109,7 @@ namespace ngl
 					}
 				}
 			}
-#endif
+#			endif
 			
 			// ID確保.
 			const auto new_handle_id = RenderTaskGraphManager::GetNewHandleId();
@@ -285,7 +285,7 @@ namespace ngl
 						{
 							if(node_handle_usage_list_[p_node][i].handle == node_handle_usage_list_[p_node][j].handle)
 							{
-								std::cout << u8"[RenderTaskGraphBuilder][Validation Error] 同一リソースへの重複アクセス登録." <<std::endl;
+								std::cout << u8"[RenderTaskGraphBuilder][Validation Error] 同一リソースへの重複アクセス登録." << std::endl;
 								assert(false);
 							}
 						}

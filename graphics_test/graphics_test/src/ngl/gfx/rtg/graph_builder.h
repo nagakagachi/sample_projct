@@ -540,6 +540,7 @@ namespace ngl
 			EBuilderState	state_ = EBuilderState::RECORDING;
 			
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
+			uint32_t compiled_order_id_ = {};
 			
 			// -------------------------------------------------------------------------------------------
 			static constexpr  int k_base_height = 1080;
@@ -674,21 +675,19 @@ namespace ngl
 			//	また, 複数のbuilderをCompileした場合はCompileした順序でExecuteが必要(確定したリソースの状態遷移コマンド実行を正しい順序で実行するために).
 			bool Compile(RenderTaskGraphBuilder& builder);
 			
+		public:
+			// Builderが利用するCommandListをPoolから取得(Graphics).
+			void GetNewFrameCommandList(rhi::GraphicsCommandListDep*& out_ref)
+			{
+				commandlist_pool_.GetFrameCommandList(out_ref);
+			}
+			// Builderが利用するCommandListをPoolから取得(Compute).
+			void GetNewFrameCommandList(rhi::ComputeCommandListDep*& out_ref)
+			{
+				commandlist_pool_.GetFrameCommandList(out_ref);
+			}
+			
 		private:
-			rhi::DeviceDep* p_device_ = nullptr;
-			
-			// 同一Manager下のBuilderのCompileは排他処理.
-			std::mutex	compile_mutex_ = {};
-			
-			// Compileで割り当てられるリソースのPool.
-			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
-			
-			// 次のフレームへ伝搬するハンドルとリソースIDのMap.
-			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_[2] = {};
-			// 次のフレームへ伝搬するハンドル登録用FlipIndex. 前回フレームから伝搬されたハンドルは 1-flip_propagate_next_handle_next_ のMapが対応.
-			int flip_propagate_next_handle_next_ = 0;
-			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_temporal_ = {};
-
 			// Poolからリソース検索または新規生成. 戻り値は実リソースID.
 			//	検索用のリソース定義keyと, アクセス期間外の再利用のためのアクセスステージ情報を引数に取る.
 			//	access_stage : リソース再利用を有効にしてアクセス開始ステージを指定する, nullptrの場合はリソース再利用をしない.
@@ -703,18 +702,21 @@ namespace ngl
 			// 伝搬されたハンドルに紐付けられたリソースIDを検索.
 			int FindPropagatedResourceId(RtgResourceHandle handle);
 			
-		public:
-			// Builderが利用するCommandListをPoolから取得(Graphics).
-			void GetNewFrameCommandList(rhi::GraphicsCommandListDep*& out_ref)
-			{
-				commandlist_pool_.GetFrameCommandList(out_ref);
-			}
-			// Builderが利用するCommandListをPoolから取得(Compute).
-			void GetNewFrameCommandList(rhi::ComputeCommandListDep*& out_ref)
-			{
-				commandlist_pool_.GetFrameCommandList(out_ref);
-			}
 		private:
+			rhi::DeviceDep* p_device_ = nullptr;
+
+			// 同一Manager下のBuilderのCompileは排他処理.
+			std::mutex	compile_mutex_ = {};
+			
+			// Compileで割り当てられるリソースのPool.
+			std::vector<InternalResourceInstanceInfo> internal_resource_pool_ = {};
+			
+			// 次のフレームへ伝搬するハンドルとリソースIDのMap.
+			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_[2] = {};
+			// 次のフレームへ伝搬するハンドル登録用FlipIndex. 前回フレームから伝搬されたハンドルは 1-flip_propagate_next_handle_next_ のMapが対応.
+			int flip_propagate_next_handle_next_ = 0;
+			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_temporal_ = {};
+			
 			pool::CommandListPool commandlist_pool_ = {};
 			
 		private:

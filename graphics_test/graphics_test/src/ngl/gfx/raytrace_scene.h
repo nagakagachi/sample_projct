@@ -414,7 +414,7 @@ namespace ngl
 
 
 
-		// RaytracingのAS管理.
+		// Raytracing Scene 管理.
 		class RtSceneManager
 		{
 		public:
