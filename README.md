@@ -13,8 +13,13 @@ https://nagakagachi.notion.site/RenderGraph-54f0cf4284c7466697b99cc0df81be80
 
 - Third Party
   - Assimp
+    - https://github.com/assimp/assimp 
   - DirectXTex
+    - https://github.com/microsoft/DirectXTex
   - tinyxml2
+    - https://github.com/leethomason/tinyxml2
+  - Dear ImGui
+    - https://github.com/ocornut/imgui
  
 - Build
   - clone
