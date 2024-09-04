@@ -1,7 +1,7 @@
 ﻿
 #include "window.win.h"
 
-//#include <windowsx.h>
+#include "ngl/imgui/imgui_util.h"
 
 
 namespace ngl
@@ -170,6 +170,10 @@ namespace ngl
 		// ここでの記述はデフォルトの処理
 		LRESULT CoreWindowImplDep::MainProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
+			// Imgui対応.
+			if (imgui::ImguiInterface::Instance().WindProc(hWnd, message, wParam, lParam))
+				return true;
+			
 			switch (message)
 			{
 				// ウィンドウが破棄された場合

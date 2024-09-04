@@ -43,6 +43,9 @@
 #include "test/test.h"
 
 
+// imgui.
+#include "ngl/imgui/imgui_util.h"
+
 
 // アプリ本体.
 class AppGame : public ngl::boot::ApplicationBase
@@ -136,10 +139,12 @@ AppGame::~AppGame()
 	// リソースマネージャから全て破棄.
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
+	// imgui.
+	ngl::imgui::ImguiInterface::Instance().Finalize();
+	
 	gfx_frame_begin_command_list_.Reset();
 
 	swapchain_.Reset();
-	
 	graphics_queue_.Finalize();
 	compute_queue_.Finalize();
 	device_.Finalize();
@@ -156,42 +161,46 @@ bool AppGame::Initialize()
 		return false;
 	}
 
-
-	ngl::rhi::DeviceDep::Desc device_desc{};
-#if _DEBUG
-	device_desc.enable_debug_layer = true;	// デバッグレイヤ
-#endif
-	device_desc.frame_descriptor_size = 500000;
-	device_desc.persistent_descriptor_size = 500000;
-	if (!device_.Initialize(&window_, device_desc))
+	// Graphics Device.
 	{
-		std::cout << "[ERROR] Device Initialize" << std::endl;
-		return false;
+		ngl::rhi::DeviceDep::Desc device_desc{};
+		#if _DEBUG
+			device_desc.enable_debug_layer = true;	// デバッグレイヤ
+		#endif
+		device_desc.frame_descriptor_size = 500000;
+		device_desc.persistent_descriptor_size = 500000;
+		if (!device_.Initialize(&window_, device_desc))
+		{
+			std::cout << "[ERROR] Initialize Device" << std::endl;
+			return false;
+		}
+		
+		// Raytracing Support Check.
+		if (!device_.IsSupportDxr())
+		{
+			MessageBoxA(window_.Dep().GetWindowHandle(), "Raytracing is not supported on this device.", "Info", MB_OK);
+		}
 	}
-
-	// Raytracing Support Check.
-	if (!device_.IsSupportDxr())
-	{
-		MessageBoxA(window_.Dep().GetWindowHandle(), "Raytracing is not supported on this device.", "Info", MB_OK);
-	}
-
+	// queue.
 	if (!graphics_queue_.Initialize(&device_))
 	{
-		std::cout << "[ERROR] Graphics Command Queue Initialize" << std::endl;
+		std::cout << "[ERROR] Initialize Graphics Command Queue" << std::endl;
 		return false;
 	}
+	// queue.
 	if(!compute_queue_.Initialize(&device_))
 	{
-		std::cout << "[ERROR] Compute Command Queue Initialize" << std::endl;
+		std::cout << "[ERROR] Initialize Compute Command Queue" << std::endl;
 		return false;
 	}
+	// swapchain.
 	{
 		ngl::rhi::SwapChainDep::Desc swap_chain_desc;
 		swap_chain_desc.format = ngl::rhi::EResourceFormat::Format_R10G10B10A2_UNORM;
 		swapchain_ = new ngl::rhi::SwapChainDep();
 		if (!swapchain_->Initialize(&device_, &graphics_queue_, swap_chain_desc))
 		{
-			std::cout << "[ERROR] SwapChain Initialize" << std::endl;
+			std::cout << "[ERROR] Initialize SwapChain" << std::endl;
 			return false;
 		}
 
@@ -204,6 +213,17 @@ bool AppGame::Initialize()
 			swapchain_resource_state_[i] = ngl::rhi::EResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
 	}
+
+	// imgui.
+	{
+		if(!ngl::imgui::ImguiInterface::Instance().Initialize(&device_, swapchain_.Get()))
+		{
+			std::cout << "[ERROR] Initialize Imgui" << std::endl;
+			assert(false);
+			return false;
+		}
+	}
+	
 
 	// Material Shader.
 	{
@@ -281,14 +301,14 @@ bool AppGame::Initialize()
 	gfx_frame_begin_command_list_ = new ngl::rhi::GraphicsCommandListDep();
 	if (!gfx_frame_begin_command_list_->Initialize(&device_))
 	{
-		std::cout << "[ERROR] Graphics CommandList Initialize" << std::endl;
+		std::cout << "[ERROR] Initialize Graphics CommandList" << std::endl;
 		assert(false);
 		return false;
 	}
-
+	
 	if (!wait_fence_.Initialize(&device_))
 	{
-		std::cout << "[ERROR] Fence Initialize" << std::endl;
+		std::cout << "[ERROR] Initialize Fence" << std::endl;
 		return false;
 	}
 	
@@ -417,6 +437,9 @@ void AppGame::SyncRender()
 	
 	// RTGのフレーム開始処理.
 	rtg_manager_.BeginFrame();
+
+	// imgui.
+	ngl::imgui::ImguiInterface::Instance().BeginFrame();
 }
 
 void AppGame::BeginRender()
@@ -620,7 +643,7 @@ bool AppGame::Execute()
 		// SubViewの描画テスト.
 		//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
 		ngl::test::RenderFrameOut subview_render_frame_out {};
-		if(true)
+		if(false)
 		{
 			// Pathの設定.
 			ngl::test::RenderFrameDesc render_frame_desc{};
@@ -724,6 +747,21 @@ bool AppGame::Execute()
 			rtg_compute_command_list->End();
 		}
 
+		// imgui.
+		ngl::rhi::GraphicsCommandListDep* imgui_command_list{};
+		rtg_manager_.GetNewFrameCommandList(imgui_command_list);
+		{
+			imgui_command_list->Begin();
+			if(!ngl::imgui::ImguiInterface::Instance().Render(
+				imgui_command_list,
+				swapchain_.Get(), swapchain_index, swapchain_rtvs_[swapchain_index].Get(),
+				swapchain_resource_state_[swapchain_index], swapchain_resource_state_[swapchain_index]))
+			{
+				assert(false);
+			}
+			imgui_command_list->End();
+		}
+
 		
 		// CommandList Submit
 		{
@@ -756,7 +794,17 @@ bool AppGame::Execute()
 			{
 				ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, e.graphics, e.compute);
 			}
+
+			// imguiは現状最後.
+			{
+				ngl::rhi::CommandListBaseDep* submit_list[]=
+				{
+					imgui_command_list
+				};
+				graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
+			}
 		}
+
 		
 		// Present
 		swapchain_->GetDxgiSwapChain()->Present(1, 0);

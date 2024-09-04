@@ -10,3 +10,6 @@
 	path = graphics_test/graphics_test/third_party/tinyxml2
 	url = https://github.com/leethomason/tinyxml2.git
 	ignore = dirty
+[submodule "graphics_test/graphics_test/third_party/imgui"]
+	path = graphics_test/graphics_test/third_party/imgui
+	url = https://github.com/ocornut/imgui.git
