@@ -81,10 +81,7 @@ private:
 	// CommandQueue実行完了待機用オブジェクト
 	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
 	
-	ngl::rhi::FenceDep							test_compute_to_gfx_fence_;
-	
 	ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>	gfx_frame_begin_command_list_;
-	ngl::rhi::RhiRef<ngl::rhi::ComputeCommandListDep>	compute_command_list_;
 
 	// SwapChain
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
@@ -98,11 +95,8 @@ private:
 	// Loaded Texture.
 	ngl::res::ResourceHandle<ngl::gfx::ResTexture> res_texture_{};
 
-	
 	// RaytraceScene.
 	ngl::gfx::RtSceneManager					rt_scene_;
-	// Raytrace Test Pass.
-	//ngl::gfx::RtPassTest						rt_pass_test;
 
 	// Meshオブジェクト管理.
 	std::vector<std::shared_ptr<ngl::gfx::StaticMeshComponent>>	mesh_comp_array_;
@@ -112,7 +106,7 @@ private:
 
 int main()
 {
-	std::cout << "Hello World!" << std::endl;
+	std::cout << "Boot App" << std::endl;
 	ngl::time::Timer::Instance().StartTimer("AppGameTime");
 
 	{
@@ -143,7 +137,7 @@ AppGame::~AppGame()
 	ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
 	gfx_frame_begin_command_list_.Reset();
-	compute_command_list_.Reset();
+
 	swapchain_.Reset();
 	
 	graphics_queue_.Finalize();
@@ -291,22 +285,10 @@ bool AppGame::Initialize()
 		assert(false);
 		return false;
 	}
-	compute_command_list_ = new ngl::rhi::ComputeCommandListDep();
-	if(!compute_command_list_->Initialize(&device_))
-	{
-		std::cout << "[ERROR] Compute CommandList Initialize" << std::endl;
-		assert(false);
-		return false;
-	}
 
 	if (!wait_fence_.Initialize(&device_))
 	{
 		std::cout << "[ERROR] Fence Initialize" << std::endl;
-		return false;
-	}
-	if(!test_compute_to_gfx_fence_.Initialize((&device_)))
-	{
-		assert(false);
 		return false;
 	}
 	
@@ -408,14 +390,6 @@ bool AppGame::Initialize()
 			std::cout << "[ERROR] Create gfx::RtSceneManager" << std::endl;
 			assert(false);
 		}
-
-		/*
-		// RtPass.
-		if(!rt_pass_test.Initialize(&device_, 1))
-		{
-			assert(false);
-		}
-		*/
 	}
 	
 	// テストコード
