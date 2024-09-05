@@ -496,7 +496,7 @@ bool AppGame::Execute()
 		camera_pose_ = player_controller.camera_pose_;
 		camera_pos_ = player_controller.camera_pos_;
 	}
-
+	
 	// ImGui.
 	static bool dbgw_test_window_enable = true;
 	static bool dbgw_enable_sub_view_path = false;
@@ -515,21 +515,27 @@ bool AppGame::Execute()
 		
 		ImGui::Begin("Debug Window", &dbgw_test_window_enable, ImGuiWindowFlags_None);
 
-
-		ImGui::SetNextItemOpen(true);
+		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
+		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), "[Camera Controll]");
+		ImGui::TextColored(ImColor(1.0f, 0.9f, 0.9f), "  Right Mouse Button + WASD + SPACE + CTRL");
+		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
+		ImGui::TextColored(ImColor(1.0f, 0.9f, 0.9f), "     (Unreal Engine Like)");
+		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
+		
+		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		if (ImGui::CollapsingHeader("Debug View"))
 		{
 			ImGui::Checkbox("View GBuffer", &dbgw_view_gbuffer);
-			ImGui::Checkbox("View DirectionalShadowAtlas", &dbgw_view_dshadow);
+			ImGui::Checkbox("View Directional Shadow Atlas", &dbgw_view_dshadow);
 			ImGui::Checkbox("View Half Dot Gray", &dbgw_view_half_dot_gray);
 		}
-		ImGui::SetNextItemOpen(true);
+		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		if (ImGui::CollapsingHeader("Directional Light"))
 		{
 			ImGui::SliderFloat("DirectionalLight Angle V", &dbgw_dlit_angle_v, 0.0f, ngl::math::k_pi_f*2.0f);
 			ImGui::SliderFloat("DirectionalLight Angle H", &dbgw_dlit_angle_h, 0.0f, ngl::math::k_pi_f*2.0f);
 		}
-		ImGui::SetNextItemOpen(true);
+		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		if (ImGui::CollapsingHeader("Pass Setting"))
 		{
 			ImGui::Checkbox("Enable Raytrace Pass", &dbgw_enable_raytrace_pass);
