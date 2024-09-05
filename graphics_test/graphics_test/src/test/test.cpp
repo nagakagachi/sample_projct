@@ -36,7 +36,7 @@ namespace ngl_test
 	// 機能テスト用.
 	void TestFunc00(ngl::rhi::DeviceDep* p_device)
 	{
-#if defined(_DEBUG)
+#if defined(_DEBUG) && false
 		auto& device = *p_device;
 		auto& ResourceMan = ngl::res::ResourceManager::Instance();
 

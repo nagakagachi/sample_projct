@@ -13,7 +13,7 @@ namespace ngl::gfx
 
 namespace ngl::test
 {
-
+	// RenderPathの入力.
     struct RenderFrameDesc
     {
         // Viewのカメラ情報.
@@ -45,13 +45,15 @@ namespace ngl::test
     	// 先行する別のrtgの出力をPropagateして使うテスト.
     	ngl::rtg::RtgResourceHandle	h_other_graph_out_tex = {};
     };
-	
+	// RenderPathが生成した出力リソース.
+	//	このRenderPathとは異なるRtgや次フレームのRtgでアクセス可能.
+	//	SubViewレンダリングの結果をMainViewに受け渡すなどの用途.
     struct RenderFrameOut
     {
         ngl::rtg::RtgResourceHandle h_propagate_lit = {};
     };
 	
-    
+    // RtgによるRenderPathの構築と実行.
 	auto TestFrameRenderingPath(
 			const RenderFrameDesc& render_frame_desc,
 			RenderFrameOut& out_frame_out,

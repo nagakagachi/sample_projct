@@ -267,7 +267,6 @@ namespace ngl
 			
 			// 状態遷移.
 			state_ = EBuilderState::COMPILED;
-			
 			// Compileでリソース割当をするマネージャを保持.
 			p_compiled_manager_ = &manager;
 
@@ -292,22 +291,6 @@ namespace ngl
 					}
 				}
 			}
-
-
-			std::vector<int> graphics_node_index;
-			std::vector<int> compute_node_index;
-			for(int i = 0; i < node_sequence_.size(); ++i)
-			{
-				if(ETASK_TYPE::GRAPHICS == node_sequence_[i]->TaskType())
-				{
-					graphics_node_index.push_back(i);
-				}
-				else
-				{
-					compute_node_index.push_back(i);
-				}
-			}
-			
 			
 			// ------------------------------------------------------------------------
 			// Nodeの依存関係(Graphics-Compute).

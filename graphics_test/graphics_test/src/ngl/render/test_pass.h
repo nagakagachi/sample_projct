@@ -40,26 +40,26 @@ namespace ngl::render
 		{
 			rtg::RtgResourceHandle h_depth_{};
 
-			rhi::RefCbvDep ref_scene_cbv_{};
-			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
-
 			struct SetupDesc
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info, const SetupDesc& desc)
 			{
-				// リソース定義.
-				rtg::RtgResourceDesc2D depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
-
-				// リソースアクセス定義.
-				h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
-
+				// Rtgリソースセットアップ.
 				{
-					ref_scene_cbv_ = desc.ref_scene_cbv;
-					p_mesh_list_ = desc.p_mesh_list;
+					rtg::RtgResourceDesc2D depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+
+					// リソースアクセス定義.
+					h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+				}
+				
+				{
+					desc_ = desc;
 				}
 			}
 
@@ -83,9 +83,9 @@ namespace ngl::render
 				// Mesh Rendering.
 				gfx::RenderMeshResource render_mesh_res = {};
 				{
-					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", desc_.ref_scene_cbv.Get()};
 				}
-				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_depth::k_name, *p_mesh_list_, render_mesh_res);
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_depth::k_name, *desc_.p_mesh_list, render_mesh_res);
 			}
 		};
 
@@ -100,14 +100,13 @@ namespace ngl::render
 			rtg::RtgResourceHandle h_gb3_{};
 			rtg::RtgResourceHandle h_velocity_{};
 			
-			rhi::RefCbvDep ref_scene_cbv_{};
-			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
-			
 			struct SetupDesc
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_async_write_tex,
@@ -120,38 +119,39 @@ namespace ngl::render
 				constexpr auto k_gbuffer3_format = gfx::MaterialPassPsoCreator_gbuffer::k_gbuffer3_format;
 				constexpr auto k_velocity_format = gfx::MaterialPassPsoCreator_gbuffer::k_velocity_format;
 				
-				// リソース定義.
-				// GBuffer0 BaseColor.xyz, Occlusion.w
-				rtg::RtgResourceDesc2D gbuffer0_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer0_format);
-				// GBuffer1 WorldNormal.xyz, 1bitOption.w
-				rtg::RtgResourceDesc2D gbuffer1_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer1_format);
-				// GBuffer2 Roughness, Metallic, Optional, MaterialId
-				rtg::RtgResourceDesc2D gbuffer2_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer2_format);
-				// GBuffer3 Emissive.xyz, Unused.w
-				rtg::RtgResourceDesc2D gbuffer3_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer3_format);
-				// Velocity xy
-				rtg::RtgResourceDesc2D velocity_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_velocity_format);
-
-				// DepthのFormat取得.
-				const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
-				
-				// リソースアクセス定義.
-				if(!h_async_write_tex.IsInvalid())
+				// Rtgリソースセットアップ.
 				{
-					// 試しにAsyncComputeで書き込まれたリソースを読み取り.
-					builder.RecordResourceAccess(*this, h_async_write_tex, rtg::access_type::SHADER_READ);
+					// GBuffer0 BaseColor.xyz, Occlusion.w
+					rtg::RtgResourceDesc2D gbuffer0_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer0_format);
+					// GBuffer1 WorldNormal.xyz, 1bitOption.w
+					rtg::RtgResourceDesc2D gbuffer1_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer1_format);
+					// GBuffer2 Roughness, Metallic, Optional, MaterialId
+					rtg::RtgResourceDesc2D gbuffer2_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer2_format);
+					// GBuffer3 Emissive.xyz, Unused.w
+					rtg::RtgResourceDesc2D gbuffer3_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer3_format);
+					// Velocity xy
+					rtg::RtgResourceDesc2D velocity_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_velocity_format);
+
+					// DepthのFormat取得.
+					const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
+				
+					// リソースアクセス定義.
+					if(!h_async_write_tex.IsInvalid())
+					{
+						// 試しにAsyncComputeで書き込まれたリソースを読み取り.
+						builder.RecordResourceAccess(*this, h_async_write_tex, rtg::access_type::SHADER_READ);
+					}
+				
+					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
+					h_gb0_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
+					h_gb1_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
+					h_gb2_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer2_desc), rtg::access_type::RENDER_TARTGET);
+					h_gb3_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer3_desc), rtg::access_type::RENDER_TARTGET);
+					h_velocity_ = builder.RecordResourceAccess(*this, builder.CreateResource(velocity_desc), rtg::access_type::RENDER_TARTGET);
 				}
 				
-				h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::DEPTH_TARGET);
-				h_gb0_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer0_desc), rtg::access_type::RENDER_TARTGET);
-				h_gb1_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer1_desc), rtg::access_type::RENDER_TARTGET);
-				h_gb2_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer2_desc), rtg::access_type::RENDER_TARTGET);
-				h_gb3_ = builder.RecordResourceAccess(*this, builder.CreateResource(gbuffer3_desc), rtg::access_type::RENDER_TARTGET);
-				h_velocity_ = builder.RecordResourceAccess(*this, builder.CreateResource(velocity_desc), rtg::access_type::RENDER_TARTGET);
-
 				{
-					ref_scene_cbv_ = desc.ref_scene_cbv;
-					p_mesh_list_ = desc.p_mesh_list;
+					desc_ = desc;
 				}
 			}
 
@@ -193,9 +193,9 @@ namespace ngl::render
 				// Mesh Rendering.
 				gfx::RenderMeshResource render_mesh_res = {};
 				{
-					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+					render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", desc_.ref_scene_cbv.Get()};
 				}
-				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_gbuffer::k_name, *p_mesh_list_, render_mesh_res);
+				ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_gbuffer::k_name, *desc_.p_mesh_list, render_mesh_res);
 			}
 		};
 
@@ -251,12 +251,9 @@ namespace ngl::render
 		{
 			rtg::RtgResourceHandle h_shadow_depth_atlas_{};
 
-			rhi::RefCbvDep ref_scene_cbv_{};
-			const std::vector<gfx::StaticMeshComponent*>* p_mesh_list_;
 
 			rhi::RefBufferDep ref_d_shadow_sample_cb_{};
 			rhi::RefCbvDep ref_d_shadow_sample_cbv_{};// 内部用.
-
 			// Cascade情報. Setupで計算.
 			CascadeShadowMapParameter csm_param_{};
 
@@ -267,6 +264,8 @@ namespace ngl::render
 
 				math::Vec3 directional_light_dir{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				const SetupDesc& desc)
@@ -283,16 +282,19 @@ namespace ngl::render
 				constexpr int shadowmap_single_reso = 1024*2;
 				// CascadeをAtlas管理する際のトータルサイズ.
 				constexpr int shadowmap_atlas_reso = shadowmap_single_reso * 2;
-				// リソース定義.
-				rtg::RtgResourceDesc2D depth_desc =
-					rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(shadowmap_atlas_reso, shadowmap_atlas_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
-
-				// リソースアクセス定義.
-				h_shadow_depth_atlas_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
-
+				
+				// Rtgリソースセットアップ.
 				{
-					ref_scene_cbv_ = desc.ref_scene_cbv;
-					p_mesh_list_ = desc.p_mesh_list;
+					// リソース定義.
+					rtg::RtgResourceDesc2D depth_desc =
+						rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(shadowmap_atlas_reso, shadowmap_atlas_reso, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+
+					// リソースアクセス定義.
+					h_shadow_depth_atlas_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
+				}
+				
+				{
+					desc_ = desc;
 				}
 
 				// ShadowSample用の定数バッファ.
@@ -347,7 +349,6 @@ namespace ngl::render
 				
 				for(int ci = 0; ci < csm_param_.k_cascade_count; ++ci)
 				{
-					// TODO.
 					// frustum_corners を利用して分割面の位置計算. Cascade間ブレンド用にnear側を拡張.
 					const float near_dist_ws = (0 == ci)? view_info.near_z : std::max(0.0f, csm_param_.split_distance_ws[ci-1] - k_cascade_blend_width_ws);
 					const float far_dist_ws = csm_param_.split_distance_ws[ci];
@@ -490,10 +491,10 @@ namespace ngl::render
 					// Mesh Rendering.
 					gfx::RenderMeshResource render_mesh_res = {};
 					{
-						render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", ref_scene_cbv_.Get()};
+						render_mesh_res.cbv_sceneview = {"ngl_cb_sceneview", desc_.ref_scene_cbv.Get()};
 						render_mesh_res.cbv_d_shadowview = {"ngl_cb_shadowview", ref_shadow_render_cbv.Get()};
 					}
-					ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_d_shadow::k_name, *p_mesh_list_, render_mesh_res);
+					ngl::gfx::RenderMeshWithMaterial(*gfx_commandlist, gfx::MaterialPassPsoCreator_d_shadow::k_name, *desc_.p_mesh_list, render_mesh_res);
 				}
 			}
 		};
@@ -504,24 +505,24 @@ namespace ngl::render
 		{
 			rtg::RtgResourceHandle h_depth_{};
 			rtg::RtgResourceHandle h_linear_depth_{};
-
-			rhi::RefCbvDep ref_scene_cbv_{};
-
+;
 			rhi::RhiRef<rhi::ComputePipelineStateDep> pso_;
 
 			struct SetupDesc
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_tex_compute, const SetupDesc& desc)
 			{
+				// Rtgリソースセットアップ.
 				{
 					// リソース定義.
 					rtg::RtgResourceDesc2D linear_depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
 
-					// テスト用
 					if(!h_tex_compute.IsInvalid())
 					{
 						builder.RecordResourceAccess(*this, h_tex_compute, rtg::access_type::SHADER_READ);
@@ -533,7 +534,7 @@ namespace ngl::render
 				}
 
 				{
-					ref_scene_cbv_ = desc.ref_scene_cbv;
+					desc_ = desc;
 				}
 
 				{
@@ -568,7 +569,7 @@ namespace ngl::render
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "TexHardwareDepth", res_depth.srv_.Get());
 				pso_->SetView(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_.Get());
-				pso_->SetView(&desc_set, "ngl_cb_sceneview", ref_scene_cbv_.Get());
+				pso_->SetView(&desc_set, "ngl_cb_sceneview", desc_.ref_scene_cbv.Get());
 
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
@@ -594,8 +595,6 @@ namespace ngl::render
 			
 			rtg::RtgResourceHandle h_shadowmap_{};
 			
-			rhi::RefCbvDep ref_scene_cbv_{};
-			rhi::RefCbvDep ref_shadow_cbv_{};
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
 
@@ -604,6 +603,8 @@ namespace ngl::render
 				rhi::RefCbvDep ref_scene_cbv{};
 				rhi::RefCbvDep ref_shadow_cbv{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_gb0, rtg::RtgResourceHandle h_gb1, rtg::RtgResourceHandle h_gb2, rtg::RtgResourceHandle h_gb3, rtg::RtgResourceHandle h_velocity,
@@ -611,7 +612,7 @@ namespace ngl::render
 				rtg::RtgResourceHandle h_shadowmap,
 				const SetupDesc& desc)
 			{
-				// リソース定義.
+				// Rtgリソースセットアップ.
 				rtg::RtgResourceDesc2D light_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 				{
 					// リソースアクセス定義.
@@ -636,12 +637,9 @@ namespace ngl::render
 				}
 				
 				{
-					// 外部リソース.
-					ref_scene_cbv_ = desc.ref_scene_cbv;
-					ref_shadow_cbv_ = desc.ref_shadow_cbv;
+					desc_ = desc;
 				}
 				
-				// 
 				{
 					// 初期化. シェーダバイナリの要求とPSO生成.
 					
@@ -727,8 +725,8 @@ namespace ngl::render
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
 
-				pso_->SetView(&desc_set, "ngl_cb_sceneview", ref_scene_cbv_.Get());
-				pso_->SetView(&desc_set, "ngl_cb_shadowview", ref_shadow_cbv_.Get());
+				pso_->SetView(&desc_set, "ngl_cb_sceneview", desc_.ref_scene_cbv.Get());
+				pso_->SetView(&desc_set, "ngl_cb_shadowview", desc_.ref_shadow_cbv.Get());
 				
 				pso_->SetView(&desc_set, "tex_lineardepth", res_linear_depth.srv_.Get());
 				pso_->SetView(&desc_set, "tex_gbuffer0", res_gb0.srv_.Get());
@@ -770,6 +768,8 @@ namespace ngl::render
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_swapchain, rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_linear_depth, rtg::RtgResourceHandle h_light,
@@ -777,8 +777,8 @@ namespace ngl::render
 				rhi::RefSrvDep ref_res_texture_srv,
 				const SetupDesc& desc)
 			{
+				// Rtgリソースセットアップ.
 				{
-					// リソースアクセス定義.
 					h_depth_ = builder.RecordResourceAccess(*this, h_depth, rtg::access_type::SHADER_READ);
 					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 					h_light_ = builder.RecordResourceAccess(*this, h_light, rtg::access_type::SHADER_READ);
@@ -801,7 +801,12 @@ namespace ngl::render
 					h_tmp_ = temp_res0;
 				}
 				
-				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする(実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
+				{
+					desc_ = desc;
+				}
+				
+				// pso生成のためにRenderTarget(実際はSwapchain)のDescをBuilderから取得. DescはCompile前に取得ができるものとする.
+				// (実リソース再利用割当のために実際のリソースのWidthやHeightは取得できないが...).
 				const auto render_target_desc = builder.GetResourceHandleDesc(h_swapchain);
 
 				{
@@ -917,11 +922,13 @@ namespace ngl::render
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_input_test, const SetupDesc& desc)
 			{
-				// テストのため独立したタスク. ただしリソース自体はPoolから確保されるため前回利用時のStateからの遷移などの諸問題は対応が必要(Computeではステート遷移不可のため).
+				// Rtgリソースセットアップ.
 				{
 					// リソース定義.
 					rtg::RtgResourceDesc2D work_tex_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
@@ -932,6 +939,10 @@ namespace ngl::render
 					// 入力リソーステスト.
 					if(!h_input_test.IsInvalid())
 						builder.RecordResourceAccess(*this, h_input_test, rtg::access_type::SHADER_READ);
+				}
+
+				{
+					desc_ = desc;
 				}
 
 				{
@@ -972,27 +983,36 @@ namespace ngl::render
 		};
 
 		
-		// Passの実装テスト.
+		// Raytracing Pass.
 		struct TaskRtDispatch : public rtg::IGraphicsTaskNode
 		{
 			rtg::RtgResourceHandle h_rt_result_{};
+			
+			ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_lib_;
+			gfx::RtPassCore	rt_pass_core_ = {};
 			
 			struct SetupDesc
 			{
 				class gfx::RtSceneManager* p_rt_scene{};
 			};
+			SetupDesc desc_{};
+			
 			// リソースとアクセスを定義するプリプロセス.
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info, const SetupDesc& desc)
 			{
-				// リソース定義.
-				rtg::RtgResourceDesc2D res_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
-				// リソースアクセス定義.
-				h_rt_result_ = builder.RecordResourceAccess(*this, builder.CreateResource(res_desc), rtg::access_type::UAV);
-
+				// Rtgリソースセットアップ.
+				{
+					rtg::RtgResourceDesc2D res_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+					// リソースアクセス定義.
+					h_rt_result_ = builder.RecordResourceAccess(*this, builder.CreateResource(res_desc), rtg::access_type::UAV);
+				}
+				
+				{
+					desc_ = desc;
+				}
+				
 				// Raytrace Pipelineセットアップ.
 				{
-					p_rt_scene_ = desc.p_rt_scene;
-					
 					{
 						auto& ResourceMan = ngl::res::ResourceManager::Instance();
 
@@ -1056,7 +1076,7 @@ namespace ngl::render
 				assert(res_rt_result.tex_.IsValid() && res_rt_result.uav_.IsValid());
 
 				// Rt ShaderTable更新.
-				rt_pass_core_.UpdateScene(p_rt_scene_, "rayGen");
+				rt_pass_core_.UpdateScene(desc_.p_rt_scene, "rayGen");
 
 				// Ray Dispatch.
 				{
@@ -1065,7 +1085,7 @@ namespace ngl::render
 					param.count_y = res_rt_result.tex_->GetHeight();
 					// global resourceのセット.
 					{
-						param.cbv_slot[0] = p_rt_scene_->GetSceneViewCbv();// View.
+						param.cbv_slot[0] = desc_.p_rt_scene->GetSceneViewCbv();// View.
 					}
 					{
 						param.srv_slot;
@@ -1080,21 +1100,7 @@ namespace ngl::render
 					// dispatch.
 					rt_pass_core_.DispatchRay(gfx_commandlist, param);
 				}
-
 			}
-
-			
-			// Pass毎に自由.
-			// サンプルのため外部からShaderとRaygen情報などを指定する.
-			bool Initialize(rhi::DeviceDep* p_device, uint32_t max_trace_recursion);
-
-			void PreRenderUpdate(class RtSceneManager* p_rt_scene);
-			void Render(rhi::GraphicsCommandListDep* p_command_list);
-
-
-			ngl::res::ResourceHandle <ngl::gfx::ResShader> res_shader_lib_;
-			gfx::RtPassCore	rt_pass_core_ = {};
-			class gfx::RtSceneManager* p_rt_scene_ = {};
 		};
 
 		

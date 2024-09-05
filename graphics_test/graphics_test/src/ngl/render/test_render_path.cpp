@@ -73,32 +73,31 @@ namespace ngl::test
 			}
 		}
 				
-		// RenderTaskGraphによるレンダリングパス.
+		// RtgによるRenderPathの構築.
 		{
-			// RTG Build.
-			// Builderは構築のたびに使い捨て.
+			// Rtg構築用オブジェクト, 1回の構築-Compile-実行で使い捨てされる.
 			ngl::rtg::RenderTaskGraphBuilder rtg_builder(screen_w, screen_h);
 				
-			// Append External Resource Info.
 			ngl::rtg::RtgResourceHandle h_swapchain = {};
+			// Rtgへ外部リソースの登録.
 			{
 				if(render_frame_desc.ref_swapchain.IsValid())
 				{
-					// 外部リソース登録.
-					// このGraphの開始時点のStateと終了時にあるべきStateを指定.
+					// このRtgの開始時点のStateと終了時にあるべきStateを指定.
 					h_swapchain = rtg_builder.RegisterSwapchainResource(render_frame_desc.ref_swapchain, render_frame_desc.ref_swapchain_rtv, render_frame_desc.swapchain_state_prev, render_frame_desc.swapchain_state_next);
 				}
 				// TODO. any other.
 				// ...
 			}
 				
-			// Build Rendering Path.
+			// 1連のRenderPathを構成するPass群を生成し, それらの間のリソース依存関係を構築.
 			{
 				
 #define ASYNC_COMPUTE_TEST 1
 				// AsyncComputeの依存関係の追い越しパターンテスト用.
 				ngl::rtg::RtgResourceHandle async_compute_tex2 = {};
 #if ASYNC_COMPUTE_TEST
+				// ----------------------------------------
 				// AsyncCompute Pass.
 				auto* task_test_compute1 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
@@ -111,11 +110,12 @@ namespace ngl::test
 				}
 #endif
 
-#if 1
+				// ----------------------------------------
+				// Raytrace Pass.
 				rtg::RtgResourceHandle h_rt_result = {};
 				if(render_frame_desc.p_rt_scene)
 				{
-					// Raytrace Pass.
+					// 外部からRaytraceSceneが渡されていればPassを生成する.
 					auto* task_rt_test = rtg_builder.AppendTaskNode<render::task::TaskRtDispatch>();
 					{
 						render::task::TaskRtDispatch::SetupDesc setup_desc{};
@@ -127,7 +127,8 @@ namespace ngl::test
 						h_rt_result = task_rt_test->h_rt_result_;
 					}
 				}
-#endif			
+
+				// ----------------------------------------
 				// PreZ Pass.
 				auto* task_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskDepthPass>();
 				{
@@ -141,6 +142,7 @@ namespace ngl::test
 					
 				ngl::rtg::RtgResourceHandle async_compute_tex = {};
 #if ASYNC_COMPUTE_TEST
+				// ----------------------------------------
 				// AsyncCompute Pass 其の二.
 				auto* task_test_compute2 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
@@ -153,6 +155,7 @@ namespace ngl::test
 				}
 #endif
 					
+				// ----------------------------------------
 				// GBuffer Pass.
 				auto* task_gbuffer = rtg_builder.AppendTaskNode<ngl::render::task::TaskGBufferPass>();
 				{
@@ -164,6 +167,7 @@ namespace ngl::test
 					task_gbuffer->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, async_compute_tex, setup_desc);
 				}
 					
+				// ----------------------------------------
 				// Linear Depth Pass.
 				auto* task_linear_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskLinearDepthPass>();
 				{
@@ -174,6 +178,7 @@ namespace ngl::test
 					task_linear_depth->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_,async_compute_tex2, setup_desc);
 				}
 					
+				// ----------------------------------------
 				// DirectionalShadow Pass.
 				auto* task_d_shadow = rtg_builder.AppendTaskNode<ngl::render::task::TaskDirectionalShadowPass>();
 				{
@@ -188,6 +193,7 @@ namespace ngl::test
 					task_d_shadow->Setup(rtg_builder, p_device, view_info, setup_desc);
 				}
 					
+				// ----------------------------------------
 				// Deferred Lighting Pass.
 				auto* task_light = rtg_builder.AppendTaskNode<ngl::render::task::TaskLightPass>();
 				{
@@ -203,10 +209,11 @@ namespace ngl::test
 						setup_desc);
 				}
 
+				// ----------------------------------------
 				// Final Composite to Swapchain.
-				// Swapchainが指定されている場合のみ最終Passを登録.
 				if(!h_swapchain.IsInvalid())
 				{
+					// Swapchainが指定されている場合のみ最終Passを登録.
 					auto* task_final = rtg_builder.AppendTaskNode<ngl::render::task::TaskFinalPass>();
 					{
 						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
@@ -227,10 +234,11 @@ namespace ngl::test
 				}
 			}
 
-			// Compile. ManagerでCompileを実行する.
+			// 構築したRtgをCompile.
+			//	ここでリソース依存関係とBarrier, 非同期コンピュート同期, リソース再利用などが確定する.
 			rtg_manager.Compile(rtg_builder);
 				
-			// Graphを構成するTaskの Run() を実行し, CommandListを生成する.
+			// Rtgを実行し構成Taskの Run() を実行, CommandListを生成する.
 			//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
 			//	各TaskのRun()はそれぞれ別スレッドで並列実行される可能性がある.
 			rtg_builder.Execute(out_graphics_cmd, out_compute_cmd);
