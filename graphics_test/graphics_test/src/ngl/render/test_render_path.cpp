@@ -89,14 +89,15 @@ namespace ngl::test
 				// TODO. any other.
 				// ...
 			}
+			
 				
+#define ASYNC_COMPUTE_TEST0 1
+#define ASYNC_COMPUTE_TEST1 1
 			// 1連のRenderPathを構成するPass群を生成し, それらの間のリソース依存関係を構築.
 			{
-				
-#define ASYNC_COMPUTE_TEST 1
 				// AsyncComputeの依存関係の追い越しパターンテスト用.
 				ngl::rtg::RtgResourceHandle async_compute_tex2 = {};
-#if ASYNC_COMPUTE_TEST
+#if ASYNC_COMPUTE_TEST0
 				// ----------------------------------------
 				// AsyncCompute Pass.
 				auto* task_test_compute1 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
@@ -141,7 +142,7 @@ namespace ngl::test
 				}
 					
 				ngl::rtg::RtgResourceHandle async_compute_tex = {};
-#if ASYNC_COMPUTE_TEST
+#if ASYNC_COMPUTE_TEST1
 				// ----------------------------------------
 				// AsyncCompute Pass 其の二.
 				auto* task_test_compute2 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
