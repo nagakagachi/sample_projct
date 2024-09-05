@@ -1155,6 +1155,10 @@ namespace ngl::render
 				auto res_rt_result = builder.GetAllocatedResource(this, h_rt_result_);
 				assert(res_rt_result.tex_.IsValid() && res_rt_result.uav_.IsValid());
 
+				// 正常に初期化されていなければ終了.
+				if(!desc_.p_rt_scene->IsValid())
+					return;
+				
 				// Rt ShaderTable更新.
 				rt_pass_core_.UpdateScene(desc_.p_rt_scene, "rayGen");
 

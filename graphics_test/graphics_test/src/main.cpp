@@ -416,8 +416,7 @@ bool AppGame::Initialize()
 	// AS他.
 	if (!rt_scene_.Initialize(&device_))
 	{
-		std::cout << "[ERROR] Create gfx::RtSceneManager" << std::endl;
-		assert(false);
+		std::cout << "[ERROR] Initialize gfx::RtSceneManager" << std::endl;
 	}
 	
 	// テストコード
@@ -576,7 +575,8 @@ bool AppGame::Execute()
 	}
 
 	// RaytraceSceneにカメラ設定.
-	rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
+	if(rt_scene_.IsValid())
+		rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
 	
 
 	// -------------------------------------------------------
@@ -590,6 +590,7 @@ bool AppGame::Execute()
 			const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
 		
 			// Raytracing Scene更新.
+			if(rt_scene_.IsValid())
 			{
 				// RtScene更新. AS更新とそのCommand生成.
 				rt_scene_.UpdateOnRender(&device_, p_gfx_frame_begin_command_list_, frame_scene);
@@ -661,7 +662,7 @@ bool AppGame::Execute()
 					render_frame_desc.p_scene = &frame_scene;
 					render_frame_desc.directional_light_dir = dlit_dir;
 
-					if(dbgw_enable_raytrace_pass)
+					if(dbgw_enable_raytrace_pass && rt_scene_.IsValid())
 					{
 						// デバッグメニューからRaytracePassの有無切り替え.
 						render_frame_desc.p_rt_scene = &rt_scene_;

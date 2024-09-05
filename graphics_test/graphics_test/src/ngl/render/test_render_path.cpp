@@ -155,7 +155,7 @@ namespace ngl::test
 				ngl::rtg::RtgResourceHandle async_compute_tex1 = {};
 #if ASYNC_COMPUTE_TEST1
 				// ----------------------------------------
-				// AsyncCompute Pass 其の二.
+				// AsyncCompute Pass.
 				auto* task_test_compute1 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};

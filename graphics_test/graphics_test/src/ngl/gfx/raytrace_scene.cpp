@@ -1717,6 +1717,12 @@ namespace ngl
 		}
 		bool RtSceneManager::Initialize(rhi::DeviceDep* p_device)
 		{
+			if(!p_device->IsSupportDxr())
+			{
+				is_initialized_ = false;
+				return false;
+			}
+			
 			// Descriptor確保用Interface初期化.
 			{
 				rhi::DynamicDescriptorStackAllocatorInterface::Desc descriptor_interface_desc = {};
@@ -1737,11 +1743,15 @@ namespace ngl
 				}
 			}
 
+			is_initialized_ = true;
 			return true;
 		}
 
 		void RtSceneManager::UpdateRtScene(rhi::DeviceDep* p_device, const SceneRepresentation& scene)
 		{
+			if(!is_initialized_)
+				return;
+			
 			// 現在SceneでのMesh情報収集.
 			std::unordered_map<const ResMeshData*, int> scene_mesh_to_id;
 			std::vector<const ResMeshData*> scene_mesh_array;
@@ -1843,16 +1853,17 @@ namespace ngl
 
 		void RtSceneManager::UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene)
 		{
+			if(!is_initialized_)
+				return;
+			
 			++frame_count_;
 			const uint32_t safe_frame_count_ = frame_count_ % 10000;
-
 
 			// 動的Scene.
 			{
 				// ASのセットアップやShaderTable構築等.
 				UpdateRtScene(p_device, scene);
-
-
+				
 				// BLASのビルドが必要なものをビルド.
 				for (auto& e : dynamic_scene_blas_array_)
 				{
@@ -1910,25 +1921,38 @@ namespace ngl
 
 		RtTlas* RtSceneManager::GetSceneTlas()
 		{
+			if(!is_initialized_)
+				return nullptr;
 			return dynamic_tlas_.get();
 		}
 		const RtTlas* RtSceneManager::GetSceneTlas() const
 		{
+			if(!is_initialized_)
+				return nullptr;
 			return dynamic_tlas_.get();
 		}
 		rhi::ConstantBufferViewDep* RtSceneManager::GetSceneViewCbv()
 		{
+			if(!is_initialized_)
+				return nullptr;
+			
 			const auto cb_index = frame_count_ % std::size(cb_scene_view);
 			return (cbv_scene_view[cb_index].IsValid())? cbv_scene_view[cb_index].Get() : nullptr;
 		}
 		const rhi::ConstantBufferViewDep* RtSceneManager::GetSceneViewCbv() const
 		{
+			if(!is_initialized_)
+				return nullptr;
+			
 			const auto cb_index = frame_count_ % std::size(cb_scene_view);
 			return (cbv_scene_view[cb_index].IsValid()) ? cbv_scene_view[cb_index].Get() : nullptr;
 		}
 
 		void RtSceneManager::DispatchRay(rhi::GraphicsCommandListDep* p_command_list, const DispatchRayParam& param)
 		{
+			if(!is_initialized_)
+				return;
+			
 			const auto cb_index = frame_count_ % std::size(cb_scene_view);
 
 			rhi::DeviceDep* p_device = p_command_list->GetDevice();
@@ -2068,6 +2092,9 @@ namespace ngl
 
 		void  RtSceneManager::SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio)
 		{
+			if(!is_initialized_)
+				return;
+			
 			camera_pos_ = position;
 			camera_dir_ = dir;
 			camera_up_ = up;

@@ -433,6 +433,7 @@ namespace ngl
 			~RtSceneManager();
 
 			bool Initialize(rhi::DeviceDep* p_device);
+			bool IsValid() const {return is_initialized_;}
 
 			void UpdateOnRender(rhi::DeviceDep* p_device, rhi::GraphicsCommandListDep* p_command_list, const SceneRepresentation& scene);
 
@@ -470,6 +471,7 @@ namespace ngl
 			void SetCameraInfo(const math::Vec3& position, const math::Vec3& dir, const math::Vec3& up, float fov_y_radian, float aspect_ratio);
 
 		private:
+			bool is_initialized_ = false;
 			uint32_t frame_count_ = 0;
 
 			// MeshPtrからBLASへのMap.
