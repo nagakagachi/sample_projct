@@ -169,28 +169,34 @@ namespace ngl
 		//===== ウィンドウプロシージャの実装(継承可能) =====//
 		// ここでの記述はデフォルトの処理
 		LRESULT CoreWindowImplDep::MainProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-		{
-			// Imgui対応.
-			if (imgui::ImguiInterface::Instance().WindProc(hWnd, message, wParam, lParam))
-				return true;
-			
+		{	
 			switch (message)
 			{
 				// ウィンドウが破棄された場合
 			case WM_DESTROY:
-			{
-				PostQuitMessage(0);
+				{
+					PostQuitMessage(0);
 
-				// フラグのリセットなどのために破棄処理呼び出し.
-				Destroy();
-				break;
-			}
-
+					// フラグのリセットなどのために破棄処理呼び出し.
+					Destroy();
+					break;
+				}
+				
 			default:
-				break;
+				{
+					break;
+				}
 			}
 
 			InputProc(message, wParam, lParam);
+			
+			// Imgui対応.
+			{
+				if (imgui::ImguiInterface::Instance().WindProc(hWnd, message, wParam, lParam))
+				{
+					return true;
+				}
+			}
 
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
@@ -226,7 +232,7 @@ namespace ngl
 			}
 		}
 		void CoreWindowImplDep::InputProc(UINT message, WPARAM wParam, LPARAM lParam)
-		{
+		{	
 			if (message == WM_KEYDOWN || message == WM_KEYUP)
 			{
 				// keyboard virtual key state. VK_LEFT, VK_0, VK_A, VK_Z, VK_OEM_PLUS.
@@ -235,7 +241,6 @@ namespace ngl
 				if (0 < wParam && 0xff > wParam)
 				{
 					keyboard_key = (int)wParam;
-
 					virtual_key_state_[keyboard_key] = (keyboard_down) ? 1 : 0;
 				}
 			}

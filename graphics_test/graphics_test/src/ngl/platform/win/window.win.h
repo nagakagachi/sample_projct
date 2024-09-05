@@ -13,6 +13,7 @@
 #undef min
 #undef max
 
+#include <iterator>
 #include <tuple>
 
 #include "ngl/platform/window.h"
@@ -69,6 +70,11 @@ namespace ngl
 			{
 				return virtual_key_state_;
 			}
+			int NumVirtualKeyState() const
+			{
+				return static_cast<int>(std::size(virtual_key_state_));
+			}
+			
 			// Mouse Screen Position XY.
 			std::tuple<int, int> GetMousePosition() const
 			{

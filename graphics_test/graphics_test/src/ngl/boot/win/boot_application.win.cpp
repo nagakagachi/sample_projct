@@ -27,6 +27,7 @@ namespace ngl
 			do {
 				if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 				{
+					TranslateMessage(&msg);// for WM_CHAR.
 					DispatchMessage(&msg);
 				}
 				else

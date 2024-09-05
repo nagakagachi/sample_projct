@@ -26,7 +26,6 @@ namespace ngl::imgui
             rhi::SwapChainDep* p_swapchain, uint32_t swapchain_index, rhi::RenderTargetViewDep* p_swapchain_rtv, rhi::EResourceState rtv_state_prev, rhi::EResourceState rtv_state_next);
         
         bool WindProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
     private:
         bool initialized_ = false;
         rhi::FrameDescriptorHeapPageInterface descriptor_heap_interface_{};

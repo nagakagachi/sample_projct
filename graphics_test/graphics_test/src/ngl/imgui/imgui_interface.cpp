@@ -94,7 +94,7 @@ namespace  ngl::imgui
         ImGui::NewFrame();
         
         // ------------------------------------------------------------------------------------------
-        //ImGui::ShowDemoWindow(); // Show demo window! :)
+        ImGui::ShowDemoWindow(); // Show demo window! :)
         // ------------------------------------------------------------------------------------------
         
 #endif
@@ -157,6 +157,4 @@ namespace  ngl::imgui
         return false;
 #endif
     }
-
-
 }

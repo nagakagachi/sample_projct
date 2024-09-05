@@ -44,6 +44,7 @@
 
 
 // imgui.
+#include "imgui.h"
 #include "ngl/imgui/imgui_interface.h"
 
 
@@ -57,6 +58,7 @@ public:
 	bool Initialize() override;
 	bool Execute() override;
 
+	void BeginFrame();
 	void SyncRender();
 	void BeginRender();
 
@@ -426,6 +428,12 @@ bool AppGame::Initialize()
 	return true;
 }
 
+void AppGame::BeginFrame()
+{
+	// imgui.
+	ngl::imgui::ImguiInterface::Instance().BeginFrame();
+}
+
 void AppGame::SyncRender()
 {
 	// FrameのGame-Render同期処理.
@@ -437,9 +445,6 @@ void AppGame::SyncRender()
 	
 	// RTGのフレーム開始処理.
 	rtg_manager_.BeginFrame();
-
-	// imgui.
-	ngl::imgui::ImguiInterface::Instance().BeginFrame();
 }
 
 void AppGame::BeginRender()
@@ -460,6 +465,10 @@ bool AppGame::Execute()
 	{
 		return false;
 	}
+	// Begin Frame.
+	BeginFrame();
+
+	
 	{
 		frame_sec_ = ngl::time::Timer::Instance().GetElapsedSec("app_frame_sec");
 		app_sec_ += frame_sec_;
@@ -471,7 +480,6 @@ bool AppGame::Execute()
 
 	ngl::u32 screen_w, screen_h;
 	window_.Impl()->GetScreenSize(screen_w, screen_h);
-
 	
 	// 操作系.
 	{
@@ -576,6 +584,51 @@ bool AppGame::Execute()
 			}
 			prev_mouse_r = mouse_r;
 		}
+	}
+
+	// ImGui.
+	static bool imgui_test_window_enable {};
+	static float imgui_test_color[4]{};
+	static char igmui_test_str[32];
+	static float imgui_test_float{};
+	{
+		/*
+		ImGui::Text("Hello, world %d", 123);
+		ImGui::InputText("string", igmui_test_str, IM_ARRAYSIZE(igmui_test_str));
+		ImGui::SliderFloat("float", &imgui_test_float, 0.0f, 1.0f);
+		*/
+		
+		
+		// Create a window called "My First Tool", with a menu bar.
+		ImGui::Begin("My First Tool", &imgui_test_window_enable, ImGuiWindowFlags_MenuBar);
+		if (ImGui::BeginMenuBar())
+		{
+			if (ImGui::BeginMenu("File"))
+			{
+				if (ImGui::MenuItem("Save", "Ctrl+S"))   { }
+				if (ImGui::MenuItem("Close", "Ctrl+W"))  { imgui_test_window_enable = false; }
+				ImGui::EndMenu();
+			}
+			ImGui::EndMenuBar();
+		}
+
+		// Edit a color stored as 4 floats
+		ImGui::ColorEdit4("Color", imgui_test_color);
+
+		// Generate samples and plot them
+		float samples[100];
+		for (int n = 0; n < 100; n++)
+			samples[n] = sinf(n * 0.2f + ImGui::GetTime() * 1.5f);
+		ImGui::PlotLines("Samples", samples, 100);
+
+		// Display contents in a scrolling region
+		ImGui::TextColored(ImVec4(1,1,0,1), "Important Stuff");
+		ImGui::BeginChild("Scrolling");
+		for (int n = 0; n < 50; n++)
+			ImGui::Text("%04d: Some text", n);
+		ImGui::EndChild();
+		ImGui::End();
+		
 	}
 	
 	// オブジェクト移動.
