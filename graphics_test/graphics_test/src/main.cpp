@@ -743,7 +743,7 @@ bool AppGame::Execute()
 		
 			// CommandList Submit
 			{
-#if 1
+#if 0
 				// フレーム先頭からAcyncComputeのテストSubmit.
 				{
 					ngl::rhi::CommandListBaseDep* p_command_lists[] =

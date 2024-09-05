@@ -91,23 +91,23 @@ namespace ngl::test
 			}
 			
 				
-#define ASYNC_COMPUTE_TEST0 1
+#define ASYNC_COMPUTE_TEST0 0
 #define ASYNC_COMPUTE_TEST1 1
 			// 1連のRenderPathを構成するPass群を生成し, それらの間のリソース依存関係を構築.
 			{
 				// AsyncComputeの依存関係の追い越しパターンテスト用.
-				ngl::rtg::RtgResourceHandle async_compute_tex2 = {};
+				ngl::rtg::RtgResourceHandle async_compute_tex0 = {};
 #if ASYNC_COMPUTE_TEST0
 				// ----------------------------------------
 				// AsyncCompute Pass.
-				auto* task_test_compute1 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
+				auto* task_test_compute0 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
-					task_test_compute1->Setup(rtg_builder, p_device, view_info, {}, setup_desc);
-					async_compute_tex2 = task_test_compute1->h_work_tex_;
+					task_test_compute0->Setup(rtg_builder, p_device, view_info, {}, setup_desc);
+					async_compute_tex0 = task_test_compute0->h_work_tex_;
 				}
 #endif
 
@@ -141,18 +141,29 @@ namespace ngl::test
 					task_depth->Setup(rtg_builder, p_device, view_info, setup_desc);
 				}
 					
-				ngl::rtg::RtgResourceHandle async_compute_tex = {};
+				// ----------------------------------------
+				// Linear Depth Pass.
+				auto* task_linear_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskLinearDepthPass>();
+				{
+					ngl::render::task::TaskLinearDepthPass::SetupDesc setup_desc{};
+					{
+						setup_desc.ref_scene_cbv = sceneview_cbv;
+					}
+					task_linear_depth->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, async_compute_tex0, setup_desc);
+				}
+				
+				ngl::rtg::RtgResourceHandle async_compute_tex1 = {};
 #if ASYNC_COMPUTE_TEST1
 				// ----------------------------------------
 				// AsyncCompute Pass 其の二.
-				auto* task_test_compute2 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
+				auto* task_test_compute1 = rtg_builder.AppendTaskNode<ngl::render::task::TaskCopmuteTest>();
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
 					{
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
-					task_test_compute2->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, setup_desc);
-					async_compute_tex = task_test_compute2->h_work_tex_;
+					task_test_compute1->Setup(rtg_builder, p_device, view_info, task_linear_depth->h_linear_depth_, setup_desc);
+					async_compute_tex1 = task_test_compute1->h_work_tex_;
 				}
 #endif
 					
@@ -165,18 +176,7 @@ namespace ngl::test
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
 					}
-					task_gbuffer->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, async_compute_tex, setup_desc);
-				}
-					
-				// ----------------------------------------
-				// Linear Depth Pass.
-				auto* task_linear_depth = rtg_builder.AppendTaskNode<ngl::render::task::TaskLinearDepthPass>();
-				{
-					ngl::render::task::TaskLinearDepthPass::SetupDesc setup_desc{};
-					{
-						setup_desc.ref_scene_cbv = sceneview_cbv;
-					}
-					task_linear_depth->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_,async_compute_tex2, setup_desc);
+					task_gbuffer->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, async_compute_tex0, setup_desc);
 				}
 					
 				// ----------------------------------------
@@ -207,6 +207,7 @@ namespace ngl::test
 						task_gbuffer->h_gb0_, task_gbuffer->h_gb1_, task_gbuffer->h_gb2_, task_gbuffer->h_gb3_,
 						task_gbuffer->h_velocity_, task_linear_depth->h_linear_depth_, render_frame_desc.h_prev_lit,
 						task_d_shadow->h_shadow_depth_atlas_,
+						async_compute_tex1,
 						setup_desc);
 				}
 

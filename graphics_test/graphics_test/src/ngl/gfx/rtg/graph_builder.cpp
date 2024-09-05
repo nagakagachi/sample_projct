@@ -329,10 +329,21 @@ namespace ngl
 				
 						for(auto& res_access_i : node_handle_usage_list_[p_node_i])
 						{
+							const bool cur_node_access_write = RtgIsWriteAccess(res_access_i.access);
+							
 							for(auto& res_access_j : node_handle_usage_list_[p_node_j])
 							{
-								// 同一HandleへのアクセスをするNodeを発見.
-								if(res_access_i.handle == res_access_j.handle)
+								const bool prev_node_access_write = RtgIsWriteAccess(res_access_j.access);
+
+								// 注目ノードと同じハンドルを先行ノードが参照している.
+								const bool is_same_handle = res_access_i.handle == res_access_j.handle;
+								// 注目ノードと先行ノードの両方のアクセスタイプを考慮.
+								const bool is_need_wait_dependency_access = !(!prev_node_access_write && !cur_node_access_write);
+								
+								if(
+									is_same_handle
+									&& is_need_wait_dependency_access
+									)
 								{
 									// 最も近い前段のNodeからの依存のみで十分なので, 最大値で探索する.
 									nearest_dependency_index = std::max(nearest_dependency_index, j);

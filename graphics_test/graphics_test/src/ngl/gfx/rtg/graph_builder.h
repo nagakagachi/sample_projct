@@ -142,6 +142,12 @@ namespace ngl
 			static constexpr ACCESS_TYPE_MASK SHADER_READ		= 1 << (access_type::SHADER_READ);
 			static constexpr ACCESS_TYPE_MASK UAV				= 1 << (access_type::UAV);
 		};
+		inline bool RtgIsWriteAccess(ACCESS_TYPE type)
+		{
+			constexpr auto k_write_assecc_mask = access_type_mask::RENDER_TARTGET | access_type_mask::DEPTH_TARGET | access_type_mask::UAV;
+			const ACCESS_TYPE_MASK mask = 1 << type;
+			return 0 != (k_write_assecc_mask & mask);
+		}
 		
 
 		// Passが必要とするリソースの定義.

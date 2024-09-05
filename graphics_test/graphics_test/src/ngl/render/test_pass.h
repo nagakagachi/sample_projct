@@ -610,6 +610,7 @@ namespace ngl::render
 				rtg::RtgResourceHandle h_gb0, rtg::RtgResourceHandle h_gb1, rtg::RtgResourceHandle h_gb2, rtg::RtgResourceHandle h_gb3, rtg::RtgResourceHandle h_velocity,
 				rtg::RtgResourceHandle h_linear_depth, rtg::RtgResourceHandle h_prev_light,
 				rtg::RtgResourceHandle h_shadowmap,
+				rtg::RtgResourceHandle h_async_compute_result,
 				const SetupDesc& desc)
 			{
 				// Rtgリソースセットアップ.
@@ -628,6 +629,11 @@ namespace ngl::render
 					if(!h_prev_light.IsInvalid())
 					{
 						h_prev_light_ = builder.RecordResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
+					}
+					if(!h_async_compute_result.IsInvalid())
+					{
+						// Asyncの結果を読み取りだけレコードしてFenceさせる.
+						builder.RecordResourceAccess(*this, h_async_compute_result, rtg::access_type::SHADER_READ);
 					}
 				
 					h_light_ = builder.RecordResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// このTaskで新規生成したRenderTargetを出力先とする.
