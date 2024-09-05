@@ -89,7 +89,7 @@ private:
 	// CommandQueue実行完了待機用オブジェクト
 	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
 	
-	ngl::rhi::RhiRef<ngl::rhi::GraphicsCommandListDep>	gfx_frame_begin_command_list_;
+	ngl::rhi::GraphicsCommandListDep*					p_gfx_frame_begin_command_list_{};
 
 	// SwapChain
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
@@ -157,8 +157,6 @@ AppGame::~AppGame()
 	// imgui.
 	ngl::imgui::ImguiInterface::Instance().Finalize();
 	
-	gfx_frame_begin_command_list_.Reset();
-
 	swapchain_.Reset();
 	graphics_queue_.Finalize();
 	compute_queue_.Finalize();
@@ -227,14 +225,6 @@ bool AppGame::Initialize()
 			swapchain_rtvs_[i]->Initialize(&device_, swapchain_.Get(), i);
 			swapchain_resource_state_[i] = ngl::rhi::EResourceState::Common;// Swapchain初期ステートは指定していないためCOMMON状態.
 		}
-	}
-	// システム用のGraphics CommnadListを一つ.
-	gfx_frame_begin_command_list_ = new ngl::rhi::GraphicsCommandListDep();
-	if (!gfx_frame_begin_command_list_->Initialize(&device_))
-	{
-		std::cout << "[ERROR] Initialize Graphics CommandList" << std::endl;
-		assert(false);
-		return false;
 	}
 	
 	if (!wait_fence_.Initialize(&device_))
@@ -464,12 +454,14 @@ void AppGame::SyncRender()
 
 void AppGame::BeginRender()
 {
-	// システム用のフレーム先頭CommandListを準備.
-	gfx_frame_begin_command_list_->Begin();
+	// このフレーム用のシステムCommandListをRtgから取得.
+	p_gfx_frame_begin_command_list_ = {};
+	rtg_manager_.GetNewFrameCommandList(p_gfx_frame_begin_command_list_);
+	p_gfx_frame_begin_command_list_->Begin();// begin.
+
 	
-	// ResourceManagerのRenderThread処理.
-	//	TextureLinearBufferや MeshBufferのUploadなど.
-	ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, gfx_frame_begin_command_list_.Get());
+	// ResourceManagerのRenderThread処理. TextureLinearBufferや MeshBufferのUploadなど.
+	ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, p_gfx_frame_begin_command_list_);
 }
 
 // メインループから呼ばれる
@@ -595,7 +587,7 @@ bool AppGame::Execute()
 			// Raytracing Scene更新.
 			{
 				// RtScene更新. AS更新とそのCommand生成.
-				rt_scene_.UpdateOnRender(&device_, gfx_frame_begin_command_list_.Get(), frame_scene);
+				rt_scene_.UpdateOnRender(&device_, p_gfx_frame_begin_command_list_, frame_scene);
 			}
 		
 		
@@ -748,12 +740,11 @@ bool AppGame::Execute()
 			
 				// システム用のGraphics CommandListをSubmit.
 				{
-					if(gfx_frame_begin_command_list_->IsOpen())
-						gfx_frame_begin_command_list_->End();
+					p_gfx_frame_begin_command_list_->End();
 				
 					ngl::rhi::CommandListBaseDep* submit_list[]=
 					{
-						gfx_frame_begin_command_list_.Get()
+						p_gfx_frame_begin_command_list_
 					};
 					graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
 				}
