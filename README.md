@@ -23,8 +23,14 @@ https://nagakagachi.notion.site/RenderGraph-54f0cf4284c7466697b99cc0df81be80
  
 - Build
   - clone
-  - build third_party/asimp (cmake)
+  - build third_party/assimp (cmake)
+    - cd assimp
+    - cmake CMakeLists.txt 
+    - cmake --build . --config Release
   - build third_party/DirectXTex (cmake)
+    - cd DirectXTex
+    - cmake CMakeLists.txt 
+    - cmake --build . --config Release
   - build graphics_test.sln (Visual Studio 2022)
     
 - Runtime
