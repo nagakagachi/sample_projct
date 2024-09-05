@@ -323,8 +323,8 @@ bool AppGame::Initialize()
 
 	// モデル読みこみ.
 	{
-		const char* mesh_file_stanford_bunny = "data/model/stanford_bunny/bunny.obj";
-		const char* mesh_file_spider = "./third_party/assimp/test/models/FBX/spider.fbx";
+		const char* mesh_file_stanford_bunny = "./data/model/stanford_bunny/bunny.obj";
+		const char* mesh_file_spider = "./data/model/assimp/FBX/spider.fbx";
 		const float spider_base_scale = 0.0001f;
 		
 		// シーンモデル.
