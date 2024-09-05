@@ -322,8 +322,6 @@ namespace ngl
 						const auto task_type_j = p_node_j->TaskType();
 
 						// 異なるTypeのNodeで同一Handleへアクセスしているものを探す
-						//	GraphicsとComputeではRead-Readの同時アクセスでもTextureレイアウト違いは失敗するなど制限が多い.
-						//	そのためアクセスタイプにかかわらず同じハンドルにアクセスしていたら依存があるという扱いにしている.
 						if(task_type_i == task_type_j)
 							continue;
 				
@@ -340,6 +338,8 @@ namespace ngl
 								// 注目ノードと先行ノードの両方のアクセスタイプを考慮.
 								const bool is_need_wait_dependency_access = !(!prev_node_access_write && !cur_node_access_write);
 								
+								// 現状ではGraphicsとComputeで Read-Read のアクセスでは依存は発生しないものとしている.
+								//	これで問題が出る場合はアクセスタイプの組み合わせに限らず同じハンドルアクセスは依存と判断することを検討.
 								if(
 									is_same_handle
 									&& is_need_wait_dependency_access
