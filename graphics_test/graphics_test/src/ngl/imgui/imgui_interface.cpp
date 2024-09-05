@@ -1,4 +1,4 @@
-﻿#include "imgui_util.h"
+﻿#include "imgui_interface.h"
 
 #if NGL_IMGUI_ENABLE
 // imgui.
@@ -35,7 +35,8 @@ namespace  ngl::imgui
         D3D12_GPU_DESCRIPTOR_HANDLE d3d_desc_handle_gpu{};
         descriptor_heap_interface_.Allocate(1, d3d_desc_handle_cpu, d3d_desc_handle_gpu);// 一つ確保してPageを取得させる.
         ID3D12DescriptorHeap* d3d_desc_heap = descriptor_heap_interface_.GetD3D12DescriptorHeap();// ページのHeap.
-        
+
+        // ------------------------------------------------------------------------------------------
         // Setup Dear ImGui context
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -50,7 +51,8 @@ namespace  ngl::imgui
             // You'll need to designate a descriptor from your descriptor heap for Dear ImGui to use internally for its font texture's SRV
             d3d_desc_handle_cpu,
             d3d_desc_handle_gpu
-         );
+            );
+        // ------------------------------------------------------------------------------------------
         
         initialized_ = true;
 #endif
@@ -64,9 +66,11 @@ namespace  ngl::imgui
             return;
         }
         
+        // ------------------------------------------------------------------------------------------
         ImGui_ImplDX12_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
+        // ------------------------------------------------------------------------------------------
 
         descriptor_heap_interface_.Finalize();
 
@@ -82,12 +86,17 @@ namespace  ngl::imgui
             return false;
         }
         
+        // ------------------------------------------------------------------------------------------
         // (Your code process and dispatch Win32 messages)
         // Start the Dear ImGui frame
         ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        ImGui::ShowDemoWindow(); // Show demo window! :)
+        
+        // ------------------------------------------------------------------------------------------
+        //ImGui::ShowDemoWindow(); // Show demo window! :)
+        // ------------------------------------------------------------------------------------------
+        
 #endif
         return true;
     }
@@ -100,7 +109,9 @@ namespace  ngl::imgui
             return false;
         }
         
+        // ------------------------------------------------------------------------------------------
         ImGui::Render();
+        // ------------------------------------------------------------------------------------------
         
         ID3D12DescriptorHeap* d3d_desc_heap = descriptor_heap_interface_.GetD3D12DescriptorHeap();// ページのHeap.
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_handle_cpu =  p_swapchain_rtv->GetD3D12DescriptorHandle();
@@ -114,8 +125,10 @@ namespace  ngl::imgui
         d3d_command_list->OMSetRenderTargets(1, &rtv_desc_handle_cpu, FALSE, nullptr);
         d3d_command_list->SetDescriptorHeaps(1, &d3d_desc_heap);
 
+        // ------------------------------------------------------------------------------------------
         // Imguiレンダリング.
         ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), p_command_list->GetD3D12GraphicsCommandList());
+        // ------------------------------------------------------------------------------------------
         
         // rtvのステートを nextへ.
         p_command_list->ResourceBarrier(p_swapchain, swapchain_index, k_rtv_target_state, rtv_state_next);
@@ -137,7 +150,9 @@ namespace  ngl::imgui
             return false;
         }
         
+        // ------------------------------------------------------------------------------------------
         return ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
+        // ------------------------------------------------------------------------------------------
 #else
         return false;
 #endif

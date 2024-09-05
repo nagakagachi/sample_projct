@@ -1,7 +1,7 @@
 ﻿
 #include "window.win.h"
 
-#include "ngl/imgui/imgui_util.h"
+#include "ngl/imgui/imgui_interface.h"
 
 
 namespace ngl

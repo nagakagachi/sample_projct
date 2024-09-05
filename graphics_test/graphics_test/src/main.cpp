@@ -44,7 +44,7 @@
 
 
 // imgui.
-#include "ngl/imgui/imgui_util.h"
+#include "ngl/imgui/imgui_interface.h"
 
 
 // アプリ本体.
@@ -806,7 +806,7 @@ bool AppGame::Execute()
 		}
 
 		
-		// Present
+		// Present.
 		swapchain_->GetDxgiSwapChain()->Present(1, 0);
 
 		// CPUへの完了シグナル. Wait用のFenceValueを取得.

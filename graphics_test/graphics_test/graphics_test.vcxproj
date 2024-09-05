@@ -173,7 +173,7 @@
     <ClCompile Include="src\ngl\gfx\material\material_shader_generator.cpp" />
     <ClCompile Include="src\ngl\gfx\material\material_shader_manager.cpp" />
     <ClCompile Include="src\ngl\gfx\rtg\graph_builder.cpp" />
-    <ClCompile Include="src\ngl\imgui\imgui_util.cpp" />
+    <ClCompile Include="src\ngl\imgui\imgui_interface.cpp" />
     <ClCompile Include="src\ngl\math\math.cpp" />
     <ClCompile Include="src\ngl\render\test_render_path.cpp" />
     <ClCompile Include="third_party\imgui\backends\imgui_impl_dx12.cpp" />
@@ -192,7 +192,7 @@
     <ClInclude Include="src\ngl\gfx\material\material_shader_manager.h" />
     <ClInclude Include="src\ngl\gfx\rtg\graph_builder.h" />
     <ClInclude Include="src\ngl\gfx\rtg\rtg_command_list_pool.h" />
-    <ClInclude Include="src\ngl\imgui\imgui_util.h" />
+    <ClInclude Include="src\ngl\imgui\imgui_interface.h" />
     <ClInclude Include="src\ngl\math\detail\math_util.h" />
     <ClInclude Include="src\ngl\render\test_render_path.h" />
     <ClInclude Include="third_party\imgui\backends\imgui_impl_dx12.h" />
