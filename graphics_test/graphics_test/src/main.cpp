@@ -498,30 +498,42 @@ bool AppGame::Execute()
 	}
 
 	// ImGui.
-	static bool dbgw_test_window_enable {};
-	static bool dbgw_enable_sub_view = false;
+	static bool dbgw_test_window_enable = true;
+	static bool dbgw_enable_sub_view_path = false;
 	static bool dbgw_enable_raytrace_pass = false;
+	static bool dbgw_view_half_dot_gray = false;
+	static bool dbgw_view_gbuffer = true;
+	static bool dbgw_view_dshadow = true;
 	static float dbgw_dlit_angle_v = 0.4f;
 	static float dbgw_dlit_angle_h = 4.1f;
 	{
 		// 初期位置とサイズ.
 		const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-		ImGui::SetNextWindowPos(ImVec2(main_viewport->WorkPos.x + 100, main_viewport->WorkPos.y + 400), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos(ImVec2(main_viewport->WorkPos.x + 1500, main_viewport->WorkPos.y + 20), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
 
 		
 		ImGui::Begin("Debug Window", &dbgw_test_window_enable, ImGuiWindowFlags_None);
-		
-		// グループ.
-		if (ImGui::CollapsingHeader("Pass Setting"))
+
+
+		ImGui::SetNextItemOpen(true);
+		if (ImGui::CollapsingHeader("Debug View"))
 		{
-			ImGui::Checkbox("Enable SubView Render", &dbgw_enable_sub_view);
-			ImGui::Checkbox("Enable Raytrace Pass", &dbgw_enable_raytrace_pass);
+			ImGui::Checkbox("View GBuffer", &dbgw_view_gbuffer);
+			ImGui::Checkbox("View DirectionalShadowAtlas", &dbgw_view_dshadow);
+			ImGui::Checkbox("View Half Dot Gray", &dbgw_view_half_dot_gray);
 		}
+		ImGui::SetNextItemOpen(true);
 		if (ImGui::CollapsingHeader("Directional Light"))
 		{
 			ImGui::SliderFloat("DirectionalLight Angle V", &dbgw_dlit_angle_v, 0.0f, ngl::math::k_pi_f*2.0f);
 			ImGui::SliderFloat("DirectionalLight Angle H", &dbgw_dlit_angle_h, 0.0f, ngl::math::k_pi_f*2.0f);
+		}
+		ImGui::SetNextItemOpen(true);
+		if (ImGui::CollapsingHeader("Pass Setting"))
+		{
+			ImGui::Checkbox("Enable Raytrace Pass", &dbgw_enable_raytrace_pass);
+			ImGui::Checkbox("Enable SubView Render", &dbgw_enable_sub_view_path);
 		}
 		
 		ImGui::End();
@@ -591,7 +603,7 @@ bool AppGame::Execute()
 			// SubViewの描画テスト.
 			//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
 			ngl::test::RenderFrameOut subview_render_frame_out {};
-			if(dbgw_enable_sub_view)
+			if(dbgw_enable_sub_view_path)
 			{
 				// Pathの設定.
 				ngl::test::RenderFrameDesc render_frame_desc{};
@@ -648,12 +660,18 @@ bool AppGame::Execute()
 						// デバッグメニューからRaytracePassの有無切り替え.
 						render_frame_desc.p_rt_scene = &rt_scene_;
 					}
-				
 					render_frame_desc.ref_test_tex_srv = res_texture_->ref_view_;
-
 					render_frame_desc.h_prev_lit = h_prev_light;// MainViewはヒストリ有効.
-
 					render_frame_desc.h_other_graph_out_tex = subview_render_frame_out.h_propagate_lit;
+
+					{
+						render_frame_desc.debugview_halfdot_gray = dbgw_view_half_dot_gray;
+						render_frame_desc.debugview_subview_result = dbgw_enable_sub_view_path;
+						render_frame_desc.debugview_raytrace_result = dbgw_enable_raytrace_pass;
+
+						render_frame_desc.debugview_gbuffer = dbgw_view_gbuffer;
+						render_frame_desc.debugview_dshadow = dbgw_view_dshadow;
+					}
 				}
 			
 				swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
@@ -721,7 +739,6 @@ bool AppGame::Execute()
 			{
 #if 1
 				// フレーム先頭からAcyncComputeのテストSubmit.
-				ngl::u64 compute_end_fence_value{};
 				{
 					ngl::rhi::CommandListBaseDep* p_command_lists[] =
 					{
@@ -777,7 +794,7 @@ bool AppGame::Execute()
 
 
 
-	void PlayerController::UpdateFrame(ngl::platform::CoreWindow& window, float delta_sec, const ngl::math::Mat33& prev_camera_pose, const ngl::math::Vec3& prev_camera_pos)
+void PlayerController::UpdateFrame(ngl::platform::CoreWindow& window, float delta_sec, const ngl::math::Mat33& prev_camera_pose, const ngl::math::Vec3& prev_camera_pos)
 {
 	float camera_translate_speed = 10.0f;
 

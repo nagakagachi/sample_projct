@@ -45,6 +45,13 @@ namespace ngl::test
         ngl::rtg::RtgResourceHandle	h_prev_lit = {};
     	// 先行する別のrtgの出力をPropagateして使うテスト.
     	ngl::rtg::RtgResourceHandle	h_other_graph_out_tex = {};
+
+
+    	bool debugview_halfdot_gray = false;
+    	bool debugview_subview_result = false;
+    	bool debugview_raytrace_result = false;
+    	bool debugview_gbuffer = false;
+    	bool debugview_dshadow = false;
     };
 	// RenderPathが生成した出力リソース.
 	//	このRenderPathとは異なるRtgや次フレームのRtgでアクセス可能.

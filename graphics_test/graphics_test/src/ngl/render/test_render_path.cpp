@@ -216,15 +216,42 @@ namespace ngl::test
 					// Swapchainが指定されている場合のみ最終Passを登録.
 					auto* task_final = rtg_builder.AppendTaskNode<ngl::render::task::TaskFinalPass>();
 					{
+						// GBufferデバッグ表示用のリソース.
+						rtg::RtgResourceHandle debug_gbuffer0 = {};
+						rtg::RtgResourceHandle debug_gbuffer1 = {};
+						rtg::RtgResourceHandle debug_gbuffer2 = {};
+						rtg::RtgResourceHandle debug_gbuffer3 = {};
+						if(render_frame_desc.debugview_gbuffer)
+						{
+							debug_gbuffer0 = task_gbuffer->h_gb0_;
+							debug_gbuffer1 = task_gbuffer->h_gb1_;
+							debug_gbuffer2 = task_gbuffer->h_gb2_;
+							debug_gbuffer3 = task_gbuffer->h_gb3_;
+						}
+						rtg::RtgResourceHandle debug_dshadow = {};
+						if(render_frame_desc.debugview_dshadow)
+						{
+							debug_dshadow = task_d_shadow->h_shadow_depth_atlas_;
+						}
+						
 						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
 						{
 							setup_desc.ref_scene_cbv = sceneview_cbv;
+
+							setup_desc.debugview_halfdot_gray = render_frame_desc.debugview_halfdot_gray;
+							setup_desc.debugview_subview_result = render_frame_desc.debugview_subview_result;
+							setup_desc.debugview_raytrace_result = render_frame_desc.debugview_raytrace_result;
+
+							setup_desc.debugview_gbuffer = render_frame_desc.debugview_gbuffer;
+							setup_desc.debugview_dshadow = render_frame_desc.debugview_dshadow;
 						}
 						
 						task_final->Setup(rtg_builder, p_device, view_info, h_swapchain,
 							task_gbuffer->h_depth_, task_linear_depth->h_linear_depth_, task_light->h_light_,
 							render_frame_desc.h_other_graph_out_tex, h_rt_result,
-							render_frame_desc.ref_test_tex_srv, setup_desc);
+							debug_gbuffer0, debug_gbuffer1, debug_gbuffer2, debug_gbuffer3,
+							debug_dshadow,
+							setup_desc);
 					}
 				}
 					

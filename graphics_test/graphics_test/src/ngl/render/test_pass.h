@@ -623,15 +623,12 @@ namespace ngl::render
 					h_velocity_ = builder.RecordResourceAccess(*this, h_velocity, rtg::access_type::SHADER_READ);
 					h_linear_depth_ = builder.RecordResourceAccess(*this, h_linear_depth, rtg::access_type::SHADER_READ);
 					h_shadowmap_ = builder.RecordResourceAccess(*this, h_shadowmap, rtg::access_type::SHADER_READ);
-				
-					if(h_prev_light.IsInvalid())
+
+					h_prev_light_ = {};
+					if(!h_prev_light.IsInvalid())
 					{
-						// If the previous Frame handle is invalid, it is the first frame,
-						// so a temporary resource is generated and allocated.
-						// Proper previous frame handle retention and supply is an outside responsibility.
-						h_prev_light = builder.CreateResource(light_desc);
+						h_prev_light_ = builder.RecordResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
 					}
-					h_prev_light_ = builder.RecordResourceAccess(*this, h_prev_light, rtg::access_type::SHADER_READ);
 				
 					h_light_ = builder.RecordResourceAccess(*this, builder.CreateResource(light_desc), rtg::access_type::RENDER_TARTGET);// このTaskで新規生成したRenderTargetを出力先とする.
 				}
@@ -696,14 +693,8 @@ namespace ngl::render
 				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
 				auto res_prev_light = builder.GetAllocatedResource(this, h_prev_light_);// 前回フレームリソースのテスト.
 				auto res_light = builder.GetAllocatedResource(this, h_light_);
-
 				auto res_shadowmap = builder.GetAllocatedResource(this, h_shadowmap_);
-
-				// 本当の前回リソースがまだ無い初回フレームでも適切に仮リソースを登録していれば無効なリソース取得になることはない.
-				if(!res_prev_light.tex_.IsValid())
-				{
-					std::cout << u8"Invalid Prev Resource : " << h_prev_light_.detail.unique_id << std::endl;
-				}
+				
 				assert(res_gb0.tex_.IsValid() && res_gb0.srv_.IsValid());
 				assert(res_gb1.tex_.IsValid() && res_gb1.srv_.IsValid());
 				assert(res_gb2.tex_.IsValid() && res_gb2.srv_.IsValid());
@@ -713,6 +704,12 @@ namespace ngl::render
 				assert(res_light.tex_.IsValid() && res_light.rtv_.IsValid());
 				assert(res_shadowmap.tex_.IsValid() && res_shadowmap.srv_.IsValid());
 
+
+				auto& global_res = gfx::GlobalRenderResource::Instance();
+
+				rhi::RefSrvDep ref_prev_lit = (res_prev_light.srv_.IsValid())? res_prev_light.srv_ : global_res.default_resource_.tex_black->ref_view_;
+
+				
 				// Viewport.
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_light.tex_->GetWidth(), res_light.tex_->GetHeight());
 
@@ -734,7 +731,7 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "tex_gbuffer2", res_gb2.srv_.Get());
 				pso_->SetView(&desc_set, "tex_gbuffer3", res_gb3.srv_.Get());
 				
-				pso_->SetView(&desc_set, "tex_prev_light", res_prev_light.srv_.Get());
+				pso_->SetView(&desc_set, "tex_prev_light", ref_prev_lit.Get());
 
 				pso_->SetView(&desc_set, "tex_shadowmap", res_shadowmap.srv_.Get());
 				
@@ -760,6 +757,12 @@ namespace ngl::render
 			rtg::RtgResourceHandle h_other_rtg_out_{};// 先行する別rtgがPropagateしたハンドルをそのフレームの後段のrtgで使用するテスト.
 			rtg::RtgResourceHandle h_rt_result_{};
 			
+			rtg::RtgResourceHandle h_gbuffer0_{};// Debug View用
+			rtg::RtgResourceHandle h_gbuffer1_{};// Debug View用
+			rtg::RtgResourceHandle h_gbuffer2_{};// Debug View用
+			rtg::RtgResourceHandle h_gbuffer3_{};// Debug View用
+			rtg::RtgResourceHandle h_dshadow_{};// Debug View用
+			
 			rtg::RtgResourceHandle h_tmp_{}; // 一時リソーステスト. マクロにも登録しない.
 			
 			rhi::RhiRef<rhi::GraphicsPipelineStateDep> pso_;
@@ -767,6 +770,13 @@ namespace ngl::render
 			struct SetupDesc
 			{
 				rhi::RefCbvDep ref_scene_cbv{};
+
+				bool debugview_halfdot_gray = false;
+				bool debugview_subview_result = false;
+				bool debugview_raytrace_result = false;
+				
+				bool debugview_gbuffer = false;
+				bool debugview_dshadow = false;
 			};
 			SetupDesc desc_{};
 			
@@ -774,7 +784,8 @@ namespace ngl::render
 			void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const RenderPassViewInfo& view_info,
 				rtg::RtgResourceHandle h_swapchain, rtg::RtgResourceHandle h_depth, rtg::RtgResourceHandle h_linear_depth, rtg::RtgResourceHandle h_light,
 				rtg::RtgResourceHandle h_other_rtg_out, rtg::RtgResourceHandle h_rt_result,
-				rhi::RefSrvDep ref_res_texture_srv,
+				rtg::RtgResourceHandle h_gbuffer0, rtg::RtgResourceHandle h_gbuffer1, rtg::RtgResourceHandle h_gbuffer2, rtg::RtgResourceHandle h_gbuffer3,
+				rtg::RtgResourceHandle h_dshadow,
 				const SetupDesc& desc)
 			{
 				// Rtgリソースセットアップ.
@@ -789,11 +800,21 @@ namespace ngl::render
 					{
 						h_rt_result_ = builder.RecordResourceAccess(*this, h_rt_result, rtg::access_type::SHADER_READ);
 					}
-					
 					if(!h_other_rtg_out.IsInvalid())
 					{
 						h_other_rtg_out_ = builder.RecordResourceAccess(*this, h_other_rtg_out, rtg::access_type::SHADER_READ);
 					}
+
+					if(!h_gbuffer0.IsInvalid())
+						h_gbuffer0_ = builder.RecordResourceAccess(*this, h_gbuffer0, rtg::access_type::SHADER_READ);
+					if(!h_gbuffer1.IsInvalid())
+						h_gbuffer1_ = builder.RecordResourceAccess(*this, h_gbuffer1, rtg::access_type::SHADER_READ);
+					if(!h_gbuffer2.IsInvalid())
+						h_gbuffer2_ = builder.RecordResourceAccess(*this, h_gbuffer2, rtg::access_type::SHADER_READ);
+					if(!h_gbuffer3.IsInvalid())
+						h_gbuffer3_ = builder.RecordResourceAccess(*this, h_gbuffer3, rtg::access_type::SHADER_READ);
+					if(!h_dshadow.IsInvalid())
+						h_dshadow_ = builder.RecordResourceAccess(*this, h_dshadow, rtg::access_type::SHADER_READ);
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
 					rtg::RtgResourceDesc2D temp_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
@@ -860,6 +881,12 @@ namespace ngl::render
 				auto res_tmp = builder.GetAllocatedResource(this, h_tmp_);
 				auto res_other_rtg_out = builder.GetAllocatedResource(this, h_other_rtg_out_);
 				auto res_rt_result = builder.GetAllocatedResource(this, h_rt_result_);
+				
+				auto res_gbuffer0 = builder.GetAllocatedResource(this, h_gbuffer0_);
+				auto res_gbuffer1 = builder.GetAllocatedResource(this, h_gbuffer1_);
+				auto res_gbuffer2 = builder.GetAllocatedResource(this, h_gbuffer2_);
+				auto res_gbuffer3 = builder.GetAllocatedResource(this, h_gbuffer3_);
+				auto res_dshadow = builder.GetAllocatedResource(this, h_dshadow_);
 
 				assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 				assert(res_linear_depth.tex_.IsValid() && res_linear_depth.srv_.IsValid());
@@ -867,6 +894,8 @@ namespace ngl::render
 				assert(res_swapchain.swapchain_.IsValid() && res_swapchain.rtv_.IsValid());
 				assert(res_tmp.tex_.IsValid() && res_tmp.rtv_.IsValid());
 
+				auto& global_res = gfx::GlobalRenderResource::Instance();
+				
 				rhi::RefSrvDep ref_other_rtg_out{};
 				if(res_other_rtg_out.srv_.IsValid())
 				{
@@ -874,7 +903,7 @@ namespace ngl::render
 				}
 				else
 				{
-					ref_other_rtg_out = gfx::GlobalRenderResource::Instance().default_resource_.tex_red->ref_view_;
+					ref_other_rtg_out = global_res.default_resource_.tex_red->ref_view_;
 				}
 				
 				rhi::RefSrvDep ref_rt_result{};
@@ -884,7 +913,47 @@ namespace ngl::render
 				}
 				else
 				{
-					ref_rt_result = gfx::GlobalRenderResource::Instance().default_resource_.tex_green->ref_view_;
+					ref_rt_result = global_res.default_resource_.tex_green->ref_view_;
+				}
+
+				rhi::RefSrvDep ref_gbuffer0 = (res_gbuffer0.srv_.IsValid())? res_gbuffer0.srv_ : global_res.default_resource_.tex_black->ref_view_;
+				rhi::RefSrvDep ref_gbuffer1 = (res_gbuffer1.srv_.IsValid())? res_gbuffer1.srv_ : global_res.default_resource_.tex_black->ref_view_;
+				rhi::RefSrvDep ref_gbuffer2 = (res_gbuffer2.srv_.IsValid())? res_gbuffer2.srv_ : global_res.default_resource_.tex_black->ref_view_;
+				rhi::RefSrvDep ref_gbuffer3 = (res_gbuffer3.srv_.IsValid())? res_gbuffer3.srv_ : global_res.default_resource_.tex_black->ref_view_;
+				rhi::RefSrvDep ref_dshadow = (res_dshadow.srv_.IsValid())? res_dshadow.srv_ : global_res.default_resource_.tex_black->ref_view_;
+
+				
+				struct CbFinalScreenPass
+				{
+					int enable_halfdot_gray;
+					int enable_subview_result;
+					int enable_raytrace_result;
+					int enable_gbuffer;
+					int enable_dshadow;
+				};
+				rhi::RefBufferDep ref_cb = new rhi::BufferDep();
+				rhi::RefCbvDep ref_cbv = new rhi::ConstantBufferViewDep();
+				{
+					{
+						rhi::BufferDep::Desc cb_desc{};
+						cb_desc.SetupAsConstantBuffer(sizeof(CbFinalScreenPass));
+						ref_cb->Initialize(gfx_commandlist->GetDevice(), cb_desc);
+					}
+					{
+						rhi::ConstantBufferViewDep::Desc cbv_desc{};
+						ref_cbv->Initialize(ref_cb.Get(), cbv_desc);
+					}
+					if(auto* p_mapped = ref_cb->MapAs<CbFinalScreenPass>())
+					{
+						p_mapped->enable_halfdot_gray = desc_.debugview_halfdot_gray;
+						p_mapped->enable_subview_result = desc_.debugview_subview_result;
+						p_mapped->enable_raytrace_result = desc_.debugview_raytrace_result;
+
+						p_mapped->enable_gbuffer = desc_.debugview_gbuffer;
+						p_mapped->enable_dshadow = desc_.debugview_dshadow;
+
+						ref_cb->Unmap();
+					}
 				}
 
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
@@ -897,11 +966,16 @@ namespace ngl::render
 
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				ngl::rhi::DescriptorSetDep desc_set = {};
+				pso_->SetView(&desc_set, "cb_final_screen_pass", ref_cbv.Get());
 				pso_->SetView(&desc_set, "tex_light", res_light.srv_.Get());
-
 				pso_->SetView(&desc_set, "tex_rt", ref_rt_result.Get());
-				
 				pso_->SetView(&desc_set, "tex_res_data", ref_other_rtg_out.Get());
+
+				pso_->SetView(&desc_set, "tex_gbuffer0", ref_gbuffer0.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer1", ref_gbuffer1.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer2", ref_gbuffer2.Get());
+				pso_->SetView(&desc_set, "tex_gbuffer3", ref_gbuffer3.Get());
+				pso_->SetView(&desc_set, "tex_dshadow", ref_dshadow.Get());
 				
 				pso_->SetView(&desc_set, "samp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_wrap.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);

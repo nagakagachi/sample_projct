@@ -29,26 +29,8 @@ SamplerState samp;
 SamplerComparisonState samp_shadow;
 
 
-
-
 float4 main_ps(VS_OUTPUT input) : SV_TARGET
-{
-	// Cascade Shadow Debug.
-	if(true)
-	{
-		const float2 k_lt = float2(0.5, 0.7);
-		const float2 k_size = float2(0.2, 0.2) * float2(1, 16.0/9.0);
-
-		const float2 area_rate = (input.uv - k_lt)/(k_size);
-		if(all(0.0 < area_rate) && all(1.0 > area_rate))
-		{
-			float sample_shadow = tex_shadowmap.SampleLevel(samp, area_rate, 0).x;
-			sample_shadow = sample_shadow*sample_shadow*sample_shadow;
-			return sample_shadow*2.0;
-		}
-	}
-
-	
+{	
 	// リニアView深度.
 	float ld = tex_lineardepth.Load(int3(input.pos.xy, 0)).r;// LightingBufferとGBufferが同じ解像度前提でLoad.
 	if(1e7 <= ld)
@@ -197,55 +179,10 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			const float2 dist_from_center = (input.uv - 0.5);
 			const float length_from_center = length(dist_from_center);
 			// 画面端でテスト用のフィードバックブラー.
-			float prev_blend_rate = (0.49 < length_from_center)? 1.0 : 0.0;
-			lit_color = lerp(lit_color, prev_light, prev_blend_rate * 0.9);
-		}
-
-		const float debug_area_w = 0.1;
-		if(true)
-		{
-			const float2 k_lt = float2(1.0 - debug_area_w, 0.0);
-			const float2 k_size = float2(debug_area_w, 0.5);
-
-			const float2 area_rate = (input.uv - k_lt)/(k_size);
-			if(all(0.0 < area_rate) && all(1.0 > area_rate))
-				lit_color = gb_base_color;
-		}
-		if(true)
-		{
-			const float2 k_lt = float2(1.0 - debug_area_w, 0.5);
-			const float2 k_size = float2(debug_area_w, 0.5);
-
-			const float2 area_rate = (input.uv - k_lt)/(k_size);
-			if(all(0.0 < area_rate) && all(1.0 > area_rate))
-				lit_color = gb_normal_ws * 0.5 + 0.5;// 可視化は [0,1] 範囲
-		}
-		if(true)
-		{
-			const float2 k_lt = float2(0.0, 0.0);
-			const float2 k_size = float2(debug_area_w, 0.4);
-
-			const float2 area_rate = (input.uv - k_lt)/(k_size);
-			if(all(0.0 < area_rate) && all(1.0 > area_rate))
-				lit_color = gb_rounghness;
-		}
-		if(true)
-		{
-			const float2 k_lt = float2(0.0, 0.4);
-			const float2 k_size = float2(debug_area_w, 0.8);
-
-			const float2 area_rate = (input.uv - k_lt)/(k_size);
-			if(all(0.0 < area_rate) && all(1.0 > area_rate))
-				lit_color = gb_metalness;
-		}
-		if(true)
-		{
-			const float2 k_lt = float2(0.0, 0.8);
-			const float2 k_size = float2(debug_area_w, 0.2);
-
-			const float2 area_rate = (input.uv - k_lt)/(k_size);
-			if(all(0.0 < area_rate) && all(1.0 > area_rate))
-				lit_color = gb_occlusion;
+			const float k_lenght_min = 0.4;
+			//float prev_blend_rate = (k_lenght_min < length_from_center)? 1.0 : 0.0;
+			float prev_blend_rate = saturate((length_from_center - k_lenght_min)*5.0);
+			lit_color = lerp(lit_color, prev_light, prev_blend_rate * 0.95);
 		}
 	}
 

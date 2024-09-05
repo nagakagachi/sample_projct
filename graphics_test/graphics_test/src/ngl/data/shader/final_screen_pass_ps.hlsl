@@ -14,10 +14,28 @@ struct VS_OUTPUT
 };
 
 
+struct CbFinalScreenPass
+{
+	int enable_halfdot_gray;
+	int enable_subview_result;
+	int enable_raytrace_result;
+	int enable_gbuffer;
+	int enable_dshadow;
+};
+ConstantBuffer<CbFinalScreenPass> cb_final_screen_pass;
+
 Texture2D tex_light;
+
 Texture2D tex_rt;// テクスチャデバッグ.
 Texture2D tex_res_data;// テクスチャデバッグ.
+Texture2D tex_gbuffer0;// テクスチャデバッグ.
+Texture2D tex_gbuffer1;// テクスチャデバッグ.
+Texture2D tex_gbuffer2;// テクスチャデバッグ.
+Texture2D tex_gbuffer3;// テクスチャデバッグ.
+Texture2D tex_dshadow;// テクスチャデバッグ.
+
 SamplerState samp;
+
 
 float4 main_ps(VS_OUTPUT input) : SV_TARGET
 {
@@ -38,12 +56,14 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 #endif
 	}
 
+	
+	// Debug View.
 	if(true)
 	{
-		// レイトレ描画確認用に一部に貼り付け.
+		if(cb_final_screen_pass.enable_raytrace_result)
 		{
-			const float2 debug_area_size = float2(0.2, 0.2);
-			const float2 debug_area_lt = float2(0.0, 0.0);
+			const float2 debug_area_size = float2(0.3, 0.3);
+			const float2 debug_area_lt = float2(0.7, 0.4);
 			const float2 debug_area_br = debug_area_lt + debug_area_size;
 			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
 			{
@@ -52,8 +72,9 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			}
 		}
 
+		if(cb_final_screen_pass.enable_subview_result)
 		{
-			const float2 debug_area_size = float2(1.0, 1.0) * 0.3;
+			const float2 debug_area_size = float2(0.3, 0.3);
 			const float2 debug_area_lt = float2(0.7, 0.7);
 			const float2 debug_area_br = debug_area_lt + debug_area_size;
 			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
@@ -63,10 +84,11 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 			}
 		}
 		
-		// 50% Gray dot. 半分のピクセルが1, 半分のピクセルが0のドットで50%の輝度表現.
+		if(cb_final_screen_pass.enable_halfdot_gray)
 		{
-			const float2 debug_area_size = float2(0.1, 0.02);
-			const float2 debug_area_lt = float2(0.5, 0.0);
+			// 50% Gray dot. 半分のピクセルが1, 半分のピクセルが0のドットで50%の輝度表現.
+			const float2 debug_area_size = float2(0.1, 0.1);
+			const float2 debug_area_lt = float2(0.5, 0.5);
 			const float2 debug_area_br = debug_area_lt + debug_area_size;
 			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
 			{
@@ -74,6 +96,65 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
 				color.rgb = v.xxx;
 			}
 		}
+
+		const float k_gbuffer_debug_height = 0.22;
+		if(cb_final_screen_pass.enable_gbuffer)
+		{
+			const float2 debug_area_size = float2(k_gbuffer_debug_height, k_gbuffer_debug_height);
+			const float2 debug_area_lt = float2(0.0, 0.0);
+			const float2 debug_area_br = debug_area_lt + debug_area_size;
+			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
+			{
+				float4 sample_color = tex_gbuffer0.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
+				color = sample_color;
+			}
+		}
+		if(cb_final_screen_pass.enable_gbuffer)
+		{
+			const float2 debug_area_size = float2(k_gbuffer_debug_height, k_gbuffer_debug_height);
+			const float2 debug_area_lt = float2(0.0, k_gbuffer_debug_height);
+			const float2 debug_area_br = debug_area_lt + debug_area_size;
+			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
+			{
+				float4 sample_color = tex_gbuffer1.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
+				color = sample_color;
+			}
+		}
+		if(cb_final_screen_pass.enable_gbuffer)
+		{
+			const float2 debug_area_size = float2(k_gbuffer_debug_height, k_gbuffer_debug_height);
+			const float2 debug_area_lt = float2(k_gbuffer_debug_height, 0.0);
+			const float2 debug_area_br = debug_area_lt + debug_area_size;
+			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
+			{
+				float4 sample_color = tex_gbuffer2.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
+				color = sample_color;
+			}
+		}
+		if(cb_final_screen_pass.enable_gbuffer)
+		{
+			const float2 debug_area_size = float2(k_gbuffer_debug_height, k_gbuffer_debug_height);
+			const float2 debug_area_lt = float2(k_gbuffer_debug_height, k_gbuffer_debug_height);
+			const float2 debug_area_br = debug_area_lt + debug_area_size;
+			if (all(debug_area_lt <= input.uv) && all(debug_area_br >= input.uv))
+			{
+				float4 sample_color = tex_gbuffer3.SampleLevel(samp, (input.uv-debug_area_lt) / debug_area_size, 0);
+				color = sample_color;
+			}
+		}
+		if(cb_final_screen_pass.enable_dshadow)
+		{
+			const float2 k_lt = float2(0.0, k_gbuffer_debug_height*2.0);
+			const float2 k_size = float2(0.25, 0.25) * float2(1, 16.0/9.0);// アスペクト比キャンセルして正方形アトラスをそのまま描画.
+			const float2 area_rate = (input.uv - k_lt)/(k_size);
+			if(all(0.0 < area_rate) && all(1.0 > area_rate))
+			{
+				float sample_shadow = tex_dshadow.SampleLevel(samp, area_rate, 0).x;
+				sample_shadow = sample_shadow*sample_shadow*sample_shadow;
+				return sample_shadow*2.0;
+			}
+		}
+		
 	}
 	
 	// sRGB向けOETF.
