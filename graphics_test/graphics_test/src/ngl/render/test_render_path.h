@@ -34,6 +34,7 @@ namespace ngl::test
         ngl::rhi::EResourceState	swapchain_state_next = {};
     	
         const ngl::gfx::SceneRepresentation* p_scene = {};
+    	math::Vec3	directional_light_dir = -math::Vec3::UnitY();
 
     	// RaytraceScene.
     	gfx::RtSceneManager* p_rt_scene = {};

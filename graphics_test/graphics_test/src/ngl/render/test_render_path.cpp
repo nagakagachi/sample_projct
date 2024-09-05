@@ -188,7 +188,7 @@ namespace ngl::test
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
 						
 						// Directionalのライト方向テスト.
-						setup_desc.directional_light_dir = ngl::math::Vec3::Normalize({0.2f, -1.0f, 0.3f});
+						setup_desc.directional_light_dir = ngl::math::Vec3::Normalize(render_frame_desc.directional_light_dir);
 					}
 					task_d_shadow->Setup(rtg_builder, p_device, view_info, setup_desc);
 				}

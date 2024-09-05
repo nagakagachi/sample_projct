@@ -385,7 +385,7 @@ bool AppGame::Initialize()
 				mc->transform_ = ngl::math::Mat34(tr);
 			}
 			
-			for(int i = 0; i < 100; ++i)
+			for(int i = 0; i < 50; ++i)
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
@@ -498,49 +498,36 @@ bool AppGame::Execute()
 	}
 
 	// ImGui.
-	static bool imgui_test_window_enable {};
-	static float imgui_test_color[4]{};
-	static char igmui_test_str[32];
-	static float imgui_test_float{};
+	static bool dbgw_test_window_enable {};
+	static bool dbgw_enable_sub_view = false;
+	static bool dbgw_enable_raytrace_pass = false;
+	static float dbgw_dlit_angle_v = 0.4f;
+	static float dbgw_dlit_angle_h = 4.1f;
 	{
-		/*
-		ImGui::Text("Hello, world %d", 123);
-		ImGui::InputText("string", igmui_test_str, IM_ARRAYSIZE(igmui_test_str));
-		ImGui::SliderFloat("float", &imgui_test_float, 0.0f, 1.0f);
-		*/
+		// 初期位置とサイズ.
+		const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(ImVec2(main_viewport->WorkPos.x + 100, main_viewport->WorkPos.y + 400), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
+
 		
+		ImGui::Begin("Debug Window", &dbgw_test_window_enable, ImGuiWindowFlags_None);
 		
-		// Create a window called "My First Tool", with a menu bar.
-		ImGui::Begin("My First Tool", &imgui_test_window_enable, ImGuiWindowFlags_MenuBar);
-		if (ImGui::BeginMenuBar())
+		// グループ.
+		if (ImGui::CollapsingHeader("Pass Setting"))
 		{
-			if (ImGui::BeginMenu("File"))
-			{
-				if (ImGui::MenuItem("Save", "Ctrl+S"))   { }
-				if (ImGui::MenuItem("Close", "Ctrl+W"))  { imgui_test_window_enable = false; }
-				ImGui::EndMenu();
-			}
-			ImGui::EndMenuBar();
+			ImGui::Checkbox("Enable SubView Render", &dbgw_enable_sub_view);
+			ImGui::Checkbox("Enable Raytrace Pass", &dbgw_enable_raytrace_pass);
 		}
-
-		// Edit a color stored as 4 floats
-		ImGui::ColorEdit4("Color", imgui_test_color);
-
-		// Generate samples and plot them
-		float samples[100];
-		for (int n = 0; n < 100; n++)
-			samples[n] = sinf(n * 0.2f + ImGui::GetTime() * 1.5f);
-		ImGui::PlotLines("Samples", samples, 100);
-
-		// Display contents in a scrolling region
-		ImGui::TextColored(ImVec4(1,1,0,1), "Important Stuff");
-		ImGui::BeginChild("Scrolling");
-		for (int n = 0; n < 50; n++)
-			ImGui::Text("%04d: Some text", n);
-		ImGui::EndChild();
-		ImGui::End();
+		if (ImGui::CollapsingHeader("Directional Light"))
+		{
+			ImGui::SliderFloat("DirectionalLight Angle V", &dbgw_dlit_angle_v, 0.0f, ngl::math::k_pi_f*2.0f);
+			ImGui::SliderFloat("DirectionalLight Angle H", &dbgw_dlit_angle_h, 0.0f, ngl::math::k_pi_f*2.0f);
+		}
 		
+		ImGui::End();
 	}
+	const auto dlit_dir = ngl::math::Vec3::Normalize( ngl::math::Mat33::RotAxisY(dbgw_dlit_angle_h) * ngl::math::Mat33::RotAxisX(dbgw_dlit_angle_v) * (-ngl::math::Vec3::UnitY()));
+	
 	
 	// オブジェクト移動.
 	if(true)
@@ -604,7 +591,7 @@ bool AppGame::Execute()
 			// SubViewの描画テスト.
 			//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
 			ngl::test::RenderFrameOut subview_render_frame_out {};
-			if(false)
+			if(dbgw_enable_sub_view)
 			{
 				// Pathの設定.
 				ngl::test::RenderFrameDesc render_frame_desc{};
@@ -619,6 +606,7 @@ bool AppGame::Execute()
 					render_frame_desc.camera_fov_y = camera_fov_y;
 
 					render_frame_desc.p_scene = &frame_scene;
+					render_frame_desc.directional_light_dir = dlit_dir;
 
 					// SubViewは最低限の設定.
 				}
@@ -653,8 +641,13 @@ bool AppGame::Execute()
 					render_frame_desc.camera_fov_y = camera_fov_y;
 
 					render_frame_desc.p_scene = &frame_scene;
-				
-					render_frame_desc.p_rt_scene = &rt_scene_;
+					render_frame_desc.directional_light_dir = dlit_dir;
+
+					if(dbgw_enable_raytrace_pass)
+					{
+						// デバッグメニューからRaytracePassの有無切り替え.
+						render_frame_desc.p_rt_scene = &rt_scene_;
+					}
 				
 					render_frame_desc.ref_test_tex_srv = res_texture_->ref_view_;
 
