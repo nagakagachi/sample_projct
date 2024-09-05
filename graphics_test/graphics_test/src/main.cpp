@@ -516,7 +516,7 @@ bool AppGame::Execute()
 		ImGui::Begin("Debug Window", &dbgw_test_window_enable, ImGuiWindowFlags_None);
 
 		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
-		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), "[Camera Controll]");
+		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), "[Camera Control]");
 		ImGui::TextColored(ImColor(1.0f, 0.9f, 0.9f), "  Right Mouse Button + WASD + SPACE + CTRL");
 		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
 		ImGui::TextColored(ImColor(1.0f, 0.9f, 0.9f), "     (Unreal Engine Like)");
