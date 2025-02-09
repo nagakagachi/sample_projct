@@ -44,8 +44,9 @@
 #include "test/test.h"
 
 
-// imgui.
+// imguiのシステム処理Wrapper.
 #include "ngl/imgui/imgui_interface.h"
+// ImGuiのUI構築関数系のため.
 #include "imgui.h"
 
 
@@ -765,22 +766,6 @@ bool AppGame::Execute()
 				}
 				rtg_compute_command_list->End();
 			}
-
-			// imgui.
-			ngl::rhi::GraphicsCommandListDep* imgui_command_list{};
-			rtg_manager_.GetNewFrameCommandList(imgui_command_list);
-			{
-				imgui_command_list->Begin();
-				if(!ngl::imgui::ImguiInterface::Instance().Render(
-					imgui_command_list,
-					swapchain_.Get(), swapchain_index, swapchain_rtvs_[swapchain_index].Get(),
-					swapchain_resource_state_[swapchain_index], swapchain_resource_state_[swapchain_index]))
-				{
-					assert(false);
-				}
-				imgui_command_list->End();
-			}
-
 		
 			// CommandList Submit
 			{
@@ -810,15 +795,6 @@ bool AppGame::Execute()
 				for(auto& e : rtg_gen_command)
 				{
 					ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, e.graphics, e.compute);
-				}
-
-				// imguiは現状最後.
-				{
-					ngl::rhi::CommandListBaseDep* submit_list[]=
-					{
-						imgui_command_list
-					};
-					graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
 				}
 			}
 

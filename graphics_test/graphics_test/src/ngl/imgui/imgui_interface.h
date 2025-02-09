@@ -5,11 +5,15 @@
 
 
 #include "ngl/util/singleton.h"
-#include "ngl/platform/window.h"
 #include "ngl/rhi/d3d12/device.d3d12.h"
+
+#include "ngl/gfx/rtg/graph_builder.h"
 
 namespace ngl::imgui
 {
+    
+    void AppendImguiRenderTask(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain);
+    
     class ImguiInterface : public Singleton<ImguiInterface>
     {
     public:

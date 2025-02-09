@@ -16,7 +16,6 @@
 #include "ngl/gfx/material/material_shader_manager.h"
 #include "ngl/util/time/timer.h"
 
-
 namespace ngl::render
 {
 
@@ -990,6 +989,7 @@ namespace ngl::render
 				gfx_commandlist->DrawInstanced(3, 1, 0, 0);
 			}
 		};
+
 
 		// AsyncComputeテスト用タスク (IComputeTaskNode派生).
 		struct TaskCopmuteTest : public  rtg::IComputeTaskNode

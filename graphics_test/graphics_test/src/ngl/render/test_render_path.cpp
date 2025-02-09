@@ -2,8 +2,8 @@
 #include "test_render_path.h"
 
 #include "ngl/render/test_pass.h"
+#include "ngl/imgui/imgui_interface.h"
 
-#include "ngl/gfx/render/mesh_renderer.h"
 #include "ngl/gfx/render/global_render_resource.h"
 #include "ngl/gfx/material/material_shader_manager.h"
 #include "ngl/util/time/timer.h"
@@ -255,6 +255,12 @@ namespace ngl::test
 							debug_dshadow,
 							setup_desc);
 					}
+				}
+
+				// ImGuiの描画用Taskを登録.
+				if(!h_swapchain.IsInvalid())
+				{
+					imgui::AppendImguiRenderTask(rtg_builder, h_swapchain);
 				}
 					
 				// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.

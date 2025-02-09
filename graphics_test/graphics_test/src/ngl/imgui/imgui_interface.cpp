@@ -14,6 +14,48 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace  ngl::imgui
 {
+
+    
+    void AppendImguiRenderTask(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain)
+    {
+        // ImGuiの描画Task.
+        struct TaskImguiRender : public rtg::IGraphicsTaskNode
+        {
+            rtg::RtgResourceHandle h_swapchain_{};
+			
+            void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain)
+            {
+                // Swapchainの使用を登録.
+                h_swapchain_ = builder.RecordResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
+            }
+
+            void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+            {
+                // スケジュール済みリソース(Swapchain)取得.
+                auto res_swapchain = builder.GetAllocatedResource(this, h_swapchain_);
+                assert(res_swapchain.swapchain_.IsValid());
+
+                // 実際の描画Command.
+                if(!ngl::imgui::ImguiInterface::Instance().Render(
+                    commandlist, res_swapchain.swapchain_.Get(), res_swapchain.swapchain_->GetCurrentBufferIndex(), res_swapchain.rtv_.Get(),
+                    res_swapchain.prev_state_, res_swapchain.curr_state_))
+                {
+                    assert(false);
+                }
+            }
+        };
+        
+        // ImGui描画を最後のSwapchainへ描画するTaskを登録.
+        auto* task_imgui_to_swapchain = builder.AppendTaskNode<TaskImguiRender>();
+        {
+            task_imgui_to_swapchain->Setup(builder, h_swapchain);
+        }
+    }
+
+
+
+
+    
     bool ImguiInterface::Initialize(rhi::DeviceDep* p_device, rhi::SwapChainDep* p_swapchain)
     {
 #if NGL_IMGUI_ENABLE
