@@ -19,6 +19,7 @@ namespace ngl::imgui
 
         // フレーム開始時.
         bool BeginFrame();
+        void EndFrame();
 
         // レンダリング.
         //  Swapchainへのレンダリングを想定.

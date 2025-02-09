@@ -101,6 +101,19 @@ namespace  ngl::imgui
         return true;
     }
 
+    void ImguiInterface::EndFrame()
+    {
+#if NGL_IMGUI_ENABLE
+        if(!initialized_)
+        {
+            return;
+        }
+        
+        ImGui::EndFrame();
+#endif
+        return;
+    }
+    
     bool ImguiInterface::Render(rhi::GraphicsCommandListDep* p_command_list, rhi::SwapChainDep* p_swapchain, uint32_t swapchain_index, rhi::RenderTargetViewDep* p_swapchain_rtv, rhi::EResourceState rtv_state_prev, rhi::EResourceState rtv_state_next)
     {
 #if NGL_IMGUI_ENABLE

@@ -17,6 +17,7 @@
 
 #include "ngl/math/math.h"
 
+#include "ngl/thread/job_thread.h"
 
 // resource
 #include "ngl/resource/resource_manager.h"
@@ -70,8 +71,11 @@ public:
 	bool Initialize() override;
 	bool Execute() override;
 
+	// フレーム開始タイミング.
 	void BeginFrame();
+	// RenderThread同期.
 	void SyncRender();
+	// RenderThread先頭処理 (RenderThread側).
 	void BeginRender();
 
 private:
@@ -79,17 +83,23 @@ private:
 	double						frame_sec_ = 0.0f;
 
 	ngl::platform::CoreWindow	window_;
+
+	// RenderThread.
+	ngl::thread::SingleJobThread				render_thread_;
 	
 	ngl::rhi::DeviceDep							device_;
 	ngl::rhi::GraphicsCommandQueueDep			graphics_queue_;
 	ngl::rhi::ComputeCommandQueueDep			compute_queue_;
 	
 	// CommandQueue実行完了待機用Fence
-	ngl::rhi::FenceDep							wait_fence_;
+	ngl::rhi::FenceDep							gpu_wait_fence_;
 	// CommandQueue実行完了待機用オブジェクト
-	ngl::rhi::WaitOnFenceSignalDep				wait_signal_;
+	ngl::rhi::WaitOnFenceSignalDep				gpu_wait_signal_;
+	// 待機Counter.
+	ngl::u64									gpu_wait_signal_count_ = 0;
+	bool										gpu_wait_signal_count_validity_ = false;
 	
-	ngl::rhi::GraphicsCommandListDep*					p_gfx_frame_begin_command_list_{};
+	ngl::rhi::GraphicsCommandListDep*			p_gfx_frame_begin_command_list_{};
 
 	// SwapChain
 	ngl::rhi::RhiRef<ngl::rhi::SwapChainDep>	swapchain_;
@@ -143,6 +153,9 @@ AppGame::AppGame()
 }
 AppGame::~AppGame()
 {
+	// RenderThread待機.
+	render_thread_.Wait();
+	
 	// リソース参照クリア.
 	mesh_comp_array_.clear();
 
@@ -227,7 +240,7 @@ bool AppGame::Initialize()
 		}
 	}
 	
-	if (!wait_fence_.Initialize(&device_))
+	if (!gpu_wait_fence_.Initialize(&device_))
 	{
 		std::cout << "[ERROR] Initialize Fence" << std::endl;
 		return false;
@@ -442,15 +455,20 @@ void AppGame::SyncRender()
 {
 	// FrameのGame-Render同期処理.
 
-	// TODO. Wait Game Thread.
+	// RenderThread待機.
+	render_thread_.Wait();
 	
 	// Graphics Deviceのフレーム準備
 	device_.ReadyToNewFrame();
 	
 	// RTGのフレーム開始処理.
 	rtg_manager_.BeginFrame();
+
+	// IMGUIのEndFrame呼び出し.
+	ngl::imgui::ImguiInterface::Instance().EndFrame();
 }
 
+// RenderThread先頭処理 (RenderThread側).
 void AppGame::BeginRender()
 {
 	// このフレーム用のシステムCommandListをRtgから取得.
@@ -458,7 +476,6 @@ void AppGame::BeginRender()
 	rtg_manager_.GetNewFrameCommandList(p_gfx_frame_begin_command_list_);
 	p_gfx_frame_begin_command_list_->Begin();// begin.
 
-	
 	// ResourceManagerのRenderThread処理. TextureLinearBufferや MeshBufferのUploadなど.
 	ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, p_gfx_frame_begin_command_list_);
 }
@@ -484,8 +501,6 @@ bool AppGame::Execute()
 	}
 	const float delta_sec = static_cast<float>(frame_sec_);
 
-	ngl::u32 screen_w, screen_h;
-	window_.Impl()->GetScreenSize(screen_w, screen_h);
 	const float screen_aspect_ratio = (float)swapchain_->GetWidth() / swapchain_->GetHeight();
 	
 	// 操作系.
@@ -498,6 +513,8 @@ bool AppGame::Execute()
 	
 	// ImGui.
 	static bool dbgw_test_window_enable = true;
+	static bool dbgw_disable_render_thread = false;
+	static float dbgw_perf_main_thread_sleep_millisec = 0.0f;
 	static bool dbgw_enable_sub_view_path = false;
 	static bool dbgw_enable_raytrace_pass = false;
 	static bool dbgw_view_half_dot_gray = false;
@@ -520,6 +537,21 @@ bool AppGame::Execute()
 		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
 		ImGui::TextColored(ImColor(1.0f, 0.9f, 0.9f), "     (Unreal Engine Like)");
 		ImGui::TextColored(ImColor(1.0f, 0.2f, 0.2f), " ");
+		
+		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+		if (ImGui::CollapsingHeader("Debug Perf"))
+		{
+			ImGui::Text("Delta Sec: %f [sec]", delta_sec);
+
+			ImGui::Separator();
+			ImGui::SliderFloat("Main Thread Sleep", &dbgw_perf_main_thread_sleep_millisec, 0.0f, 100.0f);
+		}
+		
+		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+		if (ImGui::CollapsingHeader("Debug App"))
+		{
+			ImGui::Checkbox("Render Thread Disable (Game-Render Serial)", &dbgw_disable_render_thread);
+		}
 		
 		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		if (ImGui::CollapsingHeader("Debug View"))
@@ -562,7 +594,7 @@ bool AppGame::Execute()
 	}
 
 	// 描画用シーン情報.
-	ngl::gfx::SceneRepresentation frame_scene{};
+	std::shared_ptr<ngl::gfx::SceneRepresentation> frame_scene(new ngl::gfx::SceneRepresentation());
 	{
 		for (auto& e : mesh_comp_array_)
 		{
@@ -570,35 +602,43 @@ bool AppGame::Execute()
 			e->UpdateRenderData();
 
 			// 登録.
-			frame_scene.mesh_instance_array_.push_back(e.get());
+			frame_scene->mesh_instance_array_.push_back(e.get());
 		}
 	}
 
-	// RaytraceSceneにカメラ設定.
-	if(rt_scene_.IsValid())
-		rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
-	
+	// テスト用のGameThread Sleep.
+	if(0.0f < dbgw_perf_main_thread_sleep_millisec)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(dbgw_perf_main_thread_sleep_millisec)));
+	}
 
 	// -------------------------------------------------------
 	// Game Thread と Render Thread の同期ポイント想定.
 	SyncRender();
 	{
-		// Render Thread 起動ポイントの想定.
-		BeginRender();
+		// RaytraceSceneにカメラ設定.
+		if(rt_scene_.IsValid())
+			rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
+		
+		// RenderThreadでJob実行.
+		render_thread_.Begin([this, frame_scene, dlit_dir]
 		{
+			// RenderThread先頭処理.
+			BeginRender();
+
+			
 			// フレームのSwapchainインデックス.
 			const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
-		
+			ngl::u32 screen_width = swapchain_->GetWidth();
+			ngl::u32 screen_height = swapchain_->GetHeight();
+			
 			// Raytracing Scene更新.
 			if(rt_scene_.IsValid())
 			{
 				// RtScene更新. AS更新とそのCommand生成.
-				rt_scene_.UpdateOnRender(&device_, p_gfx_frame_begin_command_list_, frame_scene);
+				rt_scene_.UpdateOnRender(&device_, p_gfx_frame_begin_command_list_, *frame_scene);
 			}
 		
-		
-			// ここからRTGを使ったシーンのレンダリング.
-
 			// Pathが構築したCommandListの出力先.
 			struct RtgGenerateCommandListSet
 			{
@@ -617,14 +657,14 @@ bool AppGame::Execute()
 				{
 					render_frame_desc.p_device = &device_;
 				
-					render_frame_desc.screen_w = screen_w;
-					render_frame_desc.screen_h = screen_h;
+					render_frame_desc.screen_w = screen_width;
+					render_frame_desc.screen_h = screen_height;
 
 					render_frame_desc.camera_pos = camera_pos_ + ngl::math::Vec3(0.0f, 5.0f, 0.0f);
 					render_frame_desc.camera_pose = camera_pose_ * ngl::math::Mat33::RotAxisX(ngl::math::Deg2Rad(75.0f));
 					render_frame_desc.camera_fov_y = camera_fov_y;
 
-					render_frame_desc.p_scene = &frame_scene;
+					render_frame_desc.p_scene = &*frame_scene;
 					render_frame_desc.directional_light_dir = dlit_dir;
 
 					// SubViewは最低限の設定.
@@ -646,8 +686,8 @@ bool AppGame::Execute()
 				{
 					render_frame_desc.p_device = &device_;
 				
-					render_frame_desc.screen_w = screen_w;
-					render_frame_desc.screen_h = screen_h;
+					render_frame_desc.screen_w = screen_width;
+					render_frame_desc.screen_h = screen_height;
 
 					// MainViewはSwapchain書き込みPassを動かすため情報設定.
 					render_frame_desc.ref_swapchain = swapchain_;
@@ -659,7 +699,7 @@ bool AppGame::Execute()
 					render_frame_desc.camera_pose = camera_pose_;
 					render_frame_desc.camera_fov_y = camera_fov_y;
 
-					render_frame_desc.p_scene = &frame_scene;
+					render_frame_desc.p_scene = &*frame_scene;
 					render_frame_desc.directional_light_dir = dlit_dir;
 
 					if(dbgw_enable_raytrace_pass && rt_scene_.IsValid())
@@ -784,16 +824,26 @@ bool AppGame::Execute()
 
 		
 			// Present.
-			swapchain_->GetDxgiSwapChain()->Present(1, 0);
+			swapchain_->GetDxgiSwapChain()->Present(0, 0);
 
 			// CPUへの完了シグナル. Wait用のFenceValueを取得.
-			const auto wait_gpu_fence_value = graphics_queue_.SignalAndIncrement(&wait_fence_);
-			// 待機
+			gpu_wait_signal_count_ = graphics_queue_.SignalAndIncrement(&gpu_wait_fence_);
+			gpu_wait_signal_count_validity_ = true;
+
+			// 現状はここで即座にGPU実行完了待機.
+			if(gpu_wait_signal_count_validity_)
 			{
-				wait_signal_.Wait(&wait_fence_, wait_gpu_fence_value);
+				gpu_wait_signal_.Wait(&gpu_wait_fence_, gpu_wait_signal_count_);
 			}
 			// フレーム描画完了.
 		}
+		);
+
+
+		// RenderThreadのシングルスレッド実行モードの場合.
+		if(dbgw_disable_render_thread)
+			render_thread_.Wait();
+		
 	}
 
 	return true;

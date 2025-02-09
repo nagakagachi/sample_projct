@@ -195,6 +195,7 @@
     <ClInclude Include="src\ngl\imgui\imgui_interface.h" />
     <ClInclude Include="src\ngl\math\detail\math_util.h" />
     <ClInclude Include="src\ngl\render\test_render_path.h" />
+    <ClInclude Include="src\ngl\thread\job_thread.h" />
     <ClInclude Include="third_party\imgui\backends\imgui_impl_dx12.h" />
     <ClInclude Include="third_party\imgui\backends\imgui_impl_win32.h" />
     <ClInclude Include="third_party\imgui\imconfig.h" />
