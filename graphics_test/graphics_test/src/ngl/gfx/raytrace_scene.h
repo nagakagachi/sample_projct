@@ -398,11 +398,11 @@ namespace ngl
 		};
 		
 		// RtPassCoreを使用したRaytracePassのサンプル.
-		class RtPassTest
+		class RaytracePassSample
 		{
 		public:
-			RtPassTest();
-			~RtPassTest();
+			RaytracePassSample();
+			~RaytracePassSample();
 
 			// Pass毎に自由.
 			// サンプルのため外部からShaderとRaygen情報などを指定する.

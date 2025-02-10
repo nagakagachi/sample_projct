@@ -516,9 +516,6 @@ namespace ngl
 			RtgResourceHandle RecordResourceAccess(const ITaskNode& node, const RtgResourceHandle res_handle, const ACCESS_TYPE access_type);
 
 		public:
-			// CompileはRenderTaskGraphManager経由で実行する
-			// RenderTaskGraphManager::Compile( RenderTaskGraphBuilder* )
-			
 			// Graph実行.
 			// Compile済みのGraphを実行しCommandListを構築する.
 			// 結果はQueueへSubmitするCommandListとFenceのSequence.
@@ -535,7 +532,7 @@ namespace ngl
 			// Graphシステム側で必要なBarrierコマンドを発効するため基本的にNode実装側ではBarrierコマンドは不要.
 			RtgAllocatedResourceInfo GetAllocatedResource(const ITaskNode* node, RtgResourceHandle res_handle) const;
 			// -------------------------------------------------------------------------------------------
-			
+
 		private:
 			enum class EBuilderState
 			{
@@ -691,6 +688,12 @@ namespace ngl
 			void GetNewFrameCommandList(rhi::ComputeCommandListDep*& out_ref)
 			{
 				commandlist_pool_.GetFrameCommandList(out_ref);
+			}
+
+		public:
+			rhi::DeviceDep* GetDevice()
+			{
+				return p_device_;
 			}
 			
 		private:

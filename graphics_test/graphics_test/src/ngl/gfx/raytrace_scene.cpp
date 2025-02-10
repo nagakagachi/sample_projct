@@ -1565,13 +1565,13 @@ namespace ngl
 		}
 
 		// ------------------------------------------------------------------------------------------------------------------------------------
-		RtPassTest::RtPassTest()
+		RaytracePassSample::RaytracePassSample()
 		{
 		}
-		RtPassTest::~RtPassTest()
+		RaytracePassSample::~RaytracePassSample()
 		{
 		}
-		bool RtPassTest::Initialize(rhi::DeviceDep* p_device, uint32_t max_trace_recursion)
+		bool RaytracePassSample::Initialize(rhi::DeviceDep* p_device, uint32_t max_trace_recursion)
 		{
 			// Shaderセットアップ.
 			{
@@ -1658,12 +1658,12 @@ namespace ngl
 
 			return true;
 		}
-		void RtPassTest::PreRenderUpdate(class RtSceneManager* p_rt_scene)
+		void RaytracePassSample::PreRenderUpdate(class RtSceneManager* p_rt_scene)
 		{
 			p_rt_scene_ = p_rt_scene;
 			rt_pass_core_.UpdateScene(p_rt_scene, "rayGen");
 		}
-		void RtPassTest::Render(rhi::GraphicsCommandListDep* p_command_list)
+		void RaytracePassSample::Render(rhi::GraphicsCommandListDep* p_command_list)
 		{
 			rhi::DeviceDep* p_device = p_command_list->GetDevice();
 
