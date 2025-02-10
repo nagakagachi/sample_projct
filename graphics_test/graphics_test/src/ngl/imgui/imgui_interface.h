@@ -11,9 +11,6 @@
 
 namespace ngl::imgui
 {
-    
-    void AppendImguiRenderTask(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain);
-    
     class ImguiInterface : public Singleton<ImguiInterface>
     {
     public:
@@ -25,10 +22,8 @@ namespace ngl::imgui
         bool BeginFrame();
         void EndFrame();
 
-        // レンダリング.
-        //  Swapchainへのレンダリングを想定.
-        bool Render(rhi::GraphicsCommandListDep* p_command_list,
-            rhi::SwapChainDep* p_swapchain, uint32_t swapchain_index, rhi::RenderTargetViewDep* p_swapchain_rtv, rhi::EResourceState rtv_state_prev, rhi::EResourceState rtv_state_next);
+        // ImGuiレンダリングタスクを登録.
+        void AppendImguiRenderTask(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain);
         
         bool WindProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
     private:

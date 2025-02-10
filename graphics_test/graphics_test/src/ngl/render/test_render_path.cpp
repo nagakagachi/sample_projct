@@ -260,7 +260,7 @@ namespace ngl::test
 				// ImGuiの描画用Taskを登録.
 				if(!h_swapchain.IsInvalid())
 				{
-					imgui::AppendImguiRenderTask(rtg_builder, h_swapchain);
+					imgui::ImguiInterface::Instance().AppendImguiRenderTask(rtg_builder, h_swapchain);
 				}
 					
 				// 次回フレームへの伝搬. 次回フレームでは h_prev_light によって前回フレームリソースを利用できる.

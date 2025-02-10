@@ -14,48 +14,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace  ngl::imgui
 {
-
-    
-    void AppendImguiRenderTask(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain)
-    {
-        // ImGuiの描画Task.
-        struct TaskImguiRender : public rtg::IGraphicsTaskNode
-        {
-            rtg::RtgResourceHandle h_swapchain_{};
-			
-            void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain)
-            {
-                // Swapchainの使用を登録.
-                h_swapchain_ = builder.RecordResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
-            }
-
-            void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
-            {
-                // スケジュール済みリソース(Swapchain)取得.
-                auto res_swapchain = builder.GetAllocatedResource(this, h_swapchain_);
-                assert(res_swapchain.swapchain_.IsValid());
-
-                // 実際の描画Command.
-                if(!ngl::imgui::ImguiInterface::Instance().Render(
-                    commandlist, res_swapchain.swapchain_.Get(), res_swapchain.swapchain_->GetCurrentBufferIndex(), res_swapchain.rtv_.Get(),
-                    res_swapchain.prev_state_, res_swapchain.curr_state_))
-                {
-                    assert(false);
-                }
-            }
-        };
-        
-        // ImGui描画を最後のSwapchainへ描画するTaskを登録.
-        auto* task_imgui_to_swapchain = builder.AppendTaskNode<TaskImguiRender>();
-        {
-            task_imgui_to_swapchain->Setup(builder, h_swapchain);
-        }
-    }
-
-
-
-
-    
     bool ImguiInterface::Initialize(rhi::DeviceDep* p_device, rhi::SwapChainDep* p_swapchain)
     {
 #if NGL_IMGUI_ENABLE
@@ -156,47 +114,63 @@ namespace  ngl::imgui
         return;
     }
     
-    bool ImguiInterface::Render(rhi::GraphicsCommandListDep* p_command_list, rhi::SwapChainDep* p_swapchain, uint32_t swapchain_index, rhi::RenderTargetViewDep* p_swapchain_rtv, rhi::EResourceState rtv_state_prev, rhi::EResourceState rtv_state_next)
+    void ImguiInterface::AppendImguiRenderTask(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain)
     {
+        // ImGuiの描画Task.
+        struct TaskImguiRender : public rtg::IGraphicsTaskNode
+        {
+            ImguiInterface* p_parent_{};
+            
+            rtg::RtgResourceHandle h_swapchain_{};
+			
+            void Setup(rtg::RenderTaskGraphBuilder& builder, rtg::RtgResourceHandle h_swapchain, ImguiInterface* p_parent)
+            {
+                assert(p_parent);
+                p_parent_ = p_parent;
+                
+                // Swapchainの使用を登録.
+                h_swapchain_ = builder.RecordResourceAccess(*this, h_swapchain, rtg::access_type::RENDER_TARTGET);
+            }
+
+            void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) override
+            {
+                // スケジュール済みリソース(Swapchain)取得.
+                auto res_swapchain = builder.GetAllocatedResource(this, h_swapchain_);
+                assert(res_swapchain.swapchain_.IsValid());
+                
 #if NGL_IMGUI_ENABLE
+                // ------------------------------------------------------------------------------------------
+                ImGui::Render();
+                // ------------------------------------------------------------------------------------------
+
+                // ImGui用のDescriptorHeap.
+                ID3D12DescriptorHeap* d3d_desc_heap = p_parent_->descriptor_heap_interface_.GetD3D12DescriptorHeap();
+                D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_handle_cpu =  res_swapchain.rtv_.Get()->GetD3D12DescriptorHandle();
+                ID3D12GraphicsCommandList* d3d_command_list = commandlist->GetD3D12GraphicsCommandList();
+
+                // RTV設定.
+                d3d_command_list->OMSetRenderTargets(1, &rtv_desc_handle_cpu, FALSE, nullptr);
+                d3d_command_list->SetDescriptorHeaps(1, &d3d_desc_heap);
+
+                // ------------------------------------------------------------------------------------------
+                // Imguiレンダリング.
+                ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandlist->GetD3D12GraphicsCommandList());
+                // ------------------------------------------------------------------------------------------
+#endif
+            }
+        };
+        
         if(!initialized_)
         {
-            return false;
+            return;
         }
-        
-        // ------------------------------------------------------------------------------------------
-        ImGui::Render();
-        // ------------------------------------------------------------------------------------------
-        
-        ID3D12DescriptorHeap* d3d_desc_heap = descriptor_heap_interface_.GetD3D12DescriptorHeap();// ページのHeap.
-        D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_handle_cpu =  p_swapchain_rtv->GetD3D12DescriptorHandle();
-        ID3D12GraphicsCommandList* d3d_command_list = p_command_list->GetD3D12GraphicsCommandList();
-
-        constexpr rhi::EResourceState k_rtv_target_state = rhi::EResourceState::RenderTarget;
-        // rtvのステートを RenderTargetへ.
-        p_command_list->ResourceBarrier(p_swapchain, swapchain_index, rtv_state_prev, k_rtv_target_state);
-
-        // RTV設定.
-        d3d_command_list->OMSetRenderTargets(1, &rtv_desc_handle_cpu, FALSE, nullptr);
-        d3d_command_list->SetDescriptorHeaps(1, &d3d_desc_heap);
-
-        // ------------------------------------------------------------------------------------------
-        // Imguiレンダリング.
-        ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), p_command_list->GetD3D12GraphicsCommandList());
-        // ------------------------------------------------------------------------------------------
-        
-        // rtvのステートを nextへ.
-        p_command_list->ResourceBarrier(p_swapchain, swapchain_index, k_rtv_target_state, rtv_state_next);
-#else
-        
-        // imgui無効時.
-        // ステート遷移のみ実行.
-        p_command_list->ResourceBarrier(p_swapchain, swapchain_index, rtv_state_prev, rtv_state_next);
-        
-#endif
-        return true;
+        // ImGui描画を最後のSwapchainへ描画するTaskを登録.
+        auto* task_imgui_to_swapchain = builder.AppendTaskNode<TaskImguiRender>();
+        {
+            task_imgui_to_swapchain->Setup(builder, h_swapchain, this);
+        }
     }
-
+    
     bool ImguiInterface::WindProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
 #if NGL_IMGUI_ENABLE
