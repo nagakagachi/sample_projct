@@ -47,7 +47,23 @@
 // imguiのシステム処理Wrapper.
 #include "ngl/imgui/imgui_interface.h"
 // ImGuiのUI構築関数系のため.
+#include <memory>
+#include <memory>
+
 #include "imgui.h"
+
+
+// ImGui.
+static bool dbgw_test_window_enable = true;
+static bool dbgw_disable_render_thread = false;
+static float dbgw_perf_main_thread_sleep_millisec = 0.0f;
+static bool dbgw_enable_sub_view_path = false;
+static bool dbgw_enable_raytrace_pass = false;
+static bool dbgw_view_half_dot_gray = false;
+static bool dbgw_view_gbuffer = true;
+static bool dbgw_view_dshadow = true;
+static float dbgw_dlit_angle_v = 0.4f;
+static float dbgw_dlit_angle_h = 4.1f;
 
 
 class PlayerController
@@ -76,9 +92,35 @@ public:
 	void BeginFrame();
 	// RenderThread同期.
 	void SyncRender();
-	// RenderThread先頭処理 (RenderThread側).
-	void BeginRender();
+	// RenderThreadメイン処理 (RenderThread側).
+	void LaunchRender();
+	
+private:
+	struct RtgGenerateCommandListSet
+	{
+		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> graphics{};
+		std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> compute{};
+	};
+	// RenderThreadメイン処理 (RenderThread側).
+	void RenderApp(std::vector<RtgGenerateCommandListSet>& out_rtg_command_list_set);
+private:
+	struct RenderParam
+	{
+		ngl::math::Vec3		camera_pos = {0.0f, 2.0f, -1.0f};
+		ngl::math::Mat33	camera_pose = ngl::math::Mat33::Identity();
+		float				camera_fov_y = ngl::math::Deg2Rad(60.0f);// not half fov.
+		
+		ngl::gfx::SceneRepresentation	frame_scene{};
+		ngl::math::Vec3					dlight_dir{};
 
+		// any.
+	};
+	using RenderParamPtr = std::shared_ptr<RenderParam>;
+	RenderParamPtr pushed_render_param_{};// RenderThreadでへ送付するための一時データ.
+	RenderParamPtr render_param_{};// RenderThreadで読み取り可能なRenderParam.
+	void PushRenderParam(RenderParamPtr param);
+	void SyncRenderParam();
+	
 private:
 	double						app_sec_ = 0.0f;
 	double						frame_sec_ = 0.0f;
@@ -130,6 +172,7 @@ private:
 	ngl::math::Mat33	camera_pose_ = ngl::math::Mat33::Identity();
 	float				camera_fov_y = ngl::math::Deg2Rad(60.0f);// not half fov.
 	PlayerController	player_controller{};
+
 };
 
 
@@ -454,8 +497,6 @@ void AppGame::BeginFrame()
 
 void AppGame::SyncRender()
 {
-	// FrameのGame-Render同期処理.
-
 	// RenderThread待機.
 	render_thread_.Wait();
 	
@@ -469,16 +510,126 @@ void AppGame::SyncRender()
 	ngl::imgui::ImguiInterface::Instance().EndFrame();
 }
 
-// RenderThread先頭処理 (RenderThread側).
-void AppGame::BeginRender()
+// Render駆動.
+void AppGame::LaunchRender()
 {
-	// このフレーム用のシステムCommandListをRtgから取得.
-	p_gfx_frame_begin_command_list_ = {};
-	rtg_manager_.GetNewFrameCommandList(p_gfx_frame_begin_command_list_);
-	p_gfx_frame_begin_command_list_->Begin();// begin.
+	// GameThread同期部
+	
+	// RenderParam同期.
+	SyncRenderParam();
+	// RenderThreadでJob実行.
+	render_thread_.Begin([this]
+	{
+		// RenderThreadシステム先頭処理.
+		{
+			// このフレーム用のシステムCommandListをRtgから取得.
+			p_gfx_frame_begin_command_list_ = {};
+			rtg_manager_.GetNewFrameCommandList(p_gfx_frame_begin_command_list_);
+			p_gfx_frame_begin_command_list_->Begin();// begin.
 
-	// ResourceManagerのRenderThread処理. TextureLinearBufferや MeshBufferのUploadなど.
-	ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, p_gfx_frame_begin_command_list_);
+			// ResourceManagerのRenderThread処理. TextureLinearBufferや MeshBufferのUploadなど.
+			ngl::res::ResourceManager::Instance().UpdateResourceOnRender(&device_, p_gfx_frame_begin_command_list_);
+		}
+
+		
+		// アプリケーション側のRender処理.
+		std::vector<RtgGenerateCommandListSet> app_rtg_command_list_set{};
+		RenderApp(app_rtg_command_list_set);
+		
+	
+#if 0
+		// システム側AsyncComputeテスト.
+		ngl::rhi::ComputeCommandListDep* rtg_compute_command_list{};
+		rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
+		{
+			// テストのためPoolから取得したCommandListに積み込み.
+			rtg_compute_command_list->Begin();
+			// GraphicsQueueがComputeQueueをWaitする状況のテスト用.
+			{
+				auto ref_cpso = ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep>(new ngl::rhi::ComputePipelineStateDep());
+				{
+					ngl::rhi::ComputePipelineStateDep::Desc cpso_desc{};
+					{
+						ngl::gfx::ResShader::LoadDesc cs_load_desc{};
+						cs_load_desc.stage = ngl::rhi::EShaderStage::Compute;
+						cs_load_desc.shader_model_version = "6_3";
+						cs_load_desc.entry_point_name = "main_cs";
+						auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/test/async_task_test_cs.hlsl", &cs_load_desc);
+				
+						cpso_desc.cs = &cs_load_handle->data_;
+					}
+					// CsPso初期化.
+					ref_cpso->Initialize(&device_, cpso_desc);
+				}
+				
+				ngl::rhi::DescriptorSetDep desc_set{};
+				ref_cpso->SetView(&desc_set, "rwtex_out", tex_rw_uav_.Get());
+				rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
+				rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
+				ref_cpso->DispatchHelper(rtg_compute_command_list, tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
+			}
+			rtg_compute_command_list->End();
+		}
+	
+		// フレーム先頭からAcyncComputeのテストSubmit.
+		{
+			ngl::rhi::CommandListBaseDep* p_command_lists[] =
+			{
+				rtg_compute_command_list
+			};
+			compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
+		}
+#endif
+		
+		// システム用Graphics CommandListをSubmit.
+		{
+			p_gfx_frame_begin_command_list_->End();
+			ngl::rhi::CommandListBaseDep* submit_list[] = { p_gfx_frame_begin_command_list_ };
+			graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
+		}
+	
+		// RtgのCommaandをSubmit.
+		for(auto& e : app_rtg_command_list_set)
+		{
+			ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, e.graphics, e.compute);
+		}
+
+	
+		// Present.
+		swapchain_->GetDxgiSwapChain()->Present(0, 0);
+
+		// CPUへの完了シグナル. Wait用のFenceValueを取得.
+		gpu_wait_signal_count_ = graphics_queue_.SignalAndIncrement(&gpu_wait_fence_);
+		gpu_wait_signal_count_validity_ = true;
+
+		// 現状はここで即座にGPU実行完了待機.
+		if(gpu_wait_signal_count_validity_)
+		{
+			gpu_wait_signal_.Wait(&gpu_wait_fence_, gpu_wait_signal_count_);
+		}
+		// フレーム描画完了.
+	}
+	);
+	
+	// RenderThreadのシングルスレッド実行モードの場合.
+	if(dbgw_disable_render_thread)
+		render_thread_.Wait();
+}
+
+void AppGame::PushRenderParam(RenderParamPtr param)
+{
+	pushed_render_param_ = param;
+}
+void AppGame::SyncRenderParam()
+{
+	render_param_ = pushed_render_param_;
+	pushed_render_param_ = {};// GameThread側クリア.
+
+	// Game側から設定されていなかった場合はデフォルト値.
+	if(!render_param_)
+	{
+		render_param_ = std::make_shared<RenderParam>();
+	}
 }
 
 // メインループから呼ばれる
@@ -502,7 +653,6 @@ bool AppGame::Execute()
 	}
 	const float delta_sec = static_cast<float>(frame_sec_);
 
-	const float screen_aspect_ratio = (float)swapchain_->GetWidth() / swapchain_->GetHeight();
 	
 	// 操作系.
 	{
@@ -512,17 +662,6 @@ bool AppGame::Execute()
 		camera_pos_ = player_controller.camera_pos_;
 	}
 	
-	// ImGui.
-	static bool dbgw_test_window_enable = true;
-	static bool dbgw_disable_render_thread = false;
-	static float dbgw_perf_main_thread_sleep_millisec = 0.0f;
-	static bool dbgw_enable_sub_view_path = false;
-	static bool dbgw_enable_raytrace_pass = false;
-	static bool dbgw_view_half_dot_gray = false;
-	static bool dbgw_view_gbuffer = true;
-	static bool dbgw_view_dshadow = true;
-	static float dbgw_dlit_angle_v = 0.4f;
-	static float dbgw_dlit_angle_h = 4.1f;
 	{
 		// 初期位置とサイズ.
 		const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -595,7 +734,7 @@ bool AppGame::Execute()
 	}
 
 	// 描画用シーン情報.
-	std::shared_ptr<ngl::gfx::SceneRepresentation> frame_scene(new ngl::gfx::SceneRepresentation());
+	ngl::gfx::SceneRepresentation frame_scene;
 	{
 		for (auto& e : mesh_comp_array_)
 		{
@@ -603,9 +742,22 @@ bool AppGame::Execute()
 			e->UpdateRenderData();
 
 			// 登録.
-			frame_scene->mesh_instance_array_.push_back(e.get());
+			frame_scene.mesh_instance_array_.push_back(e.get());
 		}
 	}
+
+	// RenderParamのセットアップ.
+	auto new_render_param = std::make_shared<RenderParam>();
+	{
+		new_render_param->camera_pos = camera_pos_;
+		new_render_param->camera_pose = camera_pose_;
+		new_render_param->camera_fov_y = camera_fov_y;
+		
+		new_render_param->frame_scene = std::move(frame_scene);
+		new_render_param->dlight_dir = dlit_dir;
+	}
+	// RenderParam送付.
+	PushRenderParam(new_render_param);
 
 	// テスト用のGameThread Sleep.
 	if(0.0f < dbgw_perf_main_thread_sleep_millisec)
@@ -613,216 +765,125 @@ bool AppGame::Execute()
 		std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(dbgw_perf_main_thread_sleep_millisec)));
 	}
 
-	// -------------------------------------------------------
-	// Game Thread と Render Thread の同期ポイント想定.
-	SyncRender();
+	// Render.
 	{
-		// RaytraceSceneにカメラ設定.
-		if(rt_scene_.IsValid())
-			rt_scene_.SetCameraInfo(camera_pos_, camera_pose_.GetColumn2(), camera_pose_.GetColumn1(), camera_fov_y, screen_aspect_ratio);
-		
-		// RenderThreadでJob実行.
-		render_thread_.Begin([this, frame_scene, dlit_dir]
-		{
-			// RenderThread先頭処理.
-			BeginRender();
-
-			
-			// フレームのSwapchainインデックス.
-			const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
-			ngl::u32 screen_width = swapchain_->GetWidth();
-			ngl::u32 screen_height = swapchain_->GetHeight();
-			
-			// Raytracing Scene更新.
-			if(rt_scene_.IsValid())
-			{
-				// RtScene更新. AS更新とそのCommand生成.
-				rt_scene_.UpdateOnRender(&device_, p_gfx_frame_begin_command_list_, *frame_scene);
-			}
-		
-			// Pathが構築したCommandListの出力先.
-			struct RtgGenerateCommandListSet
-			{
-				std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> graphics{};
-				std::vector<ngl::rtg::RtgSubmitCommandSequenceElem> compute{};
-			};
-			std::vector<RtgGenerateCommandListSet> rtg_gen_command{};
-
-			// SubViewの描画テスト.
-			//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
-			ngl::test::RenderFrameOut subview_render_frame_out {};
-			if(dbgw_enable_sub_view_path)
-			{
-				// Pathの設定.
-				ngl::test::RenderFrameDesc render_frame_desc{};
-				{
-					render_frame_desc.p_device = &device_;
-				
-					render_frame_desc.screen_w = screen_width;
-					render_frame_desc.screen_h = screen_height;
-
-					render_frame_desc.camera_pos = camera_pos_ + ngl::math::Vec3(0.0f, 5.0f, 0.0f);
-					render_frame_desc.camera_pose = camera_pose_ * ngl::math::Mat33::RotAxisX(ngl::math::Deg2Rad(75.0f));
-					render_frame_desc.camera_fov_y = camera_fov_y;
-
-					render_frame_desc.p_scene = &*frame_scene;
-					render_frame_desc.directional_light_dir = dlit_dir;
-
-					// SubViewは最低限の設定.
-				}
-			
-				rtg_gen_command.push_back({});
-				RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
-				// Pathの実行 (RenderTaskGraphの構築と実行).
-				TestFrameRenderingPath(render_frame_desc, subview_render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
-			}
-		
-			static ngl::rtg::RtgResourceHandle h_prev_light{};// 前回フレームハンドルのテスト.
-			// MainViewの描画.
-			{
-				constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
-
-				// Pathの設定.
-				ngl::test::RenderFrameDesc render_frame_desc{};
-				{
-					render_frame_desc.p_device = &device_;
-				
-					render_frame_desc.screen_w = screen_width;
-					render_frame_desc.screen_h = screen_height;
-
-					// MainViewはSwapchain書き込みPassを動かすため情報設定.
-					render_frame_desc.ref_swapchain = swapchain_;
-					render_frame_desc.ref_swapchain_rtv = swapchain_rtvs_[swapchain_index];
-					render_frame_desc.swapchain_state_prev = swapchain_resource_state_[swapchain_index];
-					render_frame_desc.swapchain_state_next = swapchain_final_state;
-				
-					render_frame_desc.camera_pos = camera_pos_;
-					render_frame_desc.camera_pose = camera_pose_;
-					render_frame_desc.camera_fov_y = camera_fov_y;
-
-					render_frame_desc.p_scene = &*frame_scene;
-					render_frame_desc.directional_light_dir = dlit_dir;
-
-					if(dbgw_enable_raytrace_pass && rt_scene_.IsValid())
-					{
-						// デバッグメニューからRaytracePassの有無切り替え.
-						render_frame_desc.p_rt_scene = &rt_scene_;
-					}
-					render_frame_desc.ref_test_tex_srv = res_texture_->ref_view_;
-					render_frame_desc.h_prev_lit = h_prev_light;// MainViewはヒストリ有効.
-					render_frame_desc.h_other_graph_out_tex = subview_render_frame_out.h_propagate_lit;
-
-					{
-						render_frame_desc.debugview_halfdot_gray = dbgw_view_half_dot_gray;
-						render_frame_desc.debugview_subview_result = dbgw_enable_sub_view_path;
-						render_frame_desc.debugview_raytrace_result = dbgw_enable_raytrace_pass;
-
-						render_frame_desc.debugview_gbuffer = dbgw_view_gbuffer;
-						render_frame_desc.debugview_dshadow = dbgw_view_dshadow;
-					}
-				}
-			
-				swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
-			
-				rtg_gen_command.push_back({});
-				RtgGenerateCommandListSet& rtg_result = rtg_gen_command.back();
-				// Pathの実行 (RenderTaskGraphの構築と実行).
-				ngl::test::RenderFrameOut render_frame_out{};
-				TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
-			
-				h_prev_light = render_frame_out.h_propagate_lit;// Rtgリソースの一部を次フレームに伝搬する.
-			}
-
-		
-			// AsyncComputeテスト.
-			ngl::rhi::ComputeCommandListDep* rtg_compute_command_list{};
-			rtg_manager_.GetNewFrameCommandList(rtg_compute_command_list);
-			{
-				// テストのためPoolから取得したCommandListに積み込み.
-				rtg_compute_command_list->Begin();
-				// GraphicsQueueがComputeQueueをWaitする状況のテスト用.
-				{
-					auto ref_cpso = ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep>(new ngl::rhi::ComputePipelineStateDep());
-					{
-						ngl::rhi::ComputePipelineStateDep::Desc cpso_desc{};
-						{
-							ngl::gfx::ResShader::LoadDesc cs_load_desc{};
-							cs_load_desc.stage = ngl::rhi::EShaderStage::Compute;
-							cs_load_desc.shader_model_version = "6_3";
-							cs_load_desc.entry_point_name = "main_cs";
-							auto cs_load_handle = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResShader>(&device_, "./src/ngl/data/shader/test/async_task_test_cs.hlsl", &cs_load_desc);
-					
-							cpso_desc.cs = &cs_load_handle->data_;
-						}
-						// CsPso初期化.
-						ref_cpso->Initialize(&device_, cpso_desc);
-					}
-					
-					ngl::rhi::DescriptorSetDep desc_set{};
-					ref_cpso->SetView(&desc_set, "rwtex_out", tex_rw_uav_.Get());
-					rtg_compute_command_list->SetPipelineState(ref_cpso.Get());
-					rtg_compute_command_list->SetDescriptorSet(ref_cpso.Get(), &desc_set);
-					ref_cpso->DispatchHelper(rtg_compute_command_list, tex_rw_->GetWidth(), tex_rw_->GetHeight(), 1);
-				}
-				rtg_compute_command_list->End();
-			}
-		
-			// CommandList Submit
-			{
-#if 0
-				// フレーム先頭からAcyncComputeのテストSubmit.
-				{
-					ngl::rhi::CommandListBaseDep* p_command_lists[] =
-					{
-						rtg_compute_command_list
-					};
-					compute_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(p_command_lists)), p_command_lists);
-				}
-#endif
-			
-				// システム用のGraphics CommandListをSubmit.
-				{
-					p_gfx_frame_begin_command_list_->End();
-				
-					ngl::rhi::CommandListBaseDep* submit_list[]=
-					{
-						p_gfx_frame_begin_command_list_
-					};
-					graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
-				}
-			
-				// RtgのCommaandをSubmit.
-				for(auto& e : rtg_gen_command)
-				{
-					ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, e.graphics, e.compute);
-				}
-			}
-
-		
-			// Present.
-			swapchain_->GetDxgiSwapChain()->Present(0, 0);
-
-			// CPUへの完了シグナル. Wait用のFenceValueを取得.
-			gpu_wait_signal_count_ = graphics_queue_.SignalAndIncrement(&gpu_wait_fence_);
-			gpu_wait_signal_count_validity_ = true;
-
-			// 現状はここで即座にGPU実行完了待機.
-			if(gpu_wait_signal_count_validity_)
-			{
-				gpu_wait_signal_.Wait(&gpu_wait_fence_, gpu_wait_signal_count_);
-			}
-			// フレーム描画完了.
-		}
-		);
-
-
-		// RenderThreadのシングルスレッド実行モードの場合.
-		if(dbgw_disable_render_thread)
-			render_thread_.Wait();
-		
+		// Game Thread - Render Thread.
+		SyncRender();
+		// Render Thread.
+		LaunchRender();
 	}
-
+	
 	return true;
+}
+
+// アプリ側のRenderThread処理.
+void AppGame::RenderApp(std::vector<RtgGenerateCommandListSet>& out_rtg_command_list_set)
+{
+	// フレームのSwapchainインデックス.
+	const auto swapchain_index = swapchain_->GetCurrentBufferIndex();
+	ngl::u32 screen_width = swapchain_->GetWidth();
+	ngl::u32 screen_height = swapchain_->GetHeight();
+		
+	// Raytracing Scene更新.
+	if(rt_scene_.IsValid())
+	{
+		const float screen_aspect_ratio = (float)screen_width / (float)screen_height;
+		// RaytraceSceneにカメラ設定.
+		rt_scene_.SetCameraInfo(
+			render_param_->camera_pos,
+			render_param_->camera_pose.GetColumn2(),
+			render_param_->camera_pose.GetColumn1(),
+			render_param_->camera_fov_y,
+			screen_aspect_ratio);
+
+		// RtScene更新. AS更新とそのCommand生成.
+		rt_scene_.UpdateOnRender(&device_, p_gfx_frame_begin_command_list_, render_param_->frame_scene);
+	}
+	
+	// SubViewの描画テスト.
+	//	SubカメラでRTG描画をし, 伝搬指定した出力バッファをそのまま同一フレームのMainView描画で伝搬リソースとして利用するテスト.
+	ngl::test::RenderFrameOut subview_render_frame_out {};
+	if(dbgw_enable_sub_view_path)
+	{
+		// Pathの設定.
+		ngl::test::RenderFrameDesc render_frame_desc{};
+		{
+			render_frame_desc.p_device = &device_;
+			
+			render_frame_desc.screen_w = screen_width;
+			render_frame_desc.screen_h = screen_height;
+
+			render_frame_desc.camera_pos = render_param_->camera_pos + ngl::math::Vec3(0.0f, 5.0f, 0.0f);
+			render_frame_desc.camera_pose = render_param_->camera_pose * ngl::math::Mat33::RotAxisX(ngl::math::Deg2Rad(75.0f));
+			render_frame_desc.camera_fov_y = render_param_->camera_fov_y;
+
+			render_frame_desc.p_scene = &render_param_->frame_scene;
+			render_frame_desc.directional_light_dir = render_param_->dlight_dir;
+
+			// SubViewは最低限の設定.
+		}
+		
+		out_rtg_command_list_set.push_back({});
+		RtgGenerateCommandListSet& rtg_result = out_rtg_command_list_set.back();
+		// Pathの実行 (RenderTaskGraphの構築と実行).
+		TestFrameRenderingPath(render_frame_desc, subview_render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
+	}
+	
+	static ngl::rtg::RtgResourceHandle h_prev_light{};// 前回フレームハンドルのテスト.
+	// MainViewの描画.
+	{
+		constexpr ngl::rhi::EResourceState swapchain_final_state = ngl::rhi::EResourceState::Present;// Execute後のステート指定.
+
+		// Pathの設定.
+		ngl::test::RenderFrameDesc render_frame_desc{};
+		{
+			render_frame_desc.p_device = &device_;
+			
+			render_frame_desc.screen_w = screen_width;
+			render_frame_desc.screen_h = screen_height;
+
+			// MainViewはSwapchain書き込みPassを動かすため情報設定.
+			render_frame_desc.ref_swapchain = swapchain_;
+			render_frame_desc.ref_swapchain_rtv = swapchain_rtvs_[swapchain_index];
+			render_frame_desc.swapchain_state_prev = swapchain_resource_state_[swapchain_index];
+			render_frame_desc.swapchain_state_next = swapchain_final_state;
+			
+			render_frame_desc.camera_pos = render_param_->camera_pos;
+			render_frame_desc.camera_pose = render_param_->camera_pose;
+			render_frame_desc.camera_fov_y = render_param_->camera_fov_y;
+
+			render_frame_desc.p_scene = &render_param_->frame_scene;
+			render_frame_desc.directional_light_dir = render_param_->dlight_dir;
+
+			if(dbgw_enable_raytrace_pass && rt_scene_.IsValid())
+			{
+				// デバッグメニューからRaytracePassの有無切り替え.
+				render_frame_desc.p_rt_scene = &rt_scene_;
+			}
+			render_frame_desc.ref_test_tex_srv = res_texture_->ref_view_;
+			render_frame_desc.h_prev_lit = h_prev_light;// MainViewはヒストリ有効.
+			render_frame_desc.h_other_graph_out_tex = subview_render_frame_out.h_propagate_lit;
+
+			{
+				render_frame_desc.debugview_halfdot_gray = dbgw_view_half_dot_gray;
+				render_frame_desc.debugview_subview_result = dbgw_enable_sub_view_path;
+				render_frame_desc.debugview_raytrace_result = dbgw_enable_raytrace_pass;
+
+				render_frame_desc.debugview_gbuffer = dbgw_view_gbuffer;
+				render_frame_desc.debugview_dshadow = dbgw_view_dshadow;
+			}
+		}
+		
+		swapchain_resource_state_[swapchain_index] = swapchain_final_state;// State変更.
+		
+		out_rtg_command_list_set.push_back({});
+		RtgGenerateCommandListSet& rtg_result = out_rtg_command_list_set.back();
+		// Pathの実行 (RenderTaskGraphの構築と実行).
+		ngl::test::RenderFrameOut render_frame_out{};
+		TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
+		
+		h_prev_light = render_frame_out.h_propagate_lit;// Rtgリソースの一部を次フレームに伝搬する.
+	}
 }
 
 
