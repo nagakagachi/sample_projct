@@ -60,6 +60,10 @@ namespace ngl::test
     struct RenderFrameOut
     {
         ngl::rtg::RtgResourceHandle h_propagate_lit = {};
+
+    	float	stat_rtg_construct_sec = {};
+    	float	stat_rtg_compile_sec = {};
+    	float	stat_rtg_execute_sec = {};
     };
 	
     // RtgによるRenderPathの構築と実行.

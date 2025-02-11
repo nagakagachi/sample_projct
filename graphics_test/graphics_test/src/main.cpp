@@ -66,6 +66,10 @@ static bool dbgw_view_dshadow = true;
 static float dbgw_dlit_angle_v = 0.4f;
 static float dbgw_dlit_angle_h = 4.1f;
 
+static float dbgw_stat_primary_rtg_construct = {};
+static float dbgw_stat_primary_rtg_compile = {};
+static float dbgw_stat_primary_rtg_execute = {};
+
 
 class PlayerController
 {
@@ -682,7 +686,11 @@ bool AppGame::Execute()
 		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		if (ImGui::CollapsingHeader("Debug Perf"))
 		{
-			ImGui::Text("Delta Sec: %f [sec]", delta_sec);
+			ImGui::Text("Delta: %f [sec]", delta_sec);
+			
+			ImGui::Text("Rtg Construct: %f [sec]", dbgw_stat_primary_rtg_construct);
+			ImGui::Text("Rtg Compile  : %f [sec]", dbgw_stat_primary_rtg_compile);
+			ImGui::Text("Rtg Execute  : %f [sec]", dbgw_stat_primary_rtg_execute);
 
 			ImGui::Separator();
 			ImGui::SliderFloat("Main Thread Sleep", &dbgw_perf_main_thread_sleep_millisec, 0.0f, 100.0f);
@@ -887,6 +895,12 @@ void AppGame::RenderApp(std::vector<RtgGenerateCommandListSet>& out_rtg_command_
 		TestFrameRenderingPath(render_frame_desc, render_frame_out, rtg_manager_, rtg_result.graphics, rtg_result.compute);
 		
 		h_prev_light = render_frame_out.h_propagate_lit;// Rtgリソースの一部を次フレームに伝搬する.
+
+		{
+			dbgw_stat_primary_rtg_construct = render_frame_out.stat_rtg_construct_sec;
+			dbgw_stat_primary_rtg_compile = render_frame_out.stat_rtg_compile_sec;
+			dbgw_stat_primary_rtg_execute = render_frame_out.stat_rtg_execute_sec;
+		}
 	}
 }
 

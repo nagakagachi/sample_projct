@@ -75,6 +75,8 @@ namespace ngl::test
 				
 		// RtgによるRenderPathの構築.
 		{
+			time::Timer::Instance().StartTimer("rtg_pass_construct");
+			
 			// Rtg構築用オブジェクト, 1回の構築-Compile-実行で使い捨てされる.
 			ngl::rtg::RenderTaskGraphBuilder rtg_builder(screen_w, screen_h);
 				
@@ -91,6 +93,7 @@ namespace ngl::test
 			}
 			
 				
+			
 #define ASYNC_COMPUTE_TEST0 0
 #define ASYNC_COMPUTE_TEST1 1
 			// 1連のRenderPathを構成するPass群を生成し, それらの間のリソース依存関係を構築.
@@ -268,16 +271,21 @@ namespace ngl::test
 					out_frame_out.h_propagate_lit = rtg_builder.PropagateResouceToNextFrame(task_light->h_light_);
 				}
 			}
-
+			out_frame_out.stat_rtg_construct_sec = static_cast<float>(time::Timer::Instance().GetElapsedSec("rtg_pass_construct"));
+			
 			// 構築したRtgをCompile.
 			//	ここでリソース依存関係とBarrier, 非同期コンピュート同期, リソース再利用などが確定する.
+			time::Timer::Instance().StartTimer("rtg_manager_compile");
 			rtg_manager.Compile(rtg_builder);
+			out_frame_out.stat_rtg_compile_sec = static_cast<float>(time::Timer::Instance().GetElapsedSec("rtg_manager_compile"));
 				
 			// Rtgを実行し構成Taskの Run() を実行, CommandListを生成する.
 			//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
 			//	各TaskのRun()はそれぞれ別スレッドで並列実行される可能性がある.
 			thread::JobSystem* p_job_system = (render_frame_desc.debug_pass_render_parallel)? rtg_manager.GetJobSystem() : nullptr;
+			time::Timer::Instance().StartTimer("rtg_builder_execute");
 			rtg_builder.Execute(out_graphics_cmd, out_compute_cmd, p_job_system);
+			out_frame_out.stat_rtg_execute_sec = static_cast<float>(time::Timer::Instance().GetElapsedSec("rtg_builder_execute"));
 		}
 	}
 }
