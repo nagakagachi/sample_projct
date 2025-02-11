@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <array>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -95,12 +96,56 @@ namespace thread
 
         std::mutex				condition_mutex_;
         std::condition_variable	condition_var_;
-
         bool			terminate_signal_ = false;
+        
         bool			job_signal_ = false;	
         std::function< void(void) > func_;
     };
 
+
+
+
+    class JobSystemWorker;
+    /*
+        JobSystem.
+     
+        ngl::thread::JobSystem job_system(8);
+        ngl::time::Timer::Instance().StartTimer("job_system_test");
+        std::atomic_int job_system_test_cnt = 0;
+        for(int i = 0; i < 100; ++i)
+        {
+            job_system.Add([i, &job_system_test_cnt]
+            {
+                job_system_test_cnt += 1;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                //std::cout <<  i << std::endl;
+            });
+        }
+        job_system.WaitAll();// 待機.
+    */
+    class JobSystem
+    {
+        friend JobSystemWorker;
+        
+    public:
+        JobSystem();
+        ~JobSystem();
+
+        void Init(int num_max_thread);
+        
+        void Add(std::function< void(void) > func);
+
+        void WaitAll();
+	
+    private:
+        std::mutex				condition_mutex_;
+        std::condition_variable	condition_var_;
+
+        std::list<std::function<void(void)>> job_queue_{};
+        
+        std::vector<JobSystemWorker*> worker_thread_{};
+    };
+    
 }
 }
 

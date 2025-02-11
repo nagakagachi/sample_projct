@@ -276,7 +276,8 @@ namespace ngl::test
 			// Rtgを実行し構成Taskの Run() を実行, CommandListを生成する.
 			//	Compileによってリソースプールのステートが更新され, その後にCompileされたGraphはそれを前提とするため, Graphは必ずExecuteする必要がある.
 			//	各TaskのRun()はそれぞれ別スレッドで並列実行される可能性がある.
-			rtg_builder.Execute(out_graphics_cmd, out_compute_cmd);
+			thread::JobSystem* p_job_system = (render_frame_desc.debug_pass_render_parallel)? rtg_manager.GetJobSystem() : nullptr;
+			rtg_builder.Execute(out_graphics_cmd, out_compute_cmd, p_job_system);
 		}
 	}
 }

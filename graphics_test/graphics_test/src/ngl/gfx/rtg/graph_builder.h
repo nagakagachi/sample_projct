@@ -105,6 +105,8 @@
 
 #include "rtg_command_list_pool.h"
 
+#include "ngl/thread/job_thread.h"
+
 namespace ngl
 {
 
@@ -517,10 +519,13 @@ namespace ngl
 
 		public:
 			// Graph実行.
-			// Compile済みのGraphを実行しCommandListを構築する.
+			// Compile済みのGraphを実行しCommandListを構築する. JobSystemが指定された場合は利用して並列実行する.
 			// 結果はQueueへSubmitするCommandListとFenceのSequence.
 			// 結果のSequenceは外部でQueueに直接Submitすることも可能であるが, ヘルパ関数SubmitCommand()を利用することを推奨する.
-			void Execute(std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands);
+			void Execute(
+				std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands,
+				thread::JobSystem* p_job_system = nullptr
+				);
 
 			// RtgのExecute() で構築して生成したComandListのSequenceをGPUへSubmitするヘルパー関数.
 			static void SubmitCommand(
@@ -667,7 +672,7 @@ namespace ngl
 			~RenderTaskGraphManager();
 		public:
 			// 初期化.
-			bool Init(rhi::DeviceDep* p_device);
+			bool Init(rhi::DeviceDep* p_device, int job_thread_count = 8);
 
 			//	フレーム開始通知. Game-Render同期中に呼び出す.
 			//		内部リソースプールの中で一定フレームアクセスされていないものを破棄するなどの処理.
@@ -694,6 +699,11 @@ namespace ngl
 			rhi::DeviceDep* GetDevice()
 			{
 				return p_device_;
+			}
+			
+			thread::JobSystem* GetJobSystem()
+			{
+				return &job_system_;
 			}
 			
 		private:
@@ -727,7 +737,9 @@ namespace ngl
 			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_temporal_ = {};
 			
 			pool::CommandListPool commandlist_pool_ = {};
-			
+		private:
+			// JobSystem. 専用に内部で持っているが要検討.
+			thread::JobSystem	job_system_;
 		private:
 			// ユニークなハンドルIDを取得.
 			//	TODO. 64bit.

@@ -55,7 +55,8 @@
 
 // ImGui.
 static bool dbgw_test_window_enable = true;
-static bool dbgw_disable_render_thread = false;
+static bool dbgw_enable_render_thread = true;
+static bool dbgw_enable_pass_render_parallel = true;
 static float dbgw_perf_main_thread_sleep_millisec = 0.0f;
 static bool dbgw_enable_sub_view_path = false;
 static bool dbgw_enable_raytrace_pass = false;
@@ -230,7 +231,7 @@ bool AppGame::Initialize()
 	{
 		return false;
 	}
-
+	
 	// Graphics Device.
 	{
 		ngl::rhi::DeviceDep::Desc device_desc{};
@@ -289,7 +290,12 @@ bool AppGame::Initialize()
 		std::cout << "[ERROR] Initialize Fence" << std::endl;
 		return false;
 	}
-
+	
+	// RTGマネージャ初期化.
+	{
+		rtg_manager_.Init(&device_, 4);
+	}
+	
 	// imgui.
 	{
 		if(!ngl::imgui::ImguiInterface::Instance().Initialize(&device_, swapchain_.Get()))
@@ -341,11 +347,6 @@ bool AppGame::Initialize()
 			assert(false);
 			return false;
 		}
-	}
-
-	// RTGマネージャ初期化.
-	{
-		rtg_manager_.Init(&device_);
 	}
 
 	// UnorderedAccess Texture.
@@ -442,7 +443,7 @@ bool AppGame::Initialize()
 				mc->transform_ = ngl::math::Mat34(tr);
 			}
 			
-			for(int i = 0; i < 50; ++i)
+			for(int i = 0; i < 100; ++i)
 			{
 				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
 				mesh_comp_array_.push_back(mc);
@@ -612,7 +613,7 @@ void AppGame::LaunchRender()
 	);
 	
 	// RenderThreadのシングルスレッド実行モードの場合.
-	if(dbgw_disable_render_thread)
+	if(!dbgw_enable_render_thread)
 		render_thread_.Wait();
 }
 
@@ -685,12 +686,10 @@ bool AppGame::Execute()
 
 			ImGui::Separator();
 			ImGui::SliderFloat("Main Thread Sleep", &dbgw_perf_main_thread_sleep_millisec, 0.0f, 100.0f);
-		}
-		
-		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-		if (ImGui::CollapsingHeader("Debug App"))
-		{
-			ImGui::Checkbox("Render Thread Disable (Game-Render Serial)", &dbgw_disable_render_thread);
+			
+			ImGui::Separator();
+			ImGui::Checkbox("Enable Render Thread", &dbgw_enable_render_thread);
+			ImGui::Checkbox("Enable Render Pass Parallel", &dbgw_enable_pass_render_parallel);
 		}
 		
 		ImGui::SetNextItemOpen(true, ImGuiCond_Once);
@@ -820,6 +819,9 @@ void AppGame::RenderApp(std::vector<RtgGenerateCommandListSet>& out_rtg_command_
 			render_frame_desc.p_scene = &render_param_->frame_scene;
 			render_frame_desc.directional_light_dir = render_param_->dlight_dir;
 
+			{
+				render_frame_desc.debug_pass_render_parallel = dbgw_enable_pass_render_parallel;
+			}
 			// SubViewは最低限の設定.
 		}
 		
@@ -865,6 +867,8 @@ void AppGame::RenderApp(std::vector<RtgGenerateCommandListSet>& out_rtg_command_
 			render_frame_desc.h_other_graph_out_tex = subview_render_frame_out.h_propagate_lit;
 
 			{
+				render_frame_desc.debug_pass_render_parallel = dbgw_enable_pass_render_parallel;
+				
 				render_frame_desc.debugview_halfdot_gray = dbgw_view_half_dot_gray;
 				render_frame_desc.debugview_subview_result = dbgw_enable_sub_view_path;
 				render_frame_desc.debugview_raytrace_result = dbgw_enable_raytrace_pass;

@@ -176,6 +176,7 @@
     <ClCompile Include="src\ngl\imgui\imgui_interface.cpp" />
     <ClCompile Include="src\ngl\math\math.cpp" />
     <ClCompile Include="src\ngl\render\test_render_path.cpp" />
+    <ClCompile Include="src\ngl\thread\job_thread.cpp" />
     <ClCompile Include="third_party\imgui\backends\imgui_impl_dx12.cpp" />
     <ClCompile Include="third_party\imgui\backends\imgui_impl_win32.cpp" />
     <ClCompile Include="third_party\imgui\imgui.cpp" />

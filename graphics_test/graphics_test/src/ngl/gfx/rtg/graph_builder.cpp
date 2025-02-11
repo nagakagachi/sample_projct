@@ -927,7 +927,9 @@ namespace ngl
 			return ret_info;
 		}
 
-		void RenderTaskGraphBuilder::Execute(std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands)
+		void RenderTaskGraphBuilder::Execute(
+			std::vector<RtgSubmitCommandSequenceElem>& out_graphics_commands, std::vector<RtgSubmitCommandSequenceElem>& out_compute_commands,
+			thread::JobSystem* p_job_system)
 		{
 			// Compileされていないチェック.
 			if(!IsExecutable())
@@ -1083,11 +1085,21 @@ namespace ngl
 				}
 			}
 
-			// Taskの処理部を実行.
-			// MEMO このJobは並列実行可能(Task実装側に注意).
-			for(auto& job : render_jobs)
+			if(p_job_system)
 			{
-				job();
+				// Parallel.
+				for(auto& job : render_jobs)
+				{
+					p_job_system->Add([&job]{job();});
+				}
+				p_job_system->WaitAll();
+			}
+			else
+			{
+				for(auto& job : render_jobs)
+				{
+					job();
+				}
 			}
 
 			// Taskが積み込みをした全CommandListをEnd.
@@ -1375,7 +1387,7 @@ namespace ngl
 			std::cout << u8"</RenderTaskGraphManager>" << std::endl;
 		}
 		// 初期化.
-		bool RenderTaskGraphManager::Init(rhi::DeviceDep* p_device)
+		bool RenderTaskGraphManager::Init(rhi::DeviceDep* p_device, int job_thread_count)
 		{
 			if(!p_device)
 			{
@@ -1387,6 +1399,10 @@ namespace ngl
 
 			// CommandListPool初期化.
 			commandlist_pool_.Initialize(p_device);
+
+			// 内部用JobSystem.
+			assert(0 < job_thread_count);
+			job_system_.Init(job_thread_count);
 			
 			return true;
 		}
