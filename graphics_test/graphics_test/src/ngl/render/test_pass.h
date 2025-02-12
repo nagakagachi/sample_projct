@@ -7,13 +7,12 @@
 
 #include "ngl/gfx/rtg/graph_builder.h"
 #include "ngl/gfx/command_helper.h"
-
 #include "ngl/gfx/render/mesh_renderer.h"
-
 #include "ngl/gfx/raytrace_scene.h"
-
 #include "ngl/gfx/render/global_render_resource.h"
+
 #include "ngl/gfx/material/material_shader_manager.h"
+
 #include "ngl/util/time/timer.h"
 
 namespace ngl::render
@@ -61,6 +60,8 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "DepthPass");
+				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				assert(res_depth.tex_.IsValid() && res_depth.dsv_.IsValid());
@@ -147,6 +148,8 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "GBuffer");
+				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				auto res_gb0 = builder.GetAllocatedResource(this, h_gb0_);
@@ -170,7 +173,7 @@ namespace ngl::render
 					res_gb3.rtv_.Get(),
 					res_velocity.rtv_.Get(),
 				};
-
+				
 				// Set RenderTarget.
 				gfx_commandlist->SetRenderTargets(p_targets, (int)std::size(p_targets), res_depth.dsv_.Get());
 				// Set Viewport and Scissor.
@@ -428,10 +431,13 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "Shadow");
+				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_shadow_depth_atlas = builder.GetAllocatedResource(this, h_shadow_depth_atlas_);
 				assert(res_shadow_depth_atlas.tex_.IsValid() && res_shadow_depth_atlas.dsv_.IsValid());
 
+				
 				// Atlas全域クリア.
 				gfx_commandlist->ClearDepthTarget(res_shadow_depth_atlas.dsv_.Get(), 0.0f, 0, true, true);// とりあえずクリアだけ.ReverseZなので0クリア.
 				// Set RenderTarget.
@@ -440,6 +446,8 @@ namespace ngl::render
 				// 描画するCascadeIndex.
 				for(int cascade_index = 0; cascade_index < csm_param_.k_cascade_count; ++cascade_index)
 				{
+					NGL_SCOPED_EVENT_MARKER(gfx_commandlist, text::FixedString<64>("Cascade_%d", cascade_index));
+					
 					// Cascade用の定数バッファを都度生成.
 					rhi::RefBufferDep ref_shadow_render_cb = new rhi::BufferDep();
 					rhi::RefCbvDep ref_shadow_render_cbv = new rhi::ConstantBufferViewDep();
@@ -541,6 +549,8 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "LinearDepth");
+				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_depth = builder.GetAllocatedResource(this, h_depth_);
 				auto res_linear_depth = builder.GetAllocatedResource(this, h_linear_depth_);
@@ -552,12 +562,11 @@ namespace ngl::render
 				pso_->SetView(&desc_set, "TexHardwareDepth", res_depth.srv_.Get());
 				pso_->SetView(&desc_set, "RWTexLinearDepth", res_linear_depth.uav_.Get());
 				pso_->SetView(&desc_set, "ngl_cb_sceneview", desc_.ref_scene_cbv.Get());
-
+				
 				gfx_commandlist->SetPipelineState(pso_.Get());
 				gfx_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 
 				pso_->DispatchHelper(gfx_commandlist, res_linear_depth.tex_->GetWidth(), res_linear_depth.tex_->GetHeight(), 1);
-
 			}
 
 		};
@@ -669,6 +678,8 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "Lighting");
+				
 				auto& global_res = gfx::GlobalRenderResource::Instance();
 				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -855,6 +866,8 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "Final");
+				
 				auto& global_res = gfx::GlobalRenderResource::Instance();
 				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
@@ -937,7 +950,7 @@ namespace ngl::render
 						ref_cb->Unmap();
 					}
 				}
-
+				
 				gfx::helper::SetFullscreenViewportAndScissor(gfx_commandlist, res_swapchain.swapchain_->GetWidth(), res_swapchain.swapchain_->GetHeight());
 
 				// Rtv, Dsv セット.
@@ -1020,20 +1033,22 @@ namespace ngl::render
 			}
 
 			// レンダリング処理.
-			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) override
+			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* p_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(p_commandlist, "ComputeTest");
+				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_work_tex = builder.GetAllocatedResource(this, h_work_tex_);
 
 				assert(res_work_tex.tex_.IsValid() && res_work_tex.uav_.IsValid());
 
-				commandlist->SetPipelineState(pso_.Get());
+				p_commandlist->SetPipelineState(pso_.Get());
 				
 				ngl::rhi::DescriptorSetDep desc_set = {};
 				pso_->SetView(&desc_set, "rwtex_out", res_work_tex.uav_.Get());
-				commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
+				p_commandlist->SetDescriptorSet(pso_.Get(), &desc_set);
 				
-				pso_->DispatchHelper(commandlist, res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
+				pso_->DispatchHelper(p_commandlist, res_work_tex.tex_->GetWidth(), res_work_tex.tex_->GetHeight(), 1);
 			}
 		};
 
@@ -1124,6 +1139,8 @@ namespace ngl::render
 			// レンダリング処理.
 			void Run(rtg::RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* gfx_commandlist) override
 			{
+				NGL_SCOPED_EVENT_MARKER(gfx_commandlist, "RtPass");
+				
 				// ハンドルからリソース取得. 必要なBarrierコマンドは外部で発行済である.
 				auto res_rt_result = builder.GetAllocatedResource(this, h_rt_result_);
 				assert(res_rt_result.tex_.IsValid() && res_rt_result.uav_.IsValid());

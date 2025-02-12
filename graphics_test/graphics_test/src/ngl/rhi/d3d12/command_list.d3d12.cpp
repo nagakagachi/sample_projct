@@ -7,6 +7,14 @@
 #include "resource.d3d12.h"
 #include "resource_view.d3d12.h"
 
+#if defined(NGL_ENABLE_GPU_EVENT_MARKER)
+// PIX
+#include <pix3.h>
+
+#include <stdio.h>
+#include <stdarg.h>
+#endif
+
 namespace ngl
 {
 	namespace rhi
@@ -251,6 +259,28 @@ namespace ngl
 				SetViewDescriptor(p_desc_set->GetCsSrv().max_use_register_index + 1, p_desc_set->GetCsSrv().cpu_handles, resource_table.cs_srv_table);
 				SetViewDescriptor(p_desc_set->GetCsUav().max_use_register_index + 1, p_desc_set->GetCsUav().cpu_handles, resource_table.cs_uav_table);
 			}
+		}
+
+		
+		void CommandListBaseDep::BeginMarker(const char* format, ...)
+		{
+#if defined(NGL_ENABLE_GPU_EVENT_MARKER)
+			// ここで全て展開.
+			char buf[256];
+			va_list args;
+			va_start( args, format );
+			const auto n = vsnprintf( buf, sizeof(buf), format, args );
+			va_end( args );
+			
+			constexpr UINT64 k_color = ~(UINT64(0));
+			PIXBeginEvent(GetD3D12GraphicsCommandList(), k_color, buf);
+#endif
+		}
+		void CommandListBaseDep::EndMarker()
+		{
+#if defined(NGL_ENABLE_GPU_EVENT_MARKER)
+			PIXEndEvent(GetD3D12GraphicsCommandList());
+#endif
 		}
 		
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -548,6 +578,24 @@ namespace ngl
 			}
 		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+		ScopedEventMarker::ScopedEventMarker(CommandListBaseDep* p_command_list, const char* label)
+			:p_command_list_(p_command_list)
+		{
+			if(p_command_list_)
+			{	
+				p_command_list_->BeginMarker(label);
+			}
+		}
+		ScopedEventMarker::~ScopedEventMarker()
+		{
+			if(p_command_list_)
+			{
+				p_command_list_->EndMarker();
+			}
+			p_command_list_ = {};
+		}
 
 	}
 }

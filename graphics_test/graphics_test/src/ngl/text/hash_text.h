@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <stdarg.h>
 
 /*
 	文字列とそのhash値を保持し、等価演算を高速化する
@@ -183,6 +184,9 @@ namespace ngl
 		template<unsigned int SIZE>
 		class FixedString
 		{
+			static constexpr unsigned int k_size = SIZE;
+			static constexpr unsigned int k_buffer_size = k_size + 1;
+			
 		public:
 			FixedString()
 			{
@@ -200,16 +204,27 @@ namespace ngl
 
 			FixedString(const char* str)
 			{
-				Set(str, std::min(static_cast<unsigned int>(std::strlen(str)), SIZE));
+				Set(str, std::min(static_cast<unsigned int>(std::strlen(str)), k_size));
 			}
 			FixedString(const FixedString& obj)
 			{
 				Set(obj.text_, obj.valid_len_);
 			}
+			FixedString(const char* format, ...)
+			{
+				// ここで全て展開.
+				char buf[k_buffer_size];
+				va_list args;
+				va_start( args, format );
+				const auto n = vsnprintf( buf, sizeof(buf), format, args );
+				va_end( args );
+				
+				Set(buf, n);
+			}
 
 			FixedString& operator = (const char* str)
 			{
-				Set(str, std::min(static_cast<unsigned int>(std::strlen(str)), SIZE));
+				Set(str, std::min(static_cast<unsigned int>(std::strlen(str)), k_size));
 				return *this;
 			}
 			FixedString& operator = (const FixedString& obj)
@@ -233,7 +248,7 @@ namespace ngl
 			void Set(const char* str, unsigned int size)
 			{
 				// このメソッドの呼び出しは必ず適正なsizeが渡される
-				assert(SIZE >= size);
+				assert(k_size >= size);
 
 				std::copy_n(str, size, text_);
 				// 有効文字列長より後ろのバッファは必ずゼロで埋まっていることを保証.
@@ -256,13 +271,13 @@ namespace ngl
 			}
 
 
-			constexpr unsigned int GetMaxLen() const { return SIZE; }
-			static constexpr unsigned int MaxLength() { return SIZE; }
+			constexpr unsigned int GetMaxLen() const { return k_size; }
+			static constexpr unsigned int MaxLength() { return k_size; }
 		private:
 
 		private:
 			unsigned int		valid_len_ = 0;
-			char				text_[SIZE + 1] = {};
+			char				text_[k_buffer_size] = {};
 		};
 
 	}

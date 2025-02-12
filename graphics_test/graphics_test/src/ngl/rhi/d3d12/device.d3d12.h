@@ -3,6 +3,15 @@
 // for mbstowcs, wcstombs
 #define _CRT_SECURE_NO_WARNINGS
 
+// EventMarkerの有効化マクロ.
+#define NGL_ENABLE_GPU_EVENT_MARKER
+
+
+#if defined(NGL_ENABLE_GPU_EVENT_MARKER)
+// PIXのEvent有効化.
+#define USE_PIX
+#endif
+
 #include <iostream>
 #include <vector>
 #include <unordered_map>

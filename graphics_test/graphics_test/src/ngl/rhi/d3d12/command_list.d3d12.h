@@ -60,6 +60,20 @@ namespace ngl
 			void ResourceUavBarrier(TextureDep* p_texture);
 			// UAV同期Barrier.
 			void ResourceUavBarrier(BufferDep* p_buffer);
+
+		public:
+			// Gpu Event Marker. マクロ NGL_SCOPED_EVENT_MARKER で利用される.
+			void BeginMarker(const char* format, ...);
+			// Gpu Event Marker. マクロ NGL_SCOPED_EVENT_MARKER で利用される.
+			void EndMarker();
+			
+		public:
+			FrameCommandListDynamicDescriptorAllocatorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
+			FrameDescriptorHeapPageInterface* GetFrameSamplerDescriptorHeapInterface() { return &frame_desc_page_interface_for_sampler_; }
+
+			DeviceDep* GetDevice() { return parent_device_; }
+			const Desc& GetDesc() const {return desc_;}
+			
 		public:
 			// CommandListの標準Interfaceを取得.
 			ID3D12GraphicsCommandList* GetD3D12GraphicsCommandList()
@@ -71,12 +85,7 @@ namespace ngl
 			{
 				return p_command_list4_.Get();
 			}
-		public:
-			FrameCommandListDynamicDescriptorAllocatorInterface* GetFrameDescriptorInterface() { return &frame_desc_interface_; }
-			FrameDescriptorHeapPageInterface* GetFrameSamplerDescriptorHeapInterface() { return &frame_desc_page_interface_for_sampler_; }
-
-			DeviceDep* GetDevice() { return parent_device_; }
-			const Desc& GetDesc() const {return desc_;}
+			
 		protected:
 			DeviceDep* parent_device_	= nullptr;
 			Desc		desc_ = {};
@@ -148,6 +157,24 @@ namespace ngl
 			void ResourceBarrier(TextureDep* p_texture, EResourceState prev, EResourceState next);
 			void ResourceBarrier(BufferDep* p_buffer, EResourceState prev, EResourceState next);
 		};
-		
+
+		// Gpu Event Marker用.
+		//	マクロ NGL_SCOPED_EVENT_MARKER での利用推奨.
+		struct ScopedEventMarker
+		{
+			ScopedEventMarker(CommandListBaseDep* p_command_list, const char* label);
+			~ScopedEventMarker();
+
+		private:
+			CommandListBaseDep* p_command_list_{};
+		};
 	}
 }
+
+// https://www.jpcert.or.jp/sc-rules/c-pre05-c.html
+#define JOIN_AGAIN_NGL_SCOPED_EVENT_MARKER(a,b) a ## b
+#define JOIN_NGL_SCOPED_EVENT_MARKER(a,b) JOIN_AGAIN_NGL_SCOPED_EVENT_MARKER(a, b)
+// Scoped Event Marker 定義用マクロ.
+//	ex. NGL_SCOPED_EVENT_MARKER(p_command_list, "BasePass");
+#define NGL_SCOPED_EVENT_MARKER(p_command_list, label) const ngl::rhi::ScopedEventMarker JOIN_NGL_SCOPED_EVENT_MARKER(scoped_event_arg_ , __LINE__) (p_command_list, label);
+
