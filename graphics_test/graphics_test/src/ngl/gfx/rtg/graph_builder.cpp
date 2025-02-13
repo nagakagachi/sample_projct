@@ -291,18 +291,20 @@ namespace ngl
 					}
 				}
 			}
+
+			// リセット.
+			compiled_ = {};
 			
 			// ------------------------------------------------------------------------
 			// Nodeの依存関係(Graphics-Compute).
-			node_dependency_fence_.clear();
-			node_dependency_fence_.resize(node_sequence_.size());
-			std::fill(node_dependency_fence_.begin(), node_dependency_fence_.end(), NodeDependency{});// fill -1
+			compiled_.node_dependency_fence_.resize(node_sequence_.size());
+			std::fill(compiled_.node_dependency_fence_.begin(), compiled_.node_dependency_fence_.end(), CompiledBuilder::NodeDependency{});// fill -1
 			{
 				std::vector<ETASK_TYPE> task_type = {};
-				std::vector<NodeDependency> task_dependency = {};
+				std::vector<CompiledBuilder::NodeDependency> task_dependency = {};
 				task_type.resize(node_sequence_.size());
 				task_dependency.resize(node_sequence_.size());
-				std::fill(task_dependency.begin(), task_dependency.end(), NodeDependency{});// fill -1
+				std::fill(task_dependency.begin(), task_dependency.end(), CompiledBuilder::NodeDependency{});// fill -1
 				// NodeのTaskTypeにアクセスしやすくするための配列セットアップ.
 				for(int i = 0; i < node_sequence_.size(); ++i)
 				{
@@ -396,10 +398,10 @@ namespace ngl
 						{
 							if(0 <= task_dependency[i].from)
 							{
-								node_dependency_fence_[i].from = task_dependency[i].from;
-								node_dependency_fence_[task_dependency[i].from].to = i;
+								compiled_.node_dependency_fence_[i].from = task_dependency[i].from;
+								compiled_.node_dependency_fence_[task_dependency[i].from].to = i;
 
-								node_dependency_fence_[i].fence_id = fence_count;
+								compiled_.node_dependency_fence_[i].fence_id = fence_count;
 								++fence_count;
 							}
 						}
@@ -423,23 +425,21 @@ namespace ngl
 			}
 
 			// 存在するハンドル毎に仮の線形インデックスを割り振る. ランダムアクセスのため.
-			handle_2_compiled_index_.clear();// = {};// クリア.
-			compiled_index_handle_.clear();
 			for(int node_i = 0; node_i < node_sequence_.size(); ++node_i)
 			{
 				const ITaskNode* p_node = node_sequence_[node_i];
 				// このNodeのリソースアクセス情報を巡回.
 				for(auto& res_access : node_handle_usage_list_[p_node])
 				{
-					if(handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_access.handle))
+					if(compiled_.handle_2_linear_index_.end() == compiled_.handle_2_linear_index_.find(res_access.handle))
 					{
 						// このResourceHandleの要素が未登録なら新規.
-						handle_2_compiled_index_[res_access.handle] = static_cast<int>(compiled_index_handle_.size());
-						compiled_index_handle_.push_back(res_access.handle);
+						compiled_.handle_2_linear_index_[res_access.handle] = static_cast<int>(compiled_.linear_handle_array_.size());
+						compiled_.linear_handle_array_.push_back(res_access.handle);
 					}
 				}
 			}
-			int handle_count = static_cast<int>(compiled_index_handle_.size());
+			int handle_count = static_cast<int>(compiled_.linear_handle_array_.size());
 
 			
 			// SequenceのNodeを順に処理して実リソースの割当とそのステート遷移確定をしていく.
@@ -461,7 +461,7 @@ namespace ngl
 				// このNodeのリソースアクセス情報を巡回.
 				for(auto& res_access : node_handle_usage_list_[p_node])
 				{
-					const auto handle_index = handle_2_compiled_index_[res_access.handle];
+					const auto handle_index = compiled_.handle_2_linear_index_[res_access.handle];
 					
 					// このResourceHandleへのNodeからのアクセスを順にリストアップ.
 					ResourceHandleAccessFromNode access_flow_part = {};
@@ -514,7 +514,7 @@ namespace ngl
 			{
 				for(auto e : propagate_next_handle_)
 				{
-					const int handle_index = handle_2_compiled_index_[e.first];
+					const int handle_index = compiled_.handle_2_linear_index_[e.first];
 					// グラフ終端までアクセスがあるものとして延長.
 					constexpr TaskStage stage_end = {std::numeric_limits<int>::max()};
 					handle_life_last_array[handle_index] = stage_end;
@@ -523,13 +523,12 @@ namespace ngl
 			
 			// リソースハンドル毎にPoolから実リソースを割り当てる.
 			// ハンドルのアクセス期間を元に実リソースの再利用も可能.
-			handle_compiled_resource_id_.clear();
-			handle_compiled_resource_id_.resize(handle_count, CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
+			compiled_.linear_handle_resource_id_.resize(handle_count, CompiledBuilder::CompiledResourceInfo::k_invalid());// 無効値-1でHandle個数分初期化.
 
 			// MEMO. handle_2_compiled_index_はunordered_mapのためイテレートに使うと順序がNodeSequence順にならずにいきなり終端の最終アクセスPassへの割当が発生して正しい再利用が働かない.
-			for(int handle_index = 0; handle_index < compiled_index_handle_.size(); ++handle_index)
+			for(int handle_index = 0; handle_index < compiled_.linear_handle_array_.size(); ++handle_index)
 			{
-				const RtgResourceHandle res_handle = compiled_index_handle_[handle_index];
+				const RtgResourceHandle res_handle = compiled_.linear_handle_array_[handle_index];
 				const auto handle_id = handle_index;
 
 					
@@ -550,8 +549,8 @@ namespace ngl
 					}
 					// 割当情報.
 					{
-						handle_compiled_resource_id_[handle_id].detail.resource_id = ex_res_index;
-						handle_compiled_resource_id_[handle_id].detail.is_external = true;// 外部リソースマーク.
+						compiled_.linear_handle_resource_id_[handle_id].detail.resource_id = ex_res_index;
+						compiled_.linear_handle_resource_id_[handle_id].detail.is_external = true;// 外部リソースマーク.
 					}
 				}
 				else
@@ -636,19 +635,19 @@ namespace ngl
 					// 割当情報.
 					{
 						// allocated_resource_id は初回フレームの伝搬リソース等では無効値-1の可能性がある.
-						handle_compiled_resource_id_[handle_id].detail.resource_id = allocated_resource_id;
-						handle_compiled_resource_id_[handle_id].detail.is_external = false;
+						compiled_.linear_handle_resource_id_[handle_id].detail.resource_id = allocated_resource_id;
+						compiled_.linear_handle_resource_id_[handle_id].detail.is_external = false;
 					}
 				}
 			}
 			
 			// Graph上で割り当てられた有効なリソースIDから密なリニアインデックスへのマップ. 有効リソースID毎の情報をワークバッファ上で操作するため.
-			std::unordered_map<CompiledResourceInfoKeyType, int> res_id_2_linear_map = {};
+			std::unordered_map<CompiledBuilder::CompiledResourceInfoKeyType, int> res_id_2_linear_map = {};
 			// 有効リソースリニアインデックスからリソースIDへのマッピングをする配列.
-			std::vector<CompiledResourceInfo> res_linear_2_id_array = {};
+			std::vector<CompiledBuilder::CompiledResourceInfo> res_linear_2_id_array = {};
 			// Graph上で有効な実リソース数.
 			int valid_res_count = 0;
-			for(const auto& res_id : handle_compiled_resource_id_)
+			for(const auto& res_id : compiled_.linear_handle_resource_id_)
 			{
 				if(res_id_2_linear_map.end() == res_id_2_linear_map.find(res_id))
 				{
@@ -666,8 +665,8 @@ namespace ngl
 				for(const auto& access_info : node_handles)
 				{
 					// access_info.access;
-					const auto handle_id = handle_2_compiled_index_[access_info.handle];
-					const auto res_id = handle_compiled_resource_id_[handle_id];
+					const auto handle_id = compiled_.handle_2_linear_index_[access_info.handle];
+					const auto res_id = compiled_.linear_handle_resource_id_[handle_id];
 
 					const auto res_index = res_id_2_linear_map[res_id];
 
@@ -678,10 +677,9 @@ namespace ngl
 
 			// リソース割当を確定したのでステート遷移を決定する.
 			//	各Nodeの各Handleがその時点でどのようにステート遷移すべきかの情報を構築.
-			node_handle_state_ = {};// クリア.
 			for(int res_index = 0; res_index < res_access_node_array.size(); ++res_index)
 			{
-				const CompiledResourceInfo res_id = res_linear_2_id_array[res_index];
+				const CompiledBuilder::CompiledResourceInfo res_id = res_linear_2_id_array[res_index];
 
 				// 初回フレームの伝搬リソース等は無効なリソースIDとなっているためチェック.
 				if(0 <= res_id.detail.resource_id)
@@ -704,8 +702,8 @@ namespace ngl
 					{
 						for(const auto handle : node_handle_usage_list_[p_node])
 						{
-							const int handle_index = handle_2_compiled_index_[handle.handle];
-							if(res_id == handle_compiled_resource_id_[handle_index])
+							const int handle_index = compiled_.handle_2_linear_index_[handle.handle];
+							if(res_id == compiled_.linear_handle_resource_id_[handle_index])
 							{
 								// Handleへのアクセスタイプから次のrhiステートを決定.
 								rhi::EResourceState next_state = {};
@@ -731,13 +729,13 @@ namespace ngl
 								}
 							
 								// このリソースに対してこのnode時点では cur_state -> next_state となる.
-								NodeHandleState node_handle_state = {};
+								CompiledBuilder::NodeHandleState node_handle_state = {};
 								{
 									node_handle_state.prev_ = curr_state;
 									node_handle_state.curr_ = next_state;
 								}
 								// Node毎のHandle時点での前回ステートと現在ステートを確定.
-								node_handle_state_[p_node][handle.handle] = node_handle_state;
+								compiled_.node_handle_state_[p_node][handle.handle] = node_handle_state;
 							
 								// 次へ.
 								curr_state = next_state;
@@ -771,21 +769,21 @@ namespace ngl
 			for(auto e : propagate_next_handle_)
 			{
 				const RtgResourceHandle handle(e.first);
-				if(handle_2_compiled_index_.end() == handle_2_compiled_index_.find(handle))
+				if(compiled_.handle_2_linear_index_.end() == compiled_.handle_2_linear_index_.find(handle))
 				{
 					// ありえないのでassert.
 					assert(false);
 					continue;
 				}
-				const int handle_id = handle_2_compiled_index_[handle];
-				if(handle_compiled_resource_id_[handle_id].detail.is_external)
+				const int handle_id = compiled_.handle_2_linear_index_[handle];
+				if(compiled_.linear_handle_resource_id_[handle_id].detail.is_external)
 				{
 					// フレーム伝搬は内部リソースのみ許可.
 					assert(false);
 					continue;
 				}
 				// Handleと割当リソースIDをマネージャにフレーム伝搬指示.
-				p_compiled_manager_->PropagateResourceToNextFrame(handle, handle_compiled_resource_id_[handle_id].detail.resource_id);
+				p_compiled_manager_->PropagateResourceToNextFrame(handle, compiled_.linear_handle_resource_id_[handle_id].detail.resource_id);
 			}
 			
 			// デバッグ表示.
@@ -794,7 +792,7 @@ namespace ngl
 #if defined(_DEBUG)
 				// 各ResourceHandleへの処理順でのアクセス情報.
 				std::cout << "-Access Flow Debug" << std::endl;
-				for(auto handle_index : handle_2_compiled_index_)
+				for(auto handle_index : compiled_.handle_2_linear_index_)
 				{
 					const auto handle = RtgResourceHandle(handle_index.first);
 					const auto handle_id = handle_index.second;
@@ -808,12 +806,12 @@ namespace ngl
 
 					std::cout << "		-Resource" << std::endl;
 					
-					const auto res_id = handle_compiled_resource_id_[handle_id];
+					const auto res_id = compiled_.handle_compiled_resource_id_[handle_id];
 					if(!res_id.detail.is_external)
 					{
 						std::cout << "			-Internal" << std::endl;
 						
-						const auto res = (0 <= res_id.detail.resource_id)? p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id] : InternalResourceInstanceInfo{};
+						const auto res = (0 <= res_id.detail.resource_id)? p_compiled_manager_->internal_resource_pool_[res_id.detail.resource_id] : InternalResourceInstanceInfo();
 						std::cout << "				-id " << res_id.detail.resource_id << std::endl;
 						std::cout << "				-tex_ptr " << res.tex_.Get() << std::endl;
 					}
@@ -831,8 +829,8 @@ namespace ngl
 					
 					for(auto res_access : handle_access_info_array[handle_id].from_node_)
 					{
-						const auto prev_state = node_handle_state_[res_access.p_node_][handle].prev_;
-						const auto curr_state = node_handle_state_[res_access.p_node_][handle].curr_;
+						const auto prev_state = compiled_.node_handle_state_[res_access.p_node_][handle].prev_;
+						const auto curr_state = compiled_.node_handle_state_[res_access.p_node_][handle].curr_;
 						
 						std::cout << "		-Node " << res_access.p_node_->GetDebugNodeName().Get() << std::endl;
 						std::cout << "			-AccessType " << static_cast<int>(res_access.access_type) << std::endl;
@@ -864,13 +862,13 @@ namespace ngl
 				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
 				return {};
 			}
-			if (handle_2_compiled_index_.end() == handle_2_compiled_index_.find(res_handle))
+			if (compiled_.handle_2_linear_index_.end() == compiled_.handle_2_linear_index_.find(res_handle))
 			{
 				// 初回フレームの伝搬リソースであってもハンドル自体は登録されるはずなので, それがない場合はassert.　
 				assert(false);// 念のためMapに登録されているかチェック.
 			}
-			const auto it_node_handle_state = node_handle_state_.find(node);
-			if (node_handle_state_.end() == it_node_handle_state)
+			const auto it_node_handle_state = compiled_.node_handle_state_.find(node);
+			if (compiled_.node_handle_state_.end() == it_node_handle_state)
 			{
 				//assert(false);// 念のためMapに登録されているかチェック.
 				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
@@ -884,10 +882,10 @@ namespace ngl
 				return {};
 			}
 
-			const auto it_compiled_handle_index = handle_2_compiled_index_.find(res_handle);
-			assert(handle_2_compiled_index_.end() != it_compiled_handle_index);
+			const auto it_compiled_handle_index = compiled_.handle_2_linear_index_.find(res_handle);
+			assert(compiled_.handle_2_linear_index_.end() != it_compiled_handle_index);
 			const int handle_id = it_compiled_handle_index->second;
-			const CompiledResourceInfo handle_res_id = handle_compiled_resource_id_[handle_id];
+			const CompiledBuilder::CompiledResourceInfo handle_res_id = compiled_.linear_handle_resource_id_[handle_id];
 			if(0 > handle_res_id.detail.resource_id)
 			{
 				// このパターンは初回フレームの伝搬リソースであり得るのでassertではなく無効値.
@@ -895,7 +893,7 @@ namespace ngl
 			}
 			
 			// ステート遷移情報取得.
-			const NodeHandleState state_transition = it_handle_state->second;
+			const CompiledBuilder::NodeHandleState state_transition = it_handle_state->second;
 			
 			// 返却情報構築.
 			RtgAllocatedResourceInfo ret_info = {};
@@ -1129,7 +1127,7 @@ namespace ngl
 				std::vector<rhi::RhiRef<rhi::FenceDep>> sync_fences;
 				{
 					sync_fences.clear();
-					for(const auto& e : node_dependency_fence_)
+					for(const auto& e : compiled_.node_dependency_fence_)
 					{
 						if(0 > e.fence_id)
 							continue;
@@ -1153,9 +1151,9 @@ namespace ngl
 					const auto queue_type = node_sequence_[i]->TaskType();
 
 					// 別のQueueを待機する.
-					if(0 <= node_dependency_fence_[i].from)
+					if(0 <= compiled_.node_dependency_fence_[i].from)
 					{
-						const auto fence_id = node_dependency_fence_[i].fence_id;
+						const auto fence_id = compiled_.node_dependency_fence_[i].fence_id;
 						assert(0 <= fence_id);
 						
 						RtgSubmitCommandSequenceElem wait_elem = {};
@@ -1230,10 +1228,10 @@ namespace ngl
 					}
 					
 					// 別のQueueへSignal発行する.
-					if(0 <= node_dependency_fence_[i].to)
+					if(0 <= compiled_.node_dependency_fence_[i].to)
 					{
 						// Fence自体はWait側が管理しているため, Signal側はtoの指すIndexのFenceを使用する.
-						const auto fence_id = node_dependency_fence_[ node_dependency_fence_[i].to ].fence_id;
+						const auto fence_id = compiled_.node_dependency_fence_[ compiled_.node_dependency_fence_[i].to ].fence_id;
 						assert(0 <= fence_id);
 						
 						RtgSubmitCommandSequenceElem signal_elem = {};
@@ -1496,7 +1494,7 @@ namespace ngl
 
 			// Compileで割り当てられた内部リソースの未使用カウンタをリセット. 外部リソースは無視すること.
 			{
-				for(auto& e : builder.handle_compiled_resource_id_)
+				for(auto& e : builder.compiled_.linear_handle_resource_id_)
 				{
 					if(!e.detail.is_external)
 					{

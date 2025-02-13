@@ -152,7 +152,7 @@ namespace ngl
 		}
 		
 
-		// Passが必要とするリソースの定義.
+		// Passがリソース(Texture)の定義.
 		struct RtgResourceDesc2D
 		{
 			struct Desc
@@ -246,10 +246,9 @@ namespace ngl
 		static constexpr auto sizeof_ResourceDesc2D = sizeof(RtgResourceDesc2D);
 
 		
-		// RTGのノードが利用するリソースハンドル.
-		// 識別IDやSwapchain識別等の情報を保持.
-		// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
 		using RtgResourceHandleKeyType = uint64_t;
+		// RTGのノードが利用するリソースハンドル. 識別IDやSwapchain識別等の情報を保持.
+		// このままMapのキーとして利用するためuint64扱いできるようにしている(もっと整理できそう).
 		struct RtgResourceHandle
 		{
 			constexpr RtgResourceHandle() = default;
@@ -296,14 +295,11 @@ namespace ngl
 		{
 		public:
 			virtual ~ITaskNode() {}
-
 			// Type.
 			virtual ETASK_TYPE TaskType() const = 0;
-			
 			// レンダリングの実装部.
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::GraphicsCommandListDep* commandlist) = 0;
 			virtual void Run(RenderTaskGraphBuilder& builder, rhi::ComputeCommandListDep* commandlist) = 0;
-
 		public:
 			const RtgNameType& GetDebugNodeName() const { return debug_node_name_; }
 		protected:
@@ -347,6 +343,7 @@ namespace ngl
 
 		// -------------------------------------------------------------------------------------------
 		// Compileで割り当てられたHandleのリソース情報.
+		//	TaskNode派生クラスのRun()でハンドル経由で取得できるリソース情報.
 		struct RtgAllocatedResourceInfo
 		{
 			RtgAllocatedResourceInfo() = default;
@@ -490,7 +487,7 @@ namespace ngl
 			RtgResourceHandle CreateResource(RtgResourceDesc2D res_desc);
 
 			// 次のフレームへ寿命を延長する.
-			//	前回フレームのハンドルのリソースを利用する場合に, この関数で寿命を延長した上で次フレームで同じハンドルを使うことでアクセス可能にする予定.
+			//	TAA等で前回フレームのリソースを利用したい場合に, この関数で寿命を次回フレームまで延長することで同じハンドルで同じリソースを利用できる.
 			RtgResourceHandle PropagateResouceToNextFrame(RtgResourceHandle handle);
 
 			// 外部リソースを登録してハンドルを生成. 一般.
@@ -545,6 +542,7 @@ namespace ngl
 				COMPILED,
 				EXECUTED
 			};
+			// Builderの状態.
 			EBuilderState	state_ = EBuilderState::RECORDING;
 			
 			class RenderTaskGraphManager* p_compiled_manager_ = nullptr;// Compileを実行したManager. 割り当てられたリソースなどはこのManagerが持っている.
@@ -560,38 +558,34 @@ namespace ngl
 			
 			struct NodeHandleUsageInfo
 			{
-				RtgResourceHandle			handle{};// あるNodeからどのようなHandleで利用されたか.
+				RtgResourceHandle		handle{};// あるNodeからどのようなHandleで利用されたか.
 				ACCESS_TYPE				access{};// あるNodeから上記Handleがどのアクセスタイプで利用されたか.
 			};
 			std::unordered_map<const ITaskNode*, std::vector<NodeHandleUsageInfo>> node_handle_usage_list_{};// Node毎のResourceHandleアクセス情報をまとめるMap.
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
-			// Importリソース用.
-			std::vector<ExternalResourceInfo> imported_resource_ = {};
-			std::unordered_map<RtgResourceHandleKeyType, int> imported_handle_2_index_ = {};
+			// Importリソース用のmap.
+			std::vector<ExternalResourceInfo>					imported_resource_ = {};
+			std::unordered_map<RtgResourceHandleKeyType, int>	imported_handle_2_index_ = {};
 
-			// ImportしたSwapchainは何かとアクセスするためHandle保持.
-			RtgResourceHandle	handle_imported_swapchain_ = {};
+			// ImportしたSwapchainは何かとアクセスするため専用にHandle保持.
+			RtgResourceHandle									handle_imported_swapchain_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			
-			// 次フレームまで寿命を延長するハンドル.
-			std::unordered_map<RtgResourceHandleKeyType, int> propagate_next_handle_ = {};
+			// 次フレームまで寿命を延長するハンドルのmap. keyのみ利用, valueは現在未使用.
+			std::unordered_map<RtgResourceHandleKeyType, int>	propagate_next_handle_ = {};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 			
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 			// Compileで構築される情報.
+			struct CompiledBuilder
+			{
 				struct NodeDependency
 				{
 					int from = -1;
 					int to = -1;
 					int fence_id = -1;// Wait側に格納されるFence. Signal側はtoの指すIndexが持つこのIDを利用する.
 				};
-				// Queue違いのNode間のfence依存関係.
-				std::vector<NodeDependency> node_dependency_fence_ = {};
-				// HandleからリニアインデックスへのMap.
-				std::unordered_map<RtgResourceHandleKeyType, int> handle_2_compiled_index_ = {};
-				// NodeSequenceの順序に沿ったHandle配列.
-				std::vector<RtgResourceHandle>						compiled_index_handle_ = {};
 
 				// Compileで構築される情報.
 				// Handleに割り当てられたリソースのPool上のIndex.
@@ -626,16 +620,25 @@ namespace ngl
 						return tmp;
 					}
 				};
-				// Handleのリニアインデックスから割り当て済みリソースID.
-				std::vector<CompiledResourceInfo> handle_compiled_resource_id_ = {};
 				
 				struct NodeHandleState
 				{
 					rhi::EResourceState prev_ = {};
 					rhi::EResourceState curr_ = {};
 				};
+			
+				// Queue違いのNode間のfence依存関係.
+				std::vector<NodeDependency>							node_dependency_fence_ = {};
+				// HandleからリニアインデックスへのMap.
+				std::unordered_map<RtgResourceHandleKeyType, int>	handle_2_linear_index_ = {};
+				// NodeSequenceの順序に沿ったHandle配列.
+				std::vector<RtgResourceHandle>						linear_handle_array_ = {};
+				// Handleのリニアインデックスから割り当て済みリソースID.
+				std::vector<CompiledResourceInfo>					linear_handle_resource_id_ = {};
 				// NodeのHandle毎のリソース状態遷移.
 				std::unordered_map<const ITaskNode*, std::unordered_map<RtgResourceHandleKeyType, NodeHandleState>> node_handle_state_ = {};
+			};
+			CompiledBuilder compiled_{};
 			// ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 		private:
