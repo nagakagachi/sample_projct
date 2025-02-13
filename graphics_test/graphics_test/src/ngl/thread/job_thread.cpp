@@ -54,7 +54,7 @@ namespace thread
         // thread完了待ち.
         thread_instance_.join();
 
-        std::cout << "~JobSystemWorker" << std::endl;
+        //std::cout << "~JobSystemWorker" << std::endl;
     }
     // Job実行完了を待機する.
     void JobSystemWorker::Wait()

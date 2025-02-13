@@ -59,7 +59,9 @@ namespace ngl
 			}
 			~ResTexture()
 			{
-				std::cout << "[ResTextureData] Destruct " << this << std::endl;
+#if defined(_DEBUG)
+				//std::cout << "[ResTextureData] Destruct " << this << std::endl;
+#endif
 			}
 
 			bool IsNeedRenderUpdate() const override { return true; }

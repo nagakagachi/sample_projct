@@ -16,7 +16,7 @@ namespace res
 	}
 	ResourceHandleCacheMap::~ResourceHandleCacheMap()
 	{
-		std::cout << "~ResourceMap()" << std::endl;
+		//std::cout << "~ResourceMap()" << std::endl;
 	}
 
 
