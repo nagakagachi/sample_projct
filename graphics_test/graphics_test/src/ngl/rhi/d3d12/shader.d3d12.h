@@ -1,11 +1,11 @@
 ﻿#pragma once
 
-
 #include "ngl/rhi/rhi.h"
 #include "ngl/rhi/rhi_ref.h"
 #include "ngl/rhi/rhi_object_garbage_collect.h"
 
 #include "rhi_util.d3d12.h"
+#include "ngl/util/singleton.h"
 
 namespace ngl
 {
@@ -286,12 +286,12 @@ namespace rhi
 		PipelineStateBaseDep() = default;
 		virtual ~PipelineStateBaseDep()
 		{
-			view_layout_.Finalize();
+			view_layout_.reset();
 		}
 		
 		const PipelineResourceViewLayoutDep* GetPipelineResourceViewLayout() const
 		{
-			return &view_layout_;
+			return view_layout_.get();
 		}
 		
 	public:
@@ -308,7 +308,7 @@ namespace rhi
 		const ID3D12PipelineState* GetD3D12PipelineState() const;
 		const ID3D12RootSignature* GetD3D12RootSignature() const;
 	protected:
-		PipelineResourceViewLayoutDep			view_layout_;
+		std::shared_ptr<PipelineResourceViewLayoutDep>		view_layout_;
 		Microsoft::WRL::ComPtr<ID3D12PipelineState>			pso_;
 	};
 	
@@ -378,5 +378,6 @@ namespace rhi
 		u32										threadgroup_size_y_ = 0;
 		u32										threadgroup_size_z_ = 0;
 	};
+	
 }
 }

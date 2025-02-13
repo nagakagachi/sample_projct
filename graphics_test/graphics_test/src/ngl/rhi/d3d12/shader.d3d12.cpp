@@ -1242,24 +1242,312 @@ namespace rhi
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+	// PSOキャッシュ関連用の簡易マネージャ.
+	class PipelineStateCacheManager : public ngl::Singleton<PipelineStateCacheManager>
+	{
+		using CacheBinKey = u64;
+		
+	public:
+		PipelineStateCacheManager()
+		{
+		}
+		~PipelineStateCacheManager()
+		{
+			Finalize();
+		}
+
+		void Finalize()
+		{
+			// Graphics Pso Cache.
+			{
+				std::scoped_lock<std::mutex> lock(graphics_pso_mutex_);
+				for(auto&& bin : graphics_cache_)
+				{
+					if(bin.second)
+					{
+						// 要素破棄で COM Ptr の Release.
+						delete bin.second;
+						bin.second = nullptr;
+					}
+				}
+				graphics_cache_.clear();
+			}
+			// Compute Pso Cache.
+			{
+				std::scoped_lock<std::mutex> lock(compute_pso_mutex_);
+				for(auto&& bin : compute_cache_)
+				{
+					if(bin.second)
+					{
+						// 要素破棄で COM Ptr の Release.
+						delete bin.second;
+						bin.second = nullptr;
+					}
+				}
+				compute_cache_.clear();
+			}
+			
+			// RootSig Cache.
+			{
+				std::scoped_lock<std::mutex> lock(sig_mutex_);
+				for(auto&& bin : sig_cache_)
+				{
+					if(bin.second)
+					{
+						// 要素破棄で COM Ptr の Release.
+						delete bin.second;
+						bin.second = nullptr;
+					}
+				}
+				sig_cache_.clear();
+			}
+		}
+
+		// Descから計算したHash->Bin化->線形リストのCache機構のBinデータ.
+		struct PsoSignatureCacheBin
+		{
+			struct Elem
+			{
+				PipelineResourceViewLayoutDep::Desc				actual_key_{};
+				std::shared_ptr<PipelineResourceViewLayoutDep>	p_sig_{};
+			};
+
+			std::mutex bin_mutex_{};
+			std::vector<Elem> list_{};
+		};
+		
+		// Descから計算したHash->Bin化->線形リストのCache機構のBinデータ.
+		struct GraphicsPsoCacheBin
+		{
+			struct Elem
+			{
+				D3D12_GRAPHICS_PIPELINE_STATE_DESC			actual_key_{};
+				Microsoft::WRL::ComPtr<ID3D12PipelineState> pso_{}; 
+			};
+			
+			std::mutex bin_mutex_{};
+			std::vector<Elem> list_{};
+		};
+		
+		// Descから計算したHash->Bin化->線形リストのCache機構のBinデータ.
+		struct ComputePsoCacheBin
+		{
+			struct Elem
+			{
+				D3D12_COMPUTE_PIPELINE_STATE_DESC			actual_key_{};
+				Microsoft::WRL::ComPtr<ID3D12PipelineState> pso_{}; 
+			};
+			
+			std::mutex bin_mutex_{};
+			std::vector<Elem> list_{};
+		};
+		
+		// 適当なハッシュ.
+		auto CalcHash(const void* blob, int byte_size) -> u64
+		{
+			const char* data = reinterpret_cast<const char*>(blob);
+			const int window_size = sizeof(u64);
+			const int window_count = byte_size / window_size;
+			const int residual_byte = byte_size - (window_count * window_size);
+			u64 v = 0;
+			for(int w = 0; w < window_count; ++w)
+			{
+				const u64 wv = *reinterpret_cast<const u64*>(data + (w * window_size));
+				v = v ^ wv;
+			}
+			// 端数部.
+			for(int r = 0; r < residual_byte; ++r)
+			{
+				const char c = *(data + (window_count * window_size + r));
+				v = v ^ ((u64)c);
+			}
+			return v;
+		};
+
+		// RootSig Cache.
+		std::shared_ptr<PipelineResourceViewLayoutDep> Cache(DeviceDep* p_device, const PipelineResourceViewLayoutDep::Desc& sig_desc)
+		{
+			// PSOに含まれるRootSigポインタが異なるとCacheキーが異なってしまうため, Cacheが動作するようにRootSig(の抽象クラス)もCacheする.
+			PsoSignatureCacheBin* sig_bin{};
+			{
+				// 全体Lock.
+				std::scoped_lock<std::mutex> lock(sig_mutex_);
+				const CacheBinKey h = CalcHash(&sig_desc, sizeof(sig_desc));
+				auto it = sig_cache_.find(h);
+				if(it == sig_cache_.end())
+				{
+					// Binが無い場合は新規追加.
+					sig_cache_[h] = new PsoSignatureCacheBin();
+					it = sig_cache_.find(h);
+				}
+				sig_bin = it->second;
+			}
+			assert(sig_bin);
+			{
+				std::scoped_lock<std::mutex> lock(sig_bin->bin_mutex_);
+				int find_index = -1;
+				for(size_t i = 0; i < sig_bin->list_.size(); ++i)
+				{
+					if(0 == std::memcmp(&(sig_bin->list_[i].actual_key_), &sig_desc, sizeof(sig_desc)))
+					{
+						find_index = static_cast<int>(i);
+						break;
+					}
+				}
+				// 未登録.
+				if(0 > find_index)
+				{
+					// 新規にPipelineResourceViewLayoutDep生成.
+					PsoSignatureCacheBin::Elem new_elem;
+					new_elem.actual_key_ = sig_desc;
+					new_elem.p_sig_.reset(new PipelineResourceViewLayoutDep());
+					{
+						if(!new_elem.p_sig_->Initialize(p_device, sig_desc))
+						{
+							std::cout << "[ERROR] PipelineResourceViewLayoutDep Init" << std::endl;
+							assert(false);
+						}
+					}
+
+					find_index = static_cast<int>(sig_bin->list_.size());
+					sig_bin->list_.push_back(new_elem);
+				}
+
+				return  sig_bin->list_[find_index].p_sig_;
+			}
+		}
+		
+		// Graphics PSO Cache.
+		// pso_desc の RootSig には同様にCacheされたPipelineResourceViewLayoutDepを使う必要がある.
+		//	RootSigポインタがDescに含まれるため同じシェーダセットでもCacheで同一化する必要があるため.
+		Microsoft::WRL::ComPtr<ID3D12PipelineState> Cache(DeviceDep* p_device, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pso_desc)
+		{
+			GraphicsPsoCacheBin* cache_bin = {};
+			{
+				// 全体Lock.
+				std::scoped_lock<std::mutex> lock(graphics_pso_mutex_);
+				const CacheBinKey h = CalcHash(&pso_desc, sizeof(pso_desc));
+				auto it = graphics_cache_.find(h);
+				if(it == graphics_cache_.end())
+				{
+					// Binが無い場合は新規追加.
+					graphics_cache_[h] = new GraphicsPsoCacheBin();
+					it = graphics_cache_.find(h);
+				}
+				cache_bin = it->second;
+			}
+			assert(cache_bin);
+
+			{
+				std::scoped_lock<std::mutex> lock(cache_bin->bin_mutex_);
+				int find_index = -1;
+				for(size_t i = 0; i < cache_bin->list_.size(); ++i)
+				{
+					if(0 == std::memcmp(&(cache_bin->list_[i].actual_key_), &pso_desc, sizeof(pso_desc)))
+					{
+						find_index = static_cast<int>(i);
+						break;
+					}
+				}
+				// 未登録.
+				if(0 > find_index)
+				{
+					find_index = static_cast<int>(cache_bin->list_.size());
+					GraphicsPsoCacheBin::Elem new_elem;
+					new_elem.actual_key_ = pso_desc;
+					if (FAILED(p_device->GetD3D12Device()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&new_elem.pso_))))
+					{
+						std::cout << "[ERROR] CreateGraphicsPipelineState" << std::endl;
+						assert(false);
+					}
+					find_index = static_cast<int>(cache_bin->list_.size());
+					cache_bin->list_.push_back(new_elem);
+				}
+					
+				return cache_bin->list_[find_index].pso_;
+			}
+		}
+		// Compute PSO Cache.
+		// pso_desc の RootSig には同様にCacheされたPipelineResourceViewLayoutDepを使う必要がある.
+		//	RootSigポインタがDescに含まれるため同じシェーダセットでもCacheで同一化する必要があるため.
+		Microsoft::WRL::ComPtr<ID3D12PipelineState> Cache(DeviceDep* p_device, const D3D12_COMPUTE_PIPELINE_STATE_DESC& pso_desc)
+		{
+			ComputePsoCacheBin* cache_bin = {};
+			{
+				// 全体Lock.
+				std::scoped_lock<std::mutex> lock(compute_pso_mutex_);
+				const CacheBinKey h = CalcHash(&pso_desc, sizeof(pso_desc));
+				auto it = compute_cache_.find(h);
+				if(it == compute_cache_.end())
+				{
+					// Binが無い場合は新規追加.
+					compute_cache_[h] = new ComputePsoCacheBin();
+					it = compute_cache_.find(h);
+				}
+				cache_bin = it->second;
+			}
+			assert(cache_bin);
+
+			{
+				std::scoped_lock<std::mutex> lock(cache_bin->bin_mutex_);
+				int find_index = -1;
+				for(size_t i = 0; i < cache_bin->list_.size(); ++i)
+				{
+					if(0 == std::memcmp(&(cache_bin->list_[i].actual_key_), &pso_desc, sizeof(pso_desc)))
+					{
+						find_index = static_cast<int>(i);
+						break;
+					}
+				}
+				// 未登録.
+				if(0 > find_index)
+				{
+					find_index = static_cast<int>(cache_bin->list_.size());
+					ComputePsoCacheBin::Elem new_elem;
+					new_elem.actual_key_ = pso_desc;
+					if (FAILED(p_device->GetD3D12Device()->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&new_elem.pso_))))
+					{
+						std::cout << "[ERROR] CreateComputePipelineState" << std::endl;
+						assert(false);
+					}
+					find_index = static_cast<int>(cache_bin->list_.size());
+					cache_bin->list_.push_back(new_elem);
+				}
+					
+				return cache_bin->list_[find_index].pso_;
+			}
+		}
+		
+	private:
+		std::mutex sig_mutex_{};
+		std::mutex graphics_pso_mutex_{};
+		std::mutex compute_pso_mutex_{};
+
+		std::unordered_map<CacheBinKey, PsoSignatureCacheBin*> sig_cache_{};
+		std::unordered_map<CacheBinKey, GraphicsPsoCacheBin*> graphics_cache_{};
+		std::unordered_map<CacheBinKey, ComputePsoCacheBin*> compute_cache_{};
+	};
+
+	
+
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
 	// 名前でDescriptorSetへView設定
 	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const ConstantBufferViewDep* p_view) const
 	{
-		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+		view_layout_->SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
 	}
 	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const ShaderResourceViewDep* p_view) const
 	{
-		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+		view_layout_->SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
 	}
 	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const UnorderedAccessViewDep* p_view) const
 	{
-		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+		view_layout_->SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
 	}
 	void PipelineStateBaseDep::SetView(DescriptorSetDep* p_desc_set, const char* name, const SamplerDep* p_view) const
 	{
-		view_layout_.SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
+		view_layout_->SetDescriptorHandle(p_desc_set, name, p_view->GetView().cpu_handle);
 	}
 	
 	ID3D12PipelineState* PipelineStateBaseDep::GetD3D12PipelineState()
@@ -1268,7 +1556,7 @@ namespace rhi
 	}
 	ID3D12RootSignature* PipelineStateBaseDep::GetD3D12RootSignature()
 	{
-		return view_layout_.GetD3D12RootSignature();
+		return view_layout_->GetD3D12RootSignature();
 	}
 	const ID3D12PipelineState* PipelineStateBaseDep::GetD3D12PipelineState() const
 	{
@@ -1276,7 +1564,7 @@ namespace rhi
 	}
 	const ID3D12RootSignature* PipelineStateBaseDep::GetD3D12RootSignature() const
 	{
-		return view_layout_.GetD3D12RootSignature();
+		return view_layout_->GetD3D12RootSignature();
 	}
 	
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1472,24 +1760,20 @@ namespace rhi
 			root_signature_desc.ds = desc.ds;
 			root_signature_desc.gs = desc.gs;
 			root_signature_desc.ps = desc.ps;
-			view_layout_.Initialize(p_device, root_signature_desc);
-
-			// RootSignature設定
-			pso_desc.pRootSignature = view_layout_.GetD3D12RootSignature();
+			
+			// Cacheを効かせるためにRootSigもCache.
+			view_layout_ = PipelineStateCacheManager::Instance().Cache(p_device, root_signature_desc);
+			pso_desc.pRootSignature = view_layout_->GetD3D12RootSignature();
 		}
-
-		if (FAILED(p_device->GetD3D12Device()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))
-		{
-			std::cout << "[ERROR] CreateGraphicsPipelineState" << std::endl;
-			return false;
-		}
+		// PsoもCache.
+		pso_ = PipelineStateCacheManager::Instance().Cache(p_device, pso_desc);
 
 		return true;
 	}
 	void GraphicsPipelineStateDep::Finalize()
 	{
 		pso_ = nullptr;
-		view_layout_.Finalize();
+		view_layout_.reset();
 	}
 	
 	// -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1528,18 +1812,14 @@ namespace rhi
 		{
 			PipelineResourceViewLayoutDep::Desc root_signature_desc = {};
 			root_signature_desc.cs = desc.cs;
-			view_layout_.Initialize(p_device, root_signature_desc);
 
-			// RootSignature設定
-			pso_desc.pRootSignature = view_layout_.GetD3D12RootSignature();
+			// Cacheを効かせるためにRootSigもCache.
+			view_layout_ = PipelineStateCacheManager::Instance().Cache(p_device, root_signature_desc);
+			pso_desc.pRootSignature = view_layout_->GetD3D12RootSignature();
 		}
-
-		if (FAILED(p_device->GetD3D12Device()->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&pso_))))
-		{
-			std::cout << "[ERROR] CreateComputePipelineState" << std::endl;
-			return false;
-		}
-
+		// PsoもCache.
+		pso_ = PipelineStateCacheManager::Instance().Cache(p_device, pso_desc);
+		
 		// ComputeのThreadGroupSize情報.
 		{
 			ShaderReflectionDep shader_ref;
@@ -1560,7 +1840,7 @@ namespace rhi
 	void ComputePipelineStateDep::Finalize()
 	{
 		pso_ = nullptr;
-		view_layout_.Finalize();
+		view_layout_.reset();
 	}
 	// Dispatch Helper. 総ThreadCountから自動でGroupCountを計算してDispatchする.
 	void ComputePipelineStateDep::DispatchHelper(CommandListBaseDep* p_command_list, u32 thread_count_x, u32 thread_count_y, u32 thread_count_z) const
