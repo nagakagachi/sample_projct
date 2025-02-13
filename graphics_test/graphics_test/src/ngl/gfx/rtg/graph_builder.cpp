@@ -806,7 +806,7 @@ namespace ngl
 
 					std::cout << "		-Resource" << std::endl;
 					
-					const auto res_id = compiled_.handle_compiled_resource_id_[handle_id];
+					const auto res_id = compiled_.linear_handle_resource_id_[handle_id];
 					if(!res_id.detail.is_external)
 					{
 						std::cout << "			-Internal" << std::endl;

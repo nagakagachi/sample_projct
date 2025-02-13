@@ -40,6 +40,9 @@ namespace ngl::render
 
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				rhi::RefCbvDep ref_scene_cbv{};
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
 			};
@@ -52,7 +55,8 @@ namespace ngl::render
 				
 				// Rtgリソースセットアップ.
 				{
-					rtg::RtgResourceDesc2D depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+					//rtg::RtgResourceDesc2D depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+					rtg::RtgResourceDesc2D depth_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, gfx::MaterialPassPsoCreator_depth::k_depth_format);
 					h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
 				}
 			}
@@ -94,6 +98,9 @@ namespace ngl::render
 			
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				rhi::RefCbvDep ref_scene_cbv{};
 				const std::vector<gfx::StaticMeshComponent*>* p_mesh_list{};
 			};
@@ -116,15 +123,15 @@ namespace ngl::render
 					constexpr auto k_velocity_format = gfx::MaterialPassPsoCreator_gbuffer::k_velocity_format;
 					
 					// GBuffer0 BaseColor.xyz, Occlusion.w
-					rtg::RtgResourceDesc2D gbuffer0_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer0_format);
+					rtg::RtgResourceDesc2D gbuffer0_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, k_gbuffer0_format);
 					// GBuffer1 WorldNormal.xyz, 1bitOption.w
-					rtg::RtgResourceDesc2D gbuffer1_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer1_format);
+					rtg::RtgResourceDesc2D gbuffer1_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, k_gbuffer1_format);
 					// GBuffer2 Roughness, Metallic, Optional, MaterialId
-					rtg::RtgResourceDesc2D gbuffer2_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer2_format);
+					rtg::RtgResourceDesc2D gbuffer2_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, k_gbuffer2_format);
 					// GBuffer3 Emissive.xyz, Unused.w
-					rtg::RtgResourceDesc2D gbuffer3_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_gbuffer3_format);
+					rtg::RtgResourceDesc2D gbuffer3_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, k_gbuffer3_format);
 					// Velocity xy
-					rtg::RtgResourceDesc2D velocity_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, k_velocity_format);
+					rtg::RtgResourceDesc2D velocity_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, k_velocity_format);
 
 					// DepthのFormat取得.
 					const auto depth_desc = builder.GetResourceHandleDesc(h_depth);
@@ -501,6 +508,9 @@ namespace ngl::render
 
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
 			SetupDesc desc_{};
@@ -514,7 +524,7 @@ namespace ngl::render
 				// Rtgリソースセットアップ.
 				{
 					// リソース定義.
-					rtg::RtgResourceDesc2D linear_depth_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
+					rtg::RtgResourceDesc2D linear_depth_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, rhi::EResourceFormat::Format_R32_FLOAT);
 
 					// Async Computeの出力リソースを読み取るテスト.
 					if(!h_tex_compute.IsInvalid())
@@ -591,6 +601,9 @@ namespace ngl::render
 
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				rhi::RefCbvDep ref_scene_cbv{};
 				rhi::RefCbvDep ref_shadow_cbv{};
 			};
@@ -605,7 +618,7 @@ namespace ngl::render
 				const SetupDesc& desc)
 			{
 				// Rtgリソースセットアップ.
-				rtg::RtgResourceDesc2D light_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+				rtg::RtgResourceDesc2D light_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 				{
 					desc_ = desc;
 					
@@ -764,6 +777,9 @@ namespace ngl::render
 
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				rhi::RefCbvDep ref_scene_cbv{};
 
 				bool debugview_halfdot_gray = false;
@@ -814,7 +830,7 @@ namespace ngl::render
 						h_dshadow_ = builder.RecordResourceAccess(*this, h_dshadow, rtg::access_type::SHADER_READ);
 					
 					// リソースアクセス期間による再利用のテスト用. 作業用の一時リソース.
-					rtg::RtgResourceDesc2D temp_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
+					rtg::RtgResourceDesc2D temp_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, rhi::EResourceFormat::Format_R11G11B10_FLOAT);
 					auto temp_res0 = builder.RecordResourceAccess(*this, builder.CreateResource(temp_desc), rtg::access_type::RENDER_TARTGET);
 					h_tmp_ = temp_res0;
 				}
@@ -990,6 +1006,9 @@ namespace ngl::render
 
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				rhi::RefCbvDep ref_scene_cbv{};
 			};
 			SetupDesc desc_{};
@@ -1003,7 +1022,7 @@ namespace ngl::render
 				// Rtgリソースセットアップ.
 				{
 					// リソース定義.
-					rtg::RtgResourceDesc2D work_tex_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+					rtg::RtgResourceDesc2D work_tex_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 
 					// リソースアクセス定義.
 					h_work_tex_ = builder.RecordResourceAccess(*this, builder.CreateResource(work_tex_desc), rtg::access_type::UAV);
@@ -1063,6 +1082,9 @@ namespace ngl::render
 			
 			struct SetupDesc
 			{
+				int w{};
+				int h{};
+				
 				class gfx::RtSceneManager* p_rt_scene{};
 			};
 			SetupDesc desc_{};
@@ -1074,7 +1096,7 @@ namespace ngl::render
 				
 				// Rtgリソースセットアップ.
 				{
-					rtg::RtgResourceDesc2D res_desc = rtg::RtgResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
+					rtg::RtgResourceDesc2D res_desc = rtg::RtgResourceDesc2D::CreateAsAbsoluteSize(desc.w, desc.h, rhi::EResourceFormat::Format_R16G16B16A16_FLOAT);
 					// リソースアクセス定義.
 					h_rt_result_ = builder.RecordResourceAccess(*this, builder.CreateResource(res_desc), rtg::access_type::UAV);
 				}

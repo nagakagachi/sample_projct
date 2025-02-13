@@ -10,7 +10,7 @@
 		void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, const SetupDesc& desc)
 		{
 			// リソース定義.
-			rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, gfx::MaterialPassPsoCreator_depth::k_depth_format);
+			rtg::ResourceDesc2D depth_desc = rtg::ResourceDesc2D::CreateAsAbsoluteSize(1920, 1080, gfx::MaterialPassPsoCreator_depth::k_depth_format);
 			// 新規作成したDepthBufferリソースをDepthTarget使用としてレコード.
 			h_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(depth_desc), rtg::access_type::DEPTH_TARGET);
 		}
@@ -44,7 +44,7 @@
 		void Setup(rtg::RenderTaskGraphBuilder& builder, rhi::DeviceDep* p_device, rtg::ResourceHandle h_depth, rtg::ResourceHandle h_tex_compute, const SetupDesc& desc)
 		{
 			// LinearDepth出力用のバッファを新規に作成してUAV使用としてレコード.
-			rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsRelative(1.0f, 1.0f, rhi::EResourceFormat::Format_R32_FLOAT);
+			rtg::ResourceDesc2D linear_depth_desc = rtg::ResourceDesc2D::CreateAsAbsoluteSize(1920, 1080, rhi::EResourceFormat::Format_R32_FLOAT);
 			h_linear_depth_ = builder.RecordResourceAccess(*this, builder.CreateResource(linear_depth_desc), rtg::access_type::UAV);
 			
 			// 先行するDepth書き込みTaskの出力先リソースハンドルを利用し, 読み取り使用としてレコード.
@@ -164,31 +164,14 @@ namespace ngl
 						int w;// 要求するバッファのWidth (例 1920).
 						int h;// 要求するバッファのHeight (例 1080).
 					} abs_size;
-
-					struct RelSize
-					{
-						float w;// 要求するバッファの基準Widthに対する相対スケール値(例 半解像度 0.5).
-						float h;// 要求するバッファの基準Heightに対する相対スケール値(例 半解像度 0.5).
-					} rel_size;
 				};
 				rhi::EResourceFormat format {};
-				bool is_relative {};
-
-
+				
 				// サイズ直接指定. その他データはEmpty.
 				static constexpr RtgResourceDesc2D CreateAsAbsoluteSize(int w, int h)
 				{
 					RtgResourceDesc2D v{};
-					v.desc.is_relative = false;
 					v.desc.abs_size = { w, h };
-					return v;
-				}
-				// 相対サイズ指定. その他データはEmpty.
-				static constexpr RtgResourceDesc2D CreateAsRelative(float w_rate, float h_rate)
-				{
-					RtgResourceDesc2D v{};
-					v.desc.is_relative = true;
-					v.desc.rel_size = { w_rate, h_rate };
 					return v;
 				}
 			};
@@ -215,24 +198,10 @@ namespace ngl
 				v.desc.format = format;
 				return v;
 			}
-			// 相対サイズ指定.
-			static constexpr RtgResourceDesc2D CreateAsRelative(float w_rate, float h_rate, rhi::EResourceFormat format)
-			{
-				RtgResourceDesc2D v = Desc::CreateAsRelative(w_rate, h_rate);
-				v.desc.format = format;
-				return v;
-			}
 
 			// 具体的なサイズ(Width, Height)を計算して返す.
 			void GetConcreteTextureSize(int work_width, int work_height, int& out_width, int& out_height) const
 			{
-				if(desc.is_relative)
-				{
-					// 相対サイズ解決.
-					out_width = static_cast<int>(work_width * desc.rel_size.w);
-					out_height = static_cast<int>(work_height * desc.rel_size.h);
-				}
-				else
 				{
 					out_width = desc.abs_size.w;
 					out_height = desc.abs_size.h;

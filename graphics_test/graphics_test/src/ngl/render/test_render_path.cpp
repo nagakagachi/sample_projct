@@ -107,6 +107,9 @@ namespace ngl::test
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
 					{
+						setup_desc.w = screen_w;
+						setup_desc.h = screen_h;
+						
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
 					task_test_compute0->Setup(rtg_builder, p_device, view_info, {}, setup_desc);
@@ -138,6 +141,9 @@ namespace ngl::test
 				{
 					ngl::render::task::TaskDepthPass::SetupDesc setup_desc{};
 					{
+						setup_desc.w = screen_w;
+						setup_desc.h = screen_h;
+						
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
 					}
@@ -150,6 +156,9 @@ namespace ngl::test
 				{
 					ngl::render::task::TaskLinearDepthPass::SetupDesc setup_desc{};
 					{
+						setup_desc.w = screen_w;
+						setup_desc.h = screen_h;
+						
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
 					task_linear_depth->Setup(rtg_builder, p_device, view_info, task_depth->h_depth_, async_compute_tex0, setup_desc);
@@ -163,6 +172,9 @@ namespace ngl::test
 				{
 					ngl::render::task::TaskCopmuteTest::SetupDesc setup_desc{};
 					{
+						setup_desc.w = screen_w;
+						setup_desc.h = screen_h;
+						
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 					}
 					task_test_compute1->Setup(rtg_builder, p_device, view_info, task_linear_depth->h_linear_depth_, setup_desc);
@@ -176,6 +188,9 @@ namespace ngl::test
 				{
 					ngl::render::task::TaskGBufferPass::SetupDesc setup_desc{};
 					{
+						setup_desc.w = screen_w;
+						setup_desc.h = screen_h;
+						
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.p_mesh_list = &p_scene->mesh_instance_array_;
 					}
@@ -203,6 +218,9 @@ namespace ngl::test
 				{
 					ngl::render::task::TaskLightPass::SetupDesc setup_desc{};
 					{
+						setup_desc.w = screen_w;
+						setup_desc.h = screen_h;
+						
 						setup_desc.ref_scene_cbv = sceneview_cbv;
 						setup_desc.ref_shadow_cbv = task_d_shadow->ref_d_shadow_sample_cbv_;
 					}
@@ -241,6 +259,9 @@ namespace ngl::test
 						
 						ngl::render::task::TaskFinalPass::SetupDesc setup_desc{};
 						{
+							setup_desc.w = screen_w;
+							setup_desc.h = screen_h;
+						
 							setup_desc.ref_scene_cbv = sceneview_cbv;
 
 							setup_desc.debugview_halfdot_gray = render_frame_desc.debugview_halfdot_gray;
