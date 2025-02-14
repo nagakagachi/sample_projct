@@ -446,6 +446,30 @@ bool AppGame::Initialize()
 
 				mc->transform_ = ngl::math::Mat34(tr);
 			}
+			{
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mesh_comp_array_.push_back(mc);
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_stanford_bunny, &loaddesc));
+				
+				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
+				tr.SetDiagonal(ngl::math::Vec4(1.0f, 0.3f, 1.0f, 1.0f));//被均一スケールテスト.
+				tr.SetColumn3(ngl::math::Vec4(1.5f, 12.0f, 0.0f, 1.0f));
+
+				mc->transform_ = ngl::math::Mat34(tr);
+			}
+			{
+				auto mc = std::make_shared<ngl::gfx::StaticMeshComponent>();
+				mesh_comp_array_.push_back(mc);
+				ngl::gfx::ResMeshData::LoadDesc loaddesc{};
+				mc->Initialize(&device_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device_, mesh_file_stanford_bunny, &loaddesc));
+				
+				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
+				tr.SetDiagonal(ngl::math::Vec4(1.0f, 3.0f, 1.0f, 1.0f));//被均一スケールテスト.
+				tr.SetColumn3(ngl::math::Vec4(3.0f, 12.0f, 0.0f, 1.0f));
+
+				mc->transform_ = ngl::math::Mat34(tr);
+			}
 			
 			for(int i = 0; i < 100; ++i)
 			{

@@ -482,6 +482,11 @@ namespace ngl
 				, r3(row3)
 			{
 			}
+			// from Mat33.
+			explicit constexpr Mat44(const Mat33& m)
+				: r0(m.r0, 0.0f), r1(m.r1, 0.0f), r2(m.r2, 0.0f), r3(0.0f)
+			{
+			}
 			Vec4 GetColumn0() const
 			{
 				return Vec4(r0.x, r1.x, r2.x, r3.x);
@@ -625,6 +630,7 @@ namespace ngl
 			}
 			// 余因子行列. 逆行列計算時に行列式で割らない値を返す.
 			//	メッシュの法線トランスフォーム時に不均一スケールで正しい変換をする際に逆転置行列ではなく余因子行列を利用する場合など.
+			//	https://github.com/graphitemaster/normals_revisited
 			static constexpr Mat44 Cofactor(const Mat44& m)
 			{
 				return InverseOrCofactor<true>(m);
@@ -759,6 +765,11 @@ namespace ngl
 			explicit constexpr Mat34(const Mat33& m)
 				: r0(m.r0.x, m.r0.y, m.r0.z, 0.0f), r1(m.r1.x, m.r1.y, m.r1.z, 0.0f), r2(m.r2.x, m.r2.y, m.r2.z)
 			{
+			}
+			// to Mat33.
+			constexpr Mat33 GetMat33()
+			{
+				return Mat33(r0.XYZ(), r1.XYZ(), r2.XYZ());
 			}
 			Vec3 GetColumn0() const
 			{

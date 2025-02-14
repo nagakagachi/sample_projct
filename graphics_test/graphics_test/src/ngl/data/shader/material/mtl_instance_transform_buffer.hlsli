@@ -8,6 +8,7 @@
 struct NglInstanceInfo
 {
     float3x4 mtx;
+    float4x4 mtx_cofactor;// 法線変換用余因子行列. https://github.com/graphitemaster/normals_revisited .
 };
 // 後でCBではなく巨大なTransformBufferにするかも.
 ConstantBuffer<NglInstanceInfo> ngl_cb_instance;
@@ -17,6 +18,11 @@ float3x4 NglGetInstanceTransform(int instance_id)
 {
     // 現状はCBだが, 後でIDから巨大なBuffer上の情報を取得する形式にしたい.
     return ngl_cb_instance.mtx;
+}
+float3x3 NglGetInstanceTransformCofactor(int instance_id)
+{
+    // 現状はCBだが, 後でIDから巨大なBuffer上の情報を取得する形式にしたい.
+    return ngl_cb_instance.mtx_cofactor;
 }
 
 

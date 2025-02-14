@@ -40,6 +40,9 @@ namespace gfx
 		StandardRenderModel	model_ = {};
 		
 	private:
+		void UpdateCbInstanceInfo(int cb_index);
+		
+	private:
 		std::array<rhi::RhiRef<rhi::BufferDep>, 2>	cb_instance_;
 		std::array<rhi::RhiRef<rhi::ConstantBufferViewDep>, 2>	cbv_instance_;
 

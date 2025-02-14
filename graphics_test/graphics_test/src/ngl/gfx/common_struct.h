@@ -14,6 +14,7 @@ namespace gfx
 	struct InstanceInfo
 	{
 		ngl::math::Mat34 mtx;
+		ngl::math::Mat44 mtx_cofactor;// 法線変換用余因子行列. https://github.com/graphitemaster/normals_revisited .
 	};
 
 	struct CbSceneView

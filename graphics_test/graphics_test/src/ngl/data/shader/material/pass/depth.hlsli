@@ -15,13 +15,19 @@
         VsInputWrapper input_wrap = ConstructVsInputWrapper(input);
         
         const float3x4 instance_mtx = NglGetInstanceTransform(0);
+        const float3x3 instance_mtx_cofactor = NglGetInstanceTransformCofactor(0);
         
         float3 pos_ws = mul(instance_mtx, float4(input_wrap.pos, 1.0)).xyz;
         float3 pos_vs = mul(ngl_cb_sceneview.cb_view_mtx, float4(pos_ws, 1.0));
         float4 pos_cs = mul(ngl_cb_sceneview.cb_proj_mtx, float4(pos_vs, 1.0));
 
-        // ジオメトリ側のTangentFrameが正規化されていない場合があるため.
-        float3 normal_ws = normalize(mul(instance_mtx, float4(input_wrap.normal, 0.0)).xyz);
+        // TangetnFrameの内, Normalは逆転置行列transpose(inverse(M)) または 余因子行列cofactor(M) で変換する.
+        //  TangentとBinormalは表面の平面上のベクトルであるため, Normalのように歪んだスケールの打消が不要のため元の行列Mで変換する.
+        //  
+        //  これは非均一スケールやミラーのスケールを含む変換でその表面の法線を適切に変換するための標準的な方法 (XYZ均一スケールでは元の行列Mでも問題ない).
+        //      https://github.com/graphitemaster/normals_revisited
+        //      https://stackoverflow.com/questions/13654401/why-transform-normals-with-the-transpose-of-the-inverse-of-the-modelview-matrix
+        float3 normal_ws = normalize(mul(instance_mtx_cofactor, float4(input_wrap.normal, 0.0)).xyz);
         float3 tangent_ws = normalize(mul(instance_mtx, float4(input_wrap.tangent, 0.0)).xyz);
         float3 binormal_ws = normalize(mul(instance_mtx, float4(input_wrap.binormal, 0.0)).xyz);
 
