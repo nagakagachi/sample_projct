@@ -502,6 +502,10 @@ void AppGame::BeginFrame()
 
 void AppGame::SyncRender()
 {
+	// IMGUIのEndFrame呼び出し. ImGui内部チェックでのEndFrame呼び出し忘れ警告の対応のためこのタイミング.
+	ngl::imgui::ImguiInterface::Instance().EndFrame();
+
+	
 	// RenderThread待機.
 	render_thread_.Wait();
 	
@@ -510,9 +514,6 @@ void AppGame::SyncRender()
 	
 	// RTGのフレーム開始処理.
 	rtg_manager_.BeginFrame();
-
-	// IMGUIのEndFrame呼び出し.
-	ngl::imgui::ImguiInterface::Instance().EndFrame();
 }
 
 // Render駆動.

@@ -11,6 +11,14 @@ namespace ngl
 	{
 
 		// -----------------------------------------------------------------------------------------
+		struct Mat22;
+		inline constexpr Mat22 operator+(const Mat22& m0, const Mat22& m1);
+		inline constexpr Mat22 operator-(const Mat22& m0, const Mat22& m1);
+		inline constexpr Mat22 operator*(const Mat22& m0, const Mat22& m1);
+		inline constexpr Mat22 operator*(const Mat22& m, float s);
+		inline constexpr Mat22 operator*(float s, const Mat22& m);
+		inline constexpr Mat22 operator/(const Mat22& m, float s);
+		
 		struct Mat22
 		{
 			union
@@ -94,8 +102,9 @@ namespace ngl
 			{
 				return m.r0.x * m.r1.y - m.r0.y * m.r1.x;
 			}
-			// 逆行列.
-			static constexpr Mat22 Inverse(const Mat22& m)
+			// 逆行列 または 行列式で割らずに余因子行列を返す.
+			template<bool IS_COFACTOR>
+			static constexpr Mat22 InverseOrCofactor(const Mat22& m)
 			{
 				const float c00 = m.r1.y;
 				const float c01 = -m.r1.x;
@@ -103,14 +112,34 @@ namespace ngl
 				const float c10 = -m.r0.y;
 				const float c11 = m.r0.x;
 
-				const float det = m.r0.x * c00 + m.r0.y * c01;
-				const float inv_det = 1.0f / det;
-
-				return Mat22(
-					c00 * inv_det, c10 * inv_det,
-					c01 * inv_det, c11 * inv_det
+				const auto cofactor = Mat22(
+					c00, c10,
+					c01, c11
 				);
+
+				if constexpr (IS_COFACTOR)
+				{
+					return cofactor;// 余因子行列のまま返す.
+				}
+				else
+				{
+					const float det = m.r0.x * c00 + m.r0.y * c01;
+					const float inv_det = 1.0f / det;
+					return cofactor * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+				}
 			}
+			// 逆行列.
+			static constexpr Mat22 Inverse(const Mat22& m)
+			{
+				return InverseOrCofactor<false>(m);
+			}
+			// 余因子行列. 逆行列計算時に行列式で割らない値を返す.
+			//	メッシュの法線トランスフォーム時に不均一スケールで正しい変換をする際に逆転置行列ではなく余因子行列を利用する場合など.
+			static constexpr Mat22 Cofactor(const Mat22& m)
+			{
+				return InverseOrCofactor<true>(m);
+			}
+			
 			// 回転行列.
 			static Mat22 Rot(float radian)
 			{
@@ -165,7 +194,16 @@ namespace ngl
 		}
 		// -----------------------------------------------------------------------------------------
 
+		
 		// -----------------------------------------------------------------------------------------
+		struct Mat33;
+		inline constexpr Mat33 operator+(const Mat33& m0, const Mat33& m1);
+		inline constexpr Mat33 operator-(const Mat33& m0, const Mat33& m1);
+		inline constexpr Mat33 operator*(const Mat33& m0, const Mat33& m1);
+		inline constexpr Mat33 operator*(const Mat33& m, float s);
+		inline constexpr Mat33 operator*(float s, const Mat33& m);
+		inline constexpr Mat33 operator/(const Mat33& m, float s);
+		
 		struct Mat33
 		{
 			union
@@ -270,8 +308,9 @@ namespace ngl
 				const float c02 = Mat22::Determinant(Mat22(m.r1.x, m.r1.y, m.r2.x, m.r2.y));
 				return m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
 			}
-			// 逆行列.
-			static constexpr Mat33 Inverse(const Mat33& m)
+			// 逆行列 または 行列式で割らずに余因子行列を返す.
+			template<bool IS_COFACTOR>
+			static constexpr Mat33 InverseOrCofactor(const Mat33& m)
 			{
 				const float c00 = Mat22::Determinant(Mat22(m.r1.y, m.r1.z, m.r2.y, m.r2.z));
 				const float c01 = -Mat22::Determinant(Mat22(m.r1.x, m.r1.z, m.r2.x, m.r2.z));
@@ -285,14 +324,33 @@ namespace ngl
 				const float c21 = -Mat22::Determinant(Mat22(m.r0.x, m.r0.z, m.r1.x, m.r1.z));
 				const float c22 = Mat22::Determinant(Mat22(m.r0.x, m.r0.y, m.r1.x, m.r1.y));
 
-				const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
-				const float inv_det = 1.0f / det;
-
-				return Mat33(
-					c00 * inv_det, c10 * inv_det, c20 * inv_det,
-					c01 * inv_det, c11 * inv_det, c21 * inv_det,
-					c02 * inv_det, c12 * inv_det, c22 * inv_det
+				const auto cofactor = Mat33(
+					c00, c10, c20,
+					c01, c11, c21,
+					c02, c12, c22
 				);
+
+				if constexpr (IS_COFACTOR)
+				{
+					return cofactor;// 余因子行列のまま返す.
+				}
+				else
+				{
+					const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
+					const float inv_det = 1.0f / det;
+					return cofactor * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+				}
+			}
+			// 逆行列.
+			static constexpr Mat33 Inverse(const Mat33& m)
+			{
+				return InverseOrCofactor<false>(m);
+			}
+			// 余因子行列. 逆行列計算時に行列式で割らない値を返す.
+			//	メッシュの法線トランスフォーム時に不均一スケールで正しい変換をする際に逆転置行列ではなく余因子行列を利用する場合など.
+			static constexpr Mat33 Cofactor(const Mat33& m)
+			{
+				return InverseOrCofactor<true>(m);
 			}
 
 			// X軸回転行列.
@@ -374,6 +432,14 @@ namespace ngl
 
 
 		// -----------------------------------------------------------------------------------------
+		struct Mat44;
+		inline constexpr Mat44 operator+(const Mat44& m0, const Mat44& m1);
+		inline constexpr Mat44 operator-(const Mat44& m0, const Mat44& m1);
+		inline constexpr Mat44 operator*(const Mat44& m0, const Mat44& m1);
+		inline constexpr Mat44 operator*(const Mat44& m, float s);
+		inline constexpr Mat44 operator*(float s, const Mat44& m);
+		inline constexpr Mat44 operator/(const Mat44& m, float s);
+		
 		struct Mat44
 		{
 			union
@@ -510,8 +576,9 @@ namespace ngl
 				const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
 				return det;
 			}
-			// 逆行列.
-			static constexpr Mat44 Inverse(const Mat44& m)
+			// 逆行列 または 行列式で割らずに余因子行列を返す.
+			template<bool IS_COFACTOR>
+			static constexpr Mat44 InverseOrCofactor(const Mat44& m)
 			{
 				const float c00 = Mat33::Determinant(Mat33(m.r1.y, m.r1.z, m.r1.w, m.r2.y, m.r2.z, m.r2.w, m.r3.y, m.r3.z, m.r3.w));
 				const float c01 = -Mat33::Determinant(Mat33(m.r1.x, m.r1.z, m.r1.w, m.r2.x, m.r2.z, m.r2.w, m.r3.x, m.r3.z, m.r3.w));
@@ -533,15 +600,34 @@ namespace ngl
 				const float c32 = -Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w));
 				const float c33 = Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z));
 
-				const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
-				const float inv_det = 1.0f / det;
-
-				return Mat44(
-					c00 * inv_det, c10 * inv_det, c20 * inv_det, c30 * inv_det,
-					c01 * inv_det, c11 * inv_det, c21 * inv_det, c31 * inv_det,
-					c02 * inv_det, c12 * inv_det, c22 * inv_det, c32 * inv_det,
-					c03 * inv_det, c13 * inv_det, c23 * inv_det, c33 * inv_det
+				const auto cofactor = Mat44(
+					c00, c10, c20, c30,
+					c01, c11, c21, c31,
+					c02, c12, c22, c32,
+					c03, c13, c23, c33
 				);
+
+				if constexpr (IS_COFACTOR)
+				{
+					return cofactor;// 余因子行列のまま返す.
+				}
+				else
+				{
+					const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
+					const float inv_det = 1.0f / det;
+					return cofactor * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+				}
+			}
+			// 逆行列.
+			static constexpr Mat44 Inverse(const Mat44& m)
+			{
+				return InverseOrCofactor<false>(m);
+			}
+			// 余因子行列. 逆行列計算時に行列式で割らない値を返す.
+			//	メッシュの法線トランスフォーム時に不均一スケールで正しい変換をする際に逆転置行列ではなく余因子行列を利用する場合など.
+			static constexpr Mat44 Cofactor(const Mat44& m)
+			{
+				return InverseOrCofactor<true>(m);
 			}
 
 			// X軸回転行列.
@@ -630,6 +716,7 @@ namespace ngl
 		// -----------------------------------------------------------------------------------------
 
 
+		// -----------------------------------------------------------------------------------------
 		// row-major Transform Matrix34 が必要な場合の Mat44->Mat34 コンバート用.
 		struct Mat34
 		{
