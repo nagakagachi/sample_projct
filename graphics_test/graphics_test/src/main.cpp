@@ -442,6 +442,7 @@ bool AppGame::Initialize()
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
 				tr.SetDiagonal(ngl::math::Vec4(1.0f));
+				tr = ngl::math::Mat44::RotAxisX(0.1f * ngl::math::k_pi_f * 2.0f) * tr;
 				tr.SetColumn3(ngl::math::Vec4(0.0f, 12.0f, 0.0f, 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
@@ -454,6 +455,7 @@ bool AppGame::Initialize()
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
 				tr.SetDiagonal(ngl::math::Vec4(1.0f, 0.3f, 1.0f, 1.0f));//被均一スケールテスト.
+				tr = ngl::math::Mat44::RotAxisX(0.1f * ngl::math::k_pi_f * 2.0f) * tr;
 				tr.SetColumn3(ngl::math::Vec4(1.5f, 12.0f, 0.0f, 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);
@@ -466,6 +468,7 @@ bool AppGame::Initialize()
 				
 				ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
 				tr.SetDiagonal(ngl::math::Vec4(1.0f, 3.0f, 1.0f, 1.0f));//被均一スケールテスト.
+				tr = ngl::math::Mat44::RotAxisX(0.1f * ngl::math::k_pi_f * 2.0f) * tr;
 				tr.SetColumn3(ngl::math::Vec4(3.0f, 12.0f, 0.0f, 1.0f));
 
 				mc->transform_ = ngl::math::Mat34(tr);

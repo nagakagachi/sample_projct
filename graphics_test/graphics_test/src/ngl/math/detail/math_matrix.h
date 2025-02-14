@@ -112,20 +112,25 @@ namespace ngl
 				const float c10 = -m.r0.y;
 				const float c11 = m.r0.x;
 
-				const auto cofactor = Mat22(
-					c00, c10,
-					c01, c11
-				);
 
 				if constexpr (IS_COFACTOR)
 				{
+					const auto cofactor = Mat22(
+						c00, c01,
+						c10, c11
+					);
 					return cofactor;// 余因子行列のまま返す.
 				}
 				else
 				{
+					// cofactorの転置.
+					const auto adj = Mat22(
+						c00, c10,
+						c01, c11
+					);
 					const float det = m.r0.x * c00 + m.r0.y * c01;
 					const float inv_det = 1.0f / det;
-					return cofactor * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+					return adj * inv_det;// 余因子行列を行列式で割って逆行列として返す.
 				}
 			}
 			// 逆行列.
@@ -324,21 +329,27 @@ namespace ngl
 				const float c21 = -Mat22::Determinant(Mat22(m.r0.x, m.r0.z, m.r1.x, m.r1.z));
 				const float c22 = Mat22::Determinant(Mat22(m.r0.x, m.r0.y, m.r1.x, m.r1.y));
 
-				const auto cofactor = Mat33(
-					c00, c10, c20,
-					c01, c11, c21,
-					c02, c12, c22
-				);
 
 				if constexpr (IS_COFACTOR)
 				{
+					const auto cofactor = Mat33(
+						c00, c01, c02,
+						c10, c11, c12,
+						c20, c21, c22
+					);
 					return cofactor;// 余因子行列のまま返す.
 				}
 				else
 				{
+					// cofactorの転置.
+					const auto adj = Mat33(
+						c00, c10, c20,
+						c01, c11, c21,
+						c02, c12, c22
+					);
 					const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
 					const float inv_det = 1.0f / det;
-					return cofactor * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+					return adj * inv_det;// 余因子行列を行列式で割って逆行列として返す.
 				}
 			}
 			// 逆行列.
@@ -605,22 +616,29 @@ namespace ngl
 				const float c32 = -Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.w, m.r1.x, m.r1.y, m.r1.w, m.r2.x, m.r2.y, m.r2.w));
 				const float c33 = Mat33::Determinant(Mat33(m.r0.x, m.r0.y, m.r0.z, m.r1.x, m.r1.y, m.r1.z, m.r2.x, m.r2.y, m.r2.z));
 
-				const auto cofactor = Mat44(
-					c00, c10, c20, c30,
-					c01, c11, c21, c31,
-					c02, c12, c22, c32,
-					c03, c13, c23, c33
-				);
 
 				if constexpr (IS_COFACTOR)
 				{
+					const auto cofactor = Mat44(
+						c00, c01, c02, c03,
+						c10, c11, c12, c13,
+						c20, c21, c22, c23,
+						c30, c31, c32, c33
+					);
 					return cofactor;// 余因子行列のまま返す.
 				}
 				else
 				{
+					// cofactorの転置.
+					const auto adj = Mat44(
+						c00, c10, c20, c30,
+						c01, c11, c21, c31,
+						c02, c12, c22, c32,
+						c03, c13, c23, c33
+					);
 					const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
 					const float inv_det = 1.0f / det;
-					return cofactor * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+					return adj * inv_det;// 余因子行列を行列式で割って逆行列として返す.
 				}
 			}
 			// 逆行列.
