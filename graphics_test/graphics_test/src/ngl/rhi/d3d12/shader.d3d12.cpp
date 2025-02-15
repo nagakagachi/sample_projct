@@ -1311,8 +1311,6 @@ namespace rhi
 				PipelineResourceViewLayoutDep::Desc				actual_key_{};
 				std::shared_ptr<PipelineResourceViewLayoutDep>	p_sig_{};
 			};
-
-			std::mutex bin_mutex_{};
 			std::vector<Elem> list_{};
 		};
 		
@@ -1324,8 +1322,6 @@ namespace rhi
 				D3D12_GRAPHICS_PIPELINE_STATE_DESC			actual_key_{};
 				Microsoft::WRL::ComPtr<ID3D12PipelineState> pso_{}; 
 			};
-			
-			std::mutex bin_mutex_{};
 			std::vector<Elem> list_{};
 		};
 		
@@ -1337,13 +1333,11 @@ namespace rhi
 				D3D12_COMPUTE_PIPELINE_STATE_DESC			actual_key_{};
 				Microsoft::WRL::ComPtr<ID3D12PipelineState> pso_{}; 
 			};
-			
-			std::mutex bin_mutex_{};
 			std::vector<Elem> list_{};
 		};
 		
 		// 適当なハッシュ.
-		auto CalcHash(const void* blob, int byte_size) -> u64
+		auto CalcHashU64(const void* blob, int byte_size) -> u64
 		{
 			const char* data = reinterpret_cast<const char*>(blob);
 			const int window_size = sizeof(u64);
@@ -1353,7 +1347,7 @@ namespace rhi
 			for(int w = 0; w < window_count; ++w)
 			{
 				const u64 wv = *reinterpret_cast<const u64*>(data + (w * window_size));
-				v = v ^ wv;
+				v = v ^ wv;// 単純XOR.
 			}
 			// 端数部.
 			for(int r = 0; r < residual_byte; ++r)
@@ -1367,12 +1361,13 @@ namespace rhi
 		// RootSig Cache.
 		std::shared_ptr<PipelineResourceViewLayoutDep> Cache(DeviceDep* p_device, const PipelineResourceViewLayoutDep::Desc& sig_desc)
 		{
+			// 全体Lock.
+			std::scoped_lock<std::mutex> lock(sig_mutex_);
+			
 			// PSOに含まれるRootSigポインタが異なるとCacheキーが異なってしまうため, Cacheが動作するようにRootSig(の抽象クラス)もCacheする.
 			PsoSignatureCacheBin* sig_bin{};
 			{
-				// 全体Lock.
-				std::scoped_lock<std::mutex> lock(sig_mutex_);
-				const CacheBinKey h = CalcHash(&sig_desc, sizeof(sig_desc));
+				const CacheBinKey h = CalcHashU64(&sig_desc, sizeof(sig_desc));
 				auto it = sig_cache_.find(h);
 				if(it == sig_cache_.end())
 				{
@@ -1384,7 +1379,6 @@ namespace rhi
 			}
 			assert(sig_bin);
 			{
-				std::scoped_lock<std::mutex> lock(sig_bin->bin_mutex_);
 				int find_index = -1;
 				for(size_t i = 0; i < sig_bin->list_.size(); ++i)
 				{
@@ -1422,11 +1416,12 @@ namespace rhi
 		//	RootSigポインタがDescに含まれるため同じシェーダセットでもCacheで同一化する必要があるため.
 		Microsoft::WRL::ComPtr<ID3D12PipelineState> Cache(DeviceDep* p_device, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pso_desc)
 		{
+			// 全体Lock.
+			std::scoped_lock<std::mutex> lock(graphics_pso_mutex_);
+			
 			GraphicsPsoCacheBin* cache_bin = {};
 			{
-				// 全体Lock.
-				std::scoped_lock<std::mutex> lock(graphics_pso_mutex_);
-				const CacheBinKey h = CalcHash(&pso_desc, sizeof(pso_desc));
+				const CacheBinKey h = CalcHashU64(&pso_desc, sizeof(pso_desc));
 				auto it = graphics_cache_.find(h);
 				if(it == graphics_cache_.end())
 				{
@@ -1439,7 +1434,6 @@ namespace rhi
 			assert(cache_bin);
 
 			{
-				std::scoped_lock<std::mutex> lock(cache_bin->bin_mutex_);
 				int find_index = -1;
 				for(size_t i = 0; i < cache_bin->list_.size(); ++i)
 				{
@@ -1472,11 +1466,12 @@ namespace rhi
 		//	RootSigポインタがDescに含まれるため同じシェーダセットでもCacheで同一化する必要があるため.
 		Microsoft::WRL::ComPtr<ID3D12PipelineState> Cache(DeviceDep* p_device, const D3D12_COMPUTE_PIPELINE_STATE_DESC& pso_desc)
 		{
+			// 全体Lock.
+			std::scoped_lock<std::mutex> lock(compute_pso_mutex_);
+			
 			ComputePsoCacheBin* cache_bin = {};
 			{
-				// 全体Lock.
-				std::scoped_lock<std::mutex> lock(compute_pso_mutex_);
-				const CacheBinKey h = CalcHash(&pso_desc, sizeof(pso_desc));
+				const CacheBinKey h = CalcHashU64(&pso_desc, sizeof(pso_desc));
 				auto it = compute_cache_.find(h);
 				if(it == compute_cache_.end())
 				{
@@ -1489,7 +1484,6 @@ namespace rhi
 			assert(cache_bin);
 
 			{
-				std::scoped_lock<std::mutex> lock(cache_bin->bin_mutex_);
 				int find_index = -1;
 				for(size_t i = 0; i < cache_bin->list_.size(); ++i)
 				{

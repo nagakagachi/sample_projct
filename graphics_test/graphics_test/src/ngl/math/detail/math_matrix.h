@@ -130,7 +130,7 @@ namespace ngl
 					);
 					const float det = m.r0.x * c00 + m.r0.y * c01;
 					const float inv_det = 1.0f / det;
-					return adj * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+					return adj * inv_det;// 行列式で割って逆行列として返す.
 				}
 			}
 			// 逆行列.
@@ -349,7 +349,7 @@ namespace ngl
 					);
 					const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02;
 					const float inv_det = 1.0f / det;
-					return adj * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+					return adj * inv_det;// 行列式で割って逆行列として返す.
 				}
 			}
 			// 逆行列.
@@ -638,7 +638,7 @@ namespace ngl
 					);
 					const float det = m.r0.x * c00 + m.r0.y * c01 + m.r0.z * c02 + m.r0.w * c03;
 					const float inv_det = 1.0f / det;
-					return adj * inv_det;// 余因子行列を行列式で割って逆行列として返す.
+					return adj * inv_det;// 行列式で割って逆行列として返す.
 				}
 			}
 			// 逆行列.
