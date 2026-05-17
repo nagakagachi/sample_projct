@@ -2,7 +2,7 @@
 #if 0
 bbv_depthtest_carving_indirect_arg_build_cs.hlsl
 
-DepthTest Frustum ActiveList を元に Carving 用 DispatchIndirect 引数を生成する。
+DepthTestCarving Frustum ActiveList を元に Carving 用 DispatchIndirect 引数を生成する。
 #endif
 
 #include "../srvs_util.hlsli"

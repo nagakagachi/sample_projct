@@ -1,9 +1,9 @@
 #if 0
 bbv_depthtest_carving_cs.hlsl
 
-DepthTest ベース更新向けの Removal。
+DepthTestCarving ベース更新向けの Carving。
 Frustum 候補 Brick に対して bitcell 単位の深度テストを行い、
-手前側の fine voxel だけを除去する。
+手前側の fine voxel だけを削る。
 #endif
 
 #include "../srvs_util.hlsli"
@@ -63,7 +63,7 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
             }
 
             const float3 ndc = bitcell_center_cs.xyz / bitcell_center_cs.w;
-            // 各Viewの射影空間で前後範囲外のセルはRemoval対象にしない。
+            // 各Viewの射影空間で前後範囲外のセルはCarving対象にしない。
             // Main/Shadowともに同一ロジックで「そのViewに映っていない前後」を保持する。
             if(ndc.z < 0.0 || ndc.z > 1.0)
             {

@@ -139,7 +139,7 @@ namespace ngl::render::app
     int ScreenReconstructedVoxelStructure::dbg_assp_total_ray_count_ = 0;
     int ScreenReconstructedVoxelStructure::dbg_assp_probe_count_ = 0;
     int ScreenReconstructedVoxelStructure::dbg_gi_update_sample_mode_ = static_cast<int>(SrvsGiSolutionMode::Assp);
-    int ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_bbv_update_flow_legacy;
+    int ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_default_srvs_param.bbv_update_flow_mode;
     float ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_ = k_default_srvs_param.bbv_depthtest_injection_world_offset;
 
     void ScreenReconstructedVoxelStructure::DrawDebugMenu(
@@ -167,7 +167,7 @@ namespace ngl::render::app
             {
                 ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_bbv_update_flow_legacy;
             }
-            if(ImGui::RadioButton("DepthTest", ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ == k_bbv_update_flow_depthtest))
+            if(ImGui::RadioButton("DepthTestCarving", ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ == k_bbv_update_flow_depthtest))
             {
                 ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_bbv_update_flow_depthtest;
             }
@@ -1681,8 +1681,8 @@ namespace ngl::render::app
 
             if(dispatch_param_cache_.bbv_update_flow_mode == k_bbv_update_flow_depthtest)
             {
-                // DepthTest flow は Injection 後の最新 bitmask で候補抽出してから Removal する。
-                // これにより Frustum ActiveList には Empty Brick を含めず、Removal 起動数を最小化できる。
+                // DepthTestCarving flow は Injection 後の最新 bitmask で候補抽出してから Carving する。
+                // これにより Frustum ActiveList には Empty Brick を含めず、Carving 起動数を最小化できる。
                 if(target_depth_info.is_enable_injection_pass)
                 {
                     func_call_depthtest_injection_pass(p_command_list, cbh_injection_view_info, target_depth_info);
