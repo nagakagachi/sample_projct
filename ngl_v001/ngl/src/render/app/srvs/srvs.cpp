@@ -875,8 +875,9 @@ namespace ngl::render::app
             pso_bbv_removal_indirect_arg_build_ = CreateComputePSO("srvs/bbv/bbv_removal_indirect_arg_build_cs.hlsl");
             pso_bbv_element_update_ = CreateComputePSO("srvs/bbv/bbv_element_update_cs.hlsl");
             pso_bbv_depthtest_frustum_cull_ = CreateComputePSO("srvs/bbv/bbv_depthtest_frustum_cull_cs.hlsl");
+            pso_bbv_depthtest_carving_indirect_arg_build_ = CreateComputePSO("srvs/bbv/bbv_depthtest_carving_indirect_arg_build_cs.hlsl");
             pso_bbv_depthtest_injection_apply_ = CreateComputePSO("srvs/bbv/bbv_depthtest_injection_apply_cs.hlsl");
-            pso_bbv_depthtest_coarse_removal_ = CreateComputePSO("srvs/bbv/bbv_depthtest_coarse_removal_cs.hlsl");
+            pso_bbv_depthtest_carving_ = CreateComputePSO("srvs/bbv/bbv_depthtest_carving_cs.hlsl");
 
             pso_fsp_clear_ = CreateComputePSO("srvs/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("srvs/fsp/fsp_begin_update_cs.hlsl");
@@ -1032,12 +1033,23 @@ namespace ngl::render::app
             bbv_depthtest_frustum_brick_list_.InitializeAsTyped(p_device,
                                            rhi::BufferDep::Desc{
                                                .element_byte_size = sizeof(uint32_t),
-                                               .element_count     = bbv_grid_updater_.Get().total_count + 1,// 1..N に候補 index+1 を格納. 0 は無効.
+                                              .element_count     = bbv_grid_updater_.Get().total_count + 1,// 0 はcounter, 1..N は active voxel index.
 
                                                .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
                                                .heap_type = rhi::EResourceHeapType::Default},
                                            rhi::EResourceFormat::Format_R32_UINT
                                         ,   "Srvs_BbvDepthTestFrustumBrickList");
+        }
+        {
+            bbv_depthtest_frustum_indirect_arg_.InitializeAsTyped(p_device,
+                                          rhi::BufferDep::Desc{
+                                              .element_byte_size = sizeof(uint32_t),
+                                              .element_count     = 3,
+
+                                              .bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::IndirectArg,
+                                              .heap_type = rhi::EResourceHeapType::Default},
+                                          rhi::EResourceFormat::Format_R32_UINT
+                                        ,   "Srvs_BbvDepthTestFrustumIndirectArg");
         }
 
         {
@@ -1490,12 +1502,14 @@ namespace ngl::render::app
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_bbv_begin_view_update_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
                 pso_bbv_begin_view_update_->SetView(&desc_set, "RWRemoveVoxelList", bbv_removal_list_.uav.Get());
+                pso_bbv_begin_view_update_->SetView(&desc_set, "RWFrustumBrickList", bbv_depthtest_frustum_brick_list_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_bbv_begin_view_update_.Get());
                 p_command_list->SetDescriptorSet(pso_bbv_begin_view_update_.Get(), &desc_set);
                 pso_bbv_begin_view_update_->DispatchHelper(p_command_list, 1, 1, 1);
 
                 p_command_list->ResourceUavBarrier(bbv_removal_list_.buffer.Get());
+                p_command_list->ResourceUavBarrier(bbv_depthtest_frustum_brick_list_.buffer.Get());
             }
 
             // Removal Pass Lambda.
@@ -1599,12 +1613,31 @@ namespace ngl::render::app
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
                 pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
+                pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
                 pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "RWFrustumBrickList", bbv_depthtest_frustum_brick_list_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_bbv_depthtest_frustum_cull_.Get());
                 p_command_list->SetDescriptorSet(pso_bbv_depthtest_frustum_cull_.Get(), &desc_set);
                 pso_bbv_depthtest_frustum_cull_->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
                 p_command_list->ResourceUavBarrier(bbv_depthtest_frustum_brick_list_.buffer.Get());
+            };
+            auto func_call_depthtest_carving_indirect_arg_build_pass = [this](
+                rhi::GraphicsCommandListDep* p_command_list
+            )
+            {
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvDepthTestCarvingIndirectArgBuild");
+
+                bbv_depthtest_frustum_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+
+                ngl::rhi::DescriptorSetDep desc_set = {};
+                pso_bbv_depthtest_carving_indirect_arg_build_->SetView(&desc_set, "FrustumBrickList", bbv_depthtest_frustum_brick_list_.srv.Get());
+                pso_bbv_depthtest_carving_indirect_arg_build_->SetView(&desc_set, "RWFrustumBrickIndirectArg", bbv_depthtest_frustum_indirect_arg_.uav.Get());
+
+                p_command_list->SetPipelineState(pso_bbv_depthtest_carving_indirect_arg_build_.Get());
+                p_command_list->SetDescriptorSet(pso_bbv_depthtest_carving_indirect_arg_build_.Get(), &desc_set);
+                pso_bbv_depthtest_carving_indirect_arg_build_->DispatchHelper(p_command_list, 1, 1, 1);
+
+                bbv_depthtest_frustum_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::IndirectArgument);
             };
             auto func_call_depthtest_injection_pass = [this](
                 rhi::GraphicsCommandListDep* p_command_list,
@@ -1625,39 +1658,40 @@ namespace ngl::render::app
                 pso_bbv_depthtest_injection_apply_->DispatchHelper(p_command_list, target_depth_info.atlas_resolution.x, target_depth_info.atlas_resolution.y, 1);  // Screen処理でDispatch.
                 p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
             };
-            auto func_call_depthtest_coarse_removal_pass = [this](
+            auto func_call_depthtest_carving_pass = [this](
                 rhi::GraphicsCommandListDep* p_command_list,
                 rhi::ConstantBufferPooledHandle cbh_injection_view_info,
                 const InjectionSourceDepthBufferViewInfo& target_depth_info
             )
             {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvDepthTestCoarseRemoval");
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvDepthTestCarving");
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_bbv_depthtest_coarse_removal_->SetView(&desc_set, "TexHardwareDepth", target_depth_info.hw_depth_srv.Get());
-                pso_bbv_depthtest_coarse_removal_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-                pso_bbv_depthtest_coarse_removal_->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
-                pso_bbv_depthtest_coarse_removal_->SetView(&desc_set, "FrustumBrickList", bbv_depthtest_frustum_brick_list_.srv.Get());
-                pso_bbv_depthtest_coarse_removal_->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
+                pso_bbv_depthtest_carving_->SetView(&desc_set, "TexHardwareDepth", target_depth_info.hw_depth_srv.Get());
+                pso_bbv_depthtest_carving_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
+                pso_bbv_depthtest_carving_->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
+                pso_bbv_depthtest_carving_->SetView(&desc_set, "FrustumBrickList", bbv_depthtest_frustum_brick_list_.srv.Get());
+                pso_bbv_depthtest_carving_->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
 
-                p_command_list->SetPipelineState(pso_bbv_depthtest_coarse_removal_.Get());
-                p_command_list->SetDescriptorSet(pso_bbv_depthtest_coarse_removal_.Get(), &desc_set);
-                pso_bbv_depthtest_coarse_removal_->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
+                p_command_list->SetPipelineState(pso_bbv_depthtest_carving_.Get());
+                p_command_list->SetDescriptorSet(pso_bbv_depthtest_carving_.Get(), &desc_set);
+                p_command_list->DispatchIndirect(bbv_depthtest_frustum_indirect_arg_.buffer.Get());
                 p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
             };
 
             if(dispatch_param_cache_.bbv_update_flow_mode == k_bbv_update_flow_depthtest)
             {
-                // DepthTest flow は Injection -> Removal の順序で実行する。
-                // Legacyフローは保持し、デバッグメニュー切替で比較可能にする。
-                func_call_depthtest_frustum_pass(p_command_list, cbh_injection_view_info);
+                // DepthTest flow は Injection 後の最新 bitmask で候補抽出してから Removal する。
+                // これにより Frustum ActiveList には Empty Brick を含めず、Removal 起動数を最小化できる。
                 if(target_depth_info.is_enable_injection_pass)
                 {
                     func_call_depthtest_injection_pass(p_command_list, cbh_injection_view_info, target_depth_info);
                 }
                 if(target_depth_info.is_enable_removal_pass)
                 {
-                    func_call_depthtest_coarse_removal_pass(p_command_list, cbh_injection_view_info, target_depth_info);
+                    func_call_depthtest_frustum_pass(p_command_list, cbh_injection_view_info);
+                    func_call_depthtest_carving_indirect_arg_build_pass(p_command_list);
+                    func_call_depthtest_carving_pass(p_command_list, cbh_injection_view_info, target_depth_info);
                 }
             }
             else

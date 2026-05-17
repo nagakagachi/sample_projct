@@ -1,5 +1,5 @@
 #if 0
-bbv_depthtest_coarse_removal_cs.hlsl
+bbv_depthtest_carving_cs.hlsl
 
 DepthTest ベース更新向けの Removal。
 Frustum 候補 Brick に対して bitcell 単位の深度テストを行い、
@@ -13,21 +13,17 @@ Frustum 候補 Brick に対して bitcell 単位の深度テストを行い、
 ConstantBuffer<BbvSurfaceInjectionViewInfo> cb_injection_src_view_info;
 Texture2D TexHardwareDepth;
 
-[numthreads(64, 1, 1)]
+[numthreads(k_bbv_depthtest_carving_thread_group_size, 1, 1)]
 void main_cs(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint brick_count = bbv_brick_count();
-    if(dtid.x >= brick_count)
+    const uint active_brick_count = FrustumBrickList[0];
+    if(dtid.x >= active_brick_count)
     {
         return;
     }
 
-    const uint packed_index = FrustumBrickList[dtid.x + 1];
-    if(0 == packed_index)
-    {
-        return;
-    }
-    const uint voxel_index = packed_index - 1;
+    // ActiveList形式: 0番はcounter、1番以降は有効 voxel index。
+    const uint voxel_index = FrustumBrickList[dtid.x + 1];
     const int3 voxel_coord_toroidal = index_to_voxel_coord(voxel_index, cb_srvs.bbv.grid_resolution);
     const int3 voxel_coord_linear = voxel_coord_toroidal_mapping(
         voxel_coord_toroidal,

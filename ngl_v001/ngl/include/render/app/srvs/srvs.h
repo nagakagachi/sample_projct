@@ -192,8 +192,9 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_element_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_coarse_removal_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_ = {};
 
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
@@ -239,8 +240,10 @@ namespace ngl::render::app
         // 除去用リスト.
         ComputeBufferSet bbv_removal_list_ = {};
         ComputeBufferSet bbv_removal_indirect_arg_ = {};
-        // 深度テストベース更新用. 1..N に候補 Brick index+1 を格納し、0 は無効値.
+        // 深度テストベース更新用 ActiveList.
+        // 0番は active counter, 1..N は voxel index.
         ComputeBufferSet bbv_depthtest_frustum_brick_list_ = {};
+        ComputeBufferSet bbv_depthtest_frustum_indirect_arg_ = {};
 
 
         // Frustum Surface Probe. Fsp.

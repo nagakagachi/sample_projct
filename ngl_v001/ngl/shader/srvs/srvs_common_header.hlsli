@@ -134,6 +134,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     // dispatch 自体も group 単位に圧縮し、未選択 Brick を起動しない前提の固定設定。
     #define k_bbv_radiance_resolve_brick_group_resolution (2)
     #define k_bbv_radiance_resolve_phase_count (k_bbv_radiance_resolve_brick_group_resolution * k_bbv_radiance_resolve_brick_group_resolution * k_bbv_radiance_resolve_brick_group_resolution)
+    // DepthTest carving 系 1D Compute の thread group size.
+    #define k_bbv_depthtest_carving_thread_group_size (128)
 
 
     #define k_bbv_per_voxel_resolution_inv (1.0 / float(k_bbv_per_voxel_resolution))
