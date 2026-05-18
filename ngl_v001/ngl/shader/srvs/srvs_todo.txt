@@ -1,13 +1,11 @@
 SRVS TODO / Known Issues
 
-[P1][pending] ShadowView FrustumCull inefficiency
-- Orthoかつ広範囲のShadowViewでFrustumCullが効きにくく、DepthBufferベースCarvingの最適化余地が残る。
+[P1][pending] DepthTestCarving: ShadowView FrustumCull inefficiency
+- DepthTestCarving運用で、Orthoかつ広範囲のShadowViewではFrustumCullが効きにくい。
+- Ortho且つ広範囲向けに最適化を行うか、MainView補助に特化したより軽量な方式を模索する必要がある。
 
-[P2][in_progress] Radiance black brick
-- DepthTestCarving版でRadiance Injection座標とOccupancy Injection座標がずれ、occupied voxelにradianceが乗らず黒化するケースがある。修正は未完了。
+[P4][pending] DepthTestCarving: MainView grazing over-removal
+- DepthTestCarving運用で、MainViewの掠め角ではRemovalが強く働き、Voxelが消えやすい。
 
-[P3][pending] Main/Shadow removal mismatch
-- MainViewとShadowViewでRemoval結果が一致しない。
-
-[P4][pending] MainView grazing over-removal
-- MainViewの掠め角でRemovalが強く働き、Voxelが消えやすい。
+[P5][pending] DepthTestCarving: screen-edge residual voxels
+- 画面端でBrickの一部が画面外にはみ出る領域ではDepthTestCarvingが十分に効かず、Voxelが残りやすい。
