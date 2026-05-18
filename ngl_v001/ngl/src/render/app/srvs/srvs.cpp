@@ -869,6 +869,7 @@ namespace ngl::render::app
             pso_bbv_removal_apply_ = CreateComputePSO("srvs/bbv/bbv_removal_apply_cs.hlsl");
             pso_bbv_injection_apply_     = CreateComputePSO("srvs/bbv/bbv_injection_apply_cs.hlsl");
             pso_bbv_radiance_injection_apply_ = CreateComputePSO("srvs/bbv/bbv_radiance_injection_apply_cs.hlsl");
+            pso_bbv_radiance_injection_apply_short_ray_ = CreateComputePSO("srvs/bbv/bbv_radiance_injection_apply_short_ray_cs.hlsl");
             pso_bbv_radiance_resolve_ = CreateComputePSO("srvs/bbv/bbv_radiance_resolve_cs.hlsl");
             pso_bbv_brick_count_aggregate_ = CreateComputePSO("srvs/bbv/bbv_brick_count_aggregate_cs.hlsl");
             pso_bbv_hibrick_count_aggregate_ = CreateComputePSO("srvs/bbv/bbv_hibrick_count_aggregate_cs.hlsl");
@@ -1774,18 +1775,25 @@ namespace ngl::render::app
             const auto injection_dispatch_resolution = CalcBbvRadianceInjectionDispatchResolution(math::Vec2u(
                 static_cast<u32>(view_info.atlas_resolution.x),
                 static_cast<u32>(view_info.atlas_resolution.y)));
+            auto& pso_bbv_radiance_injection = (dispatch_param_cache_.bbv_update_flow_mode == k_bbv_update_flow_depthtest)
+                ? pso_bbv_radiance_injection_apply_short_ray_
+                : pso_bbv_radiance_injection_apply_;
 
             ngl::rhi::DescriptorSetDep desc_set = {};
-            pso_bbv_radiance_injection_apply_->SetView(&desc_set, "TexHardwareDepth", view_info.hw_depth_srv.Get());
-            pso_bbv_radiance_injection_apply_->SetView(&desc_set, "TexInputRadiance", view_info.hw_color_srv.Get());
-            pso_bbv_radiance_injection_apply_->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
-            pso_bbv_radiance_injection_apply_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-            pso_bbv_radiance_injection_apply_->SetView(&desc_set, "RWBbvRadianceAccumBuffer", bbv_radiance_accum_buffer_.uav.Get());
+            pso_bbv_radiance_injection->SetView(&desc_set, "TexHardwareDepth", view_info.hw_depth_srv.Get());
+            pso_bbv_radiance_injection->SetView(&desc_set, "TexInputRadiance", view_info.hw_color_srv.Get());
+            pso_bbv_radiance_injection->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
+            pso_bbv_radiance_injection->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
+            pso_bbv_radiance_injection->SetView(&desc_set, "RWBbvRadianceAccumBuffer", bbv_radiance_accum_buffer_.uav.Get());
+            if(dispatch_param_cache_.bbv_update_flow_mode == k_bbv_update_flow_depthtest)
+            {
+                pso_bbv_radiance_injection->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+            }
 
-            p_command_list->SetPipelineState(pso_bbv_radiance_injection_apply_.Get());
-            p_command_list->SetDescriptorSet(pso_bbv_radiance_injection_apply_.Get(), &desc_set);
+            p_command_list->SetPipelineState(pso_bbv_radiance_injection.Get());
+            p_command_list->SetDescriptorSet(pso_bbv_radiance_injection.Get(), &desc_set);
             // 1F に各 2x2 screen tile group から 1 tile だけ更新する前提なので、dispatch も group 数に合わせる。
-            pso_bbv_radiance_injection_apply_->DispatchHelper(p_command_list, injection_dispatch_resolution.x, injection_dispatch_resolution.y, 1);
+            pso_bbv_radiance_injection->DispatchHelper(p_command_list, injection_dispatch_resolution.x, injection_dispatch_resolution.y, 1);
 
             p_command_list->ResourceUavBarrier(bbv_radiance_accum_buffer_.buffer.Get());
         }

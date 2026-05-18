@@ -130,6 +130,17 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_bbv_radiance_injection_tile_width (16)
     #define k_bbv_radiance_injection_tile_group_resolution (2)
     #define k_bbv_radiance_injection_phase_count (k_bbv_radiance_injection_tile_group_resolution * k_bbv_radiance_injection_tile_group_resolution)
+    // 追加の間引き定数. 1で無効、2以上でよりアグレッシブに間引く。
+    // ピクセル単位のサブサンプリング間隔。2なら概ね1/2、4なら概ね1/4の密度で注入。
+    #define k_bbv_radiance_injection_pixel_skip_stride (1)
+    // フレーム間引き。N=0で毎フレーム実行、N>0で (N+1) フレームに1回実行。
+    #define k_bbv_radiance_injection_frame_skip_count (0)
+    // Empty始点時の短距離フォールバック探索長（単位: Brick長）。
+    // 1.0で「最大1Brick先まで」探索する。
+    #define k_bbv_radiance_short_ray_length_in_brick (1.0)
+    // Empty始点時の短距離フォールバック探索ステップ数。
+    // 値を増やすほどヒットしやすいが、コストは増える。
+    #define k_bbv_radiance_short_ray_step_count (4)
     // BBV radiance resolve は 2x2x2 Brick group ごとに 1F で 1 Brick を処理し、8F で全更新する。
     // dispatch 自体も group 単位に圧縮し、未選択 Brick を起動しない前提の固定設定。
     #define k_bbv_radiance_resolve_brick_group_resolution (2)
