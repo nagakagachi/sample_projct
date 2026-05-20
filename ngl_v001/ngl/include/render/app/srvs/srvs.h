@@ -213,8 +213,8 @@ namespace ngl::render::app
 
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_clear_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_begin_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_preupdate_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_build_ray_meta_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_finalize_ray_query_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_trace_ = {};
@@ -277,7 +277,6 @@ namespace ngl::render::app
         ComputeTextureSet assp_probe_variance_tex_[2] = {}; // f16_rgba, x: filtered mean, y: filtered second moment, z: raw mean, w: raw variance.
         ComputeTextureSet assp_probe_packed_sh_tex_ = {}; // f16_rgba, 係数優先2x2 atlas.
         ComputeTextureSet assp_probe_best_prev_tile_tex_ = {}; // r32_uint, Preupdateで計算したBestPrevTile.
-        ComputeBufferSet assp_probe_indirect_arg_ = {}; // Probe単位 pass(Resolve/Variance/SH) 用 DispatchIndirect 3 uint.
         ComputeBufferSet assp_probe_trace_indirect_arg_ = {}; // RayTrace pass 用 DispatchIndirect 3 uint.
         ComputeBufferSet assp_probe_total_ray_count_buffer_ = {}; // [0] = frame total traced ray count.
         ComputeBufferSet assp_probe_ray_meta_buffer_ = {}; // packed ray meta: offset|count per active ASSP probe(tile).

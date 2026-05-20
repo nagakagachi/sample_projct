@@ -21,7 +21,6 @@ RWTexture2D<uint>      RWAdaptiveScreenSpaceProbeBestPrevTileTex;
 Texture2D<float4>      AdaptiveScreenSpaceProbePackedSHTex;
 RWTexture2D<float4>    RWAdaptiveScreenSpaceProbePackedSHTex;
 
-RWBuffer<uint>         RWAsspProbeIndirectArg;
 RWBuffer<uint>         RWAsspProbeTraceIndirectArg;
 Buffer<uint>           AsspProbeTotalRayCountBuffer;
 RWBuffer<uint>         RWAsspProbeTotalRayCountBuffer;
