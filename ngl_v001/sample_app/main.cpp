@@ -108,11 +108,13 @@ static float dbgw_perf_main_thread_sleep_millisec = 0.0f;
 static float dbgw_stat_primary_rtg_construct = {};
 static float dbgw_stat_primary_rtg_compile   = {};
 static float dbgw_stat_primary_rtg_execute   = {};
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 static bool dbgw_show_gpu_profiler_window    = false;
 static bool dbgw_gpu_profiler_latest_only    = true;
 static bool dbgw_gpu_profiler_show_all_history = false;
-static bool dbgw_gpu_profiler_hierarchy_view = false;
+static bool dbgw_gpu_profiler_hierarchy_view = true;
 static bool dbgw_gpu_profiler_pause_updates = false;
+#endif
 
 // SwTessellation.
 static float sw_tess_important_point_offset_in_view  = 7.0;
@@ -828,8 +830,10 @@ bool AppGame::ExecuteApp()
             ImGui::Checkbox("Enable Render Thread", &dbgw_render_thread);
             ImGui::Checkbox("Enable MultiThread RenderPass", &dbgw_multithread_render_pass);
             ImGui::Checkbox("Enable MultiThread CascadeShadow", &dbgw_multithread_cascade_shadow);
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
             // メインウィンドウから専用GPUプロファイラウィンドウを開閉.
             ImGui::Checkbox("Show GPU Profiler Window", &dbgw_show_gpu_profiler_window);
+#endif
         }
 
         ImGui::SetNextItemOpen(false, ImGuiCond_Once);
@@ -998,6 +1002,7 @@ bool AppGame::ExecuteApp()
         ImGui::End();
     }
 
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
     if (dbgw_show_gpu_profiler_window)
     {
         // GPU計測専用ウィンドウ.
@@ -1215,6 +1220,7 @@ bool AppGame::ExecuteApp()
         }
         ImGui::End();
     }
+#endif
 
     const auto dlit_dir = ngl::math::Vec3::Normalize(ngl::math::Mat33::RotAxisY(dbgw_dlit_angle_h) * ngl::math::Mat33::RotAxisX(dbgw_dlit_angle_v) * (-ngl::math::Vec3::UnitY()));
 

@@ -2,6 +2,9 @@
 #include "framework/gfx_framework.h"
 
 #include <chrono>
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
+#include <string>
+#endif
 
 #include "rhi/d3d12/command_list.d3d12.h"
 #include "rhi/d3d12/gpu_scope_profiler.d3d12.h"
@@ -112,6 +115,7 @@ namespace ngl::fwk
 			return false;
 		}
 
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 		gpu_scope_profiler_ = std::make_unique<ngl::rhi::GpuScopeProfilerDep>();
 		if (!gpu_scope_profiler_->Initialize(&device_, &graphics_queue_))
 		{
@@ -119,6 +123,9 @@ namespace ngl::fwk
 			gpu_scope_profiler_.reset();
 		}
 		device_.SetGpuScopeProfiler(gpu_scope_profiler_.get());
+#else
+		device_.SetGpuScopeProfiler(nullptr);
+#endif
 
 		// RTGマネージャ初期化.
 		{
@@ -168,12 +175,14 @@ namespace ngl::fwk
 		// imgui.
 		ngl::imgui::ImguiInterface::Instance().Finalize();
 
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 		device_.SetGpuScopeProfiler(nullptr);
 		if (gpu_scope_profiler_)
 		{
 			gpu_scope_profiler_->Finalize();
 			gpu_scope_profiler_.reset();
 		}
+#endif
 
 		// リソースマネージャから全て破棄.
 		ngl::res::ResourceManager::Instance().ReleaseCacheAll();
@@ -212,12 +221,14 @@ namespace ngl::fwk
 		
 		// Graphics Deviceのフレーム準備
 		device_.ReadyToNewFrame();
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 		if (gpu_scope_profiler_)
 		{
 			// 前フレームまででFence完了した分を先に回収し、現フレーム記録を開始.
 			gpu_scope_profiler_->CollectCompleted(gpu_wait_fence_.GetCompletedValue());
 			gpu_scope_profiler_->BeginFrame(device_.GetDeviceFrameIndex());
 		}
+#endif
 
 		// RTGのフレーム開始処理.
 		rtg_manager_.BeginFrame();
@@ -291,12 +302,38 @@ namespace ngl::fwk
 			ReadyToSubmit();
 
 			// アプリケーションのSubmit.
-			for(auto& command_set : app_rtg_command_list_set)
+			for (size_t rtg_graph_index = 0; rtg_graph_index < app_rtg_command_list_set.size(); ++rtg_graph_index)
 			{
+				auto& command_set = app_rtg_command_list_set[rtg_graph_index];
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
+                // RTGグラフ全体のGPUスコープ計測開始. ラベルはフレームごとにユニークになるようにする.
+				const std::string rtg_graph_label = "Graph_" + std::to_string(rtg_graph_index) + "_Gfx";
+				if (gpu_scope_profiler_)
+				{
+					// RTG内部のスコープはSubmit時ではなくExecute時に記録されるため、
+					// 事前に「このCommandListはどのRTGグラフ配下か」をProfilerへ関連付けておく。
+					for (const auto& submit_elem : command_set.graphics)
+					{
+						if (submit_elem.type == ngl::rtg::ERtgSubmitCommandType::CommandList && submit_elem.command_list)
+						{
+							gpu_scope_profiler_->RegisterCommandListContextPrefixForCurrentFrame(submit_elem.command_list, rtg_graph_label.c_str());
+						}
+					}
+				}
+				ngl::rhi::GpuProfileScopeToken rtg_graph_scope_token = {};
+				BeginGpuScopeForRtgGraph(rtg_graph_label.c_str(), rtg_graph_scope_token);
+#endif
+                // RTGのSubmit.
 				ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, &command_set);
+
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
+                // GPUスコープの終了. RTGグラフ全体のスコープを閉じる.
+				EndGpuScopeForRtgGraph(rtg_graph_scope_token);
+#endif
 			}
 
 			// フレーム終端でGPU timestamp queryをresolveするコマンドを追加.
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 			if (gpu_scope_profiler_)
 			{
 				p_system_frame_end_command_list_ = {};
@@ -311,6 +348,7 @@ namespace ngl::fwk
 					p_system_frame_end_command_list_ = {};
 				}
 			}
+#endif
 
 			// フレームワークのPresent.
 			Present();
@@ -323,6 +361,58 @@ namespace ngl::fwk
 	void GraphicsFramework::ForceWaitFrameRender()
 	{
 		render_thread_.Wait();
+	}
+	// RTGのSubmitCommand直前に、graphics queue上で有効なbegin timestampを別CommandListで記録する.
+	void GraphicsFramework::BeginGpuScopeForRtgGraph(const char* label, ngl::rhi::GpuProfileScopeToken& out_token)
+	{
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
+		out_token.frame_local_scope_index = 0xffffffffu;
+		if (!gpu_scope_profiler_ || !label)
+		{
+			return;
+		}
+
+		ngl::rhi::GraphicsCommandListDep* p_scope_begin_command_list = {};
+		rtg_manager_.GetNewFrameCommandList(p_scope_begin_command_list);
+		if (!p_scope_begin_command_list)
+		{
+			return;
+		}
+
+		p_scope_begin_command_list->Begin();
+		gpu_scope_profiler_->BeginScope(p_scope_begin_command_list, label, out_token);
+		p_scope_begin_command_list->End();
+		ngl::rhi::CommandListBaseDep* submit_list[] = { p_scope_begin_command_list };
+		graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
+#else
+		(void)label;
+		out_token.frame_local_scope_index = 0xffffffffu;
+#endif
+	}
+	// RTGのSubmitCommand直後に、beginと同じgraphics queue上でend timestampを記録してスコープを閉じる.
+	void GraphicsFramework::EndGpuScopeForRtgGraph(const ngl::rhi::GpuProfileScopeToken& token)
+	{
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
+		if (!gpu_scope_profiler_ || token.frame_local_scope_index == 0xffffffffu)
+		{
+			return;
+		}
+
+		ngl::rhi::GraphicsCommandListDep* p_scope_end_command_list = {};
+		rtg_manager_.GetNewFrameCommandList(p_scope_end_command_list);
+		if (!p_scope_end_command_list)
+		{
+			return;
+		}
+
+		p_scope_end_command_list->Begin();
+		gpu_scope_profiler_->EndScope(p_scope_end_command_list, token);
+		p_scope_end_command_list->End();
+		ngl::rhi::CommandListBaseDep* submit_list[] = { p_scope_end_command_list };
+		graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
+#else
+		(void)token;
+#endif
 	}
 	// フレームのCommandListのSubmit準備として, 以前のSubmitによるGPU処理完了を待機する. RenderThread.
 	void GraphicsFramework::ReadyToSubmit()
@@ -392,11 +482,13 @@ namespace ngl::fwk
 				inflight_gpu_work_id_enable_[gpu_work_index] = false;
 			}
 		}
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 		if (gpu_scope_profiler_)
 		{
 			// 明示待機後はすべて回収可能なので最新値を更新しておく.
 			gpu_scope_profiler_->CollectCompleted(gpu_wait_fence_.GetCompletedValue());
 		}
+#endif
 	}
 
 
@@ -426,20 +518,30 @@ namespace ngl::fwk
 
 	bool GraphicsFramework::TryGetLatestGpuScopeStatByLabel(const char* label, GpuScopeStatLatest& out_stat) const
 	{
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 		if (!gpu_scope_profiler_)
 		{
 			return false;
 		}
 		return gpu_scope_profiler_->TryGetLatestByLabel(label, out_stat);
+#else
+		(void)label;
+		(void)out_stat;
+		return false;
+#endif
 	}
 
 	void GraphicsFramework::EnumerateLatestGpuScopeStats(const std::function<void(const GpuScopeStatEntry&)>& fn) const
 	{
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
 		if (!gpu_scope_profiler_)
 		{
 			return;
 		}
 		gpu_scope_profiler_->EnumerateLatest(fn);
+#else
+		(void)fn;
+#endif
 	}
 
 }

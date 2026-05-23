@@ -101,6 +101,10 @@ namespace ngl::rhi
 			std::scoped_lock lock(mutex_);
 			frame_samples_.clear();
 			scope_stats_.clear();
+			for (auto& e : command_list_context_prefix_by_slot_)
+			{
+				e.clear();
+			}
 			query_heap_.Reset();
 			readback_buffer_.Reset();
 			p_device_ = nullptr;
@@ -119,6 +123,7 @@ namespace ngl::rhi
 			slot.sample_count = 0;
 			slot.submitted = false;
 			slot.collected = false;
+			command_list_context_prefix_by_slot_[current_slot_index_].clear();
 		}
 
 		void ResolveCurrentFrame(GraphicsCommandListDep* p_command_list)
@@ -178,6 +183,8 @@ namespace ngl::rhi
 				};
 				std::vector<ResolvedSample> resolved_samples = {};
 				resolved_samples.reserve(slot.sample_count);
+				// 同一フレームslotで事前登録された「CommandList -> RTG親ラベル」対応表.
+				const auto& command_list_context_prefix = command_list_context_prefix_by_slot_[slot_index];
 				for (u32 local_sample_index = 0; local_sample_index < slot.sample_count; ++local_sample_index)
 				{
 					const auto& sample = frame_samples_[slot.sample_base + local_sample_index];
@@ -193,7 +200,18 @@ namespace ngl::rhi
 						continue;
 					}
 					ResolvedSample resolved = {};
-					resolved.label = sample.label;
+					const auto context_it = command_list_context_prefix.find(sample.stack_owner_command_list);
+					if (context_it != command_list_context_prefix.end())
+					{
+						// 例: Graph_0_Gfx/DepthPass/... のように親コンテキストを先頭へ合成.
+						resolved.label = context_it->second;
+						resolved.label += "/";
+						resolved.label += sample.label;
+					}
+					else
+					{
+						resolved.label = sample.label;
+					}
 					resolved.duration_ms = static_cast<double>(end_tick - begin_tick) * timestamp_to_millisec_;
 					resolved.begin_tick = begin_tick;
 					resolved.begin_query = sample.begin_query;
@@ -284,6 +302,20 @@ namespace ngl::rhi
 			}
 		}
 
+		void RegisterCommandListContextPrefixForCurrentFrame(CommandListBaseDep* p_command_list, const char* prefix)
+		{
+			if (!p_command_list || !prefix || prefix[0] == '\0')
+			{
+				return;
+			}
+			std::scoped_lock lock(mutex_);
+			if (current_slot_index_ == k_gpu_profiler_invalid_index)
+			{
+				return;
+			}
+			command_list_context_prefix_by_slot_[current_slot_index_][p_command_list] = prefix;
+		}
+
 		void BeginScope(CommandListBaseDep* p_command_list, const char* label, GpuProfileScopeToken& out_token) override
 		{
 			out_token.frame_local_scope_index = k_gpu_profiler_invalid_index;
@@ -311,6 +343,7 @@ namespace ngl::rhi
 			auto& sample = frame_samples_[sample_absolute_index];
 			const std::string full_path_label = BuildFullPathLabelForBegin(p_command_list, label);
 			sample.label = full_path_label;
+			sample.stack_owner_command_list = p_command_list;
 			sample.begin_query = slot.query_base + slot.query_count;
 			sample.end_query = k_gpu_profiler_invalid_index;
 
@@ -334,12 +367,18 @@ namespace ngl::rhi
 			}
 
 			std::scoped_lock lock(mutex_);
-			PopScopeLabelStack(p_command_list);
 			if (token.frame_local_scope_index == k_gpu_profiler_invalid_index)
 			{
 				return;
 			}
-			if (current_slot_index_ == k_gpu_profiler_invalid_index || token.frame_local_scope_index >= frame_samples_.size())
+			if (token.frame_local_scope_index >= frame_samples_.size())
+			{
+				return;
+			}
+			auto& sample = frame_samples_[token.frame_local_scope_index];
+			PopScopeLabelStack(sample.stack_owner_command_list);
+
+			if (current_slot_index_ == k_gpu_profiler_invalid_index)
 			{
 				return;
 			}
@@ -349,7 +388,6 @@ namespace ngl::rhi
 				return;
 			}
 
-			auto& sample = frame_samples_[token.frame_local_scope_index];
 			if (sample.end_query != k_gpu_profiler_invalid_index)
 			{
 				return;
@@ -366,6 +404,7 @@ namespace ngl::rhi
 		struct FrameSample
 		{
 			std::string label{};
+			CommandListBaseDep* stack_owner_command_list = nullptr;
 			u32 begin_query = k_gpu_profiler_invalid_index;
 			u32 end_query = k_gpu_profiler_invalid_index;
 		};
@@ -465,6 +504,8 @@ namespace ngl::rhi
 		std::vector<FrameSample> frame_samples_ = {};
 		std::unordered_map<u32, ScopeStatInternal> scope_stats_ = {};
 		std::unordered_map<CommandListBaseDep*, std::vector<std::string>> command_list_scope_stack_ = {};
+		// frame slotごとに、RTG submit時に登録した親コンテキストを保持する.
+		std::array<std::unordered_map<CommandListBaseDep*, std::string>, k_gpu_profiler_buffered_frame_count> command_list_context_prefix_by_slot_ = {};
 		mutable std::mutex mutex_{};
 	};
 
@@ -530,6 +571,14 @@ namespace ngl::rhi
 		if (p_impl_)
 		{
 			p_impl_->BeginScope(p_command_list, label, out_token);
+		}
+	}
+
+	void GpuScopeProfilerDep::RegisterCommandListContextPrefixForCurrentFrame(CommandListBaseDep* p_command_list, const char* prefix)
+	{
+		if (p_impl_)
+		{
+			p_impl_->RegisterCommandListContextPrefixForCurrentFrame(p_command_list, prefix);
 		}
 	}
 

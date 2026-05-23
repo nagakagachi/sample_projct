@@ -96,6 +96,11 @@ public:
 	Statistics GetStatistics(int history_index) const;
 	
 private:
+	// RTGの1グラフsubmit区間を計測するため、専用の短いCommandListでtimestamp beginを発行する.
+	void BeginGpuScopeForRtgGraph(const char* label, ngl::rhi::GpuProfileScopeToken& out_token);
+	// BeginGpuScopeForRtgGraphで開始したRTGグラフ計測を、専用CommandListでtimestamp endして閉じる.
+	void EndGpuScopeForRtgGraph(const ngl::rhi::GpuProfileScopeToken& token);
+
 	// 内部用. フレームのCommandListのSubmit準備として, 以前のSubmitによるGPU処理完了を待機する. RenderThread.
 	void ReadyToSubmit();
 	// 内部用. フレームのSwapchainのPresent. RenderThread.

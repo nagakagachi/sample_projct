@@ -41,6 +41,8 @@ namespace ngl::rhi
 
 		bool TryGetLatestByLabel(const char* label, GpuScopeStatLatestDep& out_stat) const;
 		void EnumerateLatest(const std::function<void(const GpuScopeStatEntryDep&)>& fn) const;
+		// 現フレームの特定CommandListにRTGなどの親コンテキストプレフィックスを関連付ける.
+		void RegisterCommandListContextPrefixForCurrentFrame(CommandListBaseDep* p_command_list, const char* prefix);
 
 		void BeginScope(CommandListBaseDep* p_command_list, const char* label, GpuProfileScopeToken& out_token) override;
 		void EndScope(CommandListBaseDep* p_command_list, const GpuProfileScopeToken& token) override;
