@@ -1148,15 +1148,30 @@ namespace ngl
 			if(p_command_list)
 			{	
 				p_command_list->BeginMarker(label);
+				// 既存Marker開始に合わせて profiler 側の begin timestamp も記録する.
+				if (auto* p_device = p_command_list->GetDevice())
+				{
+					p_gpu_scope_profiler = p_device->GetGpuScopeProfiler();
+					if (p_gpu_scope_profiler)
+					{
+						p_gpu_scope_profiler->BeginScope(p_command_list, label, gpu_scope_token_);
+					}
+				}
 			}
 		}
 		ScopedEventMarker::~ScopedEventMarker()
 		{
 			if(p_command_list)
 			{
+				// Marker終了と同じスコープ境界で end timestamp を記録する.
+				if (p_gpu_scope_profiler)
+				{
+					p_gpu_scope_profiler->EndScope(p_command_list, gpu_scope_token_);
+				}
 				p_command_list->EndMarker();
 			}
 			p_command_list = {};
+			p_gpu_scope_profiler = {};
 		}
 
 	}

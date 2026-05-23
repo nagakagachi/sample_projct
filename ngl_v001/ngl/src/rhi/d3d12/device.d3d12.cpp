@@ -650,6 +650,10 @@ namespace ngl
 		{
 			return p_fence_.Get();
 		}
+		ngl::types::u64 FenceDep::GetCompletedValue() const
+		{
+			return p_fence_ ? p_fence_->GetCompletedValue() : 0;
+		}
 		// -------------------------------------------------------------------------------------------------------------------------------------------------
 
 

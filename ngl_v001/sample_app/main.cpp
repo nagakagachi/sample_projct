@@ -3,8 +3,11 @@
 #include <array>
 #include <cfloat>
 #include <filesystem>
+#include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -105,6 +108,11 @@ static float dbgw_perf_main_thread_sleep_millisec = 0.0f;
 static float dbgw_stat_primary_rtg_construct = {};
 static float dbgw_stat_primary_rtg_compile   = {};
 static float dbgw_stat_primary_rtg_execute   = {};
+static bool dbgw_show_gpu_profiler_window    = false;
+static bool dbgw_gpu_profiler_latest_only    = true;
+static bool dbgw_gpu_profiler_show_all_history = false;
+static bool dbgw_gpu_profiler_hierarchy_view = false;
+static bool dbgw_gpu_profiler_pause_updates = false;
 
 // SwTessellation.
 static float sw_tess_important_point_offset_in_view  = 7.0;
@@ -820,6 +828,8 @@ bool AppGame::ExecuteApp()
             ImGui::Checkbox("Enable Render Thread", &dbgw_render_thread);
             ImGui::Checkbox("Enable MultiThread RenderPass", &dbgw_multithread_render_pass);
             ImGui::Checkbox("Enable MultiThread CascadeShadow", &dbgw_multithread_cascade_shadow);
+            // メインウィンドウから専用GPUプロファイラウィンドウを開閉.
+            ImGui::Checkbox("Show GPU Profiler Window", &dbgw_show_gpu_profiler_window);
         }
 
         ImGui::SetNextItemOpen(false, ImGuiCond_Once);
@@ -987,6 +997,225 @@ bool AppGame::ExecuteApp()
         ImGui::PopItemWidth();
         ImGui::End();
     }
+
+    if (dbgw_show_gpu_profiler_window)
+    {
+        // GPU計測専用ウィンドウ.
+        ImGui::SetNextWindowSize(ImVec2(780.0f, 420.0f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("GPU Profiler", &dbgw_show_gpu_profiler_window, ImGuiWindowFlags_None))
+        {
+            struct UiGpuScopeStatEntry
+            {
+                std::string label = {};
+                size_t label_hash = 0;
+                ngl::fwk::GraphicsFramework::GpuScopeStatLatest stat = {};
+            };
+            static std::vector<UiGpuScopeStatEntry> cached_all_entries = {};
+            static ngl::u64 cached_latest_frame_id = 0;
+
+            ImGui::Checkbox("Pause Updates", &dbgw_gpu_profiler_pause_updates);
+            if (!dbgw_gpu_profiler_pause_updates)
+            {
+                // 更新停止がOFFの間だけ最新スナップショットを取り込む.
+                cached_all_entries.clear();
+                cached_latest_frame_id = 0;
+                auto& all_entries_ref = cached_all_entries;
+                auto& latest_frame_id_ref = cached_latest_frame_id;
+                gfxfw_.EnumerateLatestGpuScopeStats([&all_entries_ref, &latest_frame_id_ref](const ngl::fwk::GraphicsFramework::GpuScopeStatEntry& e)
+                {
+                    if (!e.stat.valid)
+                    {
+                        return;
+                    }
+                    UiGpuScopeStatEntry ui_entry = {};
+                    ui_entry.label = (e.label ? e.label : "");
+                    ui_entry.label_hash = std::hash<std::string>{}(ui_entry.label);
+                    ui_entry.stat = e.stat;
+                    latest_frame_id_ref = std::max(latest_frame_id_ref, e.stat.frame_id);
+                    all_entries_ref.push_back(ui_entry);
+                });
+            }
+            const auto& all_entries = cached_all_entries;
+            const ngl::u64 latest_frame_id = cached_latest_frame_id;
+
+            // UIの2値状態を同期する.
+            if (dbgw_gpu_profiler_show_all_history)
+            {
+                dbgw_gpu_profiler_latest_only = false;
+            }
+
+            std::vector<UiGpuScopeStatEntry> entries = {};
+            entries.reserve(all_entries.size());
+            for (const auto& e : all_entries)
+            {
+                if (dbgw_gpu_profiler_latest_only && e.stat.frame_id != latest_frame_id)
+                {
+                    continue;
+                }
+                entries.push_back(e);
+            }
+
+            // 既定はGPUの実行順。近接tickは同一バケットとしてハッシュ順(同値時のみラベル順)へフォールバック.
+            constexpr ngl::u64 k_gpu_profiler_begin_tick_bucket = 128ull;
+            std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b)
+            {
+                if (a.stat.frame_id != b.stat.frame_id)
+                {
+                    return a.stat.frame_id > b.stat.frame_id;
+                }
+                const ngl::u64 a_bucket = a.stat.gpu_begin_tick / k_gpu_profiler_begin_tick_bucket;
+                const ngl::u64 b_bucket = b.stat.gpu_begin_tick / k_gpu_profiler_begin_tick_bucket;
+                if (a_bucket != b_bucket)
+                {
+                    return a_bucket < b_bucket;
+                }
+                if (a.label_hash != b.label_hash)
+                {
+                    return a.label_hash < b.label_hash;
+                }
+                if (a.label != b.label)
+                {
+                    return a.label < b.label;
+                }
+                return a.stat.gpu_begin_tick < b.stat.gpu_begin_tick;
+            });
+            ImGui::Text("Scope Count: %d", static_cast<int>(entries.size()));
+            ImGui::Text("Latest FrameId: %llu", static_cast<unsigned long long>(latest_frame_id));
+            if (ImGui::Checkbox("Show Latest Frame Only", &dbgw_gpu_profiler_latest_only))
+            {
+                dbgw_gpu_profiler_show_all_history = !dbgw_gpu_profiler_latest_only;
+            }
+            if (ImGui::Checkbox("Show All History", &dbgw_gpu_profiler_show_all_history))
+            {
+                dbgw_gpu_profiler_latest_only = !dbgw_gpu_profiler_show_all_history;
+            }
+            ImGui::Checkbox("Hierarchy View", &dbgw_gpu_profiler_hierarchy_view);
+            if (ImGui::Button("Export CSV"))
+            {
+                // 直近統計のスナップショットをCSVへ保存.
+                std::ofstream ofs("gpu_profiler_latest.csv", std::ios::out | std::ios::trunc);
+                if (ofs.is_open())
+                {
+                    ofs << "scope,last_ms,avg_ms,p95_ms,max_ms,frame_id\n";
+                    for (const auto& e : entries)
+                    {
+                        ofs << e.label
+                            << "," << e.stat.last_ms
+                            << "," << e.stat.avg_ms
+                            << "," << e.stat.p95_ms
+                            << "," << e.stat.max_ms
+                            << "," << e.stat.frame_id
+                            << "\n";
+                    }
+                }
+            }
+            ImGui::Separator();
+            if (dbgw_gpu_profiler_hierarchy_view)
+            {
+                struct TreeNode
+                {
+                    std::vector<std::pair<std::string, TreeNode>> children = {};
+                    const UiGpuScopeStatEntry* p_entry = nullptr;
+                };
+                auto FindOrAddChild = [](TreeNode& node, const std::string& name) -> TreeNode&
+                {
+                    for (auto& kv : node.children)
+                    {
+                        if (kv.first == name)
+                        {
+                            return kv.second;
+                        }
+                    }
+                    node.children.push_back({name, {}});
+                    return node.children.back().second;
+                };
+                TreeNode root = {};
+                for (const auto& e : entries)
+                {
+                    TreeNode* p_node = &root;
+                    std::string path = e.label;
+                    size_t segment_begin = 0;
+                    while (segment_begin <= path.size())
+                    {
+                        const size_t slash_pos = path.find('/', segment_begin);
+                        const size_t segment_end = (slash_pos == std::string::npos) ? path.size() : slash_pos;
+                        const std::string segment = path.substr(segment_begin, segment_end - segment_begin);
+                        p_node = &FindOrAddChild(*p_node, segment);
+                        if (slash_pos == std::string::npos)
+                        {
+                            break;
+                        }
+                        segment_begin = slash_pos + 1;
+                    }
+                    p_node->p_entry = &e;
+                }
+
+                std::function<void(const TreeNode&, const std::string&)> DrawTree;
+                DrawTree = [&DrawTree](const TreeNode& node, const std::string& name)
+                {
+                    if (name.empty())
+                    {
+                        for (const auto& kv : node.children)
+                        {
+                            DrawTree(kv.second, kv.first);
+                        }
+                        return;
+                    }
+
+                    const bool is_leaf = node.children.empty();
+                    ImGuiTreeNodeFlags flags = is_leaf ? (ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen) : ImGuiTreeNodeFlags_None;
+                    const bool opened = ImGui::TreeNodeEx(name.c_str(), flags);
+                    if (node.p_entry)
+                    {
+                        const auto& s = node.p_entry->stat;
+                        ImGui::SameLine();
+                        ImGui::Text("last %.4f / avg %.4f / p95 %.4f / max %.4f / frame %llu",
+                            s.last_ms, s.avg_ms, s.p95_ms, s.max_ms, static_cast<unsigned long long>(s.frame_id));
+                    }
+                    if (!is_leaf && opened)
+                    {
+                        for (const auto& kv : node.children)
+                        {
+                            DrawTree(kv.second, kv.first);
+                        }
+                        ImGui::TreePop();
+                    }
+                };
+
+                DrawTree(root, "");
+            }
+            else if (ImGui::BeginTable("GpuScopeTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY))
+            {
+                ImGui::TableSetupColumn("Scope");
+                ImGui::TableSetupColumn("Last [ms]");
+                ImGui::TableSetupColumn("Avg [ms]");
+                ImGui::TableSetupColumn("P95 [ms]");
+                ImGui::TableSetupColumn("Max [ms]");
+                ImGui::TableSetupColumn("FrameId");
+                ImGui::TableHeadersRow();
+
+                for (const auto& e : entries)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(e.label.c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%.4f", e.stat.last_ms);
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%.4f", e.stat.avg_ms);
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::Text("%.4f", e.stat.p95_ms);
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::Text("%.4f", e.stat.max_ms);
+                    ImGui::TableSetColumnIndex(5);
+                    ImGui::Text("%llu", static_cast<unsigned long long>(e.stat.frame_id));
+                }
+                ImGui::EndTable();
+            }
+        }
+        ImGui::End();
+    }
+
     const auto dlit_dir = ngl::math::Vec3::Normalize(ngl::math::Mat33::RotAxisY(dbgw_dlit_angle_h) * ngl::math::Mat33::RotAxisX(dbgw_dlit_angle_v) * (-ngl::math::Vec3::UnitY()));
 
     // オブジェクト移動.

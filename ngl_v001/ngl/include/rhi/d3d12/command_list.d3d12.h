@@ -104,6 +104,13 @@ namespace ngl
 
 		class GraphicsPipelineStateDep;
 		class ComputePipelineStateDep;
+		class IGpuScopeProfiler;
+
+		struct GpuProfileScopeToken
+		{
+			// profiler内部で管理するフレーム内サンプルインデックス.
+			u32 frame_local_scope_index = 0xffffffffu;
+		};
 
 
 		class CommandListBaseDep : public RhiObjectBase
@@ -447,6 +454,18 @@ namespace ngl
 
 		private:
 			CommandListBaseDep* p_command_list{};
+			// Marker開始時にDeviceから取得した profiler 参照.
+			IGpuScopeProfiler* p_gpu_scope_profiler{};
+			GpuProfileScopeToken gpu_scope_token_{};
+		};
+
+		// GPUマーカースコープ開始/終了に連動してtimestampを記録する抽象IF.
+		class IGpuScopeProfiler
+		{
+		public:
+			virtual ~IGpuScopeProfiler() = default;
+			virtual void BeginScope(CommandListBaseDep* p_command_list, const char* label, GpuProfileScopeToken& out_token) = 0;
+			virtual void EndScope(CommandListBaseDep* p_command_list, const GpuProfileScopeToken& token) = 0;
 		};
 	}
 }
@@ -458,3 +477,6 @@ namespace ngl
 //	ex. NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BasePass");
 #define NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, label) const ngl::rhi::ScopedEventMarker NGL_RHI_JOIN_NGL_GPU_SCOPED_EVENT_MARKER(scoped_event_arg_ , __LINE__) (p_command_list, label);
 
+// GPU Scoped Profile (Marker + Timestamp) 定義用マクロ.
+//	ex. NGL_RHI_GPU_SCOPED_PROFILE(p_command_list, "BasePass");
+#define NGL_RHI_GPU_SCOPED_PROFILE(p_command_list, label) NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, label)

@@ -45,6 +45,7 @@ namespace ngl
 		class FenceDep;
 
 		class CommandListBaseDep;
+		class IGpuScopeProfiler;
 		class GraphicsCommandListDep;
 		class ComputeCommandListDep;
 		class GraphicsCommandQueueDep;
@@ -146,6 +147,10 @@ namespace ngl
 			// Deviceが管理するグローバルなフレームインデックスを取得.
 			u64	 GetDeviceFrameIndex() const { return frame_index_; }
 
+			// CommandList側のScopedEventMarkerから参照される profiler を設定/取得.
+			void SetGpuScopeProfiler(IGpuScopeProfiler* p_profiler) { p_gpu_scope_profiler_ = p_profiler; }
+			IGpuScopeProfiler* GetGpuScopeProfiler() const { return p_gpu_scope_profiler_; }
+
 		public:
 			// RHIオブジェクトガベージコレクト関連.
 
@@ -194,6 +199,7 @@ namespace ngl
 			ConstantBufferPool		cb_pool_{};
 
 			std::unique_ptr<PipelineStateObjectCacheDep>	p_pipeline_state_cache_{};
+			IGpuScopeProfiler* p_gpu_scope_profiler_ = nullptr;
 		};
 
 
@@ -263,6 +269,8 @@ namespace ngl
 			void Finalize();
 
 			ID3D12Fence* GetD3D12Fence();
+			// 現在までにGPUで完了したFence値を取得.
+			ngl::types::u64 GetCompletedValue() const;
 
 			ngl::types::u64 GetHelperFenceValue() const {return helper_fence_value_;}
 			

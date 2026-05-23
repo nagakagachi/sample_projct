@@ -4,7 +4,7 @@
 #include <chrono>
 
 #include "rhi/d3d12/command_list.d3d12.h"
-#include "rhi/d3d12/resource_view.d3d12.h"
+#include "rhi/d3d12/gpu_scope_profiler.d3d12.h"
 
 #include "gfx/command_helper.h"
 
@@ -22,7 +22,6 @@
 
 namespace ngl::fwk
 {
-
 	GraphicsFramework::GraphicsFramework()
 	{
 
@@ -113,6 +112,14 @@ namespace ngl::fwk
 			return false;
 		}
 
+		gpu_scope_profiler_ = std::make_unique<ngl::rhi::GpuScopeProfilerDep>();
+		if (!gpu_scope_profiler_->Initialize(&device_, &graphics_queue_))
+		{
+			std::cout << "[WARN] Initialize GPU Scope Profiler failed." << std::endl;
+			gpu_scope_profiler_.reset();
+		}
+		device_.SetGpuScopeProfiler(gpu_scope_profiler_.get());
+
 		// RTGマネージャ初期化.
 		{
 			rtg_manager_.Init(&device_, 4);
@@ -161,6 +168,13 @@ namespace ngl::fwk
 		// imgui.
 		ngl::imgui::ImguiInterface::Instance().Finalize();
 
+		device_.SetGpuScopeProfiler(nullptr);
+		if (gpu_scope_profiler_)
+		{
+			gpu_scope_profiler_->Finalize();
+			gpu_scope_profiler_.reset();
+		}
+
 		// リソースマネージャから全て破棄.
 		ngl::res::ResourceManager::Instance().ReleaseCacheAll();
 
@@ -198,6 +212,12 @@ namespace ngl::fwk
 		
 		// Graphics Deviceのフレーム準備
 		device_.ReadyToNewFrame();
+		if (gpu_scope_profiler_)
+		{
+			// 前フレームまででFence完了した分を先に回収し、現フレーム記録を開始.
+			gpu_scope_profiler_->CollectCompleted(gpu_wait_fence_.GetCompletedValue());
+			gpu_scope_profiler_->BeginFrame(device_.GetDeviceFrameIndex());
+		}
 
 		// RTGのフレーム開始処理.
 		rtg_manager_.BeginFrame();
@@ -269,13 +289,29 @@ namespace ngl::fwk
 			
 			// フレームワークのSubmit準備&前回GPUタスク完了待ち.
 			ReadyToSubmit();
-			
+
 			// アプリケーションのSubmit.
 			for(auto& command_set : app_rtg_command_list_set)
 			{
 				ngl::rtg::RenderTaskGraphBuilder::SubmitCommand(graphics_queue_, compute_queue_, &command_set);
 			}
-			
+
+			// フレーム終端でGPU timestamp queryをresolveするコマンドを追加.
+			if (gpu_scope_profiler_)
+			{
+				p_system_frame_end_command_list_ = {};
+				rtg_manager_.GetNewFrameCommandList(p_system_frame_end_command_list_);
+				if (p_system_frame_end_command_list_)
+				{
+					p_system_frame_end_command_list_->Begin();
+					gpu_scope_profiler_->ResolveCurrentFrame(p_system_frame_end_command_list_);
+					p_system_frame_end_command_list_->End();
+					ngl::rhi::CommandListBaseDep* submit_list[] = { p_system_frame_end_command_list_ };
+					graphics_queue_.ExecuteCommandLists(static_cast<unsigned int>(std::size(submit_list)), submit_list);
+					p_system_frame_end_command_list_ = {};
+				}
+			}
+
 			// フレームワークのPresent.
 			Present();
 			// フレームワークのRender終了&次フレームの準備.
@@ -356,6 +392,11 @@ namespace ngl::fwk
 				inflight_gpu_work_id_enable_[gpu_work_index] = false;
 			}
 		}
+		if (gpu_scope_profiler_)
+		{
+			// 明示待機後はすべて回収可能なので最新値を更新しておく.
+			gpu_scope_profiler_->CollectCompleted(gpu_wait_fence_.GetCompletedValue());
+		}
 	}
 
 
@@ -381,6 +422,24 @@ namespace ngl::fwk
 		// 過去に向かうインデックス.
 		const int ring_buffer_index = (stat_history_.Size() - 1) - history_index;
 		return *stat_history_.Get(ring_buffer_index);
+	}
+
+	bool GraphicsFramework::TryGetLatestGpuScopeStatByLabel(const char* label, GpuScopeStatLatest& out_stat) const
+	{
+		if (!gpu_scope_profiler_)
+		{
+			return false;
+		}
+		return gpu_scope_profiler_->TryGetLatestByLabel(label, out_stat);
+	}
+
+	void GraphicsFramework::EnumerateLatestGpuScopeStats(const std::function<void(const GpuScopeStatEntry&)>& fn) const
+	{
+		if (!gpu_scope_profiler_)
+		{
+			return;
+		}
+		gpu_scope_profiler_->EnumerateLatest(fn);
 	}
 
 }

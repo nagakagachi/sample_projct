@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <array>
+#include <functional>
+#include <memory>
 
 
 #include "thread/job_thread.h"
@@ -9,6 +11,7 @@
 
 // rhi
 #include "rhi/d3d12/device.d3d12.h"
+#include "rhi/d3d12/gpu_scope_profiler.d3d12.h"
 
 // resource
 #include "resource/resource_manager.h"
@@ -37,6 +40,9 @@ using RtgFrameRenderSubmitCommandBuffer = std::vector<rtg::RtgSubmitCommandSet>;
 class GraphicsFramework
 {
 public:
+	using GpuScopeStatLatest = ngl::rhi::GpuScopeStatLatestDep;
+	using GpuScopeStatEntry = ngl::rhi::GpuScopeStatEntryDep;
+
 	struct Desc
 	{
 		// Enhanced Barrierサポート時に利用を要求するか.(Experimental: 非サポート時はLegacyにフォールバック)
@@ -66,6 +72,11 @@ public:
 	
 	// Submit済みのGPUタスクのすべての完了を待機.
 	void WaitAllGpuTask();
+
+	// ラベル名から最新統計を取得. 成功時に true.
+	bool TryGetLatestGpuScopeStatByLabel(const char* label, GpuScopeStatLatest& out_stat) const;
+	// profilerが保持する全スコープ最新統計を列挙.
+	void EnumerateLatestGpuScopeStats(const std::function<void(const GpuScopeStatEntry&)>& fn) const;
 
 private:
     void EmptyFrameProcessForDestroy();
@@ -112,6 +123,7 @@ public:
 
 	// フレームワークが処理するコマンドを登録するための, Rtgのプールからレンタルしたコマンドリスト参照. フレーム単位プールから取得しているため次のフレームで自動的に返却される.
 	ngl::rhi::GraphicsCommandListDep*			p_system_frame_begin_command_list_ = {};
+	ngl::rhi::GraphicsCommandListDep*			p_system_frame_end_command_list_ = {};
 	
 private:
 	// CommandQueue実行完了待機用Fence
@@ -136,6 +148,8 @@ private:
 private:
 	StaticSizeRingBuffer<Statistics, 16>		stat_history_{};
 	Statistics									stat_on_render_{};
+
+	std::unique_ptr<ngl::rhi::GpuScopeProfilerDep> gpu_scope_profiler_{};
 };
 
 }
