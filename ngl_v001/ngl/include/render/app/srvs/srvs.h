@@ -325,6 +325,7 @@ namespace ngl::render::app
         static int dbg_assp_probe_count_;
         static int dbg_gi_update_sample_mode_;
         static int dbg_bbv_update_flow_mode_;
+        static int dbg_bbv_depthtest_frustum_cull_force_pass_;
         static float dbg_bbv_depthtest_injection_world_offset_;
 
         // デバッグメニューを描画する. ImGuiウィンドウ内で呼び出すこと.

@@ -140,6 +140,7 @@ namespace ngl::render::app
     int ScreenReconstructedVoxelStructure::dbg_assp_probe_count_ = 0;
     int ScreenReconstructedVoxelStructure::dbg_gi_update_sample_mode_ = static_cast<int>(SrvsGiSolutionMode::Assp);
     int ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_default_srvs_param.bbv_update_flow_mode;
+    int ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_ = k_default_srvs_param.bbv_depthtest_frustum_cull_force_pass;
     float ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_ = k_default_srvs_param.bbv_depthtest_injection_world_offset;
 
     void ScreenReconstructedVoxelStructure::DrawDebugMenu(
@@ -175,6 +176,19 @@ namespace ngl::render::app
                 if (ImGui::MenuItem("Reset to Default"))
                     ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_default_srvs_param.bbv_update_flow_mode;
                 ImGui::EndPopup();
+            }
+            {
+                bool v = (0 != ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_);
+                if(ImGui::Checkbox("DepthTest FrustumCull Force Pass All", &v))
+                {
+                    ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_ = v ? 1 : 0;
+                }
+                if (ImGui::BeginPopupContextItem()) {
+                    if (ImGui::MenuItem("Reset to Default"))
+                        ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_ = k_default_srvs_param.bbv_depthtest_frustum_cull_force_pass;
+                    ImGui::EndPopup();
+                }
+                ImGui::TextDisabled("ON: Frustum判定/Empty判定を省略して全BrickをCarving候補へ通す");
             }
             ImGui::SliderFloat("DepthTest Injection World Offset", &ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_, 0.0f, 5.0f, "%.3f");
             if (ImGui::BeginPopupContextItem()) {
@@ -1272,6 +1286,7 @@ namespace ngl::render::app
                 param.bbv_visible_voxel_buffer_size = bbv_fine_update_voxel_count_max_;
                 param.bbv_hollow_voxel_buffer_size = bbv_hollow_voxel_list_count_max_;
                 param.bbv_update_flow_mode = ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_;
+                param.bbv_depthtest_frustum_cull_force_pass = ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_;
                 param.bbv_depthtest_injection_world_offset = ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_;
             }
             // Fsp

@@ -323,11 +323,12 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int bbv_visible_voxel_buffer_size NGL_CPP_MEMBER_INIT({});// 更新プローブ用のワークサイズ.
         int bbv_hollow_voxel_buffer_size NGL_CPP_MEMBER_INIT({});// 削除用中空Voxel情報のワークサイズ.
         int bbv_update_flow_mode NGL_CPP_MEMBER_INIT({k_bbv_update_flow_depthtest});
+        // 1 の場合、DepthTest FrustumCull は判定を省略して全 Brick を ActiveList に通す（負荷計測用）。
+        int bbv_depthtest_frustum_cull_force_pass NGL_CPP_MEMBER_INIT({0});
         // DepthTest専用Injectionで、サーフェイス座標を視線奥へ固定ワールド距離オフセットする量.
         // 推奨初期値は BBV cell=3.0 / fine=8 のとき 1 fineセル相当の 0.375。
         float bbv_depthtest_injection_world_offset NGL_CPP_MEMBER_INIT({3.0f * k_bbv_per_voxel_resolution_inv});
         int dummy1 NGL_CPP_MEMBER_INIT({});
-        int dummy2 NGL_CPP_MEMBER_INIT({});
 
         // Temporal再利用重みの最小値.
         float ss_probe_temporal_min_hysteresis NGL_CPP_MEMBER_INIT({0.85f});
