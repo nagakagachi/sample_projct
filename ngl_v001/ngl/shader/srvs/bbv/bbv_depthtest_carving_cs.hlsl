@@ -29,32 +29,38 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
         voxel_coord_toroidal,
         cb_srvs.bbv.grid_resolution - cb_srvs.bbv.grid_toroidal_offset,
         cb_srvs.bbv.grid_resolution);
+    const float3 brick_origin_ws = (float3(voxel_coord_linear) * cb_srvs.bbv.cell_size) + cb_srvs.bbv.grid_min_pos;
+    const float3 bitcell_step_ws = cb_srvs.bbv.cell_size * k_bbv_per_voxel_resolution_inv;
+    const int2 depth_size = cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw;
+    const int2 depth_atlas_offset = cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy;
 
     const uint bbv_addr = bbv_voxel_bitmask_data_addr(voxel_index);
     [unroll]
     for(uint u32_offset = 0; u32_offset < k_bbv_per_voxel_bitmask_u32_count; ++u32_offset)
     {
         uint bit_block = RWBitmaskBrickVoxel[bbv_addr + u32_offset];
-        if(0 == bit_block)
+        // wave全体でこのu32ブロックに有効bitが1つも無ければ即skipする。
+        // laneごとの分岐ばらつきを減らし、空ブロック処理をまとめて落とす。
+        if(0 == WaveActiveCountBits(0 != bit_block))
         {
             continue;
         }
 
         uint remain_mask = bit_block;
-        [unroll]
-        for(uint bit_in_u32 = 0; bit_in_u32 < 32; ++bit_in_u32)
+        // 空bitをなめず、立っているbitのみ処理する。
+        uint scan_mask = bit_block;
+        [loop]
+        while(0 != scan_mask)
         {
+            const uint bit_in_u32 = firstbitlow(scan_mask);
             const uint bit_value = (1u << bit_in_u32);
-            if(0 == (remain_mask & bit_value))
-            {
-                continue;
-            }
+            // continue経路でも必ず前進するよう、先に走査済みbitを落とす。
+            scan_mask &= (scan_mask - 1);
 
             const uint bit_index = u32_offset * 32 + bit_in_u32;
             const uint3 bitcell_pos = calc_bbv_bitcell_pos_from_bit_index(bit_index);
             const float3 bitcell_center_ws =
-                ((float3(voxel_coord_linear) + (float3(bitcell_pos) + 0.5) * k_bbv_per_voxel_resolution_inv) * cb_srvs.bbv.cell_size)
-                + cb_srvs.bbv.grid_min_pos;
+                brick_origin_ws + (float3(bitcell_pos) + 0.5) * bitcell_step_ws;
             const float3 bitcell_center_vs = mul(cb_injection_src_view_info.cb_view_mtx, float4(bitcell_center_ws, 1.0));
             const float4 bitcell_center_cs = mul(cb_injection_src_view_info.cb_proj_mtx, float4(bitcell_center_vs, 1.0));
             if(abs(bitcell_center_cs.w) <= 1e-6)
@@ -75,9 +81,8 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
                 continue;
             }
 
-            const int2 depth_size = cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw;
             const int2 screen_pos = clamp(int2(uv * float2(depth_size)), int2(0, 0), depth_size - 1);
-            const int2 atlas_pos = screen_pos + cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy;
+            const int2 atlas_pos = screen_pos + depth_atlas_offset;
             const float surface_depth = TexHardwareDepth.Load(int3(atlas_pos, 0)).r;
             if(!isValidDepth(surface_depth))
             {
