@@ -77,3 +77,41 @@ trace 系を触る場合は、通常版 / 初期ヒット回避版 / dev 版で�
 - **HiBrick / Brick 充填率を使った VoxelCone trace の実装と検証**
   - HiBrick と Brick の occupancy ratio を使い、cone 幅に応じた近似トレース / 積分に使えるか検証する。
   - 品質と性能の両面で SRVS への適用可能性を確認する。
+
+## Agent運用: ベンチマーク自動実行フロー（ローカル前提）
+
+- Agent は、ユーザーの以下の表記ゆれを同義として扱うこと:
+  - `benchmark`
+  - `ベンチマーク`
+  - `bench`
+  - `perf-run`
+  - `計測分析レポート`
+- 上記が含まれる依頼を受けたら、**「benchmark機能を使った計測分析レポート」フローの要求**として解釈する。
+
+### 正規化する内部タスク名
+
+- 内部の実行名・ログ名は `benchmark` に統一する（外部入力はファジー受理）。
+
+### 標準フロー（実装後の運用）
+
+1. Releaseビルド
+2. `sample_app --benchmark ...` 実行（**working directory は `sample_app` 固定**）
+3. **最低 60 フレーム経過後**、`delta_time` が安定（既定: 30フレーム連続）または開始タイムアウト到達で計測開始
+4. 自動終了
+5. baseline/candidate比較レポートを保存
+
+### 現在の主要CLI引数（benchmark）
+
+- `--benchmark-warmup <frames>`
+- `--benchmark-ready-delta-frames <frames>`
+- `--benchmark-start-timeout-sec <seconds>`
+- `--benchmark-measure <frames>`
+- `--benchmark-output <dir>`
+- `--benchmark-tag <label>`
+
+### 成果物の標準出力先
+
+- `artifacts/perf/<timestamp>/`
+  - `baseline.json`
+  - `candidate.json`
+  - `report.md`

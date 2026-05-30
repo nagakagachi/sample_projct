@@ -2,11 +2,18 @@
 #include <algorithm>
 #include <array>
 #include <cfloat>
+#include <chrono>
+#include <cmath>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <limits>
+#include <numeric>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -116,6 +123,19 @@ static bool dbgw_gpu_profiler_hierarchy_view = true;
 static bool dbgw_gpu_profiler_pause_updates = false;
 #endif
 
+// ベンチマークCLI実行設定.
+struct BenchmarkCliOptions
+{
+    bool enabled = false;
+    ngl::u32 warmup_frames = 60;
+    double start_timeout_seconds = 120.0;
+    ngl::u32 measure_frames = 600;
+    ngl::u32 ready_delta_stable_frames = 30;
+    std::string output_dir = "artifacts\\perf\\latest";
+    std::string tag = {};
+};
+static BenchmarkCliOptions g_benchmark_cli = {};
+
 // SwTessellation.
 static float sw_tess_important_point_offset_in_view  = 7.0;
 static int sw_tess_fixed_subdivision_level           = -1;     // -1で無効、0以上で固定分割レベルを指定
@@ -158,6 +178,12 @@ public:
 private:
     // AppのMainThread処理.
     bool ExecuteApp();
+    // ベンチマーク実行設定をCLI引数から反映.
+    void ConfigureBenchmarkFromCli();
+    // 最新フレームのGPUマーカー統計を1サンプル収集.
+    bool CaptureBenchmarkFrameStats();
+    // ベンチマーク結果をJSON/CSVへ保存.
+    bool SaveBenchmarkReport() const;
     // AppのRenderThread処理.
     void RenderApp(ngl::fwk::RtgFrameRenderSubmitCommandBuffer& out_rtg_command_list_set);
 
@@ -222,6 +248,29 @@ private:
 
     // Loaded Texture.
     ngl::res::ResourceHandle<ngl::gfx::ResTexture> res_texture_{};
+
+    struct BenchmarkMarkerSamples
+    {
+        std::vector<double> last_ms_history = {};
+        ngl::fwk::GraphicsFramework::GpuScopeStatLatest latest = {};
+    };
+    bool benchmark_enabled_ = false;
+    ngl::u32 benchmark_warmup_frames_ = 0;
+    double benchmark_start_timeout_seconds_ = 120.0;
+    ngl::u32 benchmark_measure_frames_ = 0;
+    ngl::u32 benchmark_ready_delta_stable_frames_ = 30;
+    ngl::u32 benchmark_delta_stable_counter_ = 0;
+    bool benchmark_start_timeout_logged_ = false;
+    bool benchmark_measure_started_logged_ = false;
+    ngl::u32 benchmark_measure_start_frame_ = 0;
+    double benchmark_measure_start_app_sec_ = 0.0;
+    std::string benchmark_measure_start_reason_ = {};
+    ngl::u32 benchmark_app_frame_counter_ = 0;
+    ngl::u32 benchmark_captured_frame_counter_ = 0;
+    std::string benchmark_output_dir_ = {};
+    std::string benchmark_tag_ = {};
+    std::vector<std::string> benchmark_marker_order_ = {};
+    std::unordered_map<std::string, BenchmarkMarkerSamples> benchmark_marker_samples_ = {};
 };
 
 // -----------------------------------------------
@@ -236,6 +285,136 @@ static void TestEntry()
     ngl::math::math_test();
 
     ngl::render::app::ConcurrentBinaryTreeU32::Test();
+}
+
+static bool TryParseU32Arg(const std::string& src, ngl::u32& out_value)
+{
+    try
+    {
+        const auto parsed = std::stoul(src);
+        if (parsed > std::numeric_limits<ngl::u32>::max())
+        {
+            return false;
+        }
+        out_value = static_cast<ngl::u32>(parsed);
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+static std::string EscapeJsonString(const std::string& src)
+{
+    std::string out = {};
+    out.reserve(src.size() + 8);
+    for (const char c : src)
+    {
+        switch (c)
+        {
+        case '\\': out += "\\\\"; break;
+        case '\"': out += "\\\""; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default: out += c; break;
+        }
+    }
+    return out;
+}
+
+static double CalcPercentileFromSorted(const std::vector<double>& sorted, double percentile01)
+{
+    if (sorted.empty())
+    {
+        return 0.0;
+    }
+    const double clamped = std::clamp(percentile01, 0.0, 1.0);
+    const size_t index = static_cast<size_t>(std::floor((sorted.size() - 1) * clamped));
+    return sorted[index];
+}
+
+static std::string BuildUtcTimestampIso8601()
+{
+    const auto now = std::chrono::system_clock::now();
+    const auto now_tt = std::chrono::system_clock::to_time_t(now);
+    std::tm utc_tm{};
+#if defined(_WIN32)
+    gmtime_s(&utc_tm, &now_tt);
+#else
+    gmtime_r(&now_tt, &utc_tm);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&utc_tm, "%Y-%m-%dT%H:%M:%SZ");
+    return oss.str();
+}
+
+static void ParseCommandLineArgs(int argc, char** argv)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i] ? argv[i] : "";
+        if (arg == "--benchmark" || arg == "benchmark" || arg == "bench" || arg == "perf-run" || arg == "ベンチマーク")
+        {
+            g_benchmark_cli.enabled = true;
+        }
+        else if (arg == "--benchmark-warmup" && (i + 1) < argc)
+        {
+            ngl::u32 parsed = 0;
+            if (TryParseU32Arg(argv[++i], parsed))
+            {
+                g_benchmark_cli.warmup_frames = parsed;
+            }
+        }
+        else if (arg == "--benchmark-measure" && (i + 1) < argc)
+        {
+            ngl::u32 parsed = 0;
+            if (TryParseU32Arg(argv[++i], parsed))
+            {
+                g_benchmark_cli.measure_frames = std::max<ngl::u32>(1u, parsed);
+            }
+        }
+        else if (arg == "--benchmark-start-timeout-sec" && (i + 1) < argc)
+        {
+            try
+            {
+                g_benchmark_cli.start_timeout_seconds = std::max(1.0, std::stod(argv[++i]));
+                g_benchmark_cli.enabled = true;
+            }
+            catch (...)
+            {
+            }
+        }
+        else if (arg == "--benchmark-output" && (i + 1) < argc)
+        {
+            g_benchmark_cli.output_dir = argv[++i];
+            g_benchmark_cli.enabled = true;
+        }
+        else if (arg == "--benchmark-ready-delta-frames" && (i + 1) < argc)
+        {
+            ngl::u32 parsed = 0;
+            if (TryParseU32Arg(argv[++i], parsed))
+            {
+                g_benchmark_cli.ready_delta_stable_frames = std::max<ngl::u32>(1u, parsed);
+                g_benchmark_cli.enabled = true;
+            }
+        }
+        else if (arg == "--benchmark-tag" && (i + 1) < argc)
+        {
+            g_benchmark_cli.tag = argv[++i];
+            g_benchmark_cli.enabled = true;
+        }
+        else if (arg == "--help" || arg == "-h")
+        {
+            std::cout
+                << "Usage: sample_app [--benchmark] [--benchmark-warmup N] [--benchmark-measure N] "
+                << "[--benchmark-start-timeout-sec S] "
+                << "[--benchmark-output PATH] [--benchmark-tag LABEL]" << std::endl
+                << "       [--benchmark-ready-delta-frames N]" << std::endl
+                << "  benchmark aliases: benchmark / bench / perf-run / ベンチマーク" << std::endl;
+        }
+    }
 }
 
 AppGame::AppGame()
@@ -682,6 +861,210 @@ bool AppGame::Initialize()
     res_texture_ = ngl::res::ResourceManager::Instance().LoadResource<ngl::gfx::ResTexture>(&device, test_load_texture_file_name, &tex_load_desc);
 
     ngl::time::Timer::Instance().StartTimer("app_frame_sec");
+    ConfigureBenchmarkFromCli();
+    return true;
+}
+
+void AppGame::ConfigureBenchmarkFromCli()
+{
+    benchmark_enabled_ = g_benchmark_cli.enabled;
+    if (!benchmark_enabled_)
+    {
+        return;
+    }
+
+    benchmark_warmup_frames_ = g_benchmark_cli.warmup_frames;
+    benchmark_start_timeout_seconds_ = g_benchmark_cli.start_timeout_seconds;
+    benchmark_measure_frames_ = std::max<ngl::u32>(1u, g_benchmark_cli.measure_frames);
+    benchmark_ready_delta_stable_frames_ = std::max<ngl::u32>(1u, g_benchmark_cli.ready_delta_stable_frames);
+    benchmark_output_dir_ = g_benchmark_cli.output_dir;
+    benchmark_tag_ = g_benchmark_cli.tag;
+
+    // ベンチマーク実行時はUI操作依存を外す.
+    dbgw_test_window_enable = false;
+#if NGL_ENABLE_GPU_SCOPE_PROFILER
+    dbgw_show_gpu_profiler_window = false;
+    dbgw_gpu_profiler_pause_updates = false;
+#endif
+
+    std::cout << "[Benchmark] enabled. warmup=" << benchmark_warmup_frames_
+              << " start_timeout_sec=" << benchmark_start_timeout_seconds_
+              << " measure=" << benchmark_measure_frames_
+              << " delta_stable_frames=" << benchmark_ready_delta_stable_frames_
+              << " output=" << benchmark_output_dir_ << std::endl;
+}
+
+bool AppGame::CaptureBenchmarkFrameStats()
+{
+    std::vector<ngl::fwk::GraphicsFramework::GpuScopeStatEntry> all_entries = {};
+    ngl::u64 latest_frame_id = 0;
+    gfxfw_.EnumerateLatestGpuScopeStats([&all_entries, &latest_frame_id](const ngl::fwk::GraphicsFramework::GpuScopeStatEntry& e)
+    {
+        if (!e.stat.valid || !e.label)
+        {
+            return;
+        }
+        latest_frame_id = std::max(latest_frame_id, e.stat.frame_id);
+        all_entries.push_back(e);
+    });
+
+    if (all_entries.empty() || latest_frame_id == 0)
+    {
+        return false;
+    }
+
+    bool has_sample = false;
+    for (const auto& e : all_entries)
+    {
+        if (e.stat.frame_id != latest_frame_id)
+        {
+            continue;
+        }
+        const std::string label = e.label;
+        auto& marker = benchmark_marker_samples_[label];
+        if (marker.last_ms_history.empty())
+        {
+            benchmark_marker_order_.push_back(label);
+        }
+        marker.last_ms_history.push_back(e.stat.last_ms);
+        marker.latest = e.stat;
+        has_sample = true;
+    }
+    return has_sample;
+}
+
+bool AppGame::SaveBenchmarkReport() const
+{
+    namespace fs = std::filesystem;
+#if defined(_DEBUG)
+    constexpr const char* k_build_config = "Debug";
+#else
+    constexpr const char* k_build_config = "Release";
+#endif
+
+    fs::path out_dir = benchmark_output_dir_;
+    if (out_dir.empty())
+    {
+        out_dir = "artifacts\\perf\\latest";
+    }
+    std::error_code ec{};
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        std::cout << "[Benchmark] Failed to create output dir: " << out_dir.string() << std::endl;
+        return false;
+    }
+
+    struct MarkerSummary
+    {
+        std::string label = {};
+        ngl::u32 sample_count = 0;
+        double last_ms = 0.0;
+        double avg_ms = 0.0;
+        double p50_ms = 0.0;
+        double p95_ms = 0.0;
+        double max_ms = 0.0;
+        ngl::u64 frame_id = 0;
+    };
+
+    std::vector<MarkerSummary> summaries = {};
+    summaries.reserve(benchmark_marker_samples_.size());
+    for (const auto& label : benchmark_marker_order_)
+    {
+        const auto it = benchmark_marker_samples_.find(label);
+        if (it == benchmark_marker_samples_.end())
+        {
+            continue;
+        }
+        const auto& hist = it->second.last_ms_history;
+        if (hist.empty())
+        {
+            continue;
+        }
+
+        MarkerSummary s = {};
+        s.label = label;
+        s.sample_count = static_cast<ngl::u32>(hist.size());
+        s.last_ms = hist.back();
+        s.avg_ms = std::accumulate(hist.begin(), hist.end(), 0.0) / static_cast<double>(hist.size());
+        s.max_ms = *std::max_element(hist.begin(), hist.end());
+
+        auto sorted = hist;
+        std::sort(sorted.begin(), sorted.end());
+        s.p50_ms = CalcPercentileFromSorted(sorted, 0.50);
+        s.p95_ms = CalcPercentileFromSorted(sorted, 0.95);
+        s.frame_id = it->second.latest.frame_id;
+        summaries.push_back(s);
+    }
+
+    const fs::path csv_path = out_dir / "benchmark_gpu_markers.csv";
+    const fs::path json_path = out_dir / "benchmark_gpu_markers.json";
+
+    {
+        std::ofstream ofs(csv_path, std::ios::out | std::ios::trunc);
+        if (!ofs.is_open())
+        {
+            std::cout << "[Benchmark] Failed to open CSV: " << csv_path.string() << std::endl;
+            return false;
+        }
+        ofs << "scope,sample_count,last_ms,avg_ms,p50_ms,p95_ms,max_ms,frame_id\n";
+        for (const auto& s : summaries)
+        {
+            ofs << "\"" << s.label << "\""
+                << "," << s.sample_count
+                << "," << s.last_ms
+                << "," << s.avg_ms
+                << "," << s.p50_ms
+                << "," << s.p95_ms
+                << "," << s.max_ms
+                << "," << s.frame_id
+                << "\n";
+        }
+    }
+
+    {
+        std::ofstream ofs(json_path, std::ios::out | std::ios::trunc);
+        if (!ofs.is_open())
+        {
+            std::cout << "[Benchmark] Failed to open JSON: " << json_path.string() << std::endl;
+            return false;
+        }
+        ofs << "{\n";
+        ofs << "  \"format_version\": 1,\n";
+        ofs << "  \"mode\": \"benchmark\",\n";
+        ofs << "  \"timestamp_utc\": \"" << EscapeJsonString(BuildUtcTimestampIso8601()) << "\",\n";
+        ofs << "  \"build_config\": \"" << k_build_config << "\",\n";
+        ofs << "  \"tag\": \"" << EscapeJsonString(benchmark_tag_) << "\",\n";
+        ofs << "  \"warmup_frames\": " << benchmark_warmup_frames_ << ",\n";
+        ofs << "  \"start_timeout_seconds\": " << benchmark_start_timeout_seconds_ << ",\n";
+        ofs << "  \"ready_delta_stable_frames\": " << benchmark_ready_delta_stable_frames_ << ",\n";
+        ofs << "  \"measure_start_reason\": \"" << EscapeJsonString(benchmark_measure_start_reason_) << "\",\n";
+        ofs << "  \"measure_start_frame\": " << benchmark_measure_start_frame_ << ",\n";
+        ofs << "  \"measure_start_app_seconds\": " << benchmark_measure_start_app_sec_ << ",\n";
+        ofs << "  \"measure_frames_target\": " << benchmark_measure_frames_ << ",\n";
+        ofs << "  \"measure_frames_captured\": " << benchmark_captured_frame_counter_ << ",\n";
+        ofs << "  \"app_frames_total\": " << benchmark_app_frame_counter_ << ",\n";
+        ofs << "  \"markers\": [\n";
+        for (size_t i = 0; i < summaries.size(); ++i)
+        {
+            const auto& s = summaries[i];
+            ofs << "    {\n";
+            ofs << "      \"scope\": \"" << EscapeJsonString(s.label) << "\",\n";
+            ofs << "      \"sample_count\": " << s.sample_count << ",\n";
+            ofs << "      \"last_ms\": " << s.last_ms << ",\n";
+            ofs << "      \"avg_ms\": " << s.avg_ms << ",\n";
+            ofs << "      \"p50_ms\": " << s.p50_ms << ",\n";
+            ofs << "      \"p95_ms\": " << s.p95_ms << ",\n";
+            ofs << "      \"max_ms\": " << s.max_ms << ",\n";
+            ofs << "      \"frame_id\": " << s.frame_id << "\n";
+            ofs << "    }" << ((i + 1) < summaries.size() ? "," : "") << "\n";
+        }
+        ofs << "  ]\n";
+        ofs << "}\n";
+    }
+
+    std::cout << "[Benchmark] Saved: " << json_path.string() << std::endl;
+    std::cout << "[Benchmark] Saved: " << csv_path.string() << std::endl;
     return true;
 }
 
@@ -772,10 +1155,12 @@ bool AppGame::ExecuteApp()
         prev_camera_pose_ = camera_pose_;
         prev_camera_pos_ = camera_pos_;
 
-        player_controller.UpdateFrame(window_, delta_sec, camera_pose_, camera_pos_);
-
-        camera_pose_ = player_controller.camera_pose_;
-        camera_pos_  = player_controller.camera_pos_;
+        if (!benchmark_enabled_)
+        {
+            player_controller.UpdateFrame(window_, delta_sec, camera_pose_, camera_pos_);
+            camera_pose_ = player_controller.camera_pose_;
+            camera_pos_  = player_controller.camera_pos_;
+        }
     }
 
     {
@@ -1317,6 +1702,58 @@ bool AppGame::ExecuteApp()
         std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(dbgw_perf_main_thread_sleep_millisec)));
     }
 
+    if (benchmark_enabled_)
+    {
+        ++benchmark_app_frame_counter_;
+        const double frame_fps = (delta_sec > 1e-6f) ? (1.0 / static_cast<double>(delta_sec)) : 0.0;
+        const double frame_delta_ms = static_cast<double>(delta_sec) * 1000.0;
+        const double moving_avg_delta_ms = moving_avg_t50_frame_sec_ * 1000.0;
+        const double delta_stable_threshold_ms = std::max(1.0, moving_avg_delta_ms * 0.20);
+        if (std::abs(frame_delta_ms - moving_avg_delta_ms) <= delta_stable_threshold_ms)
+        {
+            ++benchmark_delta_stable_counter_;
+        }
+        else
+        {
+            benchmark_delta_stable_counter_ = 0;
+        }
+
+        const bool warmup_frame_ready = benchmark_app_frame_counter_ > benchmark_warmup_frames_;
+        const bool warmup_delta_ready = benchmark_delta_stable_counter_ >= benchmark_ready_delta_stable_frames_;
+        const bool start_timeout_reached = app_sec_ >= benchmark_start_timeout_seconds_;
+        if (start_timeout_reached && !warmup_delta_ready && !benchmark_start_timeout_logged_)
+        {
+            benchmark_start_timeout_logged_ = true;
+            std::cout << "[Benchmark] Start timeout reached. Bypassing delta-stability gate at app_sec=" << app_sec_ << std::endl;
+        }
+
+        if (warmup_frame_ready && (warmup_delta_ready || start_timeout_reached))
+        {
+            if (!benchmark_measure_started_logged_)
+            {
+                benchmark_measure_started_logged_ = true;
+                benchmark_measure_start_frame_ = benchmark_app_frame_counter_;
+                benchmark_measure_start_app_sec_ = app_sec_;
+                benchmark_measure_start_reason_ = warmup_delta_ready ? "delta_stable" : "start_timeout";
+                std::cout << "[Benchmark] Measure start at frame=" << benchmark_app_frame_counter_
+                          << " app_sec=" << app_sec_
+                          << " reason=" << benchmark_measure_start_reason_
+                          << " fps=" << frame_fps
+                          << " delta_ms=" << frame_delta_ms << std::endl;
+            }
+            if (CaptureBenchmarkFrameStats())
+            {
+                ++benchmark_captured_frame_counter_;
+            }
+        }
+
+        if (benchmark_captured_frame_counter_ >= benchmark_measure_frames_)
+        {
+            SaveBenchmarkReport();
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -1619,10 +2056,11 @@ void PlayerController::UpdateFrame(ngl::platform::CoreWindow& window, float delt
     camera_pos_  = camera_pos;
 }
 
-int main()
+int main(int argc, char** argv)
 {
     std::cout << "Boot App" << std::endl;
     ngl::time::Timer::Instance().StartTimer("AppGameTime");
+    ParseCommandLineArgs(argc, argv);
 
     {
         std::unique_ptr<ngl::boot::BootApplication> boot(ngl::boot::BootApplication::Create());

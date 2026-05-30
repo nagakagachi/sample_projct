@@ -1,0 +1,9 @@
+{
+  "mode": "benchmark",
+  "warmup_frames": 60,
+  "start_timeout_seconds": 120.0,
+  "measure_frames": 600,
+  "ready_delta_stable_frames": 30,
+  "output_dir": "artifacts/perf/latest",
+  "tag": "candidate"
+}
