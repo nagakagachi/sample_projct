@@ -456,7 +456,7 @@ bool AppGame::Initialize()
     constexpr auto scree_w = scree_h * 16 / 9;
 
     // ウィンドウ作成
-    if (!window_.Initialize(_T("ToyRenderer"), scree_w, scree_h))
+    if (!window_.Initialize(_T("ToyRenderer"), scree_w, scree_h, g_benchmark_cli.enabled))
     {
         return false;
     }

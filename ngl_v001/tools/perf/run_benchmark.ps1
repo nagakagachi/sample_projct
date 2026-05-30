@@ -1,4 +1,17 @@
-# run_benchmark.ps1: Build sample_app, run benchmark mode, and generate analysis report.
+# run_benchmark.ps1
+# 1) sample_app を Release ビルド
+# 2) benchmark モード実行と生マーカー出力の回収
+# 3) 比較用に整形して report.md を生成
+#
+# 出力フォルダ構成:
+#   artifacts\perf\<timestamp>\
+#     candidate\benchmark_gpu_markers.json   # sample_app が出力する生 JSON
+#     candidate\benchmark_gpu_markers.csv    # sample_app が出力する生 CSV
+#     candidate.json                          # compare スクリプト用の候補 JSON
+#     baseline.json                           # ベースライン比較時のみ作成
+#     report.md                               # compare_gpu_markers.py の要約レポート
+#     sample_app.stdout.log                   # sample_app の標準出力ログ
+#     sample_app.stderr.log                   # sample_app の標準エラーログ
 param(
     [string]$SolutionPath = "ngl_v001.sln",
     [string]$Configuration = "Release",
@@ -10,7 +23,9 @@ param(
     [int]$ReadyDeltaStableFrames = 30,
     [int]$TimeoutSec = 900,
     [string]$BaselineJson = "",
-    [string]$Tag = "candidate"
+    [string]$Tag = "candidate",
+    [ValidateSet("Hidden", "Minimized", "Normal")]
+    [string]$AppWindowStyle = "Hidden"
 )
 
 Set-StrictMode -Version Latest
@@ -28,6 +43,7 @@ $repoRoot = (Resolve-Path ".").Path
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $artifactDir = Join-Path $repoRoot (Join-Path $OutputRoot $timestamp)
 $candidateDir = Join-Path $artifactDir "candidate"
+# 生出力は candidate\ に集約し、比較/要約用ファイルは artifact 直下に配置する。
 New-Item -ItemType Directory -Force -Path $candidateDir | Out-Null
 
 Write-Host "[perf] Building $Configuration..."
@@ -53,7 +69,11 @@ $benchmarkArgs = @(
 
 Write-Host "[perf] Running benchmark: $appExeAbs $($benchmarkArgs -join ' ')"
 $appWorkingDir = Join-Path $repoRoot "sample_app"
-$proc = Start-Process -FilePath $appExeAbs -ArgumentList $benchmarkArgs -PassThru -WorkingDirectory $appWorkingDir
+# コンソールを Hidden/Minimized で起動してもログを必ず保存する。
+# シェーダ読み込み・コンパイル失敗は stderr 側を確認する。
+$appStdoutLog = Join-Path $artifactDir "sample_app.stdout.log"
+$appStderrLog = Join-Path $artifactDir "sample_app.stderr.log"
+$proc = Start-Process -FilePath $appExeAbs -ArgumentList $benchmarkArgs -PassThru -WorkingDirectory $appWorkingDir -WindowStyle $AppWindowStyle -RedirectStandardOutput $appStdoutLog -RedirectStandardError $appStderrLog
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 while (-not $proc.HasExited -and $sw.Elapsed.TotalSeconds -lt $TimeoutSec) {
     Start-Sleep -Milliseconds 500
@@ -63,13 +83,18 @@ if (-not $proc.HasExited) {
     Stop-Process -Id $proc.Id
     throw "Benchmark timed out after $TimeoutSec sec."
 }
+$proc.Refresh()
+$exitCode = $proc.ExitCode
+$exitCodeText = if ($null -eq $exitCode) { "unknown" } else { "$exitCode" }
 
 $candidateJson = Join-Path $candidateDir "benchmark_gpu_markers.json"
 if (-not (Test-Path $candidateJson)) {
-    throw "Benchmark output JSON not found (exit code=$($proc.ExitCode)): $candidateJson"
+    throw "Benchmark output JSON not found (exit code=$exitCodeText): $candidateJson"
 }
-if ($proc.ExitCode -ne 0) {
-    Write-Warning "Benchmark process exited with code $($proc.ExitCode), but output JSON exists. Continue."
+if ($null -eq $exitCode -or $exitCode -ne 0) {
+    # 現状は、出力生成後に非0終了するケースがある。
+    # JSON が存在する場合は成果物を優先して処理継続する。
+    Write-Warning "Benchmark process exited with code $exitCodeText, but output JSON exists. Continue."
 }
 $candidateFlatJson = Join-Path $artifactDir "candidate.json"
 Copy-Item -Force $candidateJson $candidateFlatJson
@@ -102,3 +127,5 @@ Write-Host "  Artifact: $artifactDir"
 Write-Host "  Candidate: $candidateFlatJson"
 if ($baselineFlatJson) { Write-Host "  Baseline: $baselineFlatJson" }
 Write-Host "  Report: $reportPath"
+Write-Host "  App stdout: $appStdoutLog"
+Write-Host "  App stderr: $appStderrLog"

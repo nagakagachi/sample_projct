@@ -22,7 +22,7 @@ namespace ngl
 		public:
 			CoreWindowImpl() {};
 			virtual ~CoreWindowImpl() {};
-			virtual bool Initialize(const TCHAR* title, int w, int h) = 0;
+			virtual bool Initialize(const TCHAR* title, int w, int h, bool no_activate) = 0;
 			virtual void Destroy() = 0;
 			virtual bool IsValid() const = 0;
 
@@ -43,7 +43,7 @@ namespace ngl
 				Destroy();
 			}
 			// 初期化
-			bool Initialize(const TCHAR* title, int w, int h)
+			bool Initialize(const TCHAR* title, int w, int h, bool no_activate = false)
 			{
 				// 生成済みなら失敗
 				if (nullptr != window_impl_)
@@ -51,7 +51,7 @@ namespace ngl
 				// 実装部生成
 				CreateImplement();
 				// 実装部初期化
-				window_impl_->Initialize(title, w, h);
+				window_impl_->Initialize(title, w, h, no_activate);
 				return true;
 			}
 			// 破棄

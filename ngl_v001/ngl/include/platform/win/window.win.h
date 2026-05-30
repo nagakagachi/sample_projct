@@ -30,7 +30,7 @@ namespace ngl
 			CoreWindowImplDep();
 			virtual ~CoreWindowImplDep();
 
-			virtual bool Initialize(const TCHAR* title, int w, int h) override;
+			virtual bool Initialize(const TCHAR* title, int w, int h, bool no_activate) override;
 			virtual void Destroy() override;
 			virtual bool IsValid() const override;
 

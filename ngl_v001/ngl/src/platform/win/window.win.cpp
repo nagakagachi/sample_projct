@@ -24,7 +24,7 @@ namespace ngl
 		}
 
 		// ウィンドウ生成
-		bool CoreWindowImplDep::Initialize(const TCHAR* title, int w, int h)
+		bool CoreWindowImplDep::Initialize(const TCHAR* title, int w, int h, bool no_activate)
 		{
 			// 初期化済みなら帰る
 			if (IsValidWindow())
@@ -51,8 +51,9 @@ namespace ngl
 				return false;
 			}
 
+			const DWORD ex_style = no_activate ? WS_EX_NOACTIVATE : 0;
 			// 自身のポインタを指定してウィンドウ生成
-			if (!(hwnd_ = CreateWindow(title, title, WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_SIZEBOX),
+			if (!(hwnd_ = CreateWindowEx(ex_style, title, title, WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_SIZEBOX),
 				CW_USEDEFAULT, 0, w, h, 0, 0, GetModuleHandle(NULL), (LPVOID)this))) {
 				return false;
 			}
@@ -61,7 +62,12 @@ namespace ngl
 			is_valid_window_ = true;
 
 			SetWindowSize(w, h);
-			ShowWindow(hwnd_, SW_SHOW);
+			ShowWindow(hwnd_, no_activate ? SW_SHOWNOACTIVATE : SW_SHOW);
+			if (no_activate)
+			{
+				::SetWindowPos(hwnd_, HWND_BOTTOM, 0, 0, 0, 0,
+					SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+			}
 			return true;
 		}
 		void CoreWindowImplDep::Destroy()
@@ -104,7 +110,7 @@ namespace ngl
 			screen_h_ = h;
 			unsigned int ww, wh;
 			GetWindowSizeFromClientSize(screen_w_, screen_h_, ww, wh);
-			::SetWindowPos(hwnd_, NULL, 0, 0, ww, wh, SWP_NOMOVE | SWP_NOZORDER);
+			::SetWindowPos(hwnd_, NULL, 0, 0, ww, wh, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 		}
 
 		void CoreWindowImplDep::GetWindowSizeFromClientSize(unsigned int cw, unsigned int ch, unsigned int& ww, unsigned int& wh)
