@@ -1,0 +1,25 @@
+{
+  "name": "gpu_task_optimization",
+  "target_scope": "Graph_0_Gfx/YourPass/YourMarkerScope",
+  "baseline_json": "artifacts/perf/<baseline_timestamp>/candidate.json",
+  "goal_target_ratio": 0.5,
+  "max_iterations": 20,
+  "run_benchmark_script": "tools/perf/run_benchmark.ps1",
+  "benchmark_output_root": "artifacts/perf",
+  "output_root": "artifacts/perf/agent_opt",
+  "app_window_style": "Hidden",
+  "attempts": [
+    {
+      "iteration": 1,
+      "tag": "gpu_opt_try01",
+      "change_summary": "試行1の変更内容（例: メモリアクセス最適化）",
+      "enabled": true
+    },
+    {
+      "iteration": 2,
+      "tag": "gpu_opt_try02",
+      "change_summary": "試行2の変更内容（例: wave/グループ共有処理の見直し）",
+      "enabled": true
+    }
+  ]
+}
