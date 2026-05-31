@@ -19,6 +19,7 @@ param(
     [string]$OutputRoot = "artifacts\\perf",
     [int]$WarmupFrames = 60,
     [int]$MeasureFrames = 600,
+    [double]$MinReadySeconds = 5.0,
     [double]$StartTimeoutSeconds = 120,
     [int]$ReadyDeltaStableFrames = 30,
     [int]$TimeoutSec = 900,
@@ -60,6 +61,7 @@ if (-not (Test-Path $appExeAbs)) {
 $benchmarkArgs = @(
     "--benchmark",
     "--benchmark-warmup", "$WarmupFrames",
+    "--benchmark-min-ready-sec", "$MinReadySeconds",
     "--benchmark-start-timeout-sec", "$StartTimeoutSeconds",
     "--benchmark-measure", "$MeasureFrames",
     "--benchmark-ready-delta-frames", "$ReadyDeltaStableFrames",

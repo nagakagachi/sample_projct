@@ -128,6 +128,7 @@ struct BenchmarkCliOptions
 {
     bool enabled = false;
     ngl::u32 warmup_frames = 60;
+    double min_ready_seconds = 5.0;
     double start_timeout_seconds = 120.0;
     ngl::u32 measure_frames = 600;
     ngl::u32 ready_delta_stable_frames = 30;
@@ -256,6 +257,7 @@ private:
     };
     bool benchmark_enabled_ = false;
     ngl::u32 benchmark_warmup_frames_ = 0;
+    double benchmark_min_ready_seconds_ = 5.0;
     double benchmark_start_timeout_seconds_ = 120.0;
     ngl::u32 benchmark_measure_frames_ = 0;
     ngl::u32 benchmark_ready_delta_stable_frames_ = 30;
@@ -386,6 +388,17 @@ static void ParseCommandLineArgs(int argc, char** argv)
             {
             }
         }
+        else if (arg == "--benchmark-min-ready-sec" && (i + 1) < argc)
+        {
+            try
+            {
+                g_benchmark_cli.min_ready_seconds = std::max(0.0, std::stod(argv[++i]));
+                g_benchmark_cli.enabled = true;
+            }
+            catch (...)
+            {
+            }
+        }
         else if (arg == "--benchmark-output" && (i + 1) < argc)
         {
             g_benchmark_cli.output_dir = argv[++i];
@@ -409,7 +422,7 @@ static void ParseCommandLineArgs(int argc, char** argv)
         {
             std::cout
                 << "Usage: sample_app [--benchmark] [--benchmark-warmup N] [--benchmark-measure N] "
-                << "[--benchmark-start-timeout-sec S] "
+                << "[--benchmark-start-timeout-sec S] [--benchmark-min-ready-sec S] "
                 << "[--benchmark-output PATH] [--benchmark-tag LABEL]" << std::endl
                 << "       [--benchmark-ready-delta-frames N]" << std::endl
                 << "  benchmark aliases: benchmark / bench / perf-run / ベンチマーク" << std::endl;
@@ -874,6 +887,7 @@ void AppGame::ConfigureBenchmarkFromCli()
     }
 
     benchmark_warmup_frames_ = g_benchmark_cli.warmup_frames;
+    benchmark_min_ready_seconds_ = std::max(0.0, g_benchmark_cli.min_ready_seconds);
     benchmark_start_timeout_seconds_ = g_benchmark_cli.start_timeout_seconds;
     benchmark_measure_frames_ = std::max<ngl::u32>(1u, g_benchmark_cli.measure_frames);
     benchmark_ready_delta_stable_frames_ = std::max<ngl::u32>(1u, g_benchmark_cli.ready_delta_stable_frames);
@@ -888,6 +902,7 @@ void AppGame::ConfigureBenchmarkFromCli()
 #endif
 
     std::cout << "[Benchmark] enabled. warmup=" << benchmark_warmup_frames_
+              << " min_ready_sec=" << benchmark_min_ready_seconds_
               << " start_timeout_sec=" << benchmark_start_timeout_seconds_
               << " measure=" << benchmark_measure_frames_
               << " delta_stable_frames=" << benchmark_ready_delta_stable_frames_
@@ -1709,7 +1724,8 @@ bool AppGame::ExecuteApp()
         const double frame_delta_ms = static_cast<double>(delta_sec) * 1000.0;
         const double moving_avg_delta_ms = moving_avg_t50_frame_sec_ * 1000.0;
         const double delta_stable_threshold_ms = std::max(1.0, moving_avg_delta_ms * 0.20);
-        if (std::abs(frame_delta_ms - moving_avg_delta_ms) <= delta_stable_threshold_ms)
+        const bool min_ready_time_elapsed = app_sec_ >= benchmark_min_ready_seconds_;
+        if (min_ready_time_elapsed && std::abs(frame_delta_ms - moving_avg_delta_ms) <= delta_stable_threshold_ms)
         {
             ++benchmark_delta_stable_counter_;
         }
