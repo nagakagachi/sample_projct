@@ -9,7 +9,7 @@ DepthTest 側の挙動調整が Legacy 側へ影響しないようにする。
 
 #endif
 
-#define TILE_WIDTH 16
+#define TILE_WIDTH 8
 
 #include "../srvs_util.hlsli"
 // SceneView定数バッファ構造定義.
@@ -24,9 +24,11 @@ Texture2D			TexHardwareDepth;
 // ThreadGroupタイル単位でスキップする最適化のグループタイル幅. 1より大きい数値で実行.
 #define THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH 0
 
-// SharedMem上のタイルで簡易重複除去をする際のサイズ.
-#define REDUCE_ATOMIC_WRITE_OPTIMIZE_TILE_WIDTH 4
-groupshared uint4 shared_bbv_bitmask_addr[TILE_WIDTH*TILE_WIDTH];
+uint first_lane_from_ballot(uint4 ballot)
+{
+    if(ballot.x != 0u) return firstbitlow(ballot.x);
+    return 32u + firstbitlow(ballot.y);
+}
 
 // DepthBufferに対してDispatch.
 [numthreads(TILE_WIDTH, TILE_WIDTH, 1)]
@@ -60,33 +62,32 @@ void main_cs(
     // ハードウェア深度取得. AtlasTexture対応のためオフセット考慮.
     float d = TexHardwareDepth.Load(int3(dtid.xy + cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy, 0)).r;
 
-    // 可視表面のbbv充填.
-    shared_bbv_bitmask_addr[gindex] = uint4(~uint(0), 0, 0, 0);// 初期無効値.
+    bool has_injection = false;
+    uint voxel_index = 0;
+    uint bitmask_u32_offset = 0;
+    uint bitmask_append = 0;
     
     // 無限遠ピクセルのチェック. ReverseZを考慮して0 < d < 1.
     if(0.0 < d && d < 1.0)
     {
         // DepthBufferに紐づいたView情報で復元.
         float view_z = calc_view_z_from_ndc_z(d, cb_injection_src_view_info.cb_ndc_z_to_view_z_coef);
-        const float2 near_far_plane_d = GetNearFarPlaneDepthFromProjectionMatrix(cb_injection_src_view_info.cb_proj_mtx);
-        const float near_plane_view_z = calc_view_z_from_ndc_z(near_far_plane_d.x, cb_injection_src_view_info.cb_ndc_z_to_view_z_coef);
-        
         // 深度->PixelWorldPosition
         // DepthBufferに紐づいたView情報で復元.
         const float2 screen_uv = (float2(dtid.xy) + float2(0.5, 0.5)) / float2(cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw);
         // Orthoも含めて対応するためPositionを直接復元.
-        float3 pixel_pos_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(CalcViewSpacePosition(screen_uv, view_z, cb_injection_src_view_info.cb_proj_mtx), 1.0));
+        float3 pixel_pos_vs = CalcViewSpacePosition(screen_uv, view_z, cb_injection_src_view_info.cb_proj_mtx);
 
         // near平面上の同一ピクセル点を始点にすると、
         // Perspectiveでは放射状、Orthoでは平行方向のレイが得られる。
-        const float3 view_ray_origin_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(CalcViewSpacePosition(screen_uv, near_plane_view_z, cb_injection_src_view_info.cb_proj_mtx), 1.0));
-        const float3 to_pixel_vec_ws = pixel_pos_ws - view_ray_origin_ws;
-        const float to_pixel_len_sq = dot(to_pixel_vec_ws, to_pixel_vec_ws);
-        if(to_pixel_len_sq > 1e-10)
-        {
-            // 表面注入がRemovalで落ちやすいケース向けに、固定ワールド距離だけ視線奥へシフト.
-            pixel_pos_ws += normalize(to_pixel_vec_ws) * cb_srvs.bbv_depthtest_injection_world_offset;
-        }
+        const float3 view_ray_origin_vs = CalcViewSpacePosition(screen_uv, cb_injection_src_view_info.cb_near_plane_view_z, cb_injection_src_view_info.cb_proj_mtx);
+        const float3 to_pixel_vec_vs = pixel_pos_vs - view_ray_origin_vs;
+        const float to_pixel_len_sq = dot(to_pixel_vec_vs, to_pixel_vec_vs);
+        const float inv_to_pixel_len = rsqrt(max(to_pixel_len_sq, 1e-10));
+        // 表面注入がRemovalで落ちやすいケース向けに、固定ワールド距離だけ視線奥へシフト.
+        pixel_pos_vs += (to_pixel_vec_vs * inv_to_pixel_len) * cb_srvs.bbv_depthtest_injection_world_offset;
+
+        const float3 pixel_pos_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(pixel_pos_vs, 1.0));
 
 
         // PixelWorldPosition->VoxelCoord
@@ -95,61 +96,40 @@ void main_cs(
         if(all(voxel_coord >= 0) && all(voxel_coord < cb_srvs.bbv.grid_resolution))
         {
             const int3 voxel_coord_toroidal = voxel_coord_toroidal_mapping(voxel_coord, cb_srvs.bbv.grid_toroidal_offset, cb_srvs.bbv.grid_resolution);
-            const uint voxel_index = voxel_coord_to_index(voxel_coord_toroidal, cb_srvs.bbv.grid_resolution);
+            voxel_index = voxel_coord_to_index(voxel_coord_toroidal, cb_srvs.bbv.grid_resolution);
             {
                 // 占有ビットマスク.
                 const float3 voxel_coord_frac = frac(voxel_coordf);
                 const uint3 voxel_coord_bitmask_pos = uint3(voxel_coord_frac * k_bbv_per_voxel_resolution);
-                uint bitcell_u32_offset, bitcell_u32_bit_pos;
-                calc_bbv_bitcell_info(bitcell_u32_offset, bitcell_u32_bit_pos, voxel_coord_bitmask_pos);
-                shared_bbv_bitmask_addr[gindex] = uint4(voxel_index, 1, bitcell_u32_offset, (1 << bitcell_u32_bit_pos));
+                uint bitcell_u32_bit_pos;
+                calc_bbv_bitcell_info(bitmask_u32_offset, bitcell_u32_bit_pos, voxel_coord_bitmask_pos);
+                bitmask_append = (1u << bitcell_u32_bit_pos);
+                has_injection = true;
             }
         }
     }
 
-
-    GroupMemoryBarrierWithGroupSync();
-    // シンプルに小Tile毎に最小インデックスの要素との一致をチェックしてマージと除去をする.
-    // 後段のAtomic操作を減らすことが目的.
-    if(0 == (gtid.x%REDUCE_ATOMIC_WRITE_OPTIMIZE_TILE_WIDTH) && 0 == (gtid.y%REDUCE_ATOMIC_WRITE_OPTIMIZE_TILE_WIDTH))
+    // Wave内で同一 (voxel_index, bitmask_u32_offset) への書き込みを統合し、
+    // 代表laneのみ AtomicOr を発行して競合を抑える。
+    uint4 pending_lanes = WaveActiveBallot(has_injection);
+    while((pending_lanes.x | pending_lanes.y) != 0u)
     {
-        for(int ix = 0; ix < REDUCE_ATOMIC_WRITE_OPTIMIZE_TILE_WIDTH; ++ix)
+        const uint leader_lane = first_lane_from_ballot(pending_lanes);
+        const uint leader_voxel = WaveReadLaneAt(voxel_index, leader_lane);
+        const uint leader_u32_offset = WaveReadLaneAt(bitmask_u32_offset, leader_lane);
+
+        const bool is_same_target = has_injection &&
+            (voxel_index == leader_voxel) &&
+            (bitmask_u32_offset == leader_u32_offset);
+        const uint4 same_target_lanes = WaveActiveBallot(is_same_target);
+        const uint merged_append = WaveActiveBitOr(is_same_target ? bitmask_append : 0u);
+
+        if(WaveGetLaneIndex() == leader_lane)
         {
-            for(int iy = 0; iy < REDUCE_ATOMIC_WRITE_OPTIMIZE_TILE_WIDTH; ++iy)
-            {
-                const uint check_index = (gtid.y + iy)*TILE_WIDTH + (gtid.x + ix);
-                if(check_index == gindex || check_index >= (TILE_WIDTH*TILE_WIDTH))
-                    continue;
-                
-                // Voxelの一致チェック.
-                if(shared_bbv_bitmask_addr[gindex].x == shared_bbv_bitmask_addr[check_index].x)
-                {
-                    // Brick毎の処理を最小化するためにBrick重複する他の要素はフラグを落とす.
-                    shared_bbv_bitmask_addr[check_index].y = 0;
-
-                    // u32オフセットも一致する場合はビットマスクをマージ.
-                    if(shared_bbv_bitmask_addr[gindex].z == shared_bbv_bitmask_addr[check_index].z)
-                    {
-                        shared_bbv_bitmask_addr[gindex].w |= shared_bbv_bitmask_addr[check_index].w;// マージ
-                        shared_bbv_bitmask_addr[check_index].x = ~uint(0);// Voxelも書き込みu32オフセットも一致するため完全にマージして無効化.
-                    }
-                }   
-            }
+            const uint bbv_addr = bbv_voxel_bitmask_data_addr(leader_voxel);
+            InterlockedOr(RWBitmaskBrickVoxel[bbv_addr + leader_u32_offset], merged_append);
         }
-    }
 
-    GroupMemoryBarrierWithGroupSync();
-
-    // shared memからバッファ書き込み解決. ここで重複要素への書き込みをマージしてAtomic操作の衝突を最小化したい.
-    const uint voxel_index = shared_bbv_bitmask_addr[gindex].x;
-    const uint bitmask_u32_offset = shared_bbv_bitmask_addr[gindex].z;
-    const uint bitmask_append = shared_bbv_bitmask_addr[gindex].w;
-    if(~uint(0) != voxel_index)
-    {
-        const uint bbv_addr = bbv_voxel_bitmask_data_addr(voxel_index);
-    
-        // 詳細ジオメトリをbitmask書き込み.
-        // Brick / HiBrick count は後段の集計パスで再構築するため、ここでは bitmask 更新だけ行う。
-        InterlockedOr(RWBitmaskBrickVoxel[bbv_addr + bitmask_u32_offset], bitmask_append);
+        pending_lanes &= ~same_target_lanes;
     }
 }

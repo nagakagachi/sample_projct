@@ -1650,6 +1650,8 @@ namespace ngl::render::app
                     p->cb_view_inv_mtx = ngl::math::Mat34::Inverse(target_depth_info.view_mat);
                     p->cb_proj_inv_mtx = ngl::math::Mat44::Inverse(target_depth_info.proj_mat);
                     p->cb_ndc_z_to_view_z_coef =  CalcViewDepthReconstructCoefFromProjectionMatrix(target_depth_info.proj_mat);
+                    const float near_plane_depth = (target_depth_info.proj_mat.m[2][3] > 0.0f) ? 1.0f : 0.0f;
+                    p->cb_near_plane_view_z = calc_view_z_from_ndc_z(near_plane_depth, p->cb_ndc_z_to_view_z_coef);
                     // ViewDepthBufferの他, ShadowMapによるInjectionもしたいのでShadowMapAtlas用にオフセット考慮.
                     p->cb_view_depth_buffer_offset_size = math::Vec4i(
                         target_depth_info.atlas_offset.x,
@@ -1658,7 +1660,7 @@ namespace ngl::render::app
                         target_depth_info.atlas_resolution.y
                     );
                     p->cb_is_main_view = is_main_view_update ? 1 : 0;
-                    p->cb_padding0 = math::Vec3i(0, 0, 0);
+                    p->cb_padding0 = math::Vec2i(0, 0);
                 }
                 cbh_injection_view_info->buffer.Unmap();
             }
@@ -1764,13 +1766,15 @@ namespace ngl::render::app
             p->cb_view_inv_mtx = ngl::math::Mat34::Inverse(view_info.view_mat);
             p->cb_proj_inv_mtx = ngl::math::Mat44::Inverse(view_info.proj_mat);
             p->cb_ndc_z_to_view_z_coef = CalcViewDepthReconstructCoefFromProjectionMatrix(view_info.proj_mat);
+            const float near_plane_depth = (view_info.proj_mat.m[2][3] > 0.0f) ? 1.0f : 0.0f;
+            p->cb_near_plane_view_z = calc_view_z_from_ndc_z(near_plane_depth, p->cb_ndc_z_to_view_z_coef);
             p->cb_view_depth_buffer_offset_size = math::Vec4i(
                 view_info.atlas_offset.x,
                 view_info.atlas_offset.y,
                 view_info.atlas_resolution.x,
                 view_info.atlas_resolution.y);
             p->cb_is_main_view = 1;
-            p->cb_padding0 = math::Vec3i(0, 0, 0);
+            p->cb_padding0 = math::Vec2i(0, 0);
             cbh_injection_view_info->buffer.Unmap();
         }
 
