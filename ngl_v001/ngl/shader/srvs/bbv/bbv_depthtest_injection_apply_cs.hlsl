@@ -20,10 +20,6 @@ ConstantBuffer<BbvSurfaceInjectionViewInfo> cb_injection_src_view_info;
 
 Texture2D			TexHardwareDepth;
 
-
-// ThreadGroupタイル単位でスキップする最適化のグループタイル幅. 1より大きい数値で実行.
-#define THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH 0
-
 // DepthBufferに対してDispatch.
 [numthreads(TILE_WIDTH, TILE_WIDTH, 1)]
 void main_cs(
@@ -38,20 +34,6 @@ void main_cs(
     {
         return;
     }
-
-    #if 1 < THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH
-        // Tile単位処理スキップ軽量化.
-        const uint skip_tile_size = THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH;// SxS個のタイルグループ毎に1Fに1タイルだけ処理するシンプル軽量化.
-        const uint tile_skip_id_x = gid.x%skip_tile_size;
-        const uint tile_skip_id_y = gid.y%skip_tile_size;
-        const uint skip_frame_id = cb_srvs.frame_count % (skip_tile_size*skip_tile_size);
-        const uint skip_frame_id_y = skip_frame_id / (skip_tile_size);
-        const uint skip_frame_id_x = skip_frame_id % (skip_tile_size);
-        if((tile_skip_id_x != skip_frame_id_x) || (tile_skip_id_y != skip_frame_id_y))
-        {
-            return;
-        }
-    #endif
 
     // ハードウェア深度取得. AtlasTexture対応のためオフセット考慮.
     float d = TexHardwareDepth.Load(int3(dtid.xy + cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy, 0)).r;
