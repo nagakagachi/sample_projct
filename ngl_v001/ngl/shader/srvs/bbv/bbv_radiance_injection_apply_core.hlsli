@@ -27,15 +27,38 @@ bool bbv_try_calc_voxel_index_from_pos_ws(float3 pos_ws, out uint voxel_index)
     return true;
 }
 
-void bbv_accumulate_radiance_to_voxel(uint voxel_index, float3 input_radiance)
+uint3 bbv_to_fixed_point_radiance(float3 input_radiance)
 {
     const float3 clamped_radiance = min(max(input_radiance, 0.0.xxx), k_bbv_radiance_input_clamp.xxx);
-    const uint3 fixed_point_radiance = (uint3)(clamped_radiance * k_bbv_radiance_fixed_point_scale + 0.5.xxx);
+    return (uint3)(clamped_radiance * k_bbv_radiance_fixed_point_scale + 0.5.xxx);
+}
 
-    InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_r_addr(voxel_index)], fixed_point_radiance.x);
-    InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_g_addr(voxel_index)], fixed_point_radiance.y);
-    InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_b_addr(voxel_index)], fixed_point_radiance.z);
-    InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_count_addr(voxel_index)], 1);
+void bbv_accumulate_radiance_to_voxel_wave(uint voxel_index, uint3 fixed_point_radiance, bool has_injection)
+{
+    // Wave内で同一 voxel_index への加算を集約し、代表laneのみ atomic を実行する。
+    uint4 pending_lanes = WaveActiveBallot(has_injection);
+    while(ballot_any(pending_lanes))
+    {
+        const uint leader_lane = first_lane_from_ballot(pending_lanes);
+        const uint leader_voxel = WaveReadLaneAt(voxel_index, leader_lane);
+        const bool is_same_target = has_injection && (voxel_index == leader_voxel);
+        const uint4 same_target_lanes = WaveActiveBallot(is_same_target);
+
+        const uint merged_r = WaveActiveSum(is_same_target ? fixed_point_radiance.x : 0u);
+        const uint merged_g = WaveActiveSum(is_same_target ? fixed_point_radiance.y : 0u);
+        const uint merged_b = WaveActiveSum(is_same_target ? fixed_point_radiance.z : 0u);
+        const uint merged_count = WaveActiveCountBits(is_same_target);
+
+        if(WaveGetLaneIndex() == leader_lane)
+        {
+            InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_r_addr(leader_voxel)], merged_r);
+            InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_g_addr(leader_voxel)], merged_g);
+            InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_b_addr(leader_voxel)], merged_b);
+            InterlockedAdd(RWBbvRadianceAccumBuffer[bbv_radiance_accum_count_addr(leader_voxel)], merged_count);
+        }
+
+        pending_lanes &= ~same_target_lanes;
+    }
 }
 
 [numthreads(k_bbv_radiance_injection_tile_width, k_bbv_radiance_injection_tile_width, 1)]
@@ -115,6 +138,9 @@ void main_cs(
     }
 
     const float3 input_radiance = TexInputRadiance.Load(int3(src_texel, 0)).rgb;
+    const uint3 fixed_point_radiance = bbv_to_fixed_point_radiance(input_radiance);
+    bool has_target_voxel = true;
+    uint target_voxel_index = voxel_index;
 
     #if NGL_SRVS_RADIANCE_ENABLE_SHORT_RAY_FALLBACK
         // Variation有効時:
@@ -123,12 +149,13 @@ void main_cs(
         const bool is_start_occupied = (0 < BitmaskBrickVoxel[bbv_voxel_coarse_occupancy_info_addr(voxel_index)]);
         if(!is_start_occupied && all(ray_dir_ws == 0.0.xxx))
         {
-            return;
+            has_target_voxel = false;
         }
-        if(!is_start_occupied)
+        if(has_target_voxel && !is_start_occupied)
         {
             const float short_ray_length_ws = cb_srvs.bbv.cell_size * k_bbv_radiance_short_ray_length_in_brick;
             const float ray_step_ws = short_ray_length_ws / max(float(k_bbv_radiance_short_ray_step_count), 1.0);
+            bool found_fallback_target = false;
 
             [loop]
             for(int step_index = 1; step_index <= k_bbv_radiance_short_ray_step_count; ++step_index)
@@ -142,13 +169,14 @@ void main_cs(
 
                 if(0 < BitmaskBrickVoxel[bbv_voxel_coarse_occupancy_info_addr(sample_voxel_index)])
                 {
-                    bbv_accumulate_radiance_to_voxel(sample_voxel_index, input_radiance);
-                    return;
+                    target_voxel_index = sample_voxel_index;
+                    found_fallback_target = true;
+                    break;
                 }
             }
-            return;
+            has_target_voxel = found_fallback_target;
         }
     #endif
 
-    bbv_accumulate_radiance_to_voxel(voxel_index, input_radiance);
+    bbv_accumulate_radiance_to_voxel_wave(target_voxel_index, fixed_point_radiance, has_target_voxel);
 }
