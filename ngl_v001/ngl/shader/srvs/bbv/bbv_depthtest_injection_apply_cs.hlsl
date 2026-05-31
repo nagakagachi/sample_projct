@@ -24,12 +24,6 @@ Texture2D			TexHardwareDepth;
 // ThreadGroupタイル単位でスキップする最適化のグループタイル幅. 1より大きい数値で実行.
 #define THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH 0
 
-uint first_lane_from_ballot(uint4 ballot)
-{
-    if(ballot.x != 0u) return firstbitlow(ballot.x);
-    return 32u + firstbitlow(ballot.y);
-}
-
 // DepthBufferに対してDispatch.
 [numthreads(TILE_WIDTH, TILE_WIDTH, 1)]
 void main_cs(
@@ -112,7 +106,7 @@ void main_cs(
     // Wave内で同一 (voxel_index, bitmask_u32_offset) への書き込みを統合し、
     // 代表laneのみ AtomicOr を発行して競合を抑える。
     uint4 pending_lanes = WaveActiveBallot(has_injection);
-    while((pending_lanes.x | pending_lanes.y) != 0u)
+    while(ballot_any(pending_lanes))
     {
         const uint leader_lane = first_lane_from_ballot(pending_lanes);
         const uint leader_voxel = WaveReadLaneAt(voxel_index, leader_lane);

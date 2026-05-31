@@ -15,6 +15,21 @@ srvs_util.hlsli
 // cpp/hlsl共通定義用ヘッダ.
 #include "srvs_common_header.hlsli"
 
+// WaveActiveBallot結果を扱う共通ヘルパー.
+// uint4(x,y,z,w) を使い、32/64/128 laneを同じ実装で扱う。
+uint first_lane_from_ballot(uint4 ballot)
+{
+    if(ballot.x != 0u) return firstbitlow(ballot.x);
+    if(ballot.y != 0u) return 32u + firstbitlow(ballot.y);
+    if(ballot.z != 0u) return 64u + firstbitlow(ballot.z);
+    return 96u + firstbitlow(ballot.w);
+}
+
+bool ballot_any(uint4 ballot)
+{
+    return (ballot.x | ballot.y | ballot.z | ballot.w) != 0u;
+}
+
 
 // Probe更新系のCS ThreadGroupSize. Indirectのため共有ヘッダに定義.
 // SharedMemのサイズ制限のため調整.
