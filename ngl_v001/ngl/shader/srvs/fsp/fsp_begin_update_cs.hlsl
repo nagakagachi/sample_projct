@@ -71,6 +71,14 @@ void main_cs(
     {
         return;
     }
+    if(0 == cb_srvs.fsp_probe_lifecycle_enable)
+    {
+        if(probe_pool_data.owner_cell_index != k_fsp_invalid_probe_index)
+        {
+            FspPushCurrActiveProbeIndex(probe_index);
+        }
+        return;
+    }
 
     const uint owner_cell_index = probe_pool_data.owner_cell_index;
     bool is_invalidate_area = (owner_cell_index == k_fsp_invalid_probe_index);

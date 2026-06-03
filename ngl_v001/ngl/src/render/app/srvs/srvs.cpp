@@ -131,6 +131,7 @@ namespace ngl::render::app
     int ScreenReconstructedVoxelStructure::dbg_fsp_lighting_interpolation_enable_ = k_default_srvs_param.fsp_lighting_interpolation_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_spawn_far_cell_enable_ = k_default_srvs_param.fsp_spawn_far_cell_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_lighting_stochastic_sampling_enable_ = k_default_srvs_param.fsp_lighting_stochastic_sampling_enable;
+    int ScreenReconstructedVoxelStructure::dbg_fsp_probe_lifecycle_enable_ = k_default_srvs_param.fsp_probe_lifecycle_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_pool_size_ = 0;
     int ScreenReconstructedVoxelStructure::dbg_fsp_free_probe_count_ = 0;
     int ScreenReconstructedVoxelStructure::dbg_fsp_allocated_probe_count_ = 0;
@@ -446,6 +447,16 @@ namespace ngl::render::app
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
                             dbg_fsp_spawn_far_cell_enable_ = k_default_srvs_param.fsp_spawn_far_cell_enable;
+                        ImGui::EndPopup();
+                    }
+                }
+                {
+                    bool v = (0 != dbg_fsp_probe_lifecycle_enable_);
+                    if (ImGui::Checkbox("Probe Lifecycle (Spawn/Relocate/Release)", &v))
+                        dbg_fsp_probe_lifecycle_enable_ = v ? 1 : 0;
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_probe_lifecycle_enable_ = k_default_srvs_param.fsp_probe_lifecycle_enable;
                         ImGui::EndPopup();
                     }
                 }
@@ -1298,6 +1309,7 @@ namespace ngl::render::app
                 param.fsp_lighting_interpolation_enable = ScreenReconstructedVoxelStructure::dbg_fsp_lighting_interpolation_enable_;
                 param.fsp_spawn_far_cell_enable = ScreenReconstructedVoxelStructure::dbg_fsp_spawn_far_cell_enable_;
                 param.fsp_lighting_stochastic_sampling_enable = ScreenReconstructedVoxelStructure::dbg_fsp_lighting_stochastic_sampling_enable_;
+                param.fsp_probe_lifecycle_enable = ScreenReconstructedVoxelStructure::dbg_fsp_probe_lifecycle_enable_;
                 param.fsp_cascade_count = static_cast<int>(fsp_cascade_count_);
                 param.fsp_total_cell_count = static_cast<int>(fsp_total_cell_count_);
                 param.fsp_probe_atlas_tile_width = static_cast<int>(fsp_probe_atlas_tile_width_);
@@ -2130,6 +2142,10 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspVisibleSurfaceProcessing");
 
+                // FSP高速化方針:
+                // - 深度バッファ全ピクセルを処理しつつ、1pixel=1セル(mid)のみ列挙
+                // - Wave内で同一セルを統合し、cell list / depth hint のAtomic競合を削減
+                // 詳細ロジックは fsp_screen_space_pass_cs.hlsl 側に実装。
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_visible_surface_proc_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
                 pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
