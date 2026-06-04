@@ -45,8 +45,8 @@ void main_cs(
     const bool has_valid_owner = (owner_cell_index != k_fsp_invalid_probe_index);
     if(has_valid_owner)
     {
-        RWFspProbeBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-        RWFspProbeBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
+        RWFspCellStateBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
+        RWFspCellStateBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
     }
 
     if(!has_valid_owner)
@@ -114,5 +114,5 @@ void main_cs(
     probe_pool_data.last_update_frame = cb_srvs.frame_count;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 
-    RWFspProbeBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
+    RWFspCellStateBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
 }

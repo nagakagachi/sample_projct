@@ -1395,7 +1395,7 @@ namespace ngl::render::app
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_clear_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-                pso_fsp_clear_->SetView(&desc_set, "RWFspProbeBuffer", fsp_buffer_.uav.Get());
+                pso_fsp_clear_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
@@ -2118,7 +2118,7 @@ namespace ngl::render::app
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_begin_update_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
                 pso_fsp_begin_update_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-                pso_fsp_begin_update_->SetView(&desc_set, "RWFspProbeBuffer", fsp_buffer_.uav.Get());
+                pso_fsp_begin_update_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
@@ -2150,7 +2150,7 @@ namespace ngl::render::app
                 pso_fsp_visible_surface_proc_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
                 pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
                 pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-                pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspProbeBuffer", fsp_buffer_.uav.Get());
+                pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
                 pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_fsp_visible_surface_proc_.Get());
@@ -2191,7 +2191,7 @@ namespace ngl::render::app
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspActiveProbeListCurr", fsp_active_probe_curr_list.uav.Get());
-                pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbeBuffer", fsp_buffer_.uav.Get());
+                pso_fsp_pre_update_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
 
 
@@ -2239,7 +2239,7 @@ namespace ngl::render::app
                 pso_fsp_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
                 pso_fsp_update_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_update_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
-                pso_fsp_update_->SetView(&desc_set, "RWFspProbeBuffer", fsp_buffer_.uav.Get());
+                pso_fsp_update_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
                 pso_fsp_update_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_fsp_update_.Get());
@@ -2373,7 +2373,7 @@ namespace ngl::render::app
             pso_fsp_debug_probe_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
             pso_fsp_debug_probe_->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, "FspProbeBuffer", fsp_buffer_.srv.Get());
+            pso_fsp_debug_probe_->SetView(&desc_set, "FspCellStateBuffer", fsp_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_packed_sh_srv.Get(), fsp_probe_packed_sh_tex_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "SmpLinearClamp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_clamp.Get());

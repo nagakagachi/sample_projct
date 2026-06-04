@@ -67,7 +67,7 @@ FSP は **surface cell と probe の双方向リンク**を基本にし、
   - `SurfaceProbeCellList`
   - `0` 番はカウンタ、`1..N` が `global cell index`
 - **cell 側 scratch / dedup**
-  - `FspProbeBuffer[cell].atomic_work`
+  - `FspCellStateBuffer[cell].atomic_work`
   - screen-space visible cell dedup 用の atomic stamp
 
 #### probe metadata の最小要件
@@ -257,7 +257,7 @@ active probe ごとに:
 必要な atomic は次だけに絞る。
 
 1. **visible cell dedup**
-   - `FspProbeBuffer[cell].atomic_work`
+   - `FspCellStateBuffer[cell].atomic_work`
 2. **visible cell list push**
    - `SurfaceProbeCellList[0]`
 3. **free stack pop/push**

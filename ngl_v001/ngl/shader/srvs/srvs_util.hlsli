@@ -62,8 +62,8 @@ Buffer<uint>		FrustumBrickList;
 RWBuffer<uint>		RWFrustumBrickList;
 
 // Frustum Surface Probe.
-StructuredBuffer<FspProbeData>		FspProbeBuffer;
-RWStructuredBuffer<FspProbeData>	RWFspProbeBuffer;
+StructuredBuffer<FspProbeData>		FspCellStateBuffer;
+RWStructuredBuffer<FspProbeData>	RWFspCellStateBuffer;
 
 Buffer<uint>                          FspCellProbeIndexBuffer;
 RWBuffer<uint>                        RWFspCellProbeIndexBuffer;

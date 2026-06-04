@@ -23,28 +23,18 @@ Texture2D			TexHardwareDepth;
 
 static const uint k_fsp_depth_hint_metric_init = 0x7f7fffff;
 
-bool FspIsLaneActive(uint4 active_ballot, uint lane_index)
-{
-    const uint word_index = lane_index >> 5;
-    const uint bit_index = lane_index & 31u;
-    if(word_index == 0u) return 0u != (active_ballot.x & (1u << bit_index));
-    if(word_index == 1u) return 0u != (active_ballot.y & (1u << bit_index));
-    if(word_index == 2u) return 0u != (active_ballot.z & (1u << bit_index));
-    return 0u != (active_ballot.w & (1u << bit_index));
-}
-
 // 同一フレーム内の重複を atomic_work で潰しながら visible cell list へ積む。
 void FspRegisterVisibleCell(uint global_cell_index)
 {
     // Visible判定フレーム番号を書き込み.
     uint old_atomic_work = 0;
-    InterlockedExchange(RWFspProbeBuffer[global_cell_index].atomic_work, cb_srvs.frame_count, old_atomic_work);
+    InterlockedExchange(RWFspCellStateBuffer[global_cell_index].atomic_work, cb_srvs.frame_count, old_atomic_work);
 
     // 交換前の値でVisible判定フレーム番号が現在フレームと異なるならリストへ登録. 別スレッドで同じVoxelを処理している場合の重複を除去する.
     if(cb_srvs.frame_count != old_atomic_work)
     {
         // 深度ヒント集約の比較値をフレーム先頭で初期化.
-        RWFspProbeBuffer[global_cell_index].probe_data_dummy = k_fsp_depth_hint_metric_init;
+        RWFspCellStateBuffer[global_cell_index].probe_data_dummy = k_fsp_depth_hint_metric_init;
 
         int current_visible_count = 0;
         InterlockedAdd(RWSurfaceProbeCellList[0], 1, current_visible_count);
@@ -61,7 +51,7 @@ void FspRegisterVisibleCell(uint global_cell_index)
     }
 }
 
-void FspUpdateVisibleCellDepthHint(uint cascade_index, uint global_cell_index, float3 hint_sample_pos_ws, float depth_metric)
+void FspUpdateVisibleCellDepthHint(uint cascade_index, uint global_cell_index, float3 hint_sample_pos_ws, uint depth_metric_u)
 {
     if(global_cell_index == k_fsp_invalid_probe_index)
     {
@@ -75,10 +65,10 @@ void FspUpdateVisibleCellDepthHint(uint cascade_index, uint global_cell_index, f
     const uint encoded_hint_offset = encode_range1_vec3_to_uint(clamped_offset_ws / max(half_cell_size, 1e-6));
 
     uint prev_metric = 0;
-    InterlockedMin(RWFspProbeBuffer[global_cell_index].probe_data_dummy, asuint(depth_metric), prev_metric);
-    if(asuint(depth_metric) < prev_metric)
+    InterlockedMin(RWFspCellStateBuffer[global_cell_index].probe_data_dummy, depth_metric_u, prev_metric);
+    if(depth_metric_u < prev_metric)
     {
-        RWFspProbeBuffer[global_cell_index].probe_offset_v3 = encoded_hint_offset;
+        RWFspCellStateBuffer[global_cell_index].probe_offset_v3 = encoded_hint_offset;
     }
 }
 
@@ -86,13 +76,18 @@ void FspRegisterAndHintVisibleCellWave(
     uint cascade_index,
     uint global_cell_index,
     float3 hint_sample_pos_ws,
-    float depth_metric)
+    uint depth_metric_u)
 {
     // 1pixel=1セル方針で得た候補をWave内で統合してから書き込む。
     // - cell list 追加は leader lane のみ
     // - depth hint 更新は同一セル内の最小depth_metric lane のみ
     // これにより、可視セル登録とhint更新のAtomic競合を抑える。
     const bool has_cell = (global_cell_index != k_fsp_invalid_probe_index);
+    if(!has_cell)
+    {
+        return;
+    }
+
     uint4 pending_lanes = WaveActiveBallot(has_cell);
     while(ballot_any(pending_lanes))
     {
@@ -100,9 +95,9 @@ void FspRegisterAndHintVisibleCellWave(
         const uint leader_cell = WaveReadLaneAt(global_cell_index, leader_lane);
         const bool is_same_cell = has_cell && (global_cell_index == leader_cell);
         const uint4 same_cell_lanes = WaveActiveBallot(is_same_cell);
-        const float same_cell_depth_metric = is_same_cell ? depth_metric : asfloat(k_fsp_depth_hint_metric_init);
-        const float leader_depth_metric = WaveActiveMin(same_cell_depth_metric);
-        const bool is_depth_leader = is_same_cell && (same_cell_depth_metric == leader_depth_metric);
+        const uint same_cell_depth_metric_u = is_same_cell ? depth_metric_u : k_fsp_depth_hint_metric_init;
+        const uint leader_depth_metric_u = WaveActiveMin(same_cell_depth_metric_u);
+        const bool is_depth_leader = is_same_cell && (same_cell_depth_metric_u == leader_depth_metric_u);
         const uint depth_leader_lane = first_lane_from_ballot(WaveActiveBallot(is_depth_leader));
 
         if(WaveGetLaneIndex() == leader_lane)
@@ -111,7 +106,7 @@ void FspRegisterAndHintVisibleCellWave(
         }
         if(WaveGetLaneIndex() == depth_leader_lane)
         {
-            FspUpdateVisibleCellDepthHint(cascade_index, global_cell_index, hint_sample_pos_ws, depth_metric);
+            FspUpdateVisibleCellDepthHint(cascade_index, global_cell_index, hint_sample_pos_ws, depth_metric_u);
         }
 
         pending_lanes &= ~same_cell_lanes;
@@ -165,6 +160,7 @@ void main_cs(
 
     const float3 to_surface_vec_ws = pixel_pos_ws - view_origin;
     const float to_surface_len_sq = dot(to_surface_vec_ws, to_surface_vec_ws);
+    const uint to_surface_len_sq_u = asuint(to_surface_len_sq);
     const bool has_surface_dir = (to_surface_len_sq > 1e-6);
     const float3 surface_view_dir_ws = has_surface_dir ? (to_surface_vec_ws * rsqrt(to_surface_len_sq)) : 0.0.xxx;
 
@@ -179,7 +175,6 @@ void main_cs(
 
         const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
         const float half_cell_size = cascade.grid.cell_size * 0.5;
-        const float depth_metric = to_surface_len_sq;
         const float hint_push_to_camera = half_cell_size * 0.08;
         const float3 hint_sample_pos_ws = has_surface_dir ? (pixel_pos_ws - surface_view_dir_ws * hint_push_to_camera) : pixel_pos_ws;
 
@@ -188,6 +183,6 @@ void main_cs(
         // サーフェイス手前寄せ/埋まり回避の品質は pre-update 側で担保する。
         uint global_cell_index = k_fsp_invalid_probe_index;
         FspTryGetGlobalCellIndexFromWorldPos(pixel_pos_ws, cascade_index, global_cell_index);
-        FspRegisterAndHintVisibleCellWave(cascade_index, global_cell_index, hint_sample_pos_ws, depth_metric);
+        FspRegisterAndHintVisibleCellWave(cascade_index, global_cell_index, hint_sample_pos_ws, to_surface_len_sq_u);
     }
 }

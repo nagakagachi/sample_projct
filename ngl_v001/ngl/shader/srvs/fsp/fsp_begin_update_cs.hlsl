@@ -111,7 +111,7 @@ void main_cs(
     if(owner_cell_index != k_fsp_invalid_probe_index && RWFspCellProbeIndexBuffer[owner_cell_index] == probe_index)
     {
         RWFspCellProbeIndexBuffer[owner_cell_index] = k_fsp_invalid_probe_index;
-        RWFspProbeBuffer[owner_cell_index] = (FspProbeData)0;
+        RWFspCellStateBuffer[owner_cell_index] = (FspProbeData)0;
     }
 
     probe_pool_data.owner_cell_index = k_fsp_invalid_probe_index;

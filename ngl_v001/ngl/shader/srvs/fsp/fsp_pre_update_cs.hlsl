@@ -172,8 +172,8 @@ void main_cs(
         const uint owner_cell_index = probe_pool_data.owner_cell_index;
         if(owner_cell_index != k_fsp_invalid_probe_index)
         {
-            RWFspProbeBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-            RWFspProbeBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
+            RWFspCellStateBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
+            RWFspCellStateBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
         }
         return;
     }
@@ -194,9 +194,9 @@ void main_cs(
         // Probe埋まり回避.
         const float half_cell_size = cascade.grid.cell_size * 0.5;
         const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * half_cell_size;
-        const uint depth_hint_metric = RWFspProbeBuffer[global_cell_index].probe_data_dummy;
+        const uint depth_hint_metric = RWFspCellStateBuffer[global_cell_index].probe_data_dummy;
         const bool has_depth_hint = (depth_hint_metric != k_fsp_depth_hint_metric_init);
-        const float3 depth_hint_offset = decode_uint_to_range1_vec3(RWFspProbeBuffer[global_cell_index].probe_offset_v3) * half_cell_size;
+        const float3 depth_hint_offset = decode_uint_to_range1_vec3(RWFspCellStateBuffer[global_cell_index].probe_offset_v3) * half_cell_size;
         const float3 seed_probe_offset = has_depth_hint ? depth_hint_offset : prev_probe_offset;
         float3 probe_sample_pos_ws = probe_cell_center + seed_probe_offset;
 
@@ -264,8 +264,8 @@ void main_cs(
     }
 
     // 既存 debug / scratch path 互換のため、セル側 legacy buffer にも最低限ミラーしておく。
-    RWFspProbeBuffer[global_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-    RWFspProbeBuffer[global_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
+    RWFspCellStateBuffer[global_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
+    RWFspCellStateBuffer[global_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 
     #if 0
