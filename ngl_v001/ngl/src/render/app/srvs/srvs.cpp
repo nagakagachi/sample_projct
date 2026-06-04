@@ -55,6 +55,43 @@ namespace ngl::render::app
         }
     }
 
+    const char* FspProbeDebugModeLabel(int mode)
+    {
+        switch(mode)
+        {
+        case -1: return "-1: Disabled";
+        case 0: return "0: Seen this frame (green) / stale (yellow)";
+        case 1: return "1: Average sky visibility";
+        case 2: return "2: Probe index hash color";
+        case 3: return "3: Probe age heat (fresh -> old)";
+        case 4: return "4: Cascade index hash color";
+        case 5: return "5: Oct radiance (tonemapped)";
+        case 6: return "6: Oct sky visibility (current dir)";
+        case 7: return "7: SH radiance (reconstructed)";
+        case 8: return "8: SH sky visibility (reconstructed)";
+        default: return "Unknown mode";
+        }
+    }
+
+    const char* FspProbeDebugModeDetailLabel(int mode)
+    {
+        switch(mode)
+        {
+        case 3: return "Age(frames)=frame_count-last_seen, 0->green, 15->yellow, 30+->red";
+        default: return "";
+        }
+    }
+
+    const char* BbvProbeDebugModeLabel(int mode)
+    {
+        switch(mode)
+        {
+        case -1: return "-1: Disabled";
+        case 0: return "0: Surface distance grayscale";
+        default: return "Other: Default normal color";
+        }
+    }
+
     struct SrvsGiDispatchEntry
     {
         SrvsGiSolutionMode mode;
@@ -511,6 +548,12 @@ namespace ngl::render::app
                                 dbg_fsp_probe_debug_mode_ = k_default_srvs_param.debug_fsp_probe_mode;
                             ImGui::EndPopup();
                         }
+                        ImGui::TextDisabled("%s", FspProbeDebugModeLabel(dbg_fsp_probe_debug_mode_));
+                        const char* fsp_probe_mode_detail = FspProbeDebugModeDetailLabel(dbg_fsp_probe_debug_mode_);
+                        if (fsp_probe_mode_detail[0] != '\0')
+                        {
+                            ImGui::TextDisabled("%s", fsp_probe_mode_detail);
+                        }
                         {
                             bool v = (0 != dbg_fsp_probe_use_relocated_pos_);
                             if (ImGui::Checkbox("Use Relocated Probe Position", &v))
@@ -542,6 +585,7 @@ namespace ngl::render::app
                             dbg_bbv_probe_debug_mode_ = k_default_srvs_param.debug_bbv_probe_mode;
                         ImGui::EndPopup();
                     }
+                    ImGui::TextDisabled("%s", BbvProbeDebugModeLabel(dbg_bbv_probe_debug_mode_));
                 }
             }
         }
