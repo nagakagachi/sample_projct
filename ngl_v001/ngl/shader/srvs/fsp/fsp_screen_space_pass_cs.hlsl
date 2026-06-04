@@ -22,6 +22,9 @@ Texture2D			TexHardwareDepth;
 #define THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH 1
 
 static const uint k_fsp_depth_hint_metric_init = 0x7f7fffff;
+// depth hint metric:
+// - 値は「視点からサーフェスまでの距離^2 (to_surface_len_sq)」を uint 化したもの。
+// - 小さいほど手前サーフェスなので、InterlockedMin で「セル内で最も手前」を代表値として残す。
 
 // 同一フレーム内の重複を atomic_work で潰しながら visible cell list へ積む。
 void FspRegisterVisibleCell(uint global_cell_index)
@@ -65,6 +68,8 @@ void FspUpdateVisibleCellDepthHint(uint cascade_index, uint global_cell_index, f
     const uint encoded_hint_offset = encode_range1_vec3_to_uint(clamped_offset_ws / max(half_cell_size, 1e-6));
 
     uint prev_metric = 0;
+    // 同一セルに対応する複数ピクセルから、最小 depth metric (最手前) だけを採用する。
+    // 勝者ピクセルの hint offset を probe_offset_v3 に保持し、PreUpdate の初期配置に使う。
     InterlockedMin(RWFspCellStateBuffer[global_cell_index].probe_data_dummy, depth_metric_u, prev_metric);
     if(depth_metric_u < prev_metric)
     {
@@ -160,6 +165,7 @@ void main_cs(
 
     const float3 to_surface_vec_ws = pixel_pos_ws - view_origin;
     const float to_surface_len_sq = dot(to_surface_vec_ws, to_surface_vec_ws);
+    // depth metric を uint 比較用に前計算して使い回す（AtomicMin / WaveMin 用）。
     const uint to_surface_len_sq_u = asuint(to_surface_len_sq);
     const bool has_surface_dir = (to_surface_len_sq > 1e-6);
     const float3 surface_view_dir_ws = has_surface_dir ? (to_surface_vec_ws * rsqrt(to_surface_len_sq)) : 0.0.xxx;

@@ -194,9 +194,12 @@ void main_cs(
         // Probe埋まり回避.
         const float half_cell_size = cascade.grid.cell_size * 0.5;
         const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * half_cell_size;
+        // screen pass 側で AtomicMin 集約した「セル内最手前サーフェイス」のヒント。
+        // probe_data_dummy が初期値でなければ、そのとき保存された hint offset を初期配置シードとして使う。
         const uint depth_hint_metric = RWFspCellStateBuffer[global_cell_index].probe_data_dummy;
         const bool has_depth_hint = (depth_hint_metric != k_fsp_depth_hint_metric_init);
         const float3 depth_hint_offset = decode_uint_to_range1_vec3(RWFspCellStateBuffer[global_cell_index].probe_offset_v3) * half_cell_size;
+        // depth hint が無いときだけ、従来の前フレームオフセットを使う。
         const float3 seed_probe_offset = has_depth_hint ? depth_hint_offset : prev_probe_offset;
         float3 probe_sample_pos_ws = probe_cell_center + seed_probe_offset;
 

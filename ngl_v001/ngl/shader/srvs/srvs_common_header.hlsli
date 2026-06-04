@@ -378,7 +378,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int fsp_probe_pool_size NGL_CPP_MEMBER_INIT({});
         int fsp_active_probe_buffer_size NGL_CPP_MEMBER_INIT({});
         int fsp_lighting_interpolation_enable NGL_CPP_MEMBER_INIT({1});
-        int fsp_spawn_far_cell_enable NGL_CPP_MEMBER_INIT({1});
+        int fsp_dummy_padding0 NGL_CPP_MEMBER_INIT({});
         int fsp_lighting_stochastic_sampling_enable NGL_CPP_MEMBER_INIT({0});
         int fsp_probe_lifecycle_enable NGL_CPP_MEMBER_INIT({1});
         int fsp_cascade_count NGL_CPP_MEMBER_INIT({1});
@@ -399,6 +399,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         
         int debug_bbv_probe_mode NGL_CPP_MEMBER_INIT({-1});
         int debug_fsp_probe_mode NGL_CPP_MEMBER_INIT({-1});
+        int debug_fsp_probe_use_relocated_pos NGL_CPP_MEMBER_INIT({1});
+        int debug_fsp_update_ray_jitter_enable NGL_CPP_MEMBER_INIT({1});
 
         float debug_probe_radius NGL_CPP_MEMBER_INIT({0.0f});
         float debug_probe_near_geom_scale NGL_CPP_MEMBER_INIT({0.2f});

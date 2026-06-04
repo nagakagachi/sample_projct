@@ -70,6 +70,7 @@ void main_cs(
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
     const float3 probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * 0.5);
     const float3 probe_pos_ws = FspCalcCellCenterWs(cascade_index, local_cell_index) + probe_offset;
+    const bool enable_ray_jitter = (0 != cb_srvs.debug_fsp_update_ray_jitter_enable);
 
     float sky_visibility_accum = 0.0;
     [unroll]
@@ -79,7 +80,16 @@ void main_cs(
         for(uint ox = 0; ox < k_fsp_probe_octmap_width; ++ox)
         {
             const uint2 oct_cell_id = uint2(ox, oy);
-            const float2 oct_uv = (float2(oct_cell_id) + float2(0.5, 0.5)) / float(k_fsp_probe_octmap_width);
+            float2 oct_uv = (float2(oct_cell_id) + float2(0.5, 0.5)) / float(k_fsp_probe_octmap_width);
+            if(enable_ray_jitter)
+            {
+                // Octセルごとに1レイ割り当てを維持しつつ、セル内だけジッタして方向を時変化させる。
+                const float2 jitter01 = float2(
+                    noise_float_to_float(float2(float(probe_index + cb_srvs.frame_count * 131u), float(ox + oy * k_fsp_probe_octmap_width))),
+                    noise_float_to_float(float2(float(probe_index * 17u + cb_srvs.frame_count * 73u), float(ox * 7u + oy * 13u))));
+                const float2 jitter = (jitter01 - 0.5.xx) / float(k_fsp_probe_octmap_width);
+                oct_uv = clamp(oct_uv + jitter, 1e-4.xx, (1.0 - 1e-4).xx);
+            }
             const float3 sample_ray_dir = OctDecode(oct_uv);
 
             const float trace_distance = k_fsp_probe_distance_max;

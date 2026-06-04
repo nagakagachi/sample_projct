@@ -111,6 +111,8 @@ namespace ngl::render::app
     int ScreenReconstructedVoxelStructure::dbg_view_sub_mode_ = 0;
     int ScreenReconstructedVoxelStructure::dbg_bbv_probe_debug_mode_ = -1;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_mode_ = -1;
+    int ScreenReconstructedVoxelStructure::dbg_fsp_probe_use_relocated_pos_ = k_default_srvs_param.debug_fsp_probe_use_relocated_pos;
+    int ScreenReconstructedVoxelStructure::dbg_fsp_update_ray_jitter_enable_ = k_default_srvs_param.debug_fsp_update_ray_jitter_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_cascade_ = -1;
     int ScreenReconstructedVoxelStructure::dbg_fsp_cascade_count_ = 1;
     float ScreenReconstructedVoxelStructure::dbg_probe_scale_ = 1.0f;
@@ -129,7 +131,6 @@ namespace ngl::render::app
     float ScreenReconstructedVoxelStructure::assp_ray_budget_scale_ = k_default_srvs_param.assp_ray_budget_scale;
     int ScreenReconstructedVoxelStructure::assp_debug_freeze_frame_random_enable_ = k_default_srvs_param.assp_debug_freeze_frame_random_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_lighting_interpolation_enable_ = k_default_srvs_param.fsp_lighting_interpolation_enable;
-    int ScreenReconstructedVoxelStructure::dbg_fsp_spawn_far_cell_enable_ = k_default_srvs_param.fsp_spawn_far_cell_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_lighting_stochastic_sampling_enable_ = k_default_srvs_param.fsp_lighting_stochastic_sampling_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_lifecycle_enable_ = k_default_srvs_param.fsp_probe_lifecycle_enable;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_pool_size_ = 0;
@@ -189,7 +190,7 @@ namespace ngl::render::app
                         ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_ = k_default_srvs_param.bbv_depthtest_frustum_cull_force_pass;
                     ImGui::EndPopup();
                 }
-                ImGui::TextDisabled("ON: Frustum判定/Empty判定を省略して全BrickをCarving候補へ通す");
+                ImGui::TextDisabled("ON: Skip frustum/empty checks and pass all bricks to carving.");
             }
             ImGui::SliderFloat("DepthTest Injection World Offset", &ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_, 0.0f, 5.0f, "%.3f");
             if (ImGui::BeginPopupContextItem()) {
@@ -441,12 +442,12 @@ namespace ngl::render::app
                     }
                 }
                 {
-                    bool v = (0 != dbg_fsp_spawn_far_cell_enable_);
-                    if (ImGui::Checkbox("Spawn Far Cell", &v))
-                        dbg_fsp_spawn_far_cell_enable_ = v ? 1 : 0;
+                    bool v = (0 != dbg_fsp_update_ray_jitter_enable_);
+                    if (ImGui::Checkbox("Update Ray Jitter (Oct Cell)", &v))
+                        dbg_fsp_update_ray_jitter_enable_ = v ? 1 : 0;
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
-                            dbg_fsp_spawn_far_cell_enable_ = k_default_srvs_param.fsp_spawn_far_cell_enable;
+                            dbg_fsp_update_ray_jitter_enable_ = k_default_srvs_param.debug_fsp_update_ray_jitter_enable;
                         ImGui::EndPopup();
                     }
                 }
@@ -509,6 +510,17 @@ namespace ngl::render::app
                             if (ImGui::MenuItem("Reset to Default"))
                                 dbg_fsp_probe_debug_mode_ = k_default_srvs_param.debug_fsp_probe_mode;
                             ImGui::EndPopup();
+                        }
+                        {
+                            bool v = (0 != dbg_fsp_probe_use_relocated_pos_);
+                            if (ImGui::Checkbox("Use Relocated Probe Position", &v))
+                                dbg_fsp_probe_use_relocated_pos_ = v ? 1 : 0;
+                            if (ImGui::BeginPopupContextItem()) {
+                                if (ImGui::MenuItem("Reset to Default"))
+                                    dbg_fsp_probe_use_relocated_pos_ = k_default_srvs_param.debug_fsp_probe_use_relocated_pos;
+                                ImGui::EndPopup();
+                            }
+                            ImGui::TextDisabled("ON: relocated probe position, OFF: cell center.");
                         }
                         const int fsp_debug_cascade_max = std::max(-1, dbg_fsp_cascade_count_ - 1);
                         ImGui::SliderInt("Fsp Debug Cascade", &dbg_fsp_probe_debug_cascade_, -1, fsp_debug_cascade_max);
@@ -1307,7 +1319,6 @@ namespace ngl::render::app
                 param.fsp_probe_pool_size = static_cast<int>(fsp_probe_pool_size_);
                 param.fsp_active_probe_buffer_size = static_cast<int>(fsp_probe_pool_size_);
                 param.fsp_lighting_interpolation_enable = ScreenReconstructedVoxelStructure::dbg_fsp_lighting_interpolation_enable_;
-                param.fsp_spawn_far_cell_enable = ScreenReconstructedVoxelStructure::dbg_fsp_spawn_far_cell_enable_;
                 param.fsp_lighting_stochastic_sampling_enable = ScreenReconstructedVoxelStructure::dbg_fsp_lighting_stochastic_sampling_enable_;
                 param.fsp_probe_lifecycle_enable = ScreenReconstructedVoxelStructure::dbg_fsp_probe_lifecycle_enable_;
                 param.fsp_cascade_count = static_cast<int>(fsp_cascade_count_);
@@ -1346,6 +1357,8 @@ namespace ngl::render::app
             param.debug_view_sub_mode = ScreenReconstructedVoxelStructure::dbg_view_sub_mode_;
             param.debug_bbv_probe_mode = ScreenReconstructedVoxelStructure::dbg_bbv_probe_debug_mode_;
             param.debug_fsp_probe_mode = ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_mode_;
+            param.debug_fsp_probe_use_relocated_pos = ScreenReconstructedVoxelStructure::dbg_fsp_probe_use_relocated_pos_;
+            param.debug_fsp_update_ray_jitter_enable = ScreenReconstructedVoxelStructure::dbg_fsp_update_ray_jitter_enable_;
             param.debug_fsp_probe_cascade = ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_cascade_;
 
             param.debug_probe_radius = ScreenReconstructedVoxelStructure::dbg_probe_scale_ * 0.5f * bbv_grid_updater_.Get().cell_size / k_bbv_per_voxel_resolution;
@@ -2373,7 +2386,6 @@ namespace ngl::render::app
             pso_fsp_debug_probe_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
             pso_fsp_debug_probe_->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, "FspCellStateBuffer", fsp_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_packed_sh_srv.Get(), fsp_probe_packed_sh_tex_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "SmpLinearClamp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_clamp.Get());

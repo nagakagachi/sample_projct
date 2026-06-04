@@ -296,6 +296,8 @@ namespace ngl::render::app
         
         static int dbg_bbv_probe_debug_mode_;
         static int dbg_fsp_probe_debug_mode_;
+        static int dbg_fsp_probe_use_relocated_pos_;
+        static int dbg_fsp_update_ray_jitter_enable_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
         static float dbg_probe_scale_;
@@ -314,7 +316,6 @@ namespace ngl::render::app
         static float assp_ray_budget_scale_;
         static int assp_debug_freeze_frame_random_enable_;
         static int dbg_fsp_lighting_interpolation_enable_;
-        static int dbg_fsp_spawn_far_cell_enable_;
         static int dbg_fsp_lighting_stochastic_sampling_enable_;
         static int dbg_fsp_probe_lifecycle_enable_;
         static int dbg_fsp_probe_pool_size_;
