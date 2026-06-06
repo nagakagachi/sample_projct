@@ -13,7 +13,7 @@ fsp_pre_update_cs.hlsl
 
 #define RAY_SAMPLE_COUNT_PER_VOXEL 8
 #define PROBE_UPDATE_TEMPORAL_RATE (0.025)
-static const uint k_fsp_depth_hint_metric_init = 0x7f7fffff;
+static const uint k_fsp_depth_hint_metric_init = 0xffffffffu;
 
 // free stack から 1 probe index を pop する。
 uint FspPopFreeProbeIndex()
@@ -199,8 +199,9 @@ void main_cs(
         const uint depth_hint_metric = RWFspCellStateBuffer[global_cell_index].probe_data_dummy;
         const bool has_depth_hint = (depth_hint_metric != k_fsp_depth_hint_metric_init);
         const float3 depth_hint_offset = decode_uint_to_range1_vec3(RWFspCellStateBuffer[global_cell_index].probe_offset_v3) * half_cell_size;
-        // depth hint が無いときだけ、従来の前フレームオフセットを使う。
-        const float3 seed_probe_offset = has_depth_hint ? depth_hint_offset : prev_probe_offset;
+
+        float3 seed_probe_offset = has_depth_hint ? depth_hint_offset : prev_probe_offset;
+
         float3 probe_sample_pos_ws = probe_cell_center + seed_probe_offset;
 
         {
@@ -232,20 +233,28 @@ void main_cs(
                 {
                     for(int ri = 0; ri < fallback_relocation_count; ++ri)
                     {
-                        const uint seed_0 = cb_srvs.frame_count + ri;
-                        const float3 random_offset = float3(noise_float_to_float(float2(global_cell_index, seed_0)), noise_float_to_float(float2(update_element_index, seed_0)), noise_float_to_float(float2(seed_0, global_cell_index))) - 0.5;
+                        const uint seed_0 = (global_cell_index * 1664525u + (ri + 1u) * 1013904223u);
+                        // update_element_index(=visible list順序) 依存を避け、セルIDベースで安定化.
+                        const uint seed_1 = seed_0 ^ (global_cell_index * 2246822519u + 3266489917u);
+                        const uint seed_2 = seed_0 ^ ((global_cell_index + 1u) * 668265263u + 374761393u);
+                        const float3 random_offset = float3(
+                            noise_float_to_float(float2(global_cell_index, seed_0)),
+                            noise_float_to_float(float2(seed_1, global_cell_index)),
+                            noise_float_to_float(float2(seed_2, seed_0))) - 0.5;
                         probe_sample_pos_ws = probe_cell_center + random_offset * (cascade.grid.cell_size * 0.4);// レンジはセルを超えない程度.
 
                         if(read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_srvs.bbv.grid_resolution, cb_srvs.bbv.grid_toroidal_offset, cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size_inv, probe_sample_pos_ws) == 0)
                         {
+                            found_non_solid = true;
                             break;
                         }
                     }
                 }
             }
         }
+        const uint encoded_probe_offset = encode_range1_vec3_to_uint(((probe_sample_pos_ws - probe_cell_center) / (cascade.grid.cell_size * 0.5)));
         // Probe位置更新. Cellサイズの半分で正規化.
-        probe_pool_data.probe_offset_v3 = encode_range1_vec3_to_uint(((probe_sample_pos_ws - probe_cell_center) / (cascade.grid.cell_size * 0.5)));
+        probe_pool_data.probe_offset_v3 = encoded_probe_offset;
     #else
         // 埋まり回避なし
         float3 probe_sample_pos_ws = probe_cell_center;

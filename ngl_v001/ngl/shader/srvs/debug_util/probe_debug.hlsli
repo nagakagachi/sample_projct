@@ -232,6 +232,5 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
         const float sh_sky_visibility = max(0.0, dot(sh_sky_vis, sh_basis));
         color = sh_sky_visibility.xxxx;
     }
-
 	return color;
 }
