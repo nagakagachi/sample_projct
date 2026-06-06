@@ -230,7 +230,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     {
         uint probe_offset_v3;//signed 10bit vector3 encode. Bbv上でのプローブ埋まり回避のためのオフセット.
         uint atomic_work;// 可視要素リスト作成時の重複除去用.
-        uint depth_hint_thread_id;// depth hint finalize 用の winner thread id.
         
         float avg_sky_visibility;
         uint probe_data_dummy;

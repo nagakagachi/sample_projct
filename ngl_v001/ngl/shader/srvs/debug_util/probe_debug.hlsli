@@ -22,7 +22,6 @@ struct VS_OUTPUT
     float4 color : COLOR0;
     float3 pos_ws : POSITION_WS;
     float3 voxel_probe_pos_ws : VOXELPROBEPOSWS0;
-    int voxel_index : VOXELINDEX0;
     uint cascade_index : CASCADEINDEX0;
     uint probe_index : PROBEINDEX0;
     uint probe_flags : PROBEFLAGS0;
@@ -74,7 +73,6 @@ VS_OUTPUT main_vs(VS_INPUT input)
         output.color = 0.0.xxxx;
         output.pos_ws = 0.0.xxx;
         output.voxel_probe_pos_ws = 0.0.xxx;
-        output.voxel_index = -1;
         output.cascade_index = 0;
         output.probe_index = k_fsp_invalid_probe_index;
         output.probe_flags = 0;
@@ -117,7 +115,6 @@ VS_OUTPUT main_vs(VS_INPUT input)
     output.pos_ws = pos_ws;
 
     output.voxel_probe_pos_ws = instance_pos;
-    output.voxel_index = int(global_cell_index);
     output.cascade_index = cascade_index;
     output.probe_index = probe_index;
     output.probe_flags = probe_pool_data.flags;

@@ -948,7 +948,6 @@ namespace ngl::render::app
             pso_fsp_clear_ = CreateComputePSO("srvs/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("srvs/fsp/fsp_begin_update_cs.hlsl");
             pso_fsp_visible_surface_proc_ = CreateComputePSO("srvs/fsp/fsp_screen_space_pass_cs.hlsl");
-            pso_fsp_depth_hint_finalize_ = CreateComputePSO("srvs/fsp/fsp_depth_hint_finalize_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("srvs/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("srvs/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("srvs/fsp/fsp_update_cs.hlsl");
@@ -2218,21 +2217,6 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
             }
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspDepthHintFinalize");
-
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_fsp_depth_hint_finalize_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                pso_fsp_depth_hint_finalize_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                pso_fsp_depth_hint_finalize_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-                pso_fsp_depth_hint_finalize_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
-
-                p_command_list->SetPipelineState(pso_fsp_depth_hint_finalize_.Get());
-                p_command_list->SetDescriptorSet(pso_fsp_depth_hint_finalize_.Get(), &desc_set);
-                pso_fsp_depth_hint_finalize_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
-
-                p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
-            }
             // Fsp IndirectArg生成.
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspGenerateIndirectArg");
@@ -2258,6 +2242,8 @@ namespace ngl::render::app
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
                 pso_fsp_pre_update_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+                // 1pass depth-hint: ScreenPass で保存した pixel_id から depth/world を再構成するために必要。
+                pso_fsp_pre_update_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
 
                 pso_fsp_pre_update_->SetView(&desc_set, "SurfaceProbeCellList", fsp_visible_surface_list_.srv.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
@@ -2446,7 +2432,6 @@ namespace ngl::render::app
             pso_fsp_debug_probe_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
             pso_fsp_debug_probe_->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, "FspCellStateBuffer", fsp_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_packed_sh_srv.Get(), fsp_probe_packed_sh_tex_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "SmpLinearClamp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_clamp.Get());

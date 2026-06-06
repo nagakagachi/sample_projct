@@ -22,9 +22,43 @@ Texture2D			TexHardwareDepth;
 #define THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH 1
 
 static const uint k_fsp_depth_hint_metric_init = 0xffffffffu;
+// packed depth-hint key layout (32bit):
+// [31:24] metric_q  (0..254 を使用。255 は sentinel衝突回避)
+// [23:00] pixel_id  (x + y * width, 最大 2^24-1)
+static const uint k_fsp_depth_hint_pixel_bits = 24u;
+static const uint k_fsp_depth_hint_metric_shift = k_fsp_depth_hint_pixel_bits;
+static const uint k_fsp_depth_hint_pixel_mask = (1u << k_fsp_depth_hint_pixel_bits) - 1u;
+static const float k_fsp_depth_hint_max_metric_q = 254.0; // 255 は sentinel(0xffffffff)衝突回避のため未使用.
 // depth hint metric:
-// - 値は「視点からサーフェスまでの距離^2 (to_surface_len_sq)」を uint 化したもの。
-// - 小さいほど手前サーフェスなので、InterlockedMin で「セル内で最も手前」を代表値として残す。
+// - 上位bitにセル内 frontness の量子化 metric、下位bitに pixel id を詰める。
+// - InterlockedMin 1回で、最小metric + 同値時の最小pixel id を同時確定する。
+
+uint FspBuildDepthHintPackedKey(
+    uint cascade_index,
+    uint global_cell_index,
+    float3 hint_sample_pos_ws,
+    uint pixel_id,
+    float3 view_origin)
+{
+    // カスケードごとのセルサイズ/セル中心で正規化するため、
+    // カスケード間で metric の意味が崩れない。
+    const uint cascade_local_cell_index = global_cell_index - cb_srvs.fsp_cascade[cascade_index].cell_offset;
+    const float3 probe_cell_center = FspCalcCellCenterWs(cascade_index, cascade_local_cell_index);
+    const float half_cell_size = cb_srvs.fsp_cascade[cascade_index].grid.cell_size * 0.5;
+    const float3 clamped_offset_ws = clamp(hint_sample_pos_ws - probe_cell_center, -half_cell_size.xxx, half_cell_size.xxx);
+
+    const float3 to_cell = probe_cell_center - view_origin;
+    const float to_cell_len_sq = dot(to_cell, to_cell);
+    const float3 to_cell_dir = (to_cell_len_sq > 1e-6) ? (to_cell * rsqrt(to_cell_len_sq)) : float3(0.0, 0.0, 1.0);
+    const float half_diag = half_cell_size * 1.73205080757; // half * sqrt(3)
+    const float frontness = dot(clamped_offset_ws, to_cell_dir);
+    // frontness をセル内レンジ[-half_diag,+half_diag]へ正規化し、8bit量子化して比較キー化。
+    // InterlockedMin の比較単調性を保つため、手前ほど小さい値になるように定義する。
+    const float metric_norm = saturate((frontness + half_diag) / max(2.0 * half_diag, 1e-6));
+    const uint metric_q = min((uint)(metric_norm * k_fsp_depth_hint_max_metric_q + 0.5), (uint)k_fsp_depth_hint_max_metric_q);
+    const uint packed_pixel_id = pixel_id & k_fsp_depth_hint_pixel_mask;
+    return (metric_q << k_fsp_depth_hint_metric_shift) | packed_pixel_id;
+}
 
 // 同一フレーム内の重複を atomic_work で潰しながら visible cell list へ積む。
 void FspRegisterVisibleCell(uint global_cell_index)
@@ -38,7 +72,6 @@ void FspRegisterVisibleCell(uint global_cell_index)
     {
         // 深度ヒント集約の比較値をフレーム先頭で初期化.
         RWFspCellStateBuffer[global_cell_index].probe_data_dummy = k_fsp_depth_hint_metric_init;
-        RWFspCellStateBuffer[global_cell_index].depth_hint_thread_id = 0xffffffffu;
 
         int current_visible_count = 0;
         InterlockedAdd(RWSurfaceProbeCellList[0], 1, current_visible_count);
@@ -55,39 +88,28 @@ void FspRegisterVisibleCell(uint global_cell_index)
     }
 }
 
-void FspUpdateVisibleCellDepthHint(uint cascade_index, uint global_cell_index, float3 hint_sample_pos_ws, uint depth_metric_u, uint global_thread_linear_id)
+void FspUpdateVisibleCellDepthHint(uint global_cell_index, uint packed_depth_hint_key_u)
 {
     if(global_cell_index == k_fsp_invalid_probe_index)
     {
         return;
     }
-    const uint cascade_local_cell_index = global_cell_index - cb_srvs.fsp_cascade[cascade_index].cell_offset;
-    const float3 probe_cell_center = FspCalcCellCenterWs(cascade_index, cascade_local_cell_index);
-    const float half_cell_size = cb_srvs.fsp_cascade[cascade_index].grid.cell_size * 0.5;
-    const float3 clamped_offset_ws = clamp(hint_sample_pos_ws - probe_cell_center, -half_cell_size.xxx, half_cell_size.xxx);
-    const uint encoded_hint_offset = encode_range1_vec3_to_uint(clamped_offset_ws / max(half_cell_size, 1e-6));
-    const uint depth_hint_key_u = depth_metric_u;
-
-    uint prev_metric = 0;
-    // 同一セルに対応する複数ピクセルから、最小 depth metric (最手前) だけを採用する。
-    // 勝者ピクセルの hint offset を probe_offset_v3 に保持し、PreUpdate の初期配置に使う。
-    InterlockedMin(RWFspCellStateBuffer[global_cell_index].probe_data_dummy, depth_hint_key_u, prev_metric);
-    if(depth_hint_key_u < prev_metric)
-    {
-        RWFspCellStateBuffer[global_cell_index].probe_offset_v3 = encoded_hint_offset;
-    }
+    // probe_data_dummy には packed key だけを保持する。
+    // 実オフセットは PreUpdate で pixel_id -> depth 再構成して生成する。
+    uint prev_packed = 0;
+    InterlockedMin(RWFspCellStateBuffer[global_cell_index].probe_data_dummy, packed_depth_hint_key_u, prev_packed);
 }
 
 void FspRegisterAndHintVisibleCellWave(
     uint cascade_index,
     uint global_cell_index,
     float3 hint_sample_pos_ws,
-    uint depth_metric_u,
-    uint global_thread_linear_id)
+    uint pixel_id,
+    float3 view_origin)
 {
     // 1pixel=1セル方針で得た候補をWave内で統合してから書き込む。
     // - cell list 追加は leader lane のみ
-    // - depth hint 更新は同一セル内の最小depth_metric lane のみ
+    // - depth hint 更新は同一セル内の最小packed-key lane のみ
     // これにより、可視セル登録とhint更新のAtomic競合を抑える。
     const bool has_cell = (global_cell_index != k_fsp_invalid_probe_index);
     if(!has_cell)
@@ -102,12 +124,12 @@ void FspRegisterAndHintVisibleCellWave(
         const uint leader_cell = WaveReadLaneAt(global_cell_index, leader_lane);
         const bool is_same_cell = has_cell && (global_cell_index == leader_cell);
         const uint4 same_cell_lanes = WaveActiveBallot(is_same_cell);
-        const uint same_cell_depth_metric_u = is_same_cell ? depth_metric_u : k_fsp_depth_hint_metric_init;
-        const uint leader_depth_metric_u = WaveActiveMin(same_cell_depth_metric_u);
-        const bool is_depth_candidate = is_same_cell && (same_cell_depth_metric_u == leader_depth_metric_u);
-        const uint depth_candidate_thread_id = is_depth_candidate ? global_thread_linear_id : 0xffffffffu;
-        const uint depth_leader_thread_id = WaveActiveMin(depth_candidate_thread_id);
-        const bool is_depth_leader = is_depth_candidate && (global_thread_linear_id == depth_leader_thread_id);
+        // Wave内は同一セル候補だけで最小packed keyを先に求め、Atomic回数を1回へ抑える。
+        const uint same_cell_packed_key = is_same_cell
+            ? FspBuildDepthHintPackedKey(cascade_index, global_cell_index, hint_sample_pos_ws, pixel_id, view_origin)
+            : k_fsp_depth_hint_metric_init;
+        const uint leader_packed_key = WaveActiveMin(same_cell_packed_key);
+        const bool is_depth_leader = is_same_cell && (same_cell_packed_key == leader_packed_key);
         const uint depth_leader_lane = first_lane_from_ballot(WaveActiveBallot(is_depth_leader));
 
         if(WaveGetLaneIndex() == leader_lane)
@@ -116,7 +138,7 @@ void FspRegisterAndHintVisibleCellWave(
         }
         if(WaveGetLaneIndex() == depth_leader_lane)
         {
-            FspUpdateVisibleCellDepthHint(cascade_index, global_cell_index, hint_sample_pos_ws, depth_metric_u, global_thread_linear_id);
+            FspUpdateVisibleCellDepthHint(global_cell_index, leader_packed_key);
         }
 
         pending_lanes &= ~same_cell_lanes;
@@ -137,7 +159,9 @@ void main_cs(
 	const float2 screen_pos_f = float2(dtid.xy) + float2(0.5, 0.5);// ピクセル中心への半ピクセルオフセット考慮.
 	const float2 screen_size_f = float2(cb_srvs.tex_main_view_depth_size.xy);
 	const float2 screen_uv = (screen_pos_f / screen_size_f);
-	const uint global_thread_linear_id = dtid.y * uint(cb_srvs.tex_main_view_depth_size.x) + dtid.x;
+	// pixel_id は packed key 下位24bitへ入る。
+	// 24bitを超える解像度では下位bitへ丸められる点に注意（一般的な解像度では問題なし）。
+	const uint pixel_id = dtid.y * uint(cb_srvs.tex_main_view_depth_size.x) + dtid.x;
 
     #if 1 < THREAD_GROUP_SKIP_OPTIMIZE_GROUP_TILE_WIDTH
         // 適当なTile単位処理スキップ軽量化.
@@ -171,8 +195,6 @@ void main_cs(
 
     const float3 to_surface_vec_ws = pixel_pos_ws - view_origin;
     const float to_surface_len_sq = dot(to_surface_vec_ws, to_surface_vec_ws);
-    // depth metric を uint 比較用に前計算して使い回す（AtomicMin / WaveMin 用）。
-    const uint to_surface_len_sq_u = asuint(to_surface_len_sq);
     const bool has_surface_dir = (to_surface_len_sq > 1e-6);
     const float3 surface_view_dir_ws = has_surface_dir ? (to_surface_vec_ws * rsqrt(to_surface_len_sq)) : 0.0.xxx;
 
@@ -195,6 +217,6 @@ void main_cs(
         // サーフェイス手前寄せ/埋まり回避の品質は pre-update 側で担保する。
         uint global_cell_index = k_fsp_invalid_probe_index;
         FspTryGetGlobalCellIndexFromWorldPos(pixel_pos_ws, cascade_index, global_cell_index);
-        FspRegisterAndHintVisibleCellWave(cascade_index, global_cell_index, hint_sample_pos_ws, to_surface_len_sq_u, global_thread_linear_id);
+        FspRegisterAndHintVisibleCellWave(cascade_index, global_cell_index, hint_sample_pos_ws, pixel_id, view_origin);
     }
 }

@@ -9,11 +9,18 @@ fsp_pre_update_cs.hlsl
 
 
 #include "../srvs_util.hlsli"
+#include "../../include/scene_view_struct.hlsli"
 
 
 #define RAY_SAMPLE_COUNT_PER_VOXEL 8
 #define PROBE_UPDATE_TEMPORAL_RATE (0.025)
 static const uint k_fsp_depth_hint_metric_init = 0xffffffffu;
+static const uint k_fsp_depth_hint_pixel_bits = 24u;
+// packed key lower bits から pixel_id を取り出すためのマスク。
+static const uint k_fsp_depth_hint_pixel_mask = (1u << k_fsp_depth_hint_pixel_bits) - 1u;
+
+ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
+Texture2D         TexHardwareDepth;
 
 // free stack から 1 probe index を pop する。
 uint FspPopFreeProbeIndex()
@@ -194,12 +201,46 @@ void main_cs(
         // Probe埋まり回避.
         const float half_cell_size = cascade.grid.cell_size * 0.5;
         const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * half_cell_size;
-        // screen pass 側で AtomicMin 集約した「セル内最手前サーフェイス」のヒント。
-        // probe_data_dummy が初期値でなければ、そのとき保存された hint offset を初期配置シードとして使う。
-        const uint depth_hint_metric = RWFspCellStateBuffer[global_cell_index].probe_data_dummy;
-        const bool has_depth_hint = (depth_hint_metric != k_fsp_depth_hint_metric_init);
-        const float3 depth_hint_offset = decode_uint_to_range1_vec3(RWFspCellStateBuffer[global_cell_index].probe_offset_v3) * half_cell_size;
+        // ScreenSpacePass では packed key のみ保持し、ここで実 offset を再構成する。
+        // 1) probe_data_dummy から pixel_id を取り出す
+        // 2) pixel_id -> (x,y) へ復元して depth を再取得
+        // 3) depth から world pos を復元し、hint offset を計算
+        const uint depth_hint_packed = RWFspCellStateBuffer[global_cell_index].probe_data_dummy;
+        bool has_depth_hint = false;
+        float3 depth_hint_offset = 0.0.xxx;
+        if(depth_hint_packed != k_fsp_depth_hint_metric_init)
+        {
+            const uint pixel_id = depth_hint_packed & k_fsp_depth_hint_pixel_mask;
+            const uint depth_width = (uint)cb_srvs.tex_main_view_depth_size.x;
+            const uint depth_height = (uint)cb_srvs.tex_main_view_depth_size.y;
+            // 防御的に width=0 を避ける（通常は発生しない）。
+            const uint pixel_x = pixel_id % max(depth_width, 1u);
+            const uint pixel_y = pixel_id / max(depth_width, 1u);
+            if(pixel_y < depth_height)
+            {
+                const float d = TexHardwareDepth.Load(int3(pixel_x, pixel_y, 0)).r;
+                const float view_z = calc_view_z_from_ndc_z(d, cb_ngl_sceneview.cb_ndc_z_to_view_z_coef);
+                if(65535.0 > abs(view_z))
+                {
+                    const float2 screen_pos_f = float2(float(pixel_x), float(pixel_y)) + float2(0.5, 0.5);
+                    const float2 screen_uv = screen_pos_f / float2(cb_srvs.tex_main_view_depth_size.xy);
+                    const float3 to_pixel_ray_vs = CalcViewSpaceRay(screen_uv, cb_ngl_sceneview.cb_proj_mtx);
+                    const float3 pixel_pos_ws = mul(cb_ngl_sceneview.cb_view_inv_mtx, float4((to_pixel_ray_vs / abs(to_pixel_ray_vs.z)) * view_z, 1.0));
+                    const float3 view_origin = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
+                    const float3 to_surface_vec_ws = pixel_pos_ws - view_origin;
+                    const float to_surface_len_sq = dot(to_surface_vec_ws, to_surface_vec_ws);
+                    const bool has_surface_dir = (to_surface_len_sq > 1e-6);
+                    const float3 surface_view_dir_ws = has_surface_dir ? (to_surface_vec_ws * rsqrt(to_surface_len_sq)) : 0.0.xxx;
+                    const float hint_push_to_camera = half_cell_size * 0.08;
+                    const float3 hint_sample_pos_ws = has_surface_dir ? (pixel_pos_ws - surface_view_dir_ws * hint_push_to_camera) : pixel_pos_ws;
+                    // seed offset として使うため、セル内範囲へクランプして安定化。
+                    depth_hint_offset = clamp(hint_sample_pos_ws - probe_cell_center, -half_cell_size.xxx, half_cell_size.xxx);
+                    has_depth_hint = true;
+                }
+            }
+        }
 
+        // 深度ヒントが得られたセルはそれを優先し、無いセルのみ前フレームoffsetを継続利用。
         float3 seed_probe_offset = has_depth_hint ? depth_hint_offset : prev_probe_offset;
 
         float3 probe_sample_pos_ws = probe_cell_center + seed_probe_offset;
@@ -229,6 +270,7 @@ void main_cs(
                 }
 
                 // 方向優先で見つからないときだけランダム探索へフォールバック.
+                // シードはセルID固定にして、静止時のフレーム間ゆらぎを抑える。
                 if(!found_non_solid)
                 {
                     for(int ri = 0; ri < fallback_relocation_count; ++ri)
