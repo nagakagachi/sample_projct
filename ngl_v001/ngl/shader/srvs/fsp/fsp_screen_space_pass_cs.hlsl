@@ -71,7 +71,7 @@ void FspRegisterVisibleCell(uint global_cell_index)
     if(cb_srvs.frame_count != old_atomic_work)
     {
         // 深度ヒント集約の比較値をフレーム先頭で初期化.
-        RWFspCellStateBuffer[global_cell_index].probe_data_dummy = k_fsp_depth_hint_metric_init;
+        RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key = k_fsp_depth_hint_metric_init;
 
         int current_visible_count = 0;
         InterlockedAdd(RWSurfaceProbeCellList[0], 1, current_visible_count);
@@ -94,10 +94,10 @@ void FspUpdateVisibleCellDepthHint(uint global_cell_index, uint packed_depth_hin
     {
         return;
     }
-    // probe_data_dummy には packed key だけを保持する。
+    // depth_hint_packed_key には packed key だけを保持する。
     // 実オフセットは PreUpdate で pixel_id -> depth 再構成して生成する。
     uint prev_packed = 0;
-    InterlockedMin(RWFspCellStateBuffer[global_cell_index].probe_data_dummy, packed_depth_hint_key_u, prev_packed);
+    InterlockedMin(RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key, packed_depth_hint_key_u, prev_packed);
 }
 
 void FspRegisterAndHintVisibleCellWave(

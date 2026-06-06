@@ -202,10 +202,10 @@ void main_cs(
         const float half_cell_size = cascade.grid.cell_size * 0.5;
         const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * half_cell_size;
         // ScreenSpacePass では packed key のみ保持し、ここで実 offset を再構成する。
-        // 1) probe_data_dummy から pixel_id を取り出す
+        // 1) depth_hint_packed_key から pixel_id を取り出す
         // 2) pixel_id -> (x,y) へ復元して depth を再取得
         // 3) depth から world pos を復元し、hint offset を計算
-        const uint depth_hint_packed = RWFspCellStateBuffer[global_cell_index].probe_data_dummy;
+        const uint depth_hint_packed = RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key;
         bool has_depth_hint = false;
         float3 depth_hint_offset = 0.0.xxx;
         if(depth_hint_packed != k_fsp_depth_hint_metric_init)

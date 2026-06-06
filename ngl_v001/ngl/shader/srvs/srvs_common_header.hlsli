@@ -232,7 +232,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint atomic_work;// 可視要素リスト作成時の重複除去用.
         
         float avg_sky_visibility;
-        uint probe_data_dummy;
+        uint depth_hint_packed_key;
     };
 
     static const uint k_fsp_invalid_probe_index = ~uint(0);
