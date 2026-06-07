@@ -112,11 +112,9 @@ namespace ngl::render::app
             );
 
         void Dispatch_Bbv_OccupancyUpdate_View(rhi::GraphicsCommandListDep* p_command_list,
-            rhi::ConstantBufferPooledHandle scene_cbv, 
             const ngl::render::task::RenderPassViewInfo& main_view_info, const InjectionSourceDepthBufferInfo& depth_buffer_info
             );
         void Dispatch_Bbv_RadianceInjection_View(rhi::GraphicsCommandListDep* p_command_list,
-            rhi::ConstantBufferPooledHandle scene_cbv,
             const ngl::render::task::RenderPassViewInfo& main_view_info, const InjectionSourceDepthBufferViewInfo& view_info
             );
             
@@ -182,15 +180,10 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_begin_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_begin_view_update_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_list_build_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_apply_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_injection_apply_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_injection_apply_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_injection_apply_short_ray_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_resolve_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_brick_count_aggregate_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_hibrick_count_aggregate_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_element_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_indirect_arg_build_ = {};
@@ -238,9 +231,6 @@ namespace ngl::render::app
         ngl::u32     bbv_hollow_voxel_list_count_max_ = {};
         ngl::u32     bbv_fine_update_voxel_count_max_ = {};
 
-        // 除去用リスト.
-        ComputeBufferSet bbv_removal_list_ = {};
-        ComputeBufferSet bbv_removal_indirect_arg_ = {};
         // 深度テストベース更新用 ActiveList.
         // 0番は active counter, 1..N は voxel index.
         ComputeBufferSet bbv_depthtest_frustum_brick_list_ = {};
@@ -326,8 +316,6 @@ namespace ngl::render::app
         static int dbg_assp_total_ray_count_;
         static int dbg_assp_probe_count_;
         static int dbg_gi_update_sample_mode_;
-        static int dbg_bbv_update_flow_mode_;
-        static int dbg_bbv_depthtest_frustum_cull_force_pass_;
         static float dbg_bbv_depthtest_injection_fine_cells_default_;
         static float dbg_bbv_depthtest_injection_fine_cells_;
 

@@ -18,42 +18,33 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
     uint candidate_voxel_index = 0;
     if(dtid.x < brick_count)
     {
-        if(0 != cb_srvs.bbv_depthtest_frustum_cull_force_pass)
-        {
-            // 負荷計測用: FrustumCull の判定処理を省略し、全 Brick を候補として通す。
-            has_candidate = true;
-            candidate_voxel_index = dtid.x;
-        }
-        else
-        {
-            const int3 voxel_coord_toroidal = index_to_voxel_coord(dtid.x, cb_srvs.bbv.grid_resolution);
-            const int3 voxel_coord_linear = voxel_coord_toroidal_mapping(
-                voxel_coord_toroidal,
-                cb_srvs.bbv.grid_resolution - cb_srvs.bbv.grid_toroidal_offset,
-                cb_srvs.bbv.grid_resolution);
+        const int3 voxel_coord_toroidal = index_to_voxel_coord(dtid.x, cb_srvs.bbv.grid_resolution);
+        const int3 voxel_coord_linear = voxel_coord_toroidal_mapping(
+            voxel_coord_toroidal,
+            cb_srvs.bbv.grid_resolution - cb_srvs.bbv.grid_toroidal_offset,
+            cb_srvs.bbv.grid_resolution);
 
-            const float3 brick_center_ws = (float3(voxel_coord_linear) + 0.5) * cb_srvs.bbv.cell_size + cb_srvs.bbv.grid_min_pos;
-            const float3 brick_center_vs = mul(cb_injection_src_view_info.cb_view_mtx, float4(brick_center_ws, 1.0));
-            const float4 brick_center_cs = mul(cb_injection_src_view_info.cb_proj_mtx, float4(brick_center_vs, 1.0));
-            if(abs(brick_center_cs.w) > 1e-6)
+        const float3 brick_center_ws = (float3(voxel_coord_linear) + 0.5) * cb_srvs.bbv.cell_size + cb_srvs.bbv.grid_min_pos;
+        const float3 brick_center_vs = mul(cb_injection_src_view_info.cb_view_mtx, float4(brick_center_ws, 1.0));
+        const float4 brick_center_cs = mul(cb_injection_src_view_info.cb_proj_mtx, float4(brick_center_vs, 1.0));
+        if(abs(brick_center_cs.w) > 1e-6)
+        {
+            const float3 ndc = brick_center_cs.xyz / brick_center_cs.w;
+            const bool inside_frustum =
+                (abs(ndc.x) <= 1.0) &&
+                (abs(ndc.y) <= 1.0);
+            if(inside_frustum)
             {
-                const float3 ndc = brick_center_cs.xyz / brick_center_cs.w;
-                const bool inside_frustum =
-                    (abs(ndc.x) <= 1.0) &&
-                    (abs(ndc.y) <= 1.0);
-                if(inside_frustum)
+                // Brick count 再集計は後段で行うため、ここでは bitmask 実データで Empty 判定する。
+                const uint bitmask_addr = bbv_voxel_bitmask_data_addr(dtid.x);
+                uint occupied_bits = 0;
+                [unroll]
+                for(uint i = 0; i < k_bbv_per_voxel_bitmask_u32_count; ++i)
                 {
-                    // Brick count 再集計は後段で行うため、ここでは bitmask 実データで Empty 判定する。
-                    const uint bitmask_addr = bbv_voxel_bitmask_data_addr(dtid.x);
-                    uint occupied_bits = 0;
-                    [unroll]
-                    for(uint i = 0; i < k_bbv_per_voxel_bitmask_u32_count; ++i)
-                    {
-                        occupied_bits |= RWBitmaskBrickVoxel[bitmask_addr + i];
-                    }
-                    has_candidate = (0 != occupied_bits);
-                    candidate_voxel_index = dtid.x;
+                    occupied_bits |= RWBitmaskBrickVoxel[bitmask_addr + i];
                 }
+                has_candidate = (0 != occupied_bits);
+                candidate_voxel_index = dtid.x;
             }
         }
     }

@@ -117,7 +117,6 @@ void main_cs(
     float3 pos_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(CalcViewSpacePosition(screen_uv, view_z, cb_injection_src_view_info.cb_proj_mtx), 1.0));
 
     float3 ray_dir_ws = 0.0.xxx;
-    if(cb_srvs.bbv_update_flow_mode == k_bbv_update_flow_depthtest)
     {
         const float2 near_far_plane_d = GetNearFarPlaneDepthFromProjectionMatrix(cb_injection_src_view_info.cb_proj_mtx);
         const float near_plane_view_z = calc_view_z_from_ndc_z(near_far_plane_d.x, cb_injection_src_view_info.cb_ndc_z_to_view_z_coef);

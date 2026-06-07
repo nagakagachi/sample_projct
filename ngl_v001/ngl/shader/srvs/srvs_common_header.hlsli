@@ -173,7 +173,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define FSP_VISIBLE_SURFACE_ELEMENT_UPDATE_SKIP_COUNT 1
 
     // 非可視表面Voxel除去用スタックの1要素のコンポーネント数.
-    #define k_component_count_RemoveVoxelList 4
 
     // ScreenSpaceProbe情報テクスチャ群のフル解像度に対する縮小率.
     #define SCREEN_SPACE_PROBE_INFO_DOWNSCALE 8
@@ -305,10 +304,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint dummy0;
         uint dummy1;
     };
-    // BBV update flow mode.
-    #define k_bbv_update_flow_legacy (0)
-    #define k_bbv_update_flow_depthtest (1)
-
     // Dispatchパラメータ.
     // ConstantBuffer は HLSL の cbuffer packing に合わせて 16-byte 単位で member レイアウトを調整すること。
     // 特に次のルールを守る:
@@ -323,9 +318,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int3 bbv_indirect_cs_thread_group_size NGL_CPP_MEMBER_INIT({});// IndirectArg計算のためにVoxel更新ComputeShaderのThreadGroupサイズを格納.
         int bbv_visible_voxel_buffer_size NGL_CPP_MEMBER_INIT({});// 更新プローブ用のワークサイズ.
         int bbv_hollow_voxel_buffer_size NGL_CPP_MEMBER_INIT({});// 削除用中空Voxel情報のワークサイズ.
-        int bbv_update_flow_mode NGL_CPP_MEMBER_INIT({k_bbv_update_flow_depthtest});
-        // 1 の場合、DepthTest FrustumCull は判定を省略して全 Brick を ActiveList に通す（負荷計測用）。
-        int bbv_depthtest_frustum_cull_force_pass NGL_CPP_MEMBER_INIT({0});
         // DepthTest専用Injectionで、サーフェイス座標を視線奥へ固定ワールド距離オフセットする量.
         // 2.13 fine cells 相当を既定にする。BBV cell=3.0 / fine=8 の場合は約 0.799。
         float bbv_depthtest_injection_world_offset NGL_CPP_MEMBER_INIT({2.13f * 3.0f * k_bbv_per_voxel_resolution_inv});

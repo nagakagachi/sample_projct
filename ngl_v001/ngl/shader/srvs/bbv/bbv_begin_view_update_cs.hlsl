@@ -4,7 +4,7 @@
 bbv_begin_view_update_cs.hlsl
 
 BbvのView毎の処理の開始用処理.
-除去リストとDepthTest Frustum ActiveListのカウンタをリセットする。
+DepthTest Frustum ActiveListのカウンタをリセットする。
 
 #endif
 
@@ -20,7 +20,6 @@ void main_cs(
 {
     if(0 == dtid.x)
     {
-        RWRemoveVoxelList[0] = 0;
         RWFrustumBrickList[0] = 0;
     }
 }
