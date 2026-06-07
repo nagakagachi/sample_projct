@@ -129,8 +129,14 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
         }
 
         const float surface_view_z = calc_view_z_from_ndc_z(surface_depth, cb_injection_src_view_info.cb_ndc_z_to_view_z_coef);
-        const float bitcell_view_z = bitcell_center_vs.z;
-        if(bitcell_view_z < surface_view_z)
+        // セル中心1点ではなく、セル外接球の「カメラ側最近点」で前後判定する。
+        // これにより中心が奥側でも手前側へはみ出した占有を削りやすくする。
+        const float center_len_sq = dot(bitcell_center_vs, bitcell_center_vs);
+        const float3 center_dir = (center_len_sq > 1e-10) ? (bitcell_center_vs * rsqrt(center_len_sq)) : float3(0.0, 0.0, 1.0);
+        const float bitcell_sphere_radius = 0.5 * length(bitcell_step_ws);
+        const float3 bitcell_nearest_vs = bitcell_center_vs - center_dir * bitcell_sphere_radius;
+        const float bitcell_nearest_view_z = bitcell_nearest_vs.z;
+        if(bitcell_nearest_view_z < surface_view_z)
         {
             remain_mask &= ~bit_value;
         }

@@ -31,8 +31,14 @@ namespace ngl::render::app
 
     static constexpr size_t k_sizeof_BbvOptionalData = sizeof(BbvOptionalData);
     static constexpr size_t k_sizeof_FspProbeData      = sizeof(FspProbeData);
+    static constexpr size_t k_sizeof_FspVisibleAnchorData = sizeof(FspVisibleAnchorData);
     static constexpr size_t k_sizeof_FspProbePoolData  = sizeof(FspProbePoolData);
     static constexpr u32 k_max_update_probe_work_count = 1024;
+    static constexpr float k_depthtest_injection_default_fine_cells = 2.0f;
+    static float CalcDepthtestInjectionWorldOffsetFromFineCells(float injection_fine_cells, float bbv_cell_size)
+    {
+        return bbv_cell_size * (injection_fine_cells * float(k_bbv_per_voxel_resolution_inv));
+    }
 
     static constexpr u32 k_fsp_probe_pool_size = 1<<13;//10000;
     static constexpr u32 k_fsp_probe_surface_cell_count_max = 1024*2;//1024;
@@ -150,6 +156,7 @@ namespace ngl::render::app
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_mode_ = -1;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_use_relocated_pos_ = k_default_srvs_param.debug_fsp_probe_use_relocated_pos;
     int ScreenReconstructedVoxelStructure::dbg_fsp_update_ray_jitter_enable_ = k_default_srvs_param.debug_fsp_update_ray_jitter_enable;
+    int ScreenReconstructedVoxelStructure::dbg_fsp_relocation_mode_ = k_default_srvs_param.debug_fsp_relocation_mode;
     int ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_cascade_ = -1;
     int ScreenReconstructedVoxelStructure::dbg_fsp_cascade_count_ = 1;
     float ScreenReconstructedVoxelStructure::dbg_probe_scale_ = 1.0f;
@@ -180,7 +187,8 @@ namespace ngl::render::app
     int ScreenReconstructedVoxelStructure::dbg_gi_update_sample_mode_ = static_cast<int>(SrvsGiSolutionMode::Assp);
     int ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_ = k_default_srvs_param.bbv_update_flow_mode;
     int ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_ = k_default_srvs_param.bbv_depthtest_frustum_cull_force_pass;
-    float ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_ = k_default_srvs_param.bbv_depthtest_injection_world_offset;
+    float ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_default_ = k_depthtest_injection_default_fine_cells;
+    float ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_ = dbg_bbv_depthtest_injection_fine_cells_default_;
 
     void ScreenReconstructedVoxelStructure::DrawDebugMenu(
         bool* p_enable_all_injection,
@@ -229,13 +237,15 @@ namespace ngl::render::app
                 }
                 ImGui::TextDisabled("ON: Skip frustum/empty checks and pass all bricks to carving.");
             }
-            ImGui::SliderFloat("DepthTest Injection World Offset", &ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_, 0.0f, 5.0f, "%.3f");
+            ImGui::SliderFloat("DepthTest Injection Offset (fine cells)", &ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_, 0.0f, 8.0f, "%.2f");
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem("Reset to Default"))
-                    ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_ = k_default_srvs_param.bbv_depthtest_injection_world_offset;
+                    ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_ = ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_default_;
                 ImGui::EndPopup();
             }
-            ImGui::TextDisabled("Recommended start: %.2f", k_default_srvs_param.bbv_depthtest_injection_world_offset);
+            ImGui::TextDisabled(
+                "Default: %.2f fine cells",
+                ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_default_);
             ImGui::Text("GI Update Target (linked): %s", SrvsGiSolutionModeName(dbg_gi_update_sample_mode_));
 
             
@@ -497,6 +507,16 @@ namespace ngl::render::app
                             dbg_fsp_probe_lifecycle_enable_ = k_default_srvs_param.fsp_probe_lifecycle_enable;
                         ImGui::EndPopup();
                     }
+                }
+                {
+                    const char* relocation_mode_items[] = { "Legacy", "VisibleFirst (Depth Validate)" };
+                    ImGui::Combo("Relocation Mode", &dbg_fsp_relocation_mode_, relocation_mode_items, IM_ARRAYSIZE(relocation_mode_items));
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_relocation_mode_ = k_default_srvs_param.debug_fsp_relocation_mode;
+                        ImGui::EndPopup();
+                    }
+                    ImGui::TextDisabled("0: legacy relocation, 1: visible-first candidate selection with depth+BBV checks.");
                 }
 
             }
@@ -948,6 +968,7 @@ namespace ngl::render::app
             pso_fsp_clear_ = CreateComputePSO("srvs/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("srvs/fsp/fsp_begin_update_cs.hlsl");
             pso_fsp_visible_surface_proc_ = CreateComputePSO("srvs/fsp/fsp_screen_space_pass_cs.hlsl");
+            pso_fsp_visible_anchor_finalize_ = CreateComputePSO("srvs/fsp/fsp_visible_anchor_finalize_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("srvs/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("srvs/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("srvs/fsp/fsp_update_cs.hlsl");
@@ -1128,6 +1149,16 @@ namespace ngl::render::app
                                                .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
                                                .heap_type = rhi::EResourceHeapType::Default}
                                             ,   "Srvs_FspBuffer");
+        }
+        {
+            fsp_visible_anchor_buffer_.InitializeAsStructured(p_device,
+                                           rhi::BufferDep::Desc{
+                                              .element_byte_size = sizeof(FspVisibleAnchorData),
+                                              .element_count     = fsp_total_cell_count_,
+
+                                              .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                                              .heap_type = rhi::EResourceHeapType::Default}
+                                            ,   "Srvs_FspVisibleAnchorBuffer");
         }
         {
             // V1 FSP lifecycle: cell -> probe index only.
@@ -1354,7 +1385,9 @@ namespace ngl::render::app
                 param.bbv_hollow_voxel_buffer_size = bbv_hollow_voxel_list_count_max_;
                 param.bbv_update_flow_mode = ScreenReconstructedVoxelStructure::dbg_bbv_update_flow_mode_;
                 param.bbv_depthtest_frustum_cull_force_pass = ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_frustum_cull_force_pass_;
-                param.bbv_depthtest_injection_world_offset = ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_world_offset_;
+                param.bbv_depthtest_injection_world_offset = CalcDepthtestInjectionWorldOffsetFromFineCells(
+                    ScreenReconstructedVoxelStructure::dbg_bbv_depthtest_injection_fine_cells_,
+                    bbv_grid_updater_.Get().cell_size);
             }
             // Fsp
             {
@@ -1403,6 +1436,7 @@ namespace ngl::render::app
             param.debug_fsp_probe_mode = ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_mode_;
             param.debug_fsp_probe_use_relocated_pos = ScreenReconstructedVoxelStructure::dbg_fsp_probe_use_relocated_pos_;
             param.debug_fsp_update_ray_jitter_enable = ScreenReconstructedVoxelStructure::dbg_fsp_update_ray_jitter_enable_;
+            param.debug_fsp_relocation_mode = ScreenReconstructedVoxelStructure::dbg_fsp_relocation_mode_;
             param.debug_fsp_probe_cascade = ScreenReconstructedVoxelStructure::dbg_fsp_probe_debug_cascade_;
 
             param.debug_probe_radius = ScreenReconstructedVoxelStructure::dbg_probe_scale_ * 0.5f * bbv_grid_updater_.Get().cell_size / k_bbv_per_voxel_resolution;
@@ -1453,6 +1487,7 @@ namespace ngl::render::app
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_clear_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
                 pso_fsp_clear_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
+                pso_fsp_clear_->SetView(&desc_set, "RWFspVisibleAnchorBuffer", fsp_visible_anchor_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
@@ -1466,6 +1501,7 @@ namespace ngl::render::app
                 pso_fsp_clear_->DispatchHelper(p_command_list, std::max<u32>(fsp_total_cell_count_, fsp_probe_pool_size_ + 1), 1, 1);
 
                 p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
+                p_command_list->ResourceUavBarrier(fsp_visible_anchor_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_cell_probe_index_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_probe_pool_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_probe_free_stack_buffer_.buffer.Get());
@@ -2217,6 +2253,23 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
             }
+            // Fsp Visible Anchor Finalize Pass.
+            {
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspVisibleAnchorFinalize");
+
+                ngl::rhi::DescriptorSetDep desc_set = {};
+                pso_fsp_visible_anchor_finalize_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                pso_fsp_visible_anchor_finalize_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                pso_fsp_visible_anchor_finalize_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
+                pso_fsp_visible_anchor_finalize_->SetView(&desc_set, "FspCellStateBuffer", fsp_buffer_.srv.Get());
+                pso_fsp_visible_anchor_finalize_->SetView(&desc_set, "RWFspVisibleAnchorBuffer", fsp_visible_anchor_buffer_.uav.Get());
+
+                p_command_list->SetPipelineState(pso_fsp_visible_anchor_finalize_.Get());
+                p_command_list->SetDescriptorSet(pso_fsp_visible_anchor_finalize_.Get(), &desc_set);
+                pso_fsp_visible_anchor_finalize_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+
+                p_command_list->ResourceUavBarrier(fsp_visible_anchor_buffer_.buffer.Get());
+            }
             // Fsp IndirectArg生成.
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspGenerateIndirectArg");
@@ -2244,6 +2297,7 @@ namespace ngl::render::app
                 pso_fsp_pre_update_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
                 // 1pass depth-hint: ScreenPass で保存した pixel_id から depth/world を再構成するために必要。
                 pso_fsp_pre_update_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                pso_fsp_pre_update_->SetView(&desc_set, "FspVisibleAnchorBuffer", fsp_visible_anchor_buffer_.srv.Get());
 
                 pso_fsp_pre_update_->SetView(&desc_set, "SurfaceProbeCellList", fsp_visible_surface_list_.srv.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
@@ -2475,6 +2529,8 @@ namespace ngl::render::app
         }
 
         is_initialized_ = true;
+        dbg_bbv_depthtest_injection_fine_cells_default_ = k_depthtest_injection_default_fine_cells;
+        dbg_bbv_depthtest_injection_fine_cells_ = dbg_bbv_depthtest_injection_fine_cells_default_;
         dbg_fsp_cascade_count_ = static_cast<int>(std::clamp<u32>(fsp_cascade_count, 1u, k_fsp_max_cascade_count));
         dbg_fsp_probe_debug_cascade_ = std::clamp(dbg_fsp_probe_debug_cascade_, -1, dbg_fsp_cascade_count_ - 1);
         return true;

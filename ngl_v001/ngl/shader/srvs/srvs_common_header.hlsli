@@ -235,6 +235,21 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint depth_hint_packed_key;
     };
 
+    // SurfacePassで確定した winner pixel の可視アンカー情報.
+    // key確定とpayload確定を2pass化して、競合時の不整合を避ける。
+    struct FspVisibleAnchorData
+    {
+        float3 surface_pos_ws;
+        float surface_view_z;
+
+        float3 surface_view_dir_ws;
+        uint winner_key;
+
+        uint valid;
+        uint atomic_frame;
+        uint2 padding0;
+    };
+
     static const uint k_fsp_invalid_probe_index = ~uint(0);
     static const uint k_fsp_probe_flag_allocated = 1u << 0;
     static const uint k_fsp_max_cascade_count = 8u;
@@ -327,8 +342,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         // 1 の場合、DepthTest FrustumCull は判定を省略して全 Brick を ActiveList に通す（負荷計測用）。
         int bbv_depthtest_frustum_cull_force_pass NGL_CPP_MEMBER_INIT({0});
         // DepthTest専用Injectionで、サーフェイス座標を視線奥へ固定ワールド距離オフセットする量.
-        // 推奨初期値は BBV cell=3.0 / fine=8 のとき 1 fineセル相当の 0.375。
-        float bbv_depthtest_injection_world_offset NGL_CPP_MEMBER_INIT({3.0f * k_bbv_per_voxel_resolution_inv});
+        // 2.13 fine cells 相当を既定にする。BBV cell=3.0 / fine=8 の場合は約 0.799。
+        float bbv_depthtest_injection_world_offset NGL_CPP_MEMBER_INIT({2.13f * 3.0f * k_bbv_per_voxel_resolution_inv});
         int dummy1 NGL_CPP_MEMBER_INIT({});
 
         // Temporal再利用重みの最小値.
@@ -401,6 +416,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int debug_fsp_probe_mode NGL_CPP_MEMBER_INIT({-1});
         int debug_fsp_probe_use_relocated_pos NGL_CPP_MEMBER_INIT({1});
         int debug_fsp_update_ray_jitter_enable NGL_CPP_MEMBER_INIT({1});
+        int debug_fsp_relocation_mode NGL_CPP_MEMBER_INIT({0}); // 0: legacy, 1: visible-first(depth validate)
 
         float debug_probe_radius NGL_CPP_MEMBER_INIT({0.0f});
         float debug_probe_near_geom_scale NGL_CPP_MEMBER_INIT({0.2f});
