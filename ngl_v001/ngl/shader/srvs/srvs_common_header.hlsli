@@ -235,21 +235,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint depth_hint_packed_key;
     };
 
-    // SurfacePassで確定した winner pixel の可視アンカー情報.
-    // key確定とpayload確定を2pass化して、競合時の不整合を避ける。
-    struct FspVisibleAnchorData
-    {
-        float3 surface_pos_ws;
-        float surface_view_z;
-
-        float3 surface_view_dir_ws;
-        uint winner_key;
-
-        uint valid;
-        uint atomic_frame;
-        uint2 padding0;
-    };
-
     static const uint k_fsp_invalid_probe_index = ~uint(0);
     static const uint k_fsp_probe_flag_allocated = 1u << 0;
     static const uint k_fsp_max_cascade_count = 8u;
@@ -416,7 +401,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int debug_fsp_probe_mode NGL_CPP_MEMBER_INIT({-1});
         int debug_fsp_probe_use_relocated_pos NGL_CPP_MEMBER_INIT({1});
         int debug_fsp_update_ray_jitter_enable NGL_CPP_MEMBER_INIT({1});
-        int debug_fsp_relocation_mode NGL_CPP_MEMBER_INIT({0}); // 0: legacy, 1: visible-first(depth validate)
 
         float debug_probe_radius NGL_CPP_MEMBER_INIT({0.0f});
         float debug_probe_near_geom_scale NGL_CPP_MEMBER_INIT({0.2f});

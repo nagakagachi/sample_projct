@@ -15,12 +15,8 @@ fsp_pre_update_cs.hlsl
 #define RAY_SAMPLE_COUNT_PER_VOXEL 8
 #define PROBE_UPDATE_TEMPORAL_RATE (0.025)
 static const uint k_fsp_depth_hint_metric_init = 0xffffffffu;
-static const uint k_fsp_depth_hint_pixel_bits = 24u;
-// packed key lower bits から pixel_id を取り出すためのマスク。
-static const uint k_fsp_depth_hint_pixel_mask = (1u << k_fsp_depth_hint_pixel_bits) - 1u;
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
-Texture2D         TexHardwareDepth;
 
 // free stack から 1 probe index を pop する。
 uint FspPopFreeProbeIndex()
@@ -83,45 +79,6 @@ void FspCopyProbeAtlas(uint dst_probe_index, uint src_probe_index)
                 RWFspProbeAtlasTex[src_probe_2d_map_pos * k_fsp_probe_octmap_width + uint2(oct_i, oct_j)];
         }
     }
-}
-
-// 候補位置が「深度面より手前」にあるかを、再投影して評価する。
-bool FspIsCandidateDepthFront(float3 candidate_ws)
-{
-    const float3 candidate_vs = mul(cb_ngl_sceneview.cb_view_mtx, float4(candidate_ws, 1.0));
-    const float4 candidate_cs = mul(cb_ngl_sceneview.cb_proj_mtx, float4(candidate_vs, 1.0));
-    if(abs(candidate_cs.w) <= 1e-6)
-    {
-        return false;
-    }
-
-    const float3 ndc = candidate_cs.xyz / candidate_cs.w;
-    if(ndc.z < 0.0 || ndc.z > 1.0)
-    {
-        return false;
-    }
-
-    const float2 uv = float2(ndc.x * 0.5 + 0.5, -ndc.y * 0.5 + 0.5);
-    if(any(uv < 0.0) || any(uv > 1.0))
-    {
-        return false;
-    }
-
-    const int2 depth_size = cb_srvs.tex_main_view_depth_size;
-    if(any(depth_size <= 0))
-    {
-        return false;
-    }
-    const int2 depth_pos = clamp(int2(uv * float2(depth_size)), int2(0, 0), depth_size - 1);
-    const float surface_depth = TexHardwareDepth.Load(int3(depth_pos, 0)).r;
-    const float surface_view_z = calc_view_z_from_ndc_z(surface_depth, cb_ngl_sceneview.cb_ndc_z_to_view_z_coef);
-    if(65535.0 <= abs(surface_view_z))
-    {
-        return false;
-    }
-
-    // bbv_depthtest_carving と同じ前後判定を使い、手前側のみ許可する。
-    return (candidate_vs.z < surface_view_z);
 }
 
 bool FspTrySeedProbeFromUpperCascade(out FspProbePoolData src_probe_pool_data, float3 sample_pos_ws, uint dst_cascade_index, uint dst_probe_index)
@@ -236,81 +193,26 @@ void main_cs(
 
     // Cell中心.
     const float3 probe_cell_center = FspCalcCellCenterWs(cascade_index, local_cell_index);
+    const float3 view_origin = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
     #if 1
         // Probe埋まり回避.
         const float half_cell_size = cascade.grid.cell_size * 0.5;
         const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * half_cell_size;
-        const int relocation_mode = cb_srvs.debug_fsp_relocation_mode;
-        // ScreenSpacePass では packed key のみ保持し、ここで実 offset を再構成する。
-        // 1) depth_hint_packed_key から pixel_id を取り出す
-        // 2) pixel_id -> (x,y) へ復元して depth を再取得
-        // 3) depth から world pos を復元し、hint offset を計算
+        // depth_hint key は可視候補の存在判定にのみ使い、位置決定はBBVベースで行う。
         const uint depth_hint_packed = RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key;
-        bool has_depth_hint = false;
-        bool has_surface_anchor = false;
-        float3 depth_hint_offset = 0.0.xxx;
-        float3 surface_view_dir_ws = 0.0.xxx;
-        if(1 == relocation_mode)
-        {
-            // 2pass化: SurfacePassで winner payload を確定済みのアンカーを優先利用する。
-            const FspVisibleAnchorData anchor = FspVisibleAnchorBuffer[global_cell_index];
-            if((0 != anchor.valid) && (anchor.atomic_frame == cb_srvs.frame_count) && (anchor.winner_key == depth_hint_packed))
-            {
-                surface_view_dir_ws = anchor.surface_view_dir_ws;
-                const float hint_push_to_camera = half_cell_size * 0.08;
-                const float3 hint_sample_pos_ws = anchor.surface_pos_ws - surface_view_dir_ws * hint_push_to_camera;
-                depth_hint_offset = clamp(hint_sample_pos_ws - probe_cell_center, -half_cell_size.xxx, half_cell_size.xxx);
-                has_depth_hint = true;
-                has_surface_anchor = true;
-            }
-        }
-        if(depth_hint_packed != k_fsp_depth_hint_metric_init)
-        {
-            // Legacy mode、または2passアンカー不成立時のみ深度から再構成する。
-            if(!has_depth_hint)
-            {
-                const uint pixel_id = depth_hint_packed & k_fsp_depth_hint_pixel_mask;
-                const uint depth_width = (uint)cb_srvs.tex_main_view_depth_size.x;
-                const uint depth_height = (uint)cb_srvs.tex_main_view_depth_size.y;
-                // 防御的に width=0 を避ける（通常は発生しない）。
-                const uint pixel_x = pixel_id % max(depth_width, 1u);
-                const uint pixel_y = pixel_id / max(depth_width, 1u);
-                if(pixel_y < depth_height)
-                {
-                    const float d = TexHardwareDepth.Load(int3(pixel_x, pixel_y, 0)).r;
-                    const float view_z = calc_view_z_from_ndc_z(d, cb_ngl_sceneview.cb_ndc_z_to_view_z_coef);
-                    if(65535.0 > abs(view_z))
-                    {
-                        const float2 screen_pos_f = float2(float(pixel_x), float(pixel_y)) + float2(0.5, 0.5);
-                        const float2 screen_uv = screen_pos_f / float2(cb_srvs.tex_main_view_depth_size.xy);
-                        const float3 to_pixel_ray_vs = CalcViewSpaceRay(screen_uv, cb_ngl_sceneview.cb_proj_mtx);
-                        const float3 pixel_pos_ws = mul(cb_ngl_sceneview.cb_view_inv_mtx, float4((to_pixel_ray_vs / abs(to_pixel_ray_vs.z)) * view_z, 1.0));
-                        const float3 view_origin = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
-                        const float3 to_surface_vec_ws = pixel_pos_ws - view_origin;
-                        const float to_surface_len_sq = dot(to_surface_vec_ws, to_surface_vec_ws);
-                        const bool has_surface_dir = (to_surface_len_sq > 1e-6);
-                        surface_view_dir_ws = has_surface_dir ? (to_surface_vec_ws * rsqrt(to_surface_len_sq)) : 0.0.xxx;
-                        const float hint_push_to_camera = half_cell_size * 0.08;
-                        const float3 hint_sample_pos_ws = has_surface_dir ? (pixel_pos_ws - surface_view_dir_ws * hint_push_to_camera) : pixel_pos_ws;
-                        // seed offset として使うため、セル内範囲へクランプして安定化。
-                        depth_hint_offset = clamp(hint_sample_pos_ws - probe_cell_center, -half_cell_size.xxx, half_cell_size.xxx);
-                        has_depth_hint = true;
-                        has_surface_anchor = has_surface_dir;
-                    }
-                }
-            }
-        }
-
-        // 深度ヒントが得られたセルはそれを優先し、無いセルのみ前フレームoffsetを継続利用。
-        float3 seed_probe_offset = has_depth_hint ? depth_hint_offset : prev_probe_offset;
+        const float3 to_camera_vec = view_origin - probe_cell_center;
+        const float to_camera_len_sq = dot(to_camera_vec, to_camera_vec);
+        const bool has_surface_anchor = (depth_hint_packed != k_fsp_depth_hint_metric_init) && (to_camera_len_sq > 1e-6);
+        const float3 surface_view_dir_ws = (to_camera_len_sq > 1e-6) ? (-to_camera_vec * rsqrt(to_camera_len_sq)) : 0.0.xxx;
+        float3 seed_probe_offset = prev_probe_offset;
 
         float3 probe_sample_pos_ws = probe_cell_center + seed_probe_offset;
         bool accepted_visible_first = false;
-        if((1 == relocation_mode) && has_surface_anchor)
+        if(has_surface_anchor)
         {
-            // 可視優先モード:
+            // 可視優先:
             // - 候補は常にセル内に収まるように生成（エンコード可能範囲を維持）
-            // - 採用条件は depth-front && non-solid のAND
+            // - 採用条件は non-solid
             const float3 dir_to_camera_ws = -surface_view_dir_ws;
             const float front_samples[6] = {0.95, 0.80, 0.65, 0.50, 0.35, 0.20};
             [unroll]
@@ -319,7 +221,7 @@ void main_cs(
                 const float3 candidate_ws = probe_cell_center + dir_to_camera_ws * (half_cell_size * front_samples[si]);
                 const bool is_non_solid =
                     (read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_srvs.bbv.grid_resolution, cb_srvs.bbv.grid_toroidal_offset, cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size_inv, candidate_ws) == 0);
-                if(is_non_solid && FspIsCandidateDepthFront(candidate_ws))
+                if(is_non_solid)
                 {
                     probe_sample_pos_ws = candidate_ws;
                     accepted_visible_first = true;
@@ -333,14 +235,14 @@ void main_cs(
                 const float3 seed_candidate_ws = probe_cell_center + clamp(seed_probe_offset, -half_cell_size.xxx, half_cell_size.xxx);
                 const bool seed_non_solid =
                     (read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_srvs.bbv.grid_resolution, cb_srvs.bbv.grid_toroidal_offset, cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size_inv, seed_candidate_ws) == 0);
-                if(seed_non_solid && FspIsCandidateDepthFront(seed_candidate_ws))
+                if(seed_non_solid)
                 {
                     probe_sample_pos_ws = seed_candidate_ws;
                     accepted_visible_first = true;
                 }
             }
         }
-        if((0 == relocation_mode) || ((1 == relocation_mode) && !has_surface_anchor))
+        if((!has_surface_anchor) || (!accepted_visible_first))
         {
             const int fallback_relocation_count = 4;
             bool found_non_solid = false;
@@ -416,7 +318,7 @@ void main_cs(
         }
     }
 
-    // 既存 debug / scratch path 互換のため、セル側 legacy buffer にも最低限ミラーしておく。
+    // デバッグ表示・scratch path 互換のため、セル状態にも最低限ミラーしておく。
     RWFspCellStateBuffer[global_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
     RWFspCellStateBuffer[global_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;

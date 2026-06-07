@@ -33,7 +33,6 @@ void main_cs(
     if(dtid.x < cell_count)
     {
         RWFspCellStateBuffer[dtid.x] = (FspProbeData)0;
-        RWFspVisibleAnchorBuffer[dtid.x] = (FspVisibleAnchorData)0;
         RWFspCellProbeIndexBuffer[dtid.x] = k_fsp_invalid_probe_index;
     }
 

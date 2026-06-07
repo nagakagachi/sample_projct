@@ -201,7 +201,6 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_proc_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_anchor_finalize_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_update_ = {};
@@ -266,7 +265,6 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
         ComputeBufferSet fsp_active_probe_list_[2] = {};
         ComputeBufferSet fsp_buffer_ = {};
-        ComputeBufferSet fsp_visible_anchor_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
         rhi::RefBufferDep fsp_visible_surface_list_readback_buffer_ = {};
@@ -300,7 +298,6 @@ namespace ngl::render::app
         static int dbg_fsp_probe_debug_mode_;
         static int dbg_fsp_probe_use_relocated_pos_;
         static int dbg_fsp_update_ray_jitter_enable_;
-        static int dbg_fsp_relocation_mode_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
         static float dbg_probe_scale_;
