@@ -95,11 +95,7 @@ void main_cs(
             const float trace_distance = k_fsp_probe_distance_max;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-#if NGL_SRVS_TRACE_USE_HIBRICK_FSP_VISIBLE_SURFACE_ELEMENT_UPDATE
-            float4 curr_ray_t_ws = trace_bbv_hibrick(
-#else
             float4 curr_ray_t_ws = trace_bbv(
-#endif
                 hit_voxel_index, debug_ray_info,
                 probe_pos_ws, sample_ray_dir, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,

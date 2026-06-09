@@ -59,7 +59,7 @@ void main_cs(
             const float trace_distance = 10000.0;          
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            float4 curr_ray_t_ws = trace_bbv_dev_hibrick(
+            float4 curr_ray_t_ws = trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance, 
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
@@ -117,7 +117,7 @@ void main_cs(
         }
         else if(1 == debug_sub_mode)
         {
-            // 最細セル単位の色分けを非 HiBrick トレーサで可視化して比較するモード.
+            // 最細セル単位の色分けを標準トレーサで可視化して比較するモード.
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
@@ -146,7 +146,7 @@ void main_cs(
             const float trace_distance = 10000.0;          
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            float4 curr_ray_t_ws = trace_bbv_dev_hibrick(
+            float4 curr_ray_t_ws = trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance, 
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
@@ -189,33 +189,33 @@ void main_cs(
         }
         else if(8 == debug_sub_mode)
         {
-            // empty HiBrick skip count. 0 以外なら HiBrick accelerator が実際に効いている。
+            // Brick coarse check count.
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            trace_bbv_dev_hibrick(
+            trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
                 cb_srvs.bbv.grid_toroidal_offset, BitmaskBrickVoxel, false);
 
-            const float skip_rate = debug_count_to_rate(debug_ray_info.x);
-            RWTexWork[dtid.xy] = float4(lerp(float3(0.02, 0.02, 0.02), float3(0.1, 1.0, 0.2), skip_rate), 1.0);
+            const float brick_check_rate = debug_count_to_rate(debug_ray_info.z);
+            RWTexWork[dtid.xy] = float4(lerp(float3(0.02, 0.02, 0.02), float3(0.1, 1.0, 0.2), brick_check_rate), 1.0);
         }
         else if(9 == debug_sub_mode)
         {
-            // occupied HiBrick descend count. HiBrick を通って Brick 走査へ降りた回数。
+            // fine voxel / bitmask check count.
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            trace_bbv_dev_hibrick(
+            trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
                 cb_srvs.bbv.grid_toroidal_offset, BitmaskBrickVoxel, false);
 
-            const float descend_rate = debug_count_to_rate(debug_ray_info.y);
-            RWTexWork[dtid.xy] = float4(lerp(float3(0.02, 0.02, 0.02), float3(1.0, 0.7, 0.1), descend_rate), 1.0);
+            const float bitmask_check_rate = debug_count_to_rate(debug_ray_info.w);
+            RWTexWork[dtid.xy] = float4(lerp(float3(0.02, 0.02, 0.02), float3(1.0, 0.7, 0.1), bitmask_check_rate), 1.0);
         }
         else if(10 == debug_sub_mode)
         {
@@ -223,7 +223,7 @@ void main_cs(
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            trace_bbv_dev_hibrick(
+            trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
@@ -238,7 +238,7 @@ void main_cs(
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            trace_bbv_dev_hibrick(
+            trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
@@ -249,44 +249,42 @@ void main_cs(
         }
         else if(12 == debug_sub_mode)
         {
-            // skip efficiency = empty_skip / (empty_skip + occupied_descend).
+            // detail efficiency = bitmask_check / max(brick_check, 1).
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            trace_bbv_dev_hibrick(
+            trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
                 cb_srvs.bbv.grid_toroidal_offset, BitmaskBrickVoxel, false);
 
-            const float skip_efficiency = debug_ray_info.x / max(debug_ray_info.x + debug_ray_info.y, 1.0);
-            RWTexWork[dtid.xy] = float4(lerp(float3(0.8, 0.1, 0.1), float3(0.1, 1.0, 0.2), skip_efficiency), 1.0);
+            const float detail_efficiency = debug_ray_info.w / max(debug_ray_info.z, 1.0);
+            RWTexWork[dtid.xy] = float4(lerp(float3(0.8, 0.1, 0.1), float3(0.1, 1.0, 0.2), detail_efficiency), 1.0);
         }
         else if(13 == debug_sub_mode)
         {
-            // HiBrick skip + Brick occupancy ratio による簡易 voxel cone transmittance.
-            // transmittance / 平均 occupancy / traced brick count をまとめて色へ寄せ、
-            // coarse density 近似として見え方が破綻していないかをまず確認する。
+            // Brick occupancy による簡易 debug 可視化。
             const float trace_distance = 10000.0;
-            const float cone_trace_transmittance_stop_threshold = 0.9;
+            int hit_voxel_index = -1;
             float4 debug_ray_info;
-            const float4 cone_trace_info = trace_bbv_dev_hibrick_brick_transmittance(
-                debug_ray_info,
+            const float4 curr_ray_t_ws = trace_bbv_dev(
+                hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,
-                cb_srvs.bbv.grid_toroidal_offset, BitmaskBrickVoxel,
-                cone_trace_transmittance_stop_threshold);
+                cb_srvs.bbv.grid_toroidal_offset, BitmaskBrickVoxel, false);
 
-            const float transmittance = cone_trace_info.x;
-            const float average_hibrick_occupancy = cone_trace_info.y;
-            const float average_brick_occupancy = cone_trace_info.z;
-            const float opacity = cone_trace_info.w;
+            float average_brick_occupancy = 0.0;
+            if(0.0 <= curr_ray_t_ws.x)
+            {
+                const uint brick_occupied_voxel_count = BitmaskBrickVoxel[bbv_voxel_coarse_occupancy_info_addr(hit_voxel_index)];
+                average_brick_occupancy = saturate(float(brick_occupied_voxel_count) / float(k_bbv_per_voxel_bitmask_bit_count));
+            }
             const float traced_brick_rate = debug_count_to_rate(debug_ray_info.z);
 
-            float3 debug_color = lerp(float3(0.02, 0.03, 0.05), float3(1.0, 0.75, 0.15), opacity);
+            float3 debug_color = lerp(float3(0.02, 0.03, 0.05), float3(1.0, 0.75, 0.15), average_brick_occupancy);
             debug_color = lerp(debug_color, float3(0.15, 0.85, 1.0), average_brick_occupancy * 0.6);
-            debug_color = lerp(debug_color, float3(0.2, 1.0, 0.3), average_hibrick_occupancy * 0.3);
-            debug_color = lerp(debug_color, float3(transmittance, transmittance, transmittance), traced_brick_rate * 0.15);
+            debug_color = lerp(debug_color, float3(0.2, 1.0, 0.3), traced_brick_rate * 0.3);
             RWTexWork[dtid.xy] = float4(debug_color, 1.0);
         }
         else if(14 == debug_sub_mode)
@@ -295,7 +293,7 @@ void main_cs(
             const float trace_distance = 10000.0;
             int hit_voxel_index = -1;
             float4 debug_ray_info;
-            float4 curr_ray_t_ws = trace_bbv_dev_hibrick(
+            float4 curr_ray_t_ws = trace_bbv_dev(
                 hit_voxel_index, debug_ray_info,
                 view_origin, ray_dir_ws, trace_distance,
                 cb_srvs.bbv.grid_min_pos, cb_srvs.bbv.cell_size, cb_srvs.bbv.grid_resolution,

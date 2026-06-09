@@ -376,19 +376,19 @@ namespace ngl::render::app
                         case 0: // BBV
                             switch(sub_mode)
                             {
-                            case 0: return "HiBrick trace: voxel ID color";
-                            case 1: return "Non-HiBrick trace: fine voxel color";
-                            case 2: return "HiBrick trace: brick ID color";
-                            case 3: return "HiBrick trace: hit normal";
-                            case 4: return "HiBrick trace: hit depth";
-                            case 5: return "HiBrick trace: brick occupancy";
-                            case 6: return "HiBrick occupancy test trace";
+                            case 0: return "Trace: voxel ID color";
+                            case 1: return "Trace: fine voxel color";
+                            case 2: return "Trace: brick ID color";
+                            case 3: return "Trace: hit normal";
+                            case 4: return "Trace: hit depth";
+                            case 5: return "Trace: brick occupancy";
+                            case 6: return "Brick occupancy test trace";
                             case 7: return "Top-down occupancy X-ray";
-                            case 8: return "HiBrick empty-skip count";
-                            case 9: return "HiBrick occupied-descend count";
+                            case 8: return "Brick coarse-check count (alt)";
+                            case 9: return "Fine voxel/bitmask check count (alt)";
                             case 10: return "Brick coarse-check count";
                             case 11: return "Fine voxel/bitmask check count";
-                            case 12: return "HiBrick skip efficiency";
+                            case 12: return "Detail efficiency";
                             case 13: return "Cone transmittance approximation";
                             case 14: return "Resolved brick radiance";
                             default: return "Unknown";
@@ -866,18 +866,12 @@ namespace ngl::render::app
         const auto bbv_grid_resolution = bbv_grid_updater_.Get().resolution;
         const u32 voxel_count = bbv_grid_resolution.x * bbv_grid_resolution.y * bbv_grid_resolution.z;
         // BBV本体バッファは shader 側と同じく
-        //   [bitmask region][brick data region][hibrick data region]
+        //   [bitmask region][brick data region]
         // の順で単一の R32_UINT バッファへ確保する。
-        const auto hibrick_grid_resolution = ngl::math::Vec3u(
-            (bbv_grid_resolution.x + k_bbv_hibrick_brick_resolution - 1) / k_bbv_hibrick_brick_resolution,
-            (bbv_grid_resolution.y + k_bbv_hibrick_brick_resolution - 1) / k_bbv_hibrick_brick_resolution,
-            (bbv_grid_resolution.z + k_bbv_hibrick_brick_resolution - 1) / k_bbv_hibrick_brick_resolution);
-        const u32 hibrick_count = hibrick_grid_resolution.x * hibrick_grid_resolution.y * hibrick_grid_resolution.z;
-        // bitmask は Brick ごとの固定長、brick/hibrick data はそれぞれ別領域の固定長配列として積み上げる。
+        // bitmask は Brick ごとの固定長、brick data は固定長配列として積み上げる。
         const u32 bbv_buffer_element_count =
             voxel_count * k_bbv_per_voxel_bitmask_u32_count +
-            voxel_count * k_bbv_brick_data_u32_count +
-            hibrick_count * k_bbv_hibrick_data_u32_count;
+            voxel_count * k_bbv_brick_data_u32_count;
         // サーフェイスVoxelのリスト. スクリーン上でサーフェイスとして充填された要素を詰め込む. Bbvの充填とは別で, 後処理でサーフェイスVoxelを処理するためのリスト.
         bbv_fine_update_voxel_count_max_= std::clamp(voxel_count / 50u, 64u, k_max_update_probe_work_count);
 
@@ -911,7 +905,6 @@ namespace ngl::render::app
             pso_bbv_radiance_injection_apply_short_ray_ = CreateComputePSO("srvs/bbv/bbv_radiance_injection_apply_short_ray_cs.hlsl");
             pso_bbv_radiance_resolve_ = CreateComputePSO("srvs/bbv/bbv_radiance_resolve_cs.hlsl");
             pso_bbv_brick_count_aggregate_ = CreateComputePSO("srvs/bbv/bbv_brick_count_aggregate_cs.hlsl");
-            pso_bbv_hibrick_count_aggregate_ = CreateComputePSO("srvs/bbv/bbv_hibrick_count_aggregate_cs.hlsl");
             pso_bbv_element_update_ = CreateComputePSO("srvs/bbv/bbv_element_update_cs.hlsl");
             pso_bbv_depthtest_frustum_cull_ = CreateComputePSO("srvs/bbv/bbv_depthtest_frustum_cull_cs.hlsl");
             pso_bbv_depthtest_carving_indirect_arg_build_ = CreateComputePSO("srvs/bbv/bbv_depthtest_carving_indirect_arg_build_cs.hlsl");
@@ -1626,7 +1619,7 @@ namespace ngl::render::app
         }
 
         // BBV count rebuild pass.
-        // Injection / Removal は bitmask のみを更新し、Brick / HiBrick count はここで再構築する。
+        // Injection / Removal は bitmask のみを更新し、Brick count はここで再構築する。
         {
             NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvBrickCountAggregate");
 
@@ -1637,27 +1630,6 @@ namespace ngl::render::app
             p_command_list->SetPipelineState(pso_bbv_brick_count_aggregate_.Get());
             p_command_list->SetDescriptorSet(pso_bbv_brick_count_aggregate_.Get(), &desc_set);
             pso_bbv_brick_count_aggregate_->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
-
-            p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
-        }
-        {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvHiBrickCountAggregate");
-
-            const auto bbv_grid_resolution = bbv_grid_updater_.Get().resolution;
-            // HiBrick は logical 2x2x2 Brick cluster 数で Dispatch する。
-            const auto hibrick_grid_resolution = ngl::math::Vec3u(
-                (bbv_grid_resolution.x + k_bbv_hibrick_brick_resolution - 1) / k_bbv_hibrick_brick_resolution,
-                (bbv_grid_resolution.y + k_bbv_hibrick_brick_resolution - 1) / k_bbv_hibrick_brick_resolution,
-                (bbv_grid_resolution.z + k_bbv_hibrick_brick_resolution - 1) / k_bbv_hibrick_brick_resolution);
-            const u32 hibrick_count = hibrick_grid_resolution.x * hibrick_grid_resolution.y * hibrick_grid_resolution.z;
-
-            ngl::rhi::DescriptorSetDep desc_set = {};
-            pso_bbv_hibrick_count_aggregate_->SetView(&desc_set, "cb_srvs", &cbh_dispatch_->cbv);
-            pso_bbv_hibrick_count_aggregate_->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
-
-            p_command_list->SetPipelineState(pso_bbv_hibrick_count_aggregate_.Get());
-            p_command_list->SetDescriptorSet(pso_bbv_hibrick_count_aggregate_.Get(), &desc_set);
-            pso_bbv_hibrick_count_aggregate_->DispatchHelper(p_command_list, hibrick_count, 1, 1);
 
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
         }

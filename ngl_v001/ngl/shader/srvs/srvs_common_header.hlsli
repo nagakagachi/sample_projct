@@ -34,25 +34,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
 #define NGL_SRVS_ENABLE_BRICK_LOCAL_AABB 1
 #endif
 
-// BBV trace 呼び出し箇所ごとの比較用切り替え. 現状のHiBricｋTraceは通常版に比べてオーバヘッドが大きく負荷増加してしまうため修正中.
-// 0: 通常 trace_bbv, 1: trace_bbv_hibrick
-#ifndef NGL_SRVS_TRACE_USE_HIBRICK_BBV_REMOVAL_LIST_BUILD
-#define NGL_SRVS_TRACE_USE_HIBRICK_BBV_REMOVAL_LIST_BUILD 1
-#endif
-#ifndef NGL_SRVS_TRACE_USE_HIBRICK_SS_PROBE_DIRECT_SH_UPDATE
-#define NGL_SRVS_TRACE_USE_HIBRICK_SS_PROBE_DIRECT_SH_UPDATE 0
-#endif
-#ifndef NGL_SRVS_TRACE_USE_HIBRICK_SS_PROBE_UPDATE
-#define NGL_SRVS_TRACE_USE_HIBRICK_SS_PROBE_UPDATE 0
-#endif
-#ifndef NGL_SRVS_TRACE_USE_HIBRICK_FSP_ELEMENT_UPDATE
-#define NGL_SRVS_TRACE_USE_HIBRICK_FSP_ELEMENT_UPDATE 0
-#endif
-#ifndef NGL_SRVS_TRACE_USE_HIBRICK_FSP_VISIBLE_SURFACE_ELEMENT_UPDATE
-#define NGL_SRVS_TRACE_USE_HIBRICK_FSP_VISIBLE_SURFACE_ELEMENT_UPDATE 0
-#endif
-
-
 #ifdef NGL_SHADER_CPP_INCLUDE
     using uint = ngl::u32;
     using uint4 = ngl::math::Vec4u;
@@ -77,7 +58,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     // BBV本体バッファは
     //   1. Brickごとの 8x8x8 occupancy bitmask 領域
     //   2. Brickごとの補助データ領域
-    //   3. HiBrickごとの集約データ領域
     // の順で連続配置する。
     //
     // ここではその各領域サイズ計算に使う共通定数だけを置く。
@@ -114,11 +94,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         #define k_bbv_brick_local_aabb_data_u32_count (0)
     #endif
     #define k_bbv_brick_data_u32_count (2 + k_bbv_brick_local_aabb_data_u32_count)
-    // HiBrick は 2x2x2 Brick cluster を 1 単位とする。
-    #define k_bbv_hibrick_brick_resolution (2)
-    // HiBrick data region の 1 HiBrick あたり要素数.
-    // 初段階では cluster 内 occupied voxel 総数のみを持つ。
-    #define k_bbv_hibrick_data_u32_count (1)
     // Brick radiance accumulation buffer は RGB + sample count の 4 要素を 1 Brick ごとに持つ。
     #define k_bbv_radiance_accum_component_count (4)
     // HDR radiance の atomic 加算用 fixed-point スケール.

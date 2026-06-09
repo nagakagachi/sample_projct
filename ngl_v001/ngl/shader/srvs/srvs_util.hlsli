@@ -43,7 +43,6 @@ bool ballot_any(uint4 ballot)
 // Bbv. bbv.
 // 1. Voxel bit data region
 // 2. Brick data region
-// 3. HiBrick data region
 Buffer<uint>		BitmaskBrickVoxel;
 RWBuffer<uint>		RWBitmaskBrickVoxel;
 
@@ -342,36 +341,7 @@ uint bbv_brick_count()
 {
     return cb_srvs.bbv.grid_resolution.x * cb_srvs.bbv.grid_resolution.y * cb_srvs.bbv.grid_resolution.z;
 }
-// HiBrickグリッド解像度. 端数は切り上げで末端HiBrickに畳み込む。
-int3 bbv_hibrick_grid_resolution()
-{
-    return (cb_srvs.bbv.grid_resolution + int3(k_bbv_hibrick_brick_resolution - 1, k_bbv_hibrick_brick_resolution - 1, k_bbv_hibrick_brick_resolution - 1)) / k_bbv_hibrick_brick_resolution;
-}
-// HiBrick総数.
-uint bbv_hibrick_count()
-{
-    const int3 hibrick_grid_resolution = bbv_hibrick_grid_resolution();
-    return hibrick_grid_resolution.x * hibrick_grid_resolution.y * hibrick_grid_resolution.z;
-}
-// Brick座標から、それを内包する logical HiBrick 座標へ変換する。
-int3 bbv_voxel_coord_to_hibrick_coord(int3 voxel_coord)
-{
-    return voxel_coord / k_bbv_hibrick_brick_resolution;
-}
-// Brick座標から HiBrick data region 用のリニアindexを得る。
-// HiBrick data region は toroidal 化せず、logical 2x2x2 Brick cluster 順で保持する。
-uint bbv_hibrick_index_from_voxel_coord(int3 voxel_coord)
-{
-    return voxel_coord_to_index(bbv_voxel_coord_to_hibrick_coord(voxel_coord), bbv_hibrick_grid_resolution());
-}
-// Brick index から HiBrick data region 用のリニアindexを得る。
-// voxel_index は physical index 解釈になるため、logical HiBrick を参照したい箇所では
-// index ではなく logical Brick 座標を直接渡す helper を優先する。
-uint bbv_hibrick_index_from_voxel_index(uint voxel_index)
-{
-    return bbv_hibrick_index_from_voxel_coord(index_to_voxel_coord(voxel_index, cb_srvs.bbv.grid_resolution));
-}
-// BBV本体バッファは [bitmask region][brick data region][hibrick data region] の順。
+// BBV本体バッファは [bitmask region][brick data region] の順。
 // それぞれの base helper から絶対アドレスを導出する。
 uint bbv_bitmask_region_addr_base()
 {
@@ -381,11 +351,6 @@ uint bbv_bitmask_region_addr_base()
 uint bbv_brick_data_region_addr_base()
 {
     return bbv_brick_count() * k_bbv_per_voxel_bitmask_u32_count;
-}
-// HiBrick data region は brick data region の直後に連続配置する。
-uint bbv_hibrick_data_region_addr_base()
-{
-    return bbv_brick_data_region_addr_base() + bbv_brick_count() * k_bbv_brick_data_u32_count;
 }
 // Brick毎のデータ部先頭アドレス計算.
 uint bbv_voxel_unique_data_addr(uint voxel_index)
@@ -415,29 +380,6 @@ uint bbv_voxel_brick_local_aabb_max_addr(uint voxel_index)
     return bbv_voxel_unique_data_addr(voxel_index) + 3;
 }
 #endif
-// HiBrick毎の occupied voxel total count のアドレス計算.
-// count > 0 なら、その logical HiBrick 配下のどこかに occupied voxel が存在する。
-uint bbv_hibrick_voxel_count_addr(uint hibrick_index)
-{
-    return bbv_hibrick_data_region_addr_base() + hibrick_index * k_bbv_hibrick_data_u32_count;
-}
-// logical Brick 座標から直接 HiBrick の count アドレスを引く helper.
-uint bbv_hibrick_voxel_count_addr_from_voxel_coord(int3 voxel_coord)
-{
-    return bbv_hibrick_voxel_count_addr(bbv_hibrick_index_from_voxel_coord(voxel_coord));
-}
-// logical HiBrick 座標から occupied voxel total count のアドレスを引く helper.
-uint bbv_hibrick_voxel_count_addr_from_hibrick_coord(int3 hibrick_coord)
-{
-    return bbv_hibrick_voxel_count_addr(voxel_coord_to_index(hibrick_coord, bbv_hibrick_grid_resolution()));
-}
-// physical Brick index から直接 HiBrick の count アドレスを引く helper.
-// HiBrick data が logical cluster ベースになった後は、trace や debug のように
-// logical 空間で扱う用途では使わないこと。
-uint bbv_hibrick_voxel_count_addr_from_voxel_index(uint voxel_index)
-{
-    return bbv_hibrick_voxel_count_addr(bbv_hibrick_index_from_voxel_index(voxel_index));
-}
 // Brick毎の占有ビットマスクデータ先頭アドレス計算.
 // bitmask region は Brick ごとに固定長で前詰め配置しているため単純な積で引ける。
 uint bbv_voxel_bitmask_data_addr(uint voxel_index)
@@ -529,14 +471,6 @@ bool bbv_radiance_resolve_dispatch_index_to_voxel_coord(uint dispatch_index, out
 float bbv_brick_occupancy_ratio_from_count(uint occupied_voxel_count)
 {
     return saturate(float(occupied_voxel_count) / float(k_bbv_per_voxel_bitmask_bit_count));
-}
-
-// HiBrick(2x2x2 Brick cluster) 全体の occupied voxel total count を 0..1 の粗い密度近似へ変換する。
-// まずは skip 判定や debug 可視化の補助指標として使い、直接の fine hit 判定には使わない。
-float bbv_hibrick_occupancy_ratio_from_count(uint occupied_voxel_total_count)
-{
-    const uint hibrick_voxel_capacity = k_bbv_per_voxel_bitmask_bit_count * k_bbv_hibrick_brick_resolution * k_bbv_hibrick_brick_resolution * k_bbv_hibrick_brick_resolution;
-    return saturate(float(occupied_voxel_total_count) / float(hibrick_voxel_capacity));
 }
 
 uint calc_bbv_subbrick_index(uint3 subbrick_coord)
@@ -846,7 +780,7 @@ float4 trace_bbv_core(
 
 // BBV trace 用の ray_dir reciprocal。
 // もともとは ray_dir の 0 軸を巨大値へ置き換える safe reciprocal を試したが、
-// HiBrick 有無に関係なく Bbv デバッグ表示で特定カメラ角度に 1px の横線欠けが発生した。
+// Bbv デバッグ表示で特定カメラ角度に 1px の横線欠けが発生した。
 // DDA 側を切り分けた結果 reciprocal の扱いが原因と分かり、旧来実装の 1.0 / ray_dir に戻している。
 // 現状は運用実績のある旧挙動を優先し、境界判定の安定性を保つ。
 float3 calc_safe_trace_ray_dir_inv(float3 ray_dir)
@@ -1189,319 +1123,6 @@ float4 trace_bbv_build_hit_result(
     return float4(hit_t_ws, hit_normal.x, hit_normal.y, hit_normal.z);
 }
 
-// Bbvレイトレース. HiBrick を最上位 accelerator とする別実装版.
-// out_debug は x: empty HiBrick skip count, y: occupied HiBrick descend count,
-// z: Brick coarse check count, w: bitmask/detail check count を返す。
-float4 trace_bbv_hibrick_core(
-    out int out_hit_voxel_index,
-    out float4 out_debug,
-    float3 ray_origin_ws, float3 ray_dir_ws, float trace_distance_ws,
-    float3 grid_min_ws, float cell_width_ws, int3 grid_resolution,
-    int3 bbv_grid_toroidal_offset, Buffer<uint> bbv_buffer,
-    const bool intersection_bit_mode,
-    const int static_initial_hit_avoidance_count,
-    const bool static_enable_hibrick_skip,
-    const bool is_brick_mode
-)
-{
-    // inverse bit trace は HiBrick count の意味が変わるため既存実装へフォールバック.
-    if(!intersection_bit_mode)
-    {
-        return trace_bbv_core(
-            out_hit_voxel_index,
-            out_debug,
-            ray_origin_ws, ray_dir_ws, trace_distance_ws,
-            grid_min_ws, cell_width_ws, grid_resolution,
-            bbv_grid_toroidal_offset, bbv_buffer,
-            intersection_bit_mode,
-            static_initial_hit_avoidance_count,
-            is_brick_mode);
-    }
-
-    const float cell_width_ws_inv = 1.0 / cell_width_ws;
-
-    out_hit_voxel_index = -1;
-    out_debug = float4(0.0, 0.0, 0.0, 0.0);
-
-    const float3 ray_dir_inv = calc_safe_trace_ray_dir_inv(ray_dir_ws);
-    const float3 ray_dir_sign = sign(ray_dir_ws);
-    const int3 ray_step = int3(ray_dir_sign);
-    const float3 ray_step_offset = step(0.0, ray_dir_ws);
-    const float3 ray_component_validity = abs(ray_dir_sign);
-
-    const float3 ray_origin = (ray_origin_ws - grid_min_ws) * cell_width_ws_inv;
-    float ray_trace_begin_t_offset;
-    float ray_trace_end_t_offset;
-    if(!calc_ray_t_offset_for_aabb(ray_trace_begin_t_offset, ray_trace_end_t_offset, float3(0.0, 0.0, 0.0), float3(grid_resolution), ray_origin, ray_dir_ws, ray_dir_inv, trace_distance_ws * cell_width_ws_inv))
-    {
-        return float4(-1.0, -1.0, -1.0, -1.0);
-    }
-
-    const float3 clampled_start_pos = ray_origin + ray_dir_ws * ray_trace_begin_t_offset;
-    const float trace_t_end = ray_trace_end_t_offset - ray_trace_begin_t_offset;
-    if(trace_t_end <= 0.0)
-    {
-        return float4(-1.0, -1.0, -1.0, -1.0);
-    }
-
-    const bool enable_initial_hit_avoidance = (0 < static_initial_hit_avoidance_count);
-    int initial_hit_avoidance_count = static_initial_hit_avoidance_count;
-
-    const int3 hibrick_grid_resolution = bbv_hibrick_grid_resolution();
-    const float k_trace_t_epsilon = 1e-4;
-
-    int3 hit_map_pos = int3(-1, -1, -1);
-    int3 hit_sub_map_pos = int3(-1, -1, -1);
-    bool3 hit_step_mask = bool3(false, false, false);
-    bool is_hit = false;
-    uint empty_hibrick_skip_count = 0;
-    uint occupied_hibrick_descend_count = 0;
-    uint brick_check_count = 0;
-    uint bitmask_check_count = 0;
-
-    float curr_t = 0.0;
-    int3 hibrick_coord = calc_trace_grid_coord_from_t(clampled_start_pos, ray_dir_ws, calc_trace_sample_t(0.0, trace_t_end), k_bbv_hibrick_brick_resolution, hibrick_grid_resolution);
-    const int3 hibrick_end_coord = calc_trace_grid_coord_from_t(clampled_start_pos, ray_dir_ws, trace_t_end, k_bbv_hibrick_brick_resolution, hibrick_grid_resolution);
-    const int max_hibrick_iteration_count = calc_trace_grid_max_iteration_count(hibrick_coord, hibrick_end_coord);
-    float3 hibrick_next_t = calc_trace_grid_next_boundary_t(
-        clampled_start_pos,
-        ray_dir_inv,
-        ray_step_offset,
-        hibrick_coord,
-        k_bbv_hibrick_brick_resolution,
-        grid_resolution);
-    // HiBrick の DDA で大まかに走査し、occupied HiBrick に入った時だけ
-    // 共通の Brick DDA へ降りて詳細判定する。
-    [loop]
-    for(int hibrick_iter = 0; hibrick_iter < max_hibrick_iteration_count && curr_t <= trace_t_end; ++hibrick_iter)
-    {
-        const float hibrick_begin_t = curr_t;
-        const float hibrick_end_t = min(Min3(hibrick_next_t), trace_t_end);
-
-        const int3 brick_coord_min = hibrick_coord * k_bbv_hibrick_brick_resolution;
-        const int3 brick_coord_max = min(brick_coord_min + int3(k_bbv_hibrick_brick_resolution, k_bbv_hibrick_brick_resolution, k_bbv_hibrick_brick_resolution), grid_resolution);
-        const uint hibrick_index = voxel_coord_to_index(hibrick_coord, hibrick_grid_resolution);
-        // HiBrick count は logical HiBrick index 順に保持される。
-        const uint hibrick_occupied_voxel_count = bbv_buffer[bbv_hibrick_voxel_count_addr(hibrick_index)];
-        if(!static_enable_hibrick_skip || (0 != hibrick_occupied_voxel_count))
-        {
-            occupied_hibrick_descend_count++;
-
-            // occupied HiBrick 区間の中だけを Brick DDA へ渡し、leaf 判定は既存共通処理へ寄せる。
-            if(trace_bbv_brick_dda_range(
-                hit_map_pos,
-                hit_sub_map_pos,
-                hit_step_mask,
-                initial_hit_avoidance_count,
-                brick_check_count,
-                bitmask_check_count,
-                clampled_start_pos,
-                ray_dir_ws,
-                ray_dir_sign,
-                ray_dir_inv,
-                ray_step,
-                ray_step_offset,
-                hibrick_begin_t,
-                hibrick_end_t,
-                brick_coord_min,
-                brick_coord_max,
-                grid_resolution,
-                bbv_grid_toroidal_offset,
-                bbv_buffer,
-                intersection_bit_mode,
-                enable_initial_hit_avoidance,
-                is_brick_mode))
-            {
-                is_hit = true;
-                break;
-            }
-        }
-        else if(static_enable_hibrick_skip)
-        {
-            empty_hibrick_skip_count++;
-        }
-
-        const bool3 hibrick_step_mask = calc_dda_trace_step_mask(hibrick_next_t);
-        const int3 hibrick_coord_delta = select(hibrick_step_mask, ray_step, 0);
-        hibrick_coord += hibrick_coord_delta;
-        curr_t = max(curr_t + k_trace_t_epsilon, hibrick_end_t + k_trace_t_epsilon);
-        if((any(hibrick_coord < 0) || any(hibrick_coord >= hibrick_grid_resolution)) || all(hibrick_coord_delta == 0))
-        {
-            break;
-        }
-        hibrick_next_t = calc_trace_grid_next_boundary_t(
-            clampled_start_pos,
-            ray_dir_inv,
-            ray_step_offset,
-            hibrick_coord,
-            k_bbv_hibrick_brick_resolution,
-            grid_resolution);
-    }
-
-    // x: empty HiBrick skip count, y: occupied HiBrick descend count,
-    // z: Brick coarse check count, w: bitmask/detail check count.
-    out_debug = float4(
-        float(empty_hibrick_skip_count),
-        float(occupied_hibrick_descend_count),
-        float(brick_check_count),
-        float(bitmask_check_count));
-
-    if(hit_sub_map_pos.x >= 0)
-    {
-        return trace_bbv_build_hit_result(
-            out_hit_voxel_index,
-            hit_map_pos,
-            hit_sub_map_pos,
-            hit_step_mask,
-            clampled_start_pos,
-            ray_dir_sign,
-            ray_dir_inv,
-            ray_component_validity,
-            ray_trace_begin_t_offset,
-            cell_width_ws,
-            bbv_grid_toroidal_offset,
-            grid_resolution);
-    }
-
-    return float4(-1.0, -1.0, -1.0, -1.0);
-}
-
-// HiBrick を使って occupied Brick の充填率を積分し、透過率を返す簡易 voxel cone trace。
-// まずは HiBrick occupancy を空間スキップに使い、occupied HiBrick 内では Brick occupancy だけで透過率を積分する。
-// transmittance_stop_threshold は「ここまで暗くなったら十分」とみなして打ち切るための閾値。
-//  0.9などを指定することで大まかな遮蔽計算をFineVoxelトレースより高速に実行可能.
-// return.x = transmittance, y = 平均 HiBrick occupancy ratio, z = 平均 Brick occupancy ratio, w = opacity。
-// out_debug.x = empty HiBrick skip count, y = occupied HiBrick descend count, z = traced Brick count, w = accumulated optical depth。
-float4 trace_bbv_hibrick_brick_transmittance_core(
-    out float4 out_debug,
-    float3 ray_origin_ws, float3 ray_dir_ws, float trace_distance_ws,
-    float3 grid_min_ws, float cell_width_ws, int3 grid_resolution,
-    int3 bbv_grid_toroidal_offset, Buffer<uint> bbv_buffer,
-    const bool static_enable_hibrick_skip,
-    const float transmittance_stop_threshold
-)
-{
-    const float cell_width_ws_inv = 1.0 / cell_width_ws;
-
-    out_debug = float4(0.0, 0.0, 0.0, 0.0);
-
-    const float3 ray_dir_inv = calc_safe_trace_ray_dir_inv(ray_dir_ws);
-    const int3 ray_step = int3(sign(ray_dir_ws));
-    const float3 ray_step_offset = step(0.0, ray_dir_ws);
-
-    const float3 ray_origin = (ray_origin_ws - grid_min_ws) * cell_width_ws_inv;
-    float ray_trace_begin_t_offset;
-    float ray_trace_end_t_offset;
-    if(!calc_ray_t_offset_for_aabb(ray_trace_begin_t_offset, ray_trace_end_t_offset, float3(0.0, 0.0, 0.0), float3(grid_resolution), ray_origin, ray_dir_ws, ray_dir_inv, trace_distance_ws * cell_width_ws_inv))
-    {
-        return float4(1.0, 0.0, 0.0, 0.0);
-    }
-
-    const float3 clampled_start_pos = ray_origin + ray_dir_ws * ray_trace_begin_t_offset;
-    const float trace_t_end = ray_trace_end_t_offset - ray_trace_begin_t_offset;
-    if(trace_t_end <= 0.0)
-    {
-        return float4(1.0, 0.0, 0.0, 0.0);
-    }
-
-    const int3 hibrick_grid_resolution = bbv_hibrick_grid_resolution();
-    const float k_trace_t_epsilon = 1e-4;
-
-    uint empty_hibrick_skip_count = 0;
-    uint occupied_hibrick_descend_count = 0;
-    uint traced_brick_count = 0;
-    uint sampled_hibrick_count = 0;
-    float hibrick_occupancy_ratio_sum = 0.0;
-    float brick_occupancy_ratio_sum = 0.0;
-    float accumulated_optical_depth = 0.0;
-    float transmittance = 1.0;
-
-    float curr_t = 0.0;
-    int3 hibrick_coord = calc_trace_grid_coord_from_t(clampled_start_pos, ray_dir_ws, calc_trace_sample_t(0.0, trace_t_end), k_bbv_hibrick_brick_resolution, hibrick_grid_resolution);
-    const int3 hibrick_end_coord = calc_trace_grid_coord_from_t(clampled_start_pos, ray_dir_ws, trace_t_end, k_bbv_hibrick_brick_resolution, hibrick_grid_resolution);
-    const int max_hibrick_iteration_count = calc_trace_grid_max_iteration_count(hibrick_coord, hibrick_end_coord);
-    // HiBrick 境界までの t を先に持ち、空 HiBrick は Brick レベルへ降りずにまとめて飛ばす。
-    float3 hibrick_next_t = calc_trace_grid_next_boundary_t(
-        clampled_start_pos,
-        ray_dir_inv,
-        ray_step_offset,
-        hibrick_coord,
-        k_bbv_hibrick_brick_resolution,
-        grid_resolution);
-    [loop]
-    for(int hibrick_iter = 0; hibrick_iter < max_hibrick_iteration_count && curr_t <= trace_t_end; ++hibrick_iter)
-    {
-        const float hibrick_begin_t = curr_t;
-        const float hibrick_end_t = min(Min3(hibrick_next_t), trace_t_end);
-
-        const int3 brick_coord_min = hibrick_coord * k_bbv_hibrick_brick_resolution;
-        const int3 brick_coord_max = min(brick_coord_min + int3(k_bbv_hibrick_brick_resolution, k_bbv_hibrick_brick_resolution, k_bbv_hibrick_brick_resolution), grid_resolution);
-        const uint hibrick_index = voxel_coord_to_index(hibrick_coord, hibrick_grid_resolution);
-        const uint hibrick_occupied_voxel_count = bbv_buffer[bbv_hibrick_voxel_count_addr(hibrick_index)];
-        const float hibrick_occupancy_ratio = bbv_hibrick_occupancy_ratio_from_count(hibrick_occupied_voxel_count);
-        if(!static_enable_hibrick_skip || (0 != hibrick_occupied_voxel_count))
-        {
-            // occupied HiBrick のみ Brick 密度近似へ降り、空 HiBrick は optical depth を積まずに飛ばす。
-            occupied_hibrick_descend_count++;
-            sampled_hibrick_count++;
-            hibrick_occupancy_ratio_sum += hibrick_occupancy_ratio;
-
-            if(trace_bbv_brick_transmittance_range(
-                transmittance,
-                accumulated_optical_depth,
-                traced_brick_count,
-                brick_occupancy_ratio_sum,
-                clampled_start_pos,
-                ray_dir_ws,
-                ray_dir_inv,
-                ray_step,
-                ray_step_offset,
-                hibrick_begin_t,
-                hibrick_end_t,
-                brick_coord_min,
-                brick_coord_max,
-                grid_resolution,
-                bbv_grid_toroidal_offset,
-                bbv_buffer,
-                transmittance_stop_threshold))
-            {
-                break;
-            }
-        }
-        else if(static_enable_hibrick_skip)
-        {
-            empty_hibrick_skip_count++;
-        }
-
-        const bool3 hibrick_step_mask = calc_dda_trace_step_mask(hibrick_next_t);
-        const int3 hibrick_coord_delta = select(hibrick_step_mask, ray_step, 0);
-        hibrick_coord += hibrick_coord_delta;
-        curr_t = max(curr_t + k_trace_t_epsilon, hibrick_end_t + k_trace_t_epsilon);
-        if((any(hibrick_coord < 0) || any(hibrick_coord >= hibrick_grid_resolution)) || all(hibrick_coord_delta == 0))
-        {
-            break;
-        }
-        hibrick_next_t = calc_trace_grid_next_boundary_t(
-            clampled_start_pos,
-            ray_dir_inv,
-            ray_step_offset,
-            hibrick_coord,
-            k_bbv_hibrick_brick_resolution,
-            grid_resolution);
-    }
-
-    out_debug = float4(
-        float(empty_hibrick_skip_count),
-        float(occupied_hibrick_descend_count),
-        float(traced_brick_count),
-        accumulated_optical_depth);
-
-    // 返り値は後段のデバッグ可視化で解釈しやすいよう、透過率と平均 occupancy を並べて返す。
-    const float average_hibrick_occupancy_ratio = (0 < sampled_hibrick_count) ? (hibrick_occupancy_ratio_sum / float(sampled_hibrick_count)) : 0.0;
-    const float average_brick_occupancy_ratio = (0 < traced_brick_count) ? (brick_occupancy_ratio_sum / float(traced_brick_count)) : 0.0;
-    return float4(transmittance, average_hibrick_occupancy_ratio, average_brick_occupancy_ratio, 1.0 - transmittance);
-}
-
 
 // Bbvレイトレース.
 float4 trace_bbv_core(
@@ -1606,7 +1227,6 @@ float4 trace_bbv_core(
 
 
 // 標準の BBV トレース入口. 従来どおり Brick / bitmask を全域走査する。
-// HiBrickスキップのオーバーヘッドがない分だけ短距離トレースは高速.
 float4 trace_bbv(
     out int out_hit_voxel_index,
     out float4 out_debug,
@@ -1624,46 +1244,6 @@ float4 trace_bbv(
         true, // 通常モード.
         0, // 初期ヒット回避無効.
         false
-    );
-}
-// 標準の BBV トレース入口. HiBrick で空クラスタをスキップしてから Brick / bitmask を走査する。
-float4 trace_bbv_hibrick(
-    out int out_hit_voxel_index,
-    out float4 out_debug,
-    float3 ray_origin_ws, float3 ray_dir_ws, float trace_distance_ws,
-    float3 grid_min_ws, float cell_width_ws, int3 grid_resolution,
-    int3 bbv_grid_toroidal_offset, Buffer<uint> bbv_buffer
-)
-{
-    return trace_bbv_hibrick_core(
-        out_hit_voxel_index,
-        out_debug,
-        ray_origin_ws, ray_dir_ws, trace_distance_ws,
-        grid_min_ws, cell_width_ws, grid_resolution,
-        bbv_grid_toroidal_offset, bbv_buffer,
-        true,
-        0,
-        true,
-        false
-    );
-}
-// 標準の BBV voxel cone trace 入口。
-// HiBrick skip と Brick occupancy 積分で透過率を見積もる基本用途向け wrapper。
-float4 trace_bbv_hibrick_brick_transmittance(
-    out float4 out_debug,
-    float3 ray_origin_ws, float3 ray_dir_ws, float trace_distance_ws,
-    float3 grid_min_ws, float cell_width_ws, int3 grid_resolution,
-    int3 bbv_grid_toroidal_offset, Buffer<uint> bbv_buffer,
-    const float transmittance_stop_threshold
-)
-{
-    return trace_bbv_hibrick_brick_transmittance_core(
-        out_debug,
-        ray_origin_ws, ray_dir_ws, trace_distance_ws,
-        grid_min_ws, cell_width_ws, grid_resolution,
-        bbv_grid_toroidal_offset, bbv_buffer,
-        true,
-        transmittance_stop_threshold
     );
 }
 // 開発用 BBV トレース入口. is_brick_mode で Brick coarse hit のみを見る。
@@ -1685,46 +1265,6 @@ float4 trace_bbv_dev(
         true, // 通常モード.
         0, // 初期ヒット回避無効.
         is_brick_mode
-    );
-}
-// 開発用 BBV トレース入口. HiBrick skip の統計も取りたいデバッグ表示向け。
-float4 trace_bbv_dev_hibrick(
-    out int out_hit_voxel_index,
-    out float4 out_debug,
-    float3 ray_origin_ws, float3 ray_dir_ws, float trace_distance_ws,
-    float3 grid_min_ws, float cell_width_ws, int3 grid_resolution,
-    int3 bbv_grid_toroidal_offset, Buffer<uint> bbv_buffer,
-    const bool is_brick_mode
-)
-{
-    return trace_bbv_hibrick_core(
-        out_hit_voxel_index,
-        out_debug,
-        ray_origin_ws, ray_dir_ws, trace_distance_ws,
-        grid_min_ws, cell_width_ws, grid_resolution,
-        bbv_grid_toroidal_offset, bbv_buffer,
-        true,
-        0,
-        true,
-        is_brick_mode
-    );
-}
-// 開発用 BBV voxel cone trace 入口。
-// 本番の cone 実装を入れる前に、HiBrick skip と Brick occupancy 積分の見え方をデバッグ表示で確認するための入口。
-float4 trace_bbv_dev_hibrick_brick_transmittance(
-    out float4 out_debug,
-    float3 ray_origin_ws, float3 ray_dir_ws, float trace_distance_ws,
-    float3 grid_min_ws, float cell_width_ws, int3 grid_resolution,
-    int3 bbv_grid_toroidal_offset, Buffer<uint> bbv_buffer,
-    const float transmittance_stop_threshold
-)
-{
-    return trace_bbv_hibrick_brick_transmittance(
-        out_debug,
-        ray_origin_ws, ray_dir_ws, trace_distance_ws,
-        grid_min_ws, cell_width_ws, grid_resolution,
-        bbv_grid_toroidal_offset, bbv_buffer,
-        transmittance_stop_threshold
     );
 }
 //------------------------------------------------------------------------------------------------------------------------------------------------------------------------

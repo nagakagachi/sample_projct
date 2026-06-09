@@ -32,8 +32,4 @@ void main_cs(
 
         clear_voxel_data(RWBitmaskBrickVoxel, dtid.x);
     }
-    if(dtid.x < bbv_hibrick_count())
-    {
-        RWBitmaskBrickVoxel[bbv_hibrick_voxel_count_addr(dtid.x)] = 0;
-    }
 }
