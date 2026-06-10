@@ -26,6 +26,10 @@ struct SceneViewInfo
     float2  cb_render_resolution_inv;
 
 	float	cb_time_sec;
+    float3  cb_time_sec_padding;
+
+	float4	cb_debug_material_emissive_mask_color_tolerance; // xyz: mask albedo color, w: tolerance
+	float4	cb_debug_material_emissive_param; // x: enable(0/1), y: intensity
 };
 
 // PerspectiveとOrthogonalの両方に同じ係数同じ計算で対応するため, 分子の乗算と加算, 分母の乗算と加算のパラメータをそれぞれ指定.

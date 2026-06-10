@@ -867,6 +867,9 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
         }
     // ------------------------------------------------------------------------------
 
+    // GBuffer emissive を最終色へ加算.
+    lit_color += gb_emissive;
+
 
 	return float4(lit_color, 1.0);
 }

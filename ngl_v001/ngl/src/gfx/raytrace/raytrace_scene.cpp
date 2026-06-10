@@ -1940,6 +1940,9 @@ namespace ngl
 					mapped->cb_prev_proj_mtx = s_scene_prev_proj_mat;
 
 					mapped->cb_ndc_z_to_view_z_coef = ndc_z_to_view_z_coef;
+					mapped->cb_time_sec_padding = math::Vec3(0.0f, 0.0f, 0.0f);
+					mapped->cb_debug_material_emissive_mask_color_tolerance = math::Vec4(1.0f, 0.0f, 0.0f, 0.25f);
+					mapped->cb_debug_material_emissive_param = math::Vec4(0.0f, 0.0f, 0.0f, 0.0f);
 
 					cbh_scene_view[cb_index]->buffer.Unmap();
 				}

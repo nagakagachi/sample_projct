@@ -36,6 +36,10 @@ namespace gfx
         ngl::math::Vec2   cb_render_resolution_inv;
 		
 		float			cb_time_sec;
+        ngl::math::Vec3	cb_time_sec_padding = {};
+
+        ngl::math::Vec4 cb_debug_material_emissive_mask_color_tolerance;	// xyz: mask albedo color, w: tolerance
+        ngl::math::Vec4 cb_debug_material_emissive_param;					// x: enable(0/1), y: intensity
 	};
 
 

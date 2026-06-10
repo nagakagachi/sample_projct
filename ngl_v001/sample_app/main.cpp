@@ -90,6 +90,10 @@ static bool dbgw_enable_srvs_main_view_injection_pass = true;
 static bool dbgw_enable_srvs_main_view_removal_pass = true;
 static bool dbgw_enable_srvs_shadow_view_injection_pass = true;
 static bool dbgw_enable_srvs_shadow_view_removal_pass = true;
+static bool dbgw_material_debug_emissive_enable = false;
+static float dbgw_material_debug_emissive_intensity = 1.0f;
+static ngl::math::Vec3 dbgw_material_debug_emissive_mask_albedo_color = ngl::math::Vec3(1.0f, 0.0f, 0.0f);
+static float dbgw_material_debug_emissive_mask_tolerance = 0.4f;
 
 static bool dbgw_enable_gtao_demo = false;
 
@@ -753,7 +757,7 @@ bool AppGame::Initialize()
 
 #if 1
             // 適当にたくさんモデル生成.
-            for (int i = 0; i < 50; ++i)
+            for (int i = 0; i < 10; ++i)
             {
                 auto mc = std::make_shared<ngl::gfx::scene::SceneMesh>();
                 mesh_entity_array_.push_back(mc);
@@ -1318,6 +1322,16 @@ bool AppGame::ExecuteApp()
         }
 
         ImGui::SetNextItemOpen(false, ImGuiCond_Once);
+        if (ImGui::CollapsingHeader("Material Debug"))
+        {
+            NGL_IMGUI_SCOPED_INDENT(10.0f);
+            ImGui::Checkbox("Debug Emissive ON/OFF", &dbgw_material_debug_emissive_enable);
+            ImGui::SliderFloat("Debug Emissive Intensity", &dbgw_material_debug_emissive_intensity, 0.0f, 10.0f);
+            ImGui::ColorEdit3("Debug Emissive Mask Albedo Color", &dbgw_material_debug_emissive_mask_albedo_color.x);
+            ImGui::SliderFloat("Debug Emissive Mask Tolerance", &dbgw_material_debug_emissive_mask_tolerance, 0.0f, 1.7320508f, "%.3f");
+        }
+
+        ImGui::SetNextItemOpen(false, ImGuiCond_Once);
         if (ImGui::CollapsingHeader("Sky"))
         {
             NGL_IMGUI_SCOPED_INDENT(10.0f);
@@ -1638,7 +1652,7 @@ bool AppGame::ExecuteApp()
 
             auto tr    = e->GetTransform();
             auto trans = tr.GetColumn3();
-            trans.z += sin_curve * delta_sec * 3.0f;
+            trans.z += sin_curve * delta_sec * 5.0f;
             tr.SetColumn3(trans);
             e->SetTransform(tr);
         }
@@ -1839,6 +1853,10 @@ void AppGame::RenderApp(ngl::fwk::RtgFrameRenderSubmitCommandBuffer& out_rtg_com
             render_frame_desc.feature_config.lighting.directional_light_dir       = render_param_->dlight_dir;
             render_frame_desc.feature_config.lighting.directional_light_intensity = dbgw_dlit_intensity;
             render_frame_desc.feature_config.lighting.sky_light_intensity         = dbgw_skylight_intensity;
+            render_frame_desc.feature_config.material_debug.debug_emissive_enable = dbgw_material_debug_emissive_enable;
+            render_frame_desc.feature_config.material_debug.debug_emissive_intensity = dbgw_material_debug_emissive_intensity;
+            render_frame_desc.feature_config.material_debug.debug_emissive_mask_albedo_color = dbgw_material_debug_emissive_mask_albedo_color;
+            render_frame_desc.feature_config.material_debug.debug_emissive_mask_tolerance = dbgw_material_debug_emissive_mask_tolerance;
 
             {
                 render_frame_desc.debug_multithread_render_pass    = dbgw_multithread_render_pass;
@@ -1887,6 +1905,13 @@ void AppGame::RenderApp(ngl::fwk::RtgFrameRenderSubmitCommandBuffer& out_rtg_com
                     render_frame_desc.feature_config.lighting.directional_light_dir       = render_param_->dlight_dir;
                     render_frame_desc.feature_config.lighting.directional_light_intensity = dbgw_dlit_intensity;
                     render_frame_desc.feature_config.lighting.sky_light_intensity         = dbgw_skylight_intensity;
+                }
+                // Material Debug.
+                {
+                    render_frame_desc.feature_config.material_debug.debug_emissive_enable = dbgw_material_debug_emissive_enable;
+                    render_frame_desc.feature_config.material_debug.debug_emissive_intensity = dbgw_material_debug_emissive_intensity;
+                    render_frame_desc.feature_config.material_debug.debug_emissive_mask_albedo_color = dbgw_material_debug_emissive_mask_albedo_color;
+                    render_frame_desc.feature_config.material_debug.debug_emissive_mask_tolerance = dbgw_material_debug_emissive_mask_tolerance;
                 }
                 // GI.
                 {

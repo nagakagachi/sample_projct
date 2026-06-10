@@ -59,11 +59,19 @@ namespace ngl::test
         bool enable_srvs_shadow_view_injection_pass{true};
         bool enable_srvs_shadow_view_removal_pass{true};
     };
+    struct RenderFeatureMaterialDebug
+    {
+        bool debug_emissive_enable = false;
+        float debug_emissive_intensity = 1.0f;
+        math::Vec3 debug_emissive_mask_albedo_color = math::Vec3(1.0f, 0.0f, 0.0f);
+        float debug_emissive_mask_tolerance = 0.25f;
+    };
     struct RenderFeatureConfig
     {
         RenderFeatureLighting lighting;
         RenderFeatureGtaoDemo gtao_demo;
         RenderFeatureGi gi;
+        RenderFeatureMaterialDebug material_debug;
     };
 
     struct EDebugBufferMode

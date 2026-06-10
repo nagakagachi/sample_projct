@@ -33,6 +33,17 @@
         // Material Customize Point.
         // マテリアル側ピクセル処理.
         MtlPsOutput mtl_output = MtlPsEntryPoint(mtl_input);
+
+        if (cb_ngl_sceneview.cb_debug_material_emissive_param.x > 0.5f)
+        {
+            const float3 mask_albedo_color = cb_ngl_sceneview.cb_debug_material_emissive_mask_color_tolerance.xyz;
+            const float mask_tolerance = max(0.0f, cb_ngl_sceneview.cb_debug_material_emissive_mask_color_tolerance.w);
+            const float3 albedo_diff = mtl_output.base_color - mask_albedo_color;
+            if (dot(albedo_diff, albedo_diff) <= (mask_tolerance * mask_tolerance))
+            {
+                mtl_output.emissive += mtl_output.base_color * cb_ngl_sceneview.cb_debug_material_emissive_param.y;
+            }
+        }
         
         GBufferOutput output = (GBufferOutput)0;
         // GBuffer Encode.
@@ -50,6 +61,7 @@
             output.gbuffer2 = float4(mtl_output.roughness, mtl_output.metalness, surface_optional, material_id);
 
             output.gbuffer3 = float4(mtl_output.emissive, 0.0);
+            //output.gbuffer3 = float4(1.0, 0.0, 0.0, 0.0);
 	    
             output.velocity = float2(0.0, 0.0);// velocityは保留.
         }

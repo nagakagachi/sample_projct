@@ -85,8 +85,21 @@ namespace ngl::test
                 mapped->cb_render_resolution_inv = math::Vec2(1.0f / screen_w, 1.0f / screen_h);
 
 				mapped->cb_time_sec = std::fmodf(static_cast<float>(ngl::time::Timer::Instance().GetElapsedSec("AppGameTime")), 60.0f*60.0f*24.0f);
+                mapped->cb_time_sec_padding = math::Vec3(0.0f, 0.0f, 0.0f);
+                mapped->cb_debug_material_emissive_mask_color_tolerance =
+                	math::Vec4(
+                		render_frame_desc.feature_config.material_debug.debug_emissive_mask_albedo_color.x,
+                		render_frame_desc.feature_config.material_debug.debug_emissive_mask_albedo_color.y,
+                		render_frame_desc.feature_config.material_debug.debug_emissive_mask_albedo_color.z,
+                		render_frame_desc.feature_config.material_debug.debug_emissive_mask_tolerance);
+                mapped->cb_debug_material_emissive_param =
+                	math::Vec4(
+                		render_frame_desc.feature_config.material_debug.debug_emissive_enable ? 1.0f : 0.0f,
+                		render_frame_desc.feature_config.material_debug.debug_emissive_intensity,
+                		0.0f,
+                		0.0f);
 
-				scene_cb_h->buffer.Unmap();
+                scene_cb_h->buffer.Unmap();
 			}
 		}
 				
