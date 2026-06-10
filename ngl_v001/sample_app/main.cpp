@@ -1326,7 +1326,7 @@ bool AppGame::ExecuteApp()
         {
             NGL_IMGUI_SCOPED_INDENT(10.0f);
             ImGui::Checkbox("Debug Emissive ON/OFF", &dbgw_material_debug_emissive_enable);
-            ImGui::SliderFloat("Debug Emissive Intensity", &dbgw_material_debug_emissive_intensity, 0.0f, 10.0f);
+            ImGui::SliderFloat("Debug Emissive Intensity", &dbgw_material_debug_emissive_intensity, 0.0f, 30.0f);
             ImGui::ColorEdit3("Debug Emissive Mask Albedo Color", &dbgw_material_debug_emissive_mask_albedo_color.x);
             ImGui::SliderFloat("Debug Emissive Mask Tolerance", &dbgw_material_debug_emissive_mask_tolerance, 0.0f, 1.7320508f, "%.3f");
         }
