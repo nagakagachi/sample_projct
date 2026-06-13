@@ -1,4 +1,4 @@
-﻿
+
 #include "render/test_render_path.h"
 
 #include "imgui/imgui_interface.h"
@@ -345,30 +345,30 @@ namespace ngl::test
 					
                 
                     
-                    // Srvs Begin Pass.
-                    auto* task_srvs_begin = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskSrvsBegin>();
+                    // InstantRdv Begin Pass.
+                    auto* task_instant_rdv_begin = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvBegin>();
                     {
-                        ngl::render::app::RenderTaskSrvsBegin::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvBegin::SetupDesc setup_desc{};
                         {
 							setup_desc.w = screen_w;
 							setup_desc.h = screen_h;
                             
 							setup_desc.scene_cbv = scene_cb_h;
 
-							setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+							setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
                         }
-                        task_srvs_begin->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_begin->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
-                    // Srvs View Voxel Injection Pass.
-                    auto* task_srvs_view_voxel_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskSrvsViewVoxelInjection>();
+                    // InstantRdv View Voxel Injection Pass.
+                    auto* task_instant_rdv_view_voxel_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvViewVoxelInjection>();
                     {
-                        ngl::render::app::RenderTaskSrvsViewVoxelInjection::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvViewVoxelInjection::SetupDesc setup_desc{};
                         {
 							setup_desc.w = screen_w;
 							setup_desc.h = screen_h;
                             
 							setup_desc.scene_cbv = scene_cb_h;
-							setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+							setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
 
                             // main view DepthBuffer登録.
                             {
@@ -379,9 +379,9 @@ namespace ngl::test
 								setup_desc.depth_buffer_info.primary.h_depth = task_depth->h_depth_;
 
 								setup_desc.depth_buffer_info.primary.is_enable_injection_pass =
-									(render_frame_desc.feature_config.gi.enable_srvs_all_injection_pass && render_frame_desc.feature_config.gi.enable_srvs_main_view_injection_pass) && true;// MainView Voxel充填利用するか.
+									(render_frame_desc.feature_config.gi.enable_instant_rdv_all_injection_pass && render_frame_desc.feature_config.gi.enable_instant_rdv_main_view_injection_pass) && true;// MainView Voxel充填利用するか.
 								setup_desc.depth_buffer_info.primary.is_enable_removal_pass =
-									(render_frame_desc.feature_config.gi.enable_srvs_all_removal_pass && render_frame_desc.feature_config.gi.enable_srvs_main_view_removal_pass) && true;// MainView Voxel除去に利用するか.
+									(render_frame_desc.feature_config.gi.enable_instant_rdv_all_removal_pass && render_frame_desc.feature_config.gi.enable_instant_rdv_main_view_removal_pass) && true;// MainView Voxel除去に利用するか.
                             }
 
                             // ShadowMapのDepthBuffer登録. 高速化のためにフレーム毎にカスケードスキップするのもありかもしれない.
@@ -396,35 +396,35 @@ namespace ngl::test
 									shadow_depth_info.h_depth = task_d_shadow->h_shadow_depth_atlas_;
                                     
 									shadow_depth_info.is_enable_injection_pass =
-										(render_frame_desc.feature_config.gi.enable_srvs_all_injection_pass && render_frame_desc.feature_config.gi.enable_srvs_shadow_view_injection_pass) && true;// ShadowView Voxel充填に利用するか.
+										(render_frame_desc.feature_config.gi.enable_instant_rdv_all_injection_pass && render_frame_desc.feature_config.gi.enable_instant_rdv_shadow_view_injection_pass) && true;// ShadowView Voxel充填に利用するか.
 									shadow_depth_info.is_enable_removal_pass =
-										(render_frame_desc.feature_config.gi.enable_srvs_all_removal_pass && render_frame_desc.feature_config.gi.enable_srvs_shadow_view_removal_pass) && true;// ShadowView Voxel除去に利用するか.
+										(render_frame_desc.feature_config.gi.enable_instant_rdv_all_removal_pass && render_frame_desc.feature_config.gi.enable_instant_rdv_shadow_view_removal_pass) && true;// ShadowView Voxel除去に利用するか.
                                 }
 
 									setup_desc.depth_buffer_info.sub_array.push_back(shadow_depth_info);
                             }   
                         }
-                        task_srvs_view_voxel_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_view_voxel_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
-                    // Srvs Update.
-                    auto* task_srvs_update = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskSrvsUpdate>();
+                    // InstantRdv Update.
+                    auto* task_instant_rdv_update = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvUpdate>();
                     {
-                        ngl::render::app::RenderTaskSrvsUpdate::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvUpdate::SetupDesc setup_desc{};
                         {
 							setup_desc.w = screen_w;
 							setup_desc.h = screen_h;
                             
 							setup_desc.scene_cbv = scene_cb_h;
 
-							setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+							setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
                             setup_desc.gi_sample_mode = render_frame_desc.feature_config.gi.sample_mode;
                              
                             // main view.
 							setup_desc.h_depth = task_depth->h_depth_;
                         }
-                        task_srvs_update->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_update->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
-                    ngl::render::app::RenderTaskSrvsDebug* task_srvs_debug = nullptr;
+                    ngl::render::app::RenderTaskInstantRdvDebug* task_instant_rdv_debug = nullptr;
 
 
 
@@ -446,14 +446,14 @@ namespace ngl::test
                         setup_desc.d_lit_intensity = render_frame_desc.feature_config.lighting.directional_light_intensity;
                         setup_desc.sky_lit_intensity = render_frame_desc.feature_config.lighting.sky_light_intensity;
 
-                        setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+                        setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
                         setup_desc.gi_sample_mode = render_frame_desc.feature_config.gi.sample_mode;
                         setup_desc.is_enable_sky_visibility = render_frame_desc.feature_config.gi.enable_sky_visibility;
                         setup_desc.is_enable_radiance = render_frame_desc.feature_config.gi.enable_radiance;
                         setup_desc.probe_sample_offset_view = render_frame_desc.feature_config.gi.probe_sample_offset_view;
                         setup_desc.probe_sample_offset_surface_normal = render_frame_desc.feature_config.gi.probe_sample_offset_surface_normal;
                         setup_desc.probe_sample_offset_bent_normal = render_frame_desc.feature_config.gi.probe_sample_offset_bent_normal;
-                        setup_desc.dbg_view_srvs_sky_visibility = render_frame_desc.debugview_srvs_sky_visibility;
+                        setup_desc.dbg_view_instant_rdv_sky_visibility = render_frame_desc.debugview_instant_rdv_sky_visibility;
                         
 						setup_desc.enable_feedback_blur_test = render_frame_desc.debugview_enable_feedback_blur_test;
 					}
@@ -469,32 +469,32 @@ namespace ngl::test
 					task_light->is_render_skip_debug_ = k_force_skip_all_pass_render;
 				}
 
-                    task_srvs_debug = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskSrvsDebug>();
+                    task_instant_rdv_debug = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvDebug>();
                     {
-                        ngl::render::app::RenderTaskSrvsDebug::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvDebug::SetupDesc setup_desc{};
                         {
                             setup_desc.w = screen_w;
                             setup_desc.h = screen_h;
 
                             setup_desc.scene_cbv = scene_cb_h;
-                            setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+                            setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
                             setup_desc.h_depth = task_depth->h_depth_;
                             setup_desc.h_color = task_light->h_light_;
                         }
-                        task_srvs_debug->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_debug->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
 
 				// ----------------------------------------
 				// After Lighting Pass.
-                    auto* task_srvs_view_voxel_radiance_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskSrvsViewVoxelRadianceInjection>();
+                    auto* task_instant_rdv_view_voxel_radiance_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvViewVoxelRadianceInjection>();
                     {
-                        ngl::render::app::RenderTaskSrvsViewVoxelRadianceInjection::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvViewVoxelRadianceInjection::SetupDesc setup_desc{};
                         {
                             setup_desc.w = screen_w;
                             setup_desc.h = screen_h;
 
                             setup_desc.scene_cbv = scene_cb_h;
-                            setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+                            setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
 
                             setup_desc.view_info.view_mat = view_info.view_mat;
                             setup_desc.view_info.proj_mat = view_info.proj_mat;
@@ -503,9 +503,9 @@ namespace ngl::test
                             setup_desc.view_info.h_depth = task_depth->h_depth_;
                             setup_desc.view_info.h_color = task_light->h_light_;
                             setup_desc.view_info.is_enable_radiance_injection_pass =
-                                (render_frame_desc.feature_config.gi.enable_srvs_all_injection_pass && render_frame_desc.feature_config.gi.enable_srvs_main_view_injection_pass) && true;
+                                (render_frame_desc.feature_config.gi.enable_instant_rdv_all_injection_pass && render_frame_desc.feature_config.gi.enable_instant_rdv_main_view_injection_pass) && true;
                         }
-                        task_srvs_view_voxel_radiance_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_view_voxel_radiance_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
 
 				auto* task_after_light = rtg_builder.AppendTaskNode<ngl::render::task::TaskAfterLightPass>();
@@ -517,7 +517,7 @@ namespace ngl::test
 						
 						setup_desc.scene_cbv = scene_cb_h;
 
-                        setup_desc.p_srvs = render_frame_desc.feature_config.gi.p_srvs;
+                        setup_desc.p_instant_rdv = render_frame_desc.feature_config.gi.p_instant_rdv;
 					}
 					task_after_light->Setup(rtg_builder, p_device, view_info,
 					task_light->h_light_, task_depth->h_depth_,
@@ -601,9 +601,9 @@ namespace ngl::test
                             case EDebugBufferMode::BentNormalTest:
 								general_debug_tex = task_ss_depth_technique->h_bent_normal_;
                                 break;
-                            case EDebugBufferMode::SrvsDebugTexture:
-                                if(task_srvs_debug)
-                                    general_debug_tex = task_srvs_debug->h_work_;
+                            case EDebugBufferMode::InstantRdvDebugTexture:
+                                if(task_instant_rdv_debug)
+                                    general_debug_tex = task_instant_rdv_debug->h_work_;
                                 break;
                             default:
                                 break;

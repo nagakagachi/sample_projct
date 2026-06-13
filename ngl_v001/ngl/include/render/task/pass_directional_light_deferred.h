@@ -9,7 +9,7 @@
 #include "gfx/rtg/graph_builder.h"
 #include "gfx/command_helper.h"
 
-#include "render/app/srvs/srvs.h"
+#include "render/app/instant_rdv/instant_rdv.h"
 
 
 namespace ngl::render::task
@@ -47,7 +47,7 @@ namespace ngl::render::task
             float d_lit_intensity{math::k_pi_f};
             float sky_lit_intensity{1.0f};
 			
-            render::app::ScreenReconstructedVoxelStructure* p_srvs = {};
+            render::app::InstantRasterDerivedVoxelScene* p_instant_rdv = {};
             int gi_sample_mode = 1;
             bool is_enable_sky_visibility = false;
             bool is_enable_radiance = false;
@@ -56,7 +56,7 @@ namespace ngl::render::task
             float probe_sample_offset_bent_normal{ 0.0f };// Probeサンプル位置をベントノーマル方向にオフセットする量[距離単位].
 
 			bool enable_feedback_blur_test{};
-            bool dbg_view_srvs_sky_visibility = false;
+            bool dbg_view_instant_rdv_sky_visibility = false;
 		} desc_{};
 		bool is_render_skip_debug_{};
 		
@@ -220,7 +220,7 @@ namespace ngl::render::task
                         int gi_sample_mode{};
                         int is_enable_sky_visibility{};
                         int is_enable_radiance{};
-                        int dbg_view_srvs_sky_visibility{};
+                        int dbg_view_instant_rdv_sky_visibility{};
                         float probe_sample_offset_view{ 0.0f };
                         float probe_sample_offset_surface_normal{ 0.0f };
                         float probe_sample_offset_bent_normal{ 0.0f };
@@ -236,9 +236,9 @@ namespace ngl::render::task
 						p_mapped->sky_lit_intensity = desc_.sky_lit_intensity;//skybox_proxy->sky_light_intensity
 
 						p_mapped->gi_sample_mode = desc_.gi_sample_mode;
-						p_mapped->is_enable_sky_visibility = (desc_.p_srvs != nullptr && desc_.is_enable_sky_visibility) ? 1 : 0;
-						p_mapped->is_enable_radiance = (desc_.p_srvs != nullptr && desc_.is_enable_radiance) ? 1 : 0;
-						p_mapped->dbg_view_srvs_sky_visibility = desc_.dbg_view_srvs_sky_visibility ? 1 : 0;
+						p_mapped->is_enable_sky_visibility = (desc_.p_instant_rdv != nullptr && desc_.is_enable_sky_visibility) ? 1 : 0;
+						p_mapped->is_enable_radiance = (desc_.p_instant_rdv != nullptr && desc_.is_enable_radiance) ? 1 : 0;
+						p_mapped->dbg_view_instant_rdv_sky_visibility = desc_.dbg_view_instant_rdv_sky_visibility ? 1 : 0;
 						p_mapped->probe_sample_offset_view = desc_.probe_sample_offset_view;
 						p_mapped->probe_sample_offset_surface_normal = desc_.probe_sample_offset_surface_normal;
 						p_mapped->probe_sample_offset_bent_normal = desc_.probe_sample_offset_bent_normal;
@@ -282,9 +282,9 @@ namespace ngl::render::task
 					pso_->SetView(&desc_set, "samp_shadow", gfx::GlobalRenderResource::Instance().default_resource_.sampler_shadow_linear.Get());
 
 
-					if(desc_.p_srvs)
+					if(desc_.p_instant_rdv)
                     {
-						desc_.p_srvs->SetDescriptor(pso_.Get(), &desc_set);
+						desc_.p_instant_rdv->SetDescriptor(pso_.Get(), &desc_set);
                     }
 
 						

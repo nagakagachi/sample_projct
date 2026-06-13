@@ -30,7 +30,7 @@ struct CbLightingPass
     int gi_sample_mode;
     int is_enable_sky_visibility;
     int is_enable_radiance;
-    int dbg_view_srvs_sky_visibility;
+    int dbg_view_instant_rdv_sky_visibility;
     float probe_sample_offset_view;
     float probe_sample_offset_surface_normal;
     float probe_sample_offset_bent_normal;
@@ -64,8 +64,8 @@ TextureCube tex_ibl_specular;
 Texture2D tex_ibl_dfg;
 
 // GI
-#include "srvs/srvs_util.hlsli"
-#include "srvs/assp/assp_probe_common.hlsli"
+#include "instant_rdv/instant_rdv_util.hlsli"
+#include "instant_rdv/assp/assp_probe_common.hlsli"
 
 
 // DirectionalLight評価. 標準.
@@ -159,7 +159,7 @@ bool FspTryLoadPackedShL1FromCellIndex(out FspProbePackedShL1Sample result, uint
     result = MakeZeroFspProbePackedShL1Sample();
 
     const uint probe_index = FspCellProbeIndexBuffer[global_cell_index];
-    if(probe_index == k_fsp_invalid_probe_index || probe_index >= (uint)cb_srvs.fsp_probe_pool_size)
+    if(probe_index == k_fsp_invalid_probe_index || probe_index >= (uint)cb_instant_rdv.fsp_probe_pool_size)
     {
         return false;
     }
@@ -371,7 +371,7 @@ bool TrySampleFspPackedShL1Interpolated(out FspProbePackedShL1Sample result, flo
         }
 
         RandomInstance rng;
-        rng.rngState = asuint(noise_float_to_float(float3(dither_seed + float2(17.0, 43.0), cb_srvs.frame_count)));
+        rng.rngState = asuint(noise_float_to_float(float3(dither_seed + float2(17.0, 43.0), cb_instant_rdv.frame_count)));
         const float guiding_rand = rng.rand();
         uint selected_index = 0;
         [unroll]
@@ -426,7 +426,7 @@ bool TrySampleFspPackedShL1Interpolated(out FspProbePackedShL1Sample result, flo
 // FSP ライティングの入口。nearest / interpolated をここで切り替える。
 bool TrySampleFspPackedShL1(out FspProbePackedShL1Sample result, float3 sample_pos_ws, float2 dither_seed, bool use_stochastic_sampling)
 {
-    if(0 != cb_srvs.fsp_lighting_interpolation_enable)
+    if(0 != cb_instant_rdv.fsp_lighting_interpolation_enable)
     {
         return TrySampleFspPackedShL1Interpolated(result, sample_pos_ws, dither_seed, use_stochastic_sampling);
     }
@@ -752,7 +752,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
     float specular_sky_visibility = 1.0;
     float3 gi_probe_diffuse_irradiance = float3(0.0, 0.0, 0.0);
     if(cb_ngl_lighting_pass.gi_sample_mode != k_gi_sample_mode_none
-        && (cb_ngl_lighting_pass.is_enable_sky_visibility || cb_ngl_lighting_pass.is_enable_radiance || cb_ngl_lighting_pass.dbg_view_srvs_sky_visibility))
+        && (cb_ngl_lighting_pass.is_enable_sky_visibility || cb_ngl_lighting_pass.is_enable_radiance || cb_ngl_lighting_pass.dbg_view_instant_rdv_sky_visibility))
 	{
         const float bent_normal_len_sq = dot(bent_normal_sample.xyz, bent_normal_sample.xyz);
         const float3 bent_normal_ws = (bent_normal_len_sq > 1e-6) ? (bent_normal_sample.xyz * rsqrt(bent_normal_len_sq)) : gb_normal_ws;
@@ -771,10 +771,10 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
         {
             FspProbePackedShL1Sample fsp_probe_sh;
             // stochastic の有無はここで決め、sampling 関数には policy として渡すだけにする。
-            const bool use_fsp_stochastic_sampling = (0 != cb_srvs.fsp_lighting_stochastic_sampling_enable);
+            const bool use_fsp_stochastic_sampling = (0 != cb_instant_rdv.fsp_lighting_stochastic_sampling_enable);
             if(TrySampleFspPackedShL1(fsp_probe_sh, gi_sample_pos_ws, input.pos.xy, use_fsp_stochastic_sampling))
             {
-                if(cb_ngl_lighting_pass.is_enable_sky_visibility || cb_ngl_lighting_pass.dbg_view_srvs_sky_visibility)
+                if(cb_ngl_lighting_pass.is_enable_sky_visibility || cb_ngl_lighting_pass.dbg_view_instant_rdv_sky_visibility)
                 {
                     const float diffuse_sh_sample = max(0.0, EvalFspSkyVisibilityL1IblOcclusion(fsp_probe_sh.sky_visibility_sh, sh_basis));
                     diffuse_sky_visibility = saturate(diffuse_sh_sample);
@@ -796,7 +796,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
             AsspProbePackedShL1Sample assp_probe_sh;
             if(TrySampleAsspPackedShL1(assp_probe_sh, screen_uv, ld))
             {
-                if(cb_ngl_lighting_pass.is_enable_sky_visibility || cb_ngl_lighting_pass.dbg_view_srvs_sky_visibility)
+                if(cb_ngl_lighting_pass.is_enable_sky_visibility || cb_ngl_lighting_pass.dbg_view_instant_rdv_sky_visibility)
                 {
                     const float diffuse_sh_sample = max(0.0, EvalAsspSkyVisibilityL1IblOcclusion(assp_probe_sh.sky_visibility_sh, sh_basis));
                     diffuse_sky_visibility = saturate(diffuse_sh_sample);
@@ -861,7 +861,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET
     // デバッグ表示.
     // ------------------------------------------------------------------------------
         // sky_visibility のデバッグ表示. 最終ライティングを上書きして visibility のみを見る。
-        if(cb_ngl_lighting_pass.dbg_view_srvs_sky_visibility)
+        if(cb_ngl_lighting_pass.dbg_view_instant_rdv_sky_visibility)
         {
             lit_color = diffuse_sky_visibility;
         }

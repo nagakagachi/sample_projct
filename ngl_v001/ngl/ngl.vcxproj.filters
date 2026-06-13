@@ -300,7 +300,7 @@
     <ClInclude Include="include\render\scene\scene_mesh.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="include\render\app\srvs\srvs.h">
+    <ClInclude Include="include\render\app\instant_rdv\instant_rdv.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="include\render\app\sw_tess\concurrent_binary_tree.h">
@@ -473,7 +473,7 @@
     <ClCompile Include="src\render\app\common\render_app_common.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\app\srvs\srvs.cpp">
+    <ClCompile Include="src\render\app\instant_rdv\instant_rdv.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="src\render\app\sw_tess\concurrent_binary_tree.cpp">

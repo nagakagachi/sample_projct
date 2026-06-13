@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "gfx/command_helper.h"
 #include "gfx/rtg/graph_builder.h"
@@ -18,7 +18,7 @@ namespace ngl
     {
         namespace app
         {
-            class ScreenReconstructedVoxelStructure;
+            class InstantRasterDerivedVoxelScene;
         }
     }  // namespace render
 }  // namespace ngl
@@ -44,7 +44,7 @@ namespace ngl::test
     };
     struct RenderFeatureGi
     {
-        render::app::ScreenReconstructedVoxelStructure* p_srvs = {};
+        render::app::InstantRasterDerivedVoxelScene* p_instant_rdv = {};
         int sample_mode = EGiSampleMode_Assp;
         bool enable_sky_visibility = false;
         bool enable_radiance = false;
@@ -52,12 +52,12 @@ namespace ngl::test
         float probe_sample_offset_surface_normal{0.0f};
         float probe_sample_offset_bent_normal{0.0f};
 
-        bool enable_srvs_all_injection_pass{true};
-        bool enable_srvs_all_removal_pass{true};
-        bool enable_srvs_main_view_injection_pass{true};
-        bool enable_srvs_main_view_removal_pass{true};
-        bool enable_srvs_shadow_view_injection_pass{true};
-        bool enable_srvs_shadow_view_removal_pass{true};
+        bool enable_instant_rdv_all_injection_pass{true};
+        bool enable_instant_rdv_all_removal_pass{true};
+        bool enable_instant_rdv_main_view_injection_pass{true};
+        bool enable_instant_rdv_main_view_removal_pass{true};
+        bool enable_instant_rdv_shadow_view_injection_pass{true};
+        bool enable_instant_rdv_shadow_view_removal_pass{true};
     };
     struct RenderFeatureMaterialDebug
     {
@@ -89,7 +89,7 @@ namespace ngl::test
 
             GtaoDemo,
             BentNormalTest,
-            SrvsDebugTexture,
+            InstantRdvDebugTexture,
 
             _MAX
         };
@@ -140,7 +140,7 @@ namespace ngl::test
         bool debugview_raytrace_result           = false;
         bool debugview_gbuffer                   = false;
         bool debugview_dshadow                   = false;
-        bool debugview_srvs_sky_visibility       = false;
+        bool debugview_instant_rdv_sky_visibility       = false;
 
         int debugview_general_debug_buffer  = -1;  // EDebugBufferMode
         int debugview_general_debug_channel = 0;

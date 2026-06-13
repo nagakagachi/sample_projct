@@ -9,7 +9,7 @@
 #include "gfx/rtg/graph_builder.h"
 #include "gfx/command_helper.h"
 
-#include "render/app/srvs/srvs.h"
+#include "render/app/instant_rdv/instant_rdv.h"
 
 namespace ngl::render::task
 {
@@ -26,7 +26,7 @@ namespace ngl::render::task
 			int h{};
 			rhi::ConstantBufferPooledHandle scene_cbv{};
 
-            render::app::ScreenReconstructedVoxelStructure* p_srvs = {};
+            render::app::InstantRasterDerivedVoxelScene* p_instant_rdv = {};
 		} desc_{};
 		bool is_render_skip_debug_{};
 		
@@ -37,7 +37,7 @@ namespace ngl::render::task
 			const SetupDesc& desc)
 		{
             SetDebugNodeName("AfterLighting");
-            if(desc.p_srvs == nullptr)
+            if(desc.p_instant_rdv == nullptr)
             {
                 return;
             }
@@ -71,7 +71,7 @@ namespace ngl::render::task
 					assert(res_depth.tex_.IsValid() && res_depth.srv_.IsValid());
 					assert(res_light.tex_.IsValid() && res_light.srv_.IsValid());
 
-					desc_.p_srvs->DebugDraw(gfx_commandlist,
+					desc_.p_instant_rdv->DebugDraw(gfx_commandlist,
 						desc_.scene_cbv,
                         res_depth.tex_, res_depth.dsv_,
                         res_light.tex_, res_light.rtv_);

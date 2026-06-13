@@ -1,4 +1,4 @@
-﻿// main.cpp: Sample application entry and scene/render setup.
+// main.cpp: Sample application entry and scene/render setup.
 #include <algorithm>
 #include <array>
 #include <cfloat>
@@ -50,7 +50,7 @@
 #include "gfx/material/material_shader_manager.h"
 
 // Render Path
-#include "render/app/srvs/srvs.h"
+#include "render/app/instant_rdv/instant_rdv.h"
 #include "render/app/sw_tess/sw_tessellation_mesh.h"
 #include "render/test_render_path.h"
 
@@ -76,20 +76,20 @@ static int dbgw_view_general_debug_buffer  = -1;
 static int dbgw_view_general_debug_channel = 0;
 static float dbgw_view_general_debug_rate  = 0.5f;
 
-// Srvs. Screen Reconstructed Voxel Structure.
-static bool dbgw_view_srvs_sky_visibility               = false;
-static bool dbgw_enable_srvs_sky_visibility_lighting    = true;
-static bool dbgw_enable_srvs_radiance_lighting          = true;
+// InstantRdv. Instant Raster Derived Voxel scene.
+static bool dbgw_view_instant_rdv_sky_visibility               = false;
+static bool dbgw_enable_instant_rdv_sky_visibility_lighting    = true;
+static bool dbgw_enable_instant_rdv_radiance_lighting          = true;
 static int  dbgw_gi_sample_mode                         = ngl::test::EGiSampleMode_Assp;
 static float dbgw_gi_probe_sample_offset_view           = 0.2f;
 static float dbgw_gi_probe_sample_offset_surface_normal = 0.2f;
 static float dbgw_gi_probe_sample_offset_bent_normal    = 0.0f;
-static bool dbgw_enable_srvs_all_injection_pass = true;
-static bool dbgw_enable_srvs_all_removal_pass = true;
-static bool dbgw_enable_srvs_main_view_injection_pass = true;
-static bool dbgw_enable_srvs_main_view_removal_pass = true;
-static bool dbgw_enable_srvs_shadow_view_injection_pass = true;
-static bool dbgw_enable_srvs_shadow_view_removal_pass = true;
+static bool dbgw_enable_instant_rdv_all_injection_pass = true;
+static bool dbgw_enable_instant_rdv_all_removal_pass = true;
+static bool dbgw_enable_instant_rdv_main_view_injection_pass = true;
+static bool dbgw_enable_instant_rdv_main_view_removal_pass = true;
+static bool dbgw_enable_instant_rdv_shadow_view_injection_pass = true;
+static bool dbgw_enable_instant_rdv_shadow_view_removal_pass = true;
 static bool dbgw_material_debug_emissive_enable = false;
 static float dbgw_material_debug_emissive_intensity = 1.0f;
 static ngl::math::Vec3 dbgw_material_debug_emissive_mask_albedo_color = ngl::math::Vec3(1.0f, 0.0f, 0.0f);
@@ -242,7 +242,7 @@ private:
     // RaytraceScene.
     ngl::gfx::RtSceneManager rt_scene_;
 
-    ngl::render::app::ScreenReconstructedVoxelStructure srvs_;
+    ngl::render::app::InstantRasterDerivedVoxelScene instant_rdv_;
 
     ngl::fwk::GfxScene gfx_scene_{};
     ngl::gfx::scene::SceneSkyBox skybox_{};
@@ -454,7 +454,7 @@ AppGame::~AppGame()
         skybox_.FinalizeGfx();
 
         rt_scene_ = {};
-        srvs_.Finalize();
+        instant_rdv_.Finalize();
 
         // リソース参照クリア.
         mesh_entity_array_.clear();
@@ -864,10 +864,10 @@ bool AppGame::Initialize()
 #endif
 
 #if 1
-    // Srvs.
-    srvs_.Initialize(&device, ngl::math::Vec3u(64), 3.0f, ngl::math::Vec3u(32), 2.0f, 5);
-    ngl::render::app::ScreenReconstructedVoxelStructure::dbg_view_category_ = 3;
-    ngl::render::app::ScreenReconstructedVoxelStructure::dbg_view_sub_mode_ = 0;
+    // InstantRdv.
+    instant_rdv_.Initialize(&device, ngl::math::Vec3u(64), 3.0f, ngl::math::Vec3u(32), 2.0f, 5);
+    ngl::render::app::InstantRasterDerivedVoxelScene::dbg_view_category_ = 3;
+    ngl::render::app::InstantRasterDerivedVoxelScene::dbg_view_sub_mode_ = 0;
 #endif
 
     // Texture Rexource読み込みのテスト.
@@ -1248,7 +1248,7 @@ bool AppGame::ExecuteApp()
             ImGui::Checkbox("View Directional Shadow Atlas", &dbgw_view_dshadow);
             ImGui::Checkbox("View Half Dot Gray", &dbgw_view_half_dot_gray);
             // SH から再評価した sky visibility デバッグ.
-            ImGui::Checkbox("View GI Sky Visibility (SH)", &dbgw_view_srvs_sky_visibility);
+            ImGui::Checkbox("View GI Sky Visibility (SH)", &dbgw_view_instant_rdv_sky_visibility);
 
             ImGui::Separator();
             ImGui::Text("Debug Buffer Visualize");
@@ -1262,7 +1262,7 @@ bool AppGame::ExecuteApp()
                 ImGui::RadioButton("DirectionalShadowAtlas", &dbgw_view_general_debug_buffer, ngl::test::EDebugBufferMode::DirectionalShadowAtlas);
                 ImGui::RadioButton("GtaoDemo", &dbgw_view_general_debug_buffer, ngl::test::EDebugBufferMode::GtaoDemo);
                 ImGui::RadioButton("BentNormalTest", &dbgw_view_general_debug_buffer, ngl::test::EDebugBufferMode::BentNormalTest);
-                ImGui::RadioButton("SrvsDebugTexture", &dbgw_view_general_debug_buffer, ngl::test::EDebugBufferMode::SrvsDebugTexture);
+                ImGui::RadioButton("InstantRdvDebugTexture", &dbgw_view_general_debug_buffer, ngl::test::EDebugBufferMode::InstantRdvDebugTexture);
             }
             ImGui::SliderInt("Channel", &dbgw_view_general_debug_channel, 0, 10);
             ImGui::SliderFloat("Slider Rate", &dbgw_view_general_debug_rate, 0.0f, 1.0f);
@@ -1293,8 +1293,8 @@ bool AppGame::ExecuteApp()
                 ImGui::RadioButton("ASSP##LightingGiSampleMode", &dbgw_gi_sample_mode, ngl::test::EGiSampleMode_Assp);
                 ImGui::SameLine();
                 ImGui::RadioButton("FSP##LightingGiSampleMode", &dbgw_gi_sample_mode, ngl::test::EGiSampleMode_Fsp);
-                ImGui::Checkbox("Enable SkyVisibility", &dbgw_enable_srvs_sky_visibility_lighting);
-                ImGui::Checkbox("Enable Irradiance", &dbgw_enable_srvs_radiance_lighting);
+                ImGui::Checkbox("Enable SkyVisibility", &dbgw_enable_instant_rdv_sky_visibility_lighting);
+                ImGui::Checkbox("Enable Irradiance", &dbgw_enable_instant_rdv_radiance_lighting);
                 ImGui::SliderFloat("Sample Offset View", &dbgw_gi_probe_sample_offset_view, 0.0f, 10.0f);
                 ImGui::SliderFloat("Sample Offset Surface Normal", &dbgw_gi_probe_sample_offset_surface_normal, 0.0f, 10.0f);
                 ImGui::SliderFloat("Sample Offset Bent Normal", &dbgw_gi_probe_sample_offset_bent_normal, 0.0f, 10.0f);
@@ -1302,17 +1302,17 @@ bool AppGame::ExecuteApp()
         }
 
         ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-        if (ImGui::CollapsingHeader("GI##Srvs"))
+        if (ImGui::CollapsingHeader("GI##InstantRdv"))
         {
             NGL_IMGUI_SCOPED_INDENT(10.0f);
             ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-            ngl::render::app::ScreenReconstructedVoxelStructure::DrawDebugMenu(
-                &dbgw_enable_srvs_all_injection_pass,
-                &dbgw_enable_srvs_all_removal_pass,
-                &dbgw_enable_srvs_main_view_injection_pass,
-                &dbgw_enable_srvs_main_view_removal_pass,
-                &dbgw_enable_srvs_shadow_view_injection_pass,
-                &dbgw_enable_srvs_shadow_view_removal_pass);
+            ngl::render::app::InstantRasterDerivedVoxelScene::DrawDebugMenu(
+                &dbgw_enable_instant_rdv_all_injection_pass,
+                &dbgw_enable_instant_rdv_all_removal_pass,
+                &dbgw_enable_instant_rdv_main_view_injection_pass,
+                &dbgw_enable_instant_rdv_main_view_removal_pass,
+                &dbgw_enable_instant_rdv_shadow_view_injection_pass,
+                &dbgw_enable_instant_rdv_shadow_view_removal_pass);
 
             if (ImGui::CollapsingHeader("GTAO Demo"))
             {
@@ -1915,22 +1915,22 @@ void AppGame::RenderApp(ngl::fwk::RtgFrameRenderSubmitCommandBuffer& out_rtg_com
                 }
                 // GI.
                 {
-                    if (srvs_.IsValid())
+                    if (instant_rdv_.IsValid())
                     {
-                        render_frame_desc.feature_config.gi.p_srvs                             = &srvs_;
+                        render_frame_desc.feature_config.gi.p_instant_rdv                             = &instant_rdv_;
                         render_frame_desc.feature_config.gi.sample_mode                        = dbgw_gi_sample_mode;
-                        render_frame_desc.feature_config.gi.enable_sky_visibility              = dbgw_enable_srvs_sky_visibility_lighting;
-                        render_frame_desc.feature_config.gi.enable_radiance                    = dbgw_enable_srvs_radiance_lighting;
+                        render_frame_desc.feature_config.gi.enable_sky_visibility              = dbgw_enable_instant_rdv_sky_visibility_lighting;
+                        render_frame_desc.feature_config.gi.enable_radiance                    = dbgw_enable_instant_rdv_radiance_lighting;
                         render_frame_desc.feature_config.gi.probe_sample_offset_view           = dbgw_gi_probe_sample_offset_view;
                         render_frame_desc.feature_config.gi.probe_sample_offset_surface_normal = dbgw_gi_probe_sample_offset_surface_normal;
                         render_frame_desc.feature_config.gi.probe_sample_offset_bent_normal    = dbgw_gi_probe_sample_offset_bent_normal;
 
-                        render_frame_desc.feature_config.gi.enable_srvs_all_injection_pass = dbgw_enable_srvs_all_injection_pass;
-                        render_frame_desc.feature_config.gi.enable_srvs_all_removal_pass = dbgw_enable_srvs_all_removal_pass;
-                        render_frame_desc.feature_config.gi.enable_srvs_main_view_injection_pass = dbgw_enable_srvs_main_view_injection_pass;
-                        render_frame_desc.feature_config.gi.enable_srvs_main_view_removal_pass = dbgw_enable_srvs_main_view_removal_pass;
-                        render_frame_desc.feature_config.gi.enable_srvs_shadow_view_injection_pass = dbgw_enable_srvs_shadow_view_injection_pass;
-                        render_frame_desc.feature_config.gi.enable_srvs_shadow_view_removal_pass = dbgw_enable_srvs_shadow_view_removal_pass;
+                        render_frame_desc.feature_config.gi.enable_instant_rdv_all_injection_pass = dbgw_enable_instant_rdv_all_injection_pass;
+                        render_frame_desc.feature_config.gi.enable_instant_rdv_all_removal_pass = dbgw_enable_instant_rdv_all_removal_pass;
+                        render_frame_desc.feature_config.gi.enable_instant_rdv_main_view_injection_pass = dbgw_enable_instant_rdv_main_view_injection_pass;
+                        render_frame_desc.feature_config.gi.enable_instant_rdv_main_view_removal_pass = dbgw_enable_instant_rdv_main_view_removal_pass;
+                        render_frame_desc.feature_config.gi.enable_instant_rdv_shadow_view_injection_pass = dbgw_enable_instant_rdv_shadow_view_injection_pass;
+                        render_frame_desc.feature_config.gi.enable_instant_rdv_shadow_view_removal_pass = dbgw_enable_instant_rdv_shadow_view_removal_pass;
                     }
                 }
                 // GTAO.
@@ -1959,7 +1959,7 @@ void AppGame::RenderApp(ngl::fwk::RtgFrameRenderSubmitCommandBuffer& out_rtg_com
                 render_frame_desc.debugview_subview_result            = dbgw_enable_sub_view_path;
                 render_frame_desc.debugview_raytrace_result           = dbgw_enable_raytrace_pass;
 
-                render_frame_desc.debugview_srvs_sky_visibility = dbgw_view_srvs_sky_visibility;
+                render_frame_desc.debugview_instant_rdv_sky_visibility = dbgw_view_instant_rdv_sky_visibility;
 
                 render_frame_desc.debugview_gbuffer               = dbgw_view_gbuffer;
                 render_frame_desc.debugview_dshadow               = dbgw_view_dshadow;

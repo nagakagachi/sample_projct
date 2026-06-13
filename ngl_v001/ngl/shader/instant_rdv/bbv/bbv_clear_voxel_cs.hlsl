@@ -1,0 +1,35 @@
+
+#if 0
+
+bbv_clear_voxel_cs.hlsl
+
+#endif
+
+
+#include "../instant_rdv_util.hlsli"
+
+
+// DepthBufferに対してDispatch.
+[numthreads(96, 1, 1)]
+void main_cs(
+	uint3 dtid	: SV_DispatchThreadID,
+	uint3 gtid : SV_GroupThreadID,
+	uint3 gid : SV_GroupID,
+	uint gindex : SV_GroupIndex
+)
+{
+    // 全Voxelをクリア.
+    uint voxel_count = cb_instant_rdv.bbv.grid_resolution.x * cb_instant_rdv.bbv.grid_resolution.y * cb_instant_rdv.bbv.grid_resolution.z;
+    if(dtid.x < voxel_count)
+    {
+        RWBitmaskBrickVoxelOptionData[dtid.x] = (BbvOptionalData)0;
+        const uint accum_addr = bbv_radiance_accum_addr_base(dtid.x);
+        [unroll]
+        for(uint i = 0; i < k_bbv_radiance_accum_component_count; ++i)
+        {
+            RWBbvRadianceAccumBuffer[accum_addr + i] = 0;
+        }
+
+        clear_voxel_data(RWBitmaskBrickVoxel, dtid.x);
+    }
+}
