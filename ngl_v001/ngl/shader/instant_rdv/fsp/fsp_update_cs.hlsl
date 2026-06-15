@@ -13,7 +13,7 @@ active probe list build に使う。
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 
-#define FSP_OCTA_UPDATE_TEMPORAL_RATE (0.1)
+#define FSP_OCTA_UPDATE_TEMPORAL_RATE (0.95)
 
 [numthreads(PROBE_UPDATE_THREAD_GROUP_SIZE, 1, 1)]
 void main_cs(
@@ -110,13 +110,13 @@ void main_cs(
             const uint2 atlas_texel_pos = FspProbeAtlasTexelCoord(probe_index, oct_cell_id);
             const float4 atlas_prev = RWFspProbeAtlasTex[atlas_texel_pos];
             const float4 atlas_curr = float4(hit_radiance, sky_visibility);
-            RWFspProbeAtlasTex[atlas_texel_pos] = lerp(atlas_prev, atlas_curr, FSP_OCTA_UPDATE_TEMPORAL_RATE);
+            RWFspProbeAtlasTex[atlas_texel_pos] = lerp(atlas_curr, atlas_prev, FSP_OCTA_UPDATE_TEMPORAL_RATE);
             sky_visibility_accum += sky_visibility;
         }
     }
 
     const float avg_sky_visibility = sky_visibility_accum / float(k_fsp_probe_octmap_width * k_fsp_probe_octmap_width);
-    probe_pool_data.avg_sky_visibility = lerp(probe_pool_data.avg_sky_visibility, avg_sky_visibility, FSP_OCTA_UPDATE_TEMPORAL_RATE);
+    probe_pool_data.avg_sky_visibility = lerp(avg_sky_visibility, probe_pool_data.avg_sky_visibility, FSP_OCTA_UPDATE_TEMPORAL_RATE);
     probe_pool_data.last_update_frame = cb_instant_rdv.frame_count;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 

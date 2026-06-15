@@ -147,15 +147,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     // Fsp 可視Fsp要素更新のフレーム負荷軽減用スキップ数. 0: スキップせずに1Fで全要素処理. 1: 1つ飛ばしでスキップ(半分).
     #define FSP_VISIBLE_SURFACE_ELEMENT_UPDATE_SKIP_COUNT 1
 
-    // 非可視表面Voxel除去用スタックの1要素のコンポーネント数.
-
-    // ScreenSpaceProbe情報テクスチャ群のフル解像度に対する縮小率.
-    #define SCREEN_SPACE_PROBE_INFO_DOWNSCALE 8
-    // 1ProbeあたりのOctahedralMapAtlas解像度.
-    #define SCREEN_SPACE_PROBE_OCT_RESOLUTION 8
-    #define SCREEN_SPACE_PROBE_OCT_RESOLUTION_INV (1.0 / float(SCREEN_SPACE_PROBE_OCT_RESOLUTION))
-    #define SCREEN_SPACE_PROBE_OCT_TEXEL_COUNT (SCREEN_SPACE_PROBE_OCT_RESOLUTION * SCREEN_SPACE_PROBE_OCT_RESOLUTION)
-
     // Adaptive ScreenSpaceProbe は 4x4 texel の OctahedralMap を 1 probe として扱う。
     #define ADAPTIVE_SCREEN_SPACE_PROBE_INFO_DOWNSCALE 4
     #define ADAPTIVE_SCREEN_SPACE_PROBE_OCT_RESOLUTION 4
