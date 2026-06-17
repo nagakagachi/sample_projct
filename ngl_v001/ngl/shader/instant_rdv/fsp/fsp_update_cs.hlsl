@@ -68,7 +68,8 @@ void main_cs(
     }
 
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
-    const float3 probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * 0.5);
+    const float cascade_relocation_offset_normalize_distance = (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
+    const float3 probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * cascade_relocation_offset_normalize_distance;
     const float3 probe_pos_ws = FspCalcCellCenterWs(cascade_index, local_cell_index) + probe_offset;
     const bool enable_ray_jitter = (0 != cb_instant_rdv.debug_fsp_update_ray_jitter_enable);
 

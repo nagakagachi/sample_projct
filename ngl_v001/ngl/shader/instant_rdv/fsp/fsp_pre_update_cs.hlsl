@@ -197,7 +197,8 @@ void main_cs(
     #if 1
         // Probe埋まり回避.
         const float half_cell_size = cascade.grid.cell_size * 0.5;
-        const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * half_cell_size;
+        const float cascade_relocation_offset_normalize_distance = (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
+        const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * cascade_relocation_offset_normalize_distance;
         // depth_hint key は可視候補の存在判定にのみ使い、位置決定はBBVベースで行う。
         const uint depth_hint_packed = RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key;
         const float3 to_camera_vec = view_origin - probe_cell_center;
@@ -218,7 +219,7 @@ void main_cs(
             [unroll]
             for(int si = 0; si < 6; ++si)
             {
-                const float3 candidate_ws = probe_cell_center + dir_to_camera_ws * (half_cell_size * front_samples[si]);
+                const float3 candidate_ws = probe_cell_center + dir_to_camera_ws * (cascade_relocation_offset_normalize_distance * front_samples[si]);
                 const bool is_non_solid =
                     (read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, candidate_ws) == 0);
                 if(is_non_solid)
@@ -232,7 +233,7 @@ void main_cs(
             // 直線候補で見つからない場合は、seed位置自体が条件を満たすかを確認する。
             if(!accepted_visible_first)
             {
-                const float3 seed_candidate_ws = probe_cell_center + clamp(seed_probe_offset, -half_cell_size.xxx, half_cell_size.xxx);
+                const float3 seed_candidate_ws = probe_cell_center + clamp(seed_probe_offset, -cascade_relocation_offset_normalize_distance.xxx, cascade_relocation_offset_normalize_distance.xxx);
                 const bool seed_non_solid =
                     (read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, seed_candidate_ws) == 0);
                 if(seed_non_solid)
@@ -258,7 +259,7 @@ void main_cs(
                     [unroll]
                     for(int fi = 0; fi < 4; ++fi)
                     {
-                        probe_sample_pos_ws = probe_cell_center + preferred_dir * (half_cell_size * front_bias_samples[fi]);
+                        probe_sample_pos_ws = probe_cell_center + preferred_dir * (cascade_relocation_offset_normalize_distance * front_bias_samples[fi]);
                         if(read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, probe_sample_pos_ws) == 0)
                         {
                             found_non_solid = true;
@@ -293,8 +294,8 @@ void main_cs(
             }
         }
         // 保存前に必ずエンコード可能範囲へ正規化してクランプする。
-        const float3 normalized_probe_offset = clamp((probe_sample_pos_ws - probe_cell_center) / half_cell_size, -1.0.xxx, 1.0.xxx);
-        probe_sample_pos_ws = probe_cell_center + normalized_probe_offset * half_cell_size;
+        const float3 normalized_probe_offset = clamp((probe_sample_pos_ws - probe_cell_center) / cascade_relocation_offset_normalize_distance, -1.0.xxx, 1.0.xxx);
+        probe_sample_pos_ws = probe_cell_center + normalized_probe_offset * cascade_relocation_offset_normalize_distance;
         const uint encoded_probe_offset = encode_range1_vec3_to_uint(normalized_probe_offset);
         // Probe位置更新. Cellサイズの半分で正規化.
         probe_pool_data.probe_offset_v3 = encoded_probe_offset;

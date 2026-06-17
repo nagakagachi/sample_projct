@@ -135,7 +135,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_fsp_probe_distance_max (50.0)
     // fsp
     #define k_fsp_probe_distance_max_inv (1.0 / k_fsp_probe_distance_max)
-
     
     // Bbv 全体更新のフレーム負荷軽減用スキップ数. 0: スキップせずに1Fで全要素処理. 1: 1つ飛ばしでスキップ(半分).
     #define BBV_ALL_ELEMENT_UPDATE_SKIP_COUNT 60
@@ -344,7 +343,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int fsp_probe_atlas_tile_width NGL_CPP_MEMBER_INIT({0});
         int fsp_probe_atlas_tile_height NGL_CPP_MEMBER_INIT({0});
         int debug_fsp_probe_cascade NGL_CPP_MEMBER_INIT({-1});
-        int fsp_dummy_padding1 NGL_CPP_MEMBER_INIT({});
+        float fsp_relocation_offset_scale_for_cascade_cell_size NGL_CPP_MEMBER_INIT({0.9f});// Probe再配置オフセットの最大距離を, 該当カスケードプローブ間隔の何倍まで許容するか.
 
         // MainViewのDepthBuffer解像度.
         int2 tex_main_view_depth_size NGL_CPP_MEMBER_INIT({});

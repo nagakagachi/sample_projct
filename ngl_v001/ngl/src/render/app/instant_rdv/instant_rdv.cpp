@@ -157,6 +157,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_cascade_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_cascade_count_ = 1;
+    float InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_ = k_default_instant_rdv_param.fsp_relocation_offset_scale_for_cascade_cell_size;
     float InstantRasterDerivedVoxelScene::dbg_probe_scale_ = 1.0f;
     float InstantRasterDerivedVoxelScene::dbg_probe_near_geom_scale_ = 0.2f;
     int InstantRasterDerivedVoxelScene::assp_spatial_filter_enable_ = k_default_instant_rdv_param.assp_spatial_filter_enable;
@@ -474,6 +475,14 @@ namespace ngl::render::app
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
                             dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
+                        ImGui::EndPopup();
+                    }
+                }
+                {
+                    ImGui::SliderFloat("Relocation Offset Scale", &dbg_fsp_relocation_offset_scale_for_cascade_cell_size_, 0.01f, 10.0f);
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_relocation_offset_scale_for_cascade_cell_size_ = k_default_instant_rdv_param.fsp_relocation_offset_scale_for_cascade_cell_size;
                         ImGui::EndPopup();
                     }
                 }
@@ -1308,6 +1317,7 @@ namespace ngl::render::app
                 param.fsp_lighting_interpolation_enable = InstantRasterDerivedVoxelScene::dbg_fsp_lighting_interpolation_enable_;
                 param.fsp_lighting_stochastic_sampling_enable = InstantRasterDerivedVoxelScene::dbg_fsp_lighting_stochastic_sampling_enable_;
                 param.fsp_probe_lifecycle_enable = InstantRasterDerivedVoxelScene::dbg_fsp_probe_lifecycle_enable_;
+                param.fsp_relocation_offset_scale_for_cascade_cell_size = InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;
                 param.fsp_cascade_count = static_cast<int>(fsp_cascade_count_);
                 param.fsp_total_cell_count = static_cast<int>(fsp_total_cell_count_);
                 param.fsp_probe_atlas_tile_width = static_cast<int>(fsp_probe_atlas_tile_width_);

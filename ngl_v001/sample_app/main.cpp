@@ -1,4 +1,4 @@
-// main.cpp: Sample application entry and scene/render setup.
+﻿// main.cpp: Sample application entry and scene/render setup.
 #include <algorithm>
 #include <array>
 #include <cfloat>

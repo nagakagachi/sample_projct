@@ -289,6 +289,7 @@ namespace ngl::render::app
         static int dbg_fsp_update_ray_jitter_enable_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
+        static float dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;
         static float dbg_probe_scale_;
         static float dbg_probe_near_geom_scale_;
         static int assp_spatial_filter_enable_;

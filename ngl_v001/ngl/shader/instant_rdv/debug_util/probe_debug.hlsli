@@ -88,7 +88,7 @@ VS_OUTPUT main_vs(VS_INPUT input)
         probe_pool_data = FspProbePoolBuffer[probe_index];
     }
     const bool use_relocated_probe_pos = (0 != cb_instant_rdv.debug_fsp_probe_use_relocated_pos);
-    const float3 probe_offset = (is_allocated && use_relocated_probe_pos) ? decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * 0.5) : float3(0.0, 0.0, 0.0);
+    const float3 probe_offset = (is_allocated && use_relocated_probe_pos) ? decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size) : float3(0.0, 0.0, 0.0);
 
     const float3 probe_pos_ws = FspCalcCellCenterWs(cascade_index, local_cell_index) + probe_offset;
 
