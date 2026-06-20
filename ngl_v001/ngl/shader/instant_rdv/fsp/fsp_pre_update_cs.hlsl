@@ -176,14 +176,12 @@ void main_cs(
         if(owner_cell_index != k_fsp_invalid_probe_index)
         {
             RWFspCellStateBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-            RWFspCellStateBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
         }
         return;
     }
     if(is_new_probe)
     {
         probe_pool_data.probe_offset_v3 = 0;
-        probe_pool_data.avg_sky_visibility = 0.0;
         probe_pool_data.last_update_frame = 0;
     }
     probe_pool_data.owner_cell_index = global_cell_index;
@@ -309,19 +307,16 @@ void main_cs(
         FspProbePoolData src_probe_pool_data = (FspProbePoolData)0;
         if(FspTrySeedProbeFromUpperCascade(src_probe_pool_data, probe_sample_pos_ws, cascade_index, probe_index))
         {
-            probe_pool_data.avg_sky_visibility = src_probe_pool_data.avg_sky_visibility;
         }
         else
         {
             // source が見つからない場合だけ新規割り当て時に明示的に初期化する。
             FspClearProbeAtlas(probe_index);
-            probe_pool_data.avg_sky_visibility = 0.0;
         }
     }
 
     // デバッグ表示・scratch path 互換のため、セル状態にも最低限ミラーしておく。
     RWFspCellStateBuffer[global_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-    RWFspCellStateBuffer[global_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 
     #if 0

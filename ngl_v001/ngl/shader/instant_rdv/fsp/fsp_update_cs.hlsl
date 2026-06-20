@@ -46,7 +46,6 @@ void main_cs(
     if(has_valid_owner)
     {
         RWFspCellStateBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-        RWFspCellStateBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
     }
 
     if(!has_valid_owner)
@@ -61,11 +60,14 @@ void main_cs(
         return;
     }
 
+    /*
+    // 処理スキップ機構. 指定カスケードのみ処理.
     const uint target_cascade_index = cb_instant_rdv.frame_count % uint(max(cb_instant_rdv.fsp_cascade_count, 1));
     if(cascade_index != target_cascade_index)
     {
         return;
     }
+    */
 
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
     const float cascade_relocation_offset_normalize_distance = (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
@@ -116,10 +118,6 @@ void main_cs(
         }
     }
 
-    const float avg_sky_visibility = sky_visibility_accum / float(k_fsp_probe_octmap_width * k_fsp_probe_octmap_width);
-    probe_pool_data.avg_sky_visibility = lerp(avg_sky_visibility, probe_pool_data.avg_sky_visibility, FSP_OCTA_UPDATE_TEMPORAL_RATE);
     probe_pool_data.last_update_frame = cb_instant_rdv.frame_count;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
-
-    RWFspCellStateBuffer[owner_cell_index].avg_sky_visibility = probe_pool_data.avg_sky_visibility;
 }

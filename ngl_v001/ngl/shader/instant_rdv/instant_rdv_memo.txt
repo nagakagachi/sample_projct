@@ -78,7 +78,6 @@ probe 側で最低限持つもの:
 - `probe_offset_v3`
 - `last_seen_frame`
 - `last_update_frame`
-- `avg_sky_visibility`
 - `debug_last_observed_frame`
 - `debug_last_released_frame`
 - `flags`
@@ -226,8 +225,7 @@ active probe ごとに:
 2. `probe_offset_v3` を復元して probe world pos を決める
 3. octa texel 群について ray trace
 4. radiance / sky visibility を atlas に書く
-5. `avg_sky_visibility` を更新
-6. `last_update_frame` を更新
+5. `last_update_frame` を更新
 
 初期実装では **non-screen pass の間引きはしない**。
 つまり:

@@ -66,14 +66,13 @@ namespace ngl::render::app
         {
         case -1: return "-1: Disabled";
         case 0: return "0: Seen this frame (green) / stale (yellow)";
-        case 1: return "1: Average sky visibility";
-        case 2: return "2: Probe index hash color";
-        case 3: return "3: Probe age heat (fresh -> old)";
-        case 4: return "4: Cascade index hash color";
-        case 5: return "5: Oct radiance (tonemapped)";
-        case 6: return "6: Oct sky visibility (current dir)";
-        case 7: return "7: SH radiance (reconstructed)";
-        case 8: return "8: SH sky visibility (reconstructed)";
+        case 1: return "1: Probe index hash color";
+        case 2: return "2: Probe age heat (fresh -> old)";
+        case 3: return "3: Cascade index hash color";
+        case 4: return "4: Oct radiance (tonemapped)";
+        case 5: return "5: Oct sky visibility (current dir)";
+        case 6: return "6: SH radiance (reconstructed)";
+        case 7: return "7: SH sky visibility (reconstructed)";
         default: return "Unknown mode";
         }
     }

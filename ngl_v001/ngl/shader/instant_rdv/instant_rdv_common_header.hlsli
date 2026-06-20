@@ -195,8 +195,9 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint probe_offset_v3;//signed 10bit vector3 encode. Bbv上でのプローブ埋まり回避のためのオフセット.
         uint atomic_work;// 可視要素リスト作成時の重複除去用.
         
-        float avg_sky_visibility;
         uint depth_hint_packed_key;
+        
+        //float avg_sky_visibility;
     };
 
     static const uint k_fsp_invalid_probe_index = ~uint(0);
@@ -212,10 +213,11 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint last_seen_frame;
         uint flags;
 
-        float avg_sky_visibility;
         uint last_update_frame;
         uint debug_last_observed_frame;
         uint debug_last_released_frame;
+
+        //float avg_sky_visibility;
     };
 
     // 可視サーフェイス情報Injection用のView情報.

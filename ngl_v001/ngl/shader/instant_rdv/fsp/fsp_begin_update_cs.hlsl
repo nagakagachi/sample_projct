@@ -117,7 +117,6 @@ void main_cs(
     probe_pool_data.owner_cell_index = k_fsp_invalid_probe_index;
     probe_pool_data.flags = 0;
     probe_pool_data.probe_offset_v3 = 0;
-    probe_pool_data.avg_sky_visibility = 0.0;
     probe_pool_data.last_update_frame = 0;
     probe_pool_data.debug_last_released_frame = cb_instant_rdv.frame_count;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;

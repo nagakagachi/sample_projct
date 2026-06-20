@@ -188,34 +188,30 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     }
     else if(1 == cb_instant_rdv.debug_fsp_probe_mode)
     {
-        color = probe_pool_data.avg_sky_visibility.xxxx;
-    }
-    else if(2 == cb_instant_rdv.debug_fsp_probe_mode)
-    {
         const float hashed = frac(float(input.probe_index) * 0.61803398875);
         color = float4(hashed, frac(hashed * 1.37), frac(hashed * 2.11), 1.0);
     }
-    else if(3 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(2 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         const float age = float(cb_instant_rdv.frame_count - probe_pool_data.last_seen_frame);
         const float age_norm = saturate(age / 30.0);
         color = lerp(float4(0.2, 1.0, 0.3, 1.0), float4(1.0, 0.2, 0.1, 1.0), age_norm);
     }
-    else if(4 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(3 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         const float hashed = frac(float(input.cascade_index) * 0.38196601125);
         color = float4(hashed, frac(hashed * 1.71), frac(hashed * 2.37), 1.0);
     }
-    else if(5 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(4 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         const float3 radiance = octmap_sample.rgb / (1.0 + octmap_sample.rgb);
         color = float4(pow(max(radiance, 0.0.xxx), 1.0 / 2.2), 1.0);
     }
-    else if(6 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(5 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         color = octmap_sample.aaaa;
     }
-    else if(7 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(6 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         const float3 sh_radiance = max(0.0.xxx, float3(
             dot(sh_radiance_r, sh_basis),
@@ -224,7 +220,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
         const float3 mapped_radiance = sh_radiance / (1.0 + sh_radiance);
         color = float4(pow(mapped_radiance, 1.0 / 2.2), 1.0);
     }
-    else if(8 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(7 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         const float sh_sky_visibility = max(0.0, dot(sh_sky_vis, sh_basis));
         color = sh_sky_visibility.xxxx;
