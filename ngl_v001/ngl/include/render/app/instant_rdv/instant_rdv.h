@@ -192,7 +192,12 @@ namespace ngl::render::app
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
+        // 旧来の1-pass可視サーフェイス抽出（デバッグ切替用に維持）。
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_proc_ = {};
+        // 高速化版の3-pass可視サーフェイス抽出。
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_prepare_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_accumulate_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_finalize_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_update_ = {};
@@ -253,6 +258,9 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_pool_buffer_ = {};
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
         ComputeBufferSet fsp_active_probe_list_[2] = {};
+        // 可視セル抽出用ワークバッファ（frame stamp / depth hint）。
+        ComputeBufferSet fsp_cell_visible_frame_buffer_ = {};
+        ComputeBufferSet fsp_cell_depth_hint_buffer_ = {};
         ComputeBufferSet fsp_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
@@ -308,6 +316,8 @@ namespace ngl::render::app
         static int dbg_fsp_lighting_interpolation_enable_;
         static int dbg_fsp_lighting_stochastic_sampling_enable_;
         static int dbg_fsp_probe_lifecycle_enable_;
+        // FSP可視サーフェイス抽出を 3-pass(ON) / 旧1-pass(OFF) で切り替えるデバッグフラグ。
+        static int dbg_fsp_use_multipass_visible_surface_;
         static int dbg_fsp_probe_pool_size_;
         static int dbg_fsp_free_probe_count_;
         static int dbg_fsp_allocated_probe_count_;

@@ -189,20 +189,18 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     };
 
 
+    static const uint k_fsp_invalid_probe_index = ~uint(0);
+    static const uint k_fsp_probe_flag_allocated = 1u << 0;
+    static const uint k_fsp_max_cascade_count = 8u;
+
     // FrustumSurfaceProbeのデータ.
     struct FspProbeData
     {
         uint probe_offset_v3;//signed 10bit vector3 encode. Bbv上でのプローブ埋まり回避のためのオフセット.
-        uint atomic_work;// 可視要素リスト作成時の重複除去用.
+        uint atomic_work;// 可視リスト重複除去処理のAtomicExchangeワーク用.
         
-        uint depth_hint_packed_key;
-        
-        //float avg_sky_visibility;
+        uint depth_hint_packed_key;// 可視Probeの深度サーフェイスまでのヒント情報.
     };
-
-    static const uint k_fsp_invalid_probe_index = ~uint(0);
-    static const uint k_fsp_probe_flag_allocated = 1u << 0;
-    static const uint k_fsp_max_cascade_count = 8u;
 
     // FSP V1 lifecycle 用の probe pool エントリ.
     // cell 側は probe index だけを持ち、probe 側に状態を寄せる。
@@ -211,13 +209,12 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         uint owner_cell_index;
         uint probe_offset_v3;// signed 10bit vector3 encode.
         uint last_seen_frame;
-        uint flags;
+        uint flags;// Cellへの割り当て済みフラグ等.
 
-        uint last_update_frame;
+        uint last_update_frame;// 新規プローブの初期値コピー元として, 若すぎるプローブを除去する判断に利用
+
         uint debug_last_observed_frame;
         uint debug_last_released_frame;
-
-        //float avg_sky_visibility;
     };
 
     // 可視サーフェイス情報Injection用のView情報.

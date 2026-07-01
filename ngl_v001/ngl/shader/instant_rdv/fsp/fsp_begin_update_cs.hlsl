@@ -104,7 +104,7 @@ void main_cs(
     const bool is_stale = !is_invalidate_area && (FSP_STALE_FRAME_THRESHOLD < frame_age);
     if(!is_invalidate_area && !is_stale)
     {
-        FspPushCurrActiveProbeIndex(probe_index);
+        FspPushCurrActiveProbeIndex(probe_index);// 今回のフレームも生存.
         return;
     }
 
@@ -121,5 +121,5 @@ void main_cs(
     probe_pool_data.debug_last_released_frame = cb_instant_rdv.frame_count;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 
-    FspPushFreeProbeIndex(probe_index);
+    FspPushFreeProbeIndex(probe_index);// 返却.
 }

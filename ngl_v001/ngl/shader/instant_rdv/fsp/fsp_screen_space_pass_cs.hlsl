@@ -70,8 +70,13 @@ void FspRegisterVisibleCell(uint global_cell_index)
     // 交換前の値でVisible判定フレーム番号が現在フレームと異なるならリストへ登録. 別スレッドで同じVoxelを処理している場合の重複を除去する.
     if(cb_instant_rdv.frame_count != old_atomic_work)
     {
+        // 3-pass実装と同じ可視スタンプを残し、デバッグ切替時の整合を保つ。
+        RWFspCellVisibleFrameBuffer[global_cell_index] = cb_instant_rdv.frame_count;
+
         // 深度ヒント集約の比較値をフレーム先頭で初期化.
         RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key = k_fsp_depth_hint_metric_init;
+        // 3-pass側ワークと同値にして、後段参照先を統一できるようにする。
+        RWFspCellDepthHintBuffer[global_cell_index] = k_fsp_depth_hint_metric_init;
 
         int current_visible_count = 0;
         InterlockedAdd(RWSurfaceProbeCellList[0], 1, current_visible_count);
@@ -98,6 +103,8 @@ void FspUpdateVisibleCellDepthHint(uint global_cell_index, uint packed_depth_hin
     // 実オフセットは PreUpdate で pixel_id -> depth 再構成して生成する。
     uint prev_packed = 0;
     InterlockedMin(RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key, packed_depth_hint_key_u, prev_packed);
+    // 1-pass/3-pass の両経路で同じ depth hint ワークを更新する。
+    InterlockedMin(RWFspCellDepthHintBuffer[global_cell_index], packed_depth_hint_key_u, prev_packed);
 }
 
 void FspRegisterAndHintVisibleCellWave(
@@ -154,6 +161,12 @@ void main_cs(
 	uint gindex : SV_GroupIndex
 )
 {
+    // Dispatch端数スレッドの無効アクセスを防ぐ。
+    if(any(dtid.xy >= cb_instant_rdv.tex_main_view_depth_size.xy))
+    {
+        return;
+    }
+
 	const float3 view_origin = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
 
 	const float2 screen_pos_f = float2(dtid.xy) + float2(0.5, 0.5);// ピクセル中心への半ピクセルオフセット考慮.

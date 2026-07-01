@@ -175,6 +175,8 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_interpolation_enable_ = k_default_instant_rdv_param.fsp_lighting_interpolation_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_stochastic_sampling_enable_ = k_default_instant_rdv_param.fsp_lighting_stochastic_sampling_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
+    // 新規高速化経路をデフォルトにしつつ、比較検証のため1-passへ戻せるようにする。
+    int InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_ = 1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ = 0;
@@ -476,6 +478,18 @@ namespace ngl::render::app
                             dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
                         ImGui::EndPopup();
                     }
+                }
+                {
+                    // 可視セル抽出の実行経路を動的切替（計測/デバッグ用途）。
+                    bool v = (0 != dbg_fsp_use_multipass_visible_surface_);
+                    if (ImGui::Checkbox("Visible Surface Multi Pass", &v))
+                        dbg_fsp_use_multipass_visible_surface_ = v ? 1 : 0;
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_use_multipass_visible_surface_ = 1;
+                        ImGui::EndPopup();
+                    }
+                    ImGui::TextDisabled("ON: prepare+accumulate+finalize / OFF: legacy 1-pass");
                 }
                 {
                     ImGui::SliderFloat("Relocation Offset Scale", &dbg_fsp_relocation_offset_scale_for_cascade_cell_size_, 0.01f, 10.0f);
@@ -922,6 +936,9 @@ namespace ngl::render::app
             pso_fsp_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("instant_rdv/fsp/fsp_begin_update_cs.hlsl");
             pso_fsp_visible_surface_proc_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_pass_cs.hlsl");
+            pso_fsp_visible_surface_prepare_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_prepare_cs.hlsl");
+            pso_fsp_visible_surface_accumulate_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_accumulate_cs.hlsl");
+            pso_fsp_visible_surface_finalize_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_finalize_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("instant_rdv/fsp/fsp_update_cs.hlsl");
@@ -1139,8 +1156,30 @@ namespace ngl::render::app
                                         ,  resource_name.c_str());
         }
         {
-            fsp_visible_surface_list_.InitializeAsTyped(p_device,
+            fsp_cell_visible_frame_buffer_.InitializeAsTyped(p_device,
                                            rhi::BufferDep::Desc{
+                                              .element_byte_size = sizeof(uint32_t),
+                                              .element_count     = fsp_total_cell_count_,
+
+                                              .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                                              .heap_type = rhi::EResourceHeapType::Default},
+                                          rhi::EResourceFormat::Format_R32_UINT
+                                        ,  "InstantRdv_FspCellVisibleFrameBuffer");
+        }
+        {
+            fsp_cell_depth_hint_buffer_.InitializeAsTyped(p_device,
+                                          rhi::BufferDep::Desc{
+                                              .element_byte_size = sizeof(uint32_t),
+                                              .element_count     = fsp_total_cell_count_,
+
+                                              .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                                              .heap_type = rhi::EResourceHeapType::Default},
+                                          rhi::EResourceFormat::Format_R32_UINT
+                                        ,  "InstantRdv_FspCellDepthHintBuffer");
+        }
+        {
+            fsp_visible_surface_list_.InitializeAsTyped(p_device,
+                                          rhi::BufferDep::Desc{
                                                .element_byte_size = sizeof(uint32_t),
                                                .element_count     = fsp_visible_surface_buffer_size_+1,// 0番目にアトミックカウンタ用途.
 
@@ -1410,6 +1449,8 @@ namespace ngl::render::app
                 pso_fsp_clear_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspActiveProbeListPrev", fsp_active_probe_list_[0].uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspActiveProbeListCurr", fsp_active_probe_list_[1].uav.Get());
+                pso_fsp_clear_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
+                pso_fsp_clear_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
 
@@ -1423,6 +1464,8 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_probe_free_stack_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[0].buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[1].buffer.Get());
+                p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
+                p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
                 p_command_list->ResourceBarrier(fsp_probe_atlas_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
             }
@@ -2019,25 +2062,87 @@ namespace ngl::render::app
             
             // Fsp Visible Surface Processing Pass.
             {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspVisibleSurfaceProcessing");
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass");
 
-                // FSP高速化方針:
-                // - 深度バッファ全ピクセルを処理しつつ、1pixel=1セル(mid)のみ列挙
-                // - Wave内で同一セルを統合し、cell list / depth hint のAtomic競合を削減
-                // 詳細ロジックは fsp_screen_space_pass_cs.hlsl 側に実装。
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_fsp_visible_surface_proc_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
-                pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                // Multi-pass: screen処理中の競合Atomicをワークバッファへ段階分離して削減する。
+                if(0 != InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_)
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Prepare");
 
-                p_command_list->SetPipelineState(pso_fsp_visible_surface_proc_.Get());
-                p_command_list->SetDescriptorSet(pso_fsp_visible_surface_proc_.Get(), &desc_set);
-                pso_fsp_visible_surface_proc_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);  // Screen処理でDispatch.
+                    // 1) セルdepth hintワーク初期化.
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_visible_surface_prepare_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_visible_surface_prepare_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
 
-                p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
-                p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
+                    p_command_list->SetPipelineState(pso_fsp_visible_surface_prepare_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_prepare_.Get(), &desc_set);
+                    pso_fsp_visible_surface_prepare_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
+
+                    p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
+                }
+
+                // 2) 画面空間Depthを集約してセルワークへ反映.
+                if(0 != InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_)
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Accumulate");
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
+                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_visible_surface_accumulate_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_accumulate_.Get(), &desc_set);
+                    pso_fsp_visible_surface_accumulate_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+
+                    p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
+                }
+                else
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_Legacy");
+
+                    // Legacy 1-pass: 旧経路をそのまま実行（回帰比較/不具合切り分け用）。
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
+                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_visible_surface_proc_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_proc_.Get(), &desc_set);
+                    pso_fsp_visible_surface_proc_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+
+                    p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
+                }
+
+                // 3) セルワークから可視セルリスト確定 + 互換ミラー.
+                if(0 != InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_)
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Finalize");
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "FspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.srv.Get());
+                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "FspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.srv.Get());
+                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
+                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_visible_surface_finalize_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_finalize_.Get(), &desc_set);
+                    pso_fsp_visible_surface_finalize_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
+
+                    p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
+                }
             }
             // Fsp IndirectArg生成.
             {

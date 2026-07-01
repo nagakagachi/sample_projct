@@ -69,6 +69,10 @@ Buffer<uint>                          FspActiveProbeListPrev;
 RWBuffer<uint>                        RWFspActiveProbeListPrev;
 Buffer<uint>                          FspActiveProbeListCurr;
 RWBuffer<uint>                        RWFspActiveProbeListCurr;
+Buffer<uint>                          FspCellVisibleFrameBuffer;
+RWBuffer<uint>                        RWFspCellVisibleFrameBuffer;
+Buffer<uint>                          FspCellDepthHintBuffer;
+RWBuffer<uint>                        RWFspCellDepthHintBuffer;
 
 Texture2D<float4>      FspProbeAtlasTex;
 RWTexture2D<float4>    RWFspProbeAtlasTex;
