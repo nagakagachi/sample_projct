@@ -40,7 +40,7 @@ namespace ngl::render::app
     }
 
     static constexpr u32 k_fsp_probe_pool_size = 1<<13;//10000;
-    static constexpr u32 k_fsp_probe_surface_cell_count_max = 1024*2;//1024;
+    static constexpr u32 k_fsp_probe_surface_cell_count_max = 1024*4;// index list only; tile-sliceの一時的な候補増加で欠落しない余裕を持つ.
 
     enum class InstantRdvGiSolutionMode : int
     {
