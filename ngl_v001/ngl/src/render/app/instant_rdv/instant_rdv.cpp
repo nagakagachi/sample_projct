@@ -96,6 +96,17 @@ namespace ngl::render::app
         }
     }
 
+    const char* FspVisibleSurfaceModeLabel(int mode)
+    {
+        switch(mode)
+        {
+        case 0: return "0: Legacy 1-pass";
+        case 1: return "1: Pixel accumulate multipass";
+        case 2: return "2: Full-res depth tile slice mask";
+        default: return "Unknown";
+        }
+    }
+
     struct InstantRdvGiDispatchEntry
     {
         InstantRdvGiSolutionMode mode;
@@ -175,8 +186,8 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_interpolation_enable_ = k_default_instant_rdv_param.fsp_lighting_interpolation_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_stochastic_sampling_enable_ = k_default_instant_rdv_param.fsp_lighting_stochastic_sampling_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
-    // 新規高速化経路をデフォルトにしつつ、比較検証のため1-passへ戻せるようにする。
-    int InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_ = 1;
+    // 新規tile slice経路をデフォルトにしつつ、比較検証のため旧経路へ戻せるようにする。
+    int InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_mode_ = 2;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ = 0;
@@ -481,15 +492,14 @@ namespace ngl::render::app
                 }
                 {
                     // 可視セル抽出の実行経路を動的切替（計測/デバッグ用途）。
-                    bool v = (0 != dbg_fsp_use_multipass_visible_surface_);
-                    if (ImGui::Checkbox("Visible Surface Multi Pass", &v))
-                        dbg_fsp_use_multipass_visible_surface_ = v ? 1 : 0;
+                    ImGui::SliderInt("Visible Surface Mode", &dbg_fsp_visible_surface_mode_, 0, 2);
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
-                            dbg_fsp_use_multipass_visible_surface_ = 1;
+                            dbg_fsp_visible_surface_mode_ = 2;
                         ImGui::EndPopup();
                     }
-                    ImGui::TextDisabled("ON: prepare+accumulate+finalize / OFF: legacy 1-pass");
+                    dbg_fsp_visible_surface_mode_ = std::clamp(dbg_fsp_visible_surface_mode_, 0, 2);
+                    ImGui::TextDisabled("%s", FspVisibleSurfaceModeLabel(dbg_fsp_visible_surface_mode_));
                 }
                 {
                     ImGui::SliderFloat("Relocation Offset Scale", &dbg_fsp_relocation_offset_scale_for_cascade_cell_size_, 0.01f, 10.0f);
@@ -684,6 +694,7 @@ namespace ngl::render::app
         assp_probe_ray_query_buffer_ = {};
         assp_probe_ray_result_buffer_ = {};
         assp_probe_total_ray_count_readback_buffer_ = {};
+        fsp_depth_tile_slice_mask_buffer_ = {};
 
         for(int i = 0; i < 2; ++i)
         {
@@ -860,6 +871,25 @@ namespace ngl::render::app
                 return false;
             }
         }
+        {
+            constexpr u32 k_fsp_depth_tile_size = 8u;
+            const u32 fsp_depth_tile_count_x = (static_cast<u32>(assp_probe_base_resolution_x) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
+            const u32 fsp_depth_tile_count_y = (static_cast<u32>(assp_probe_base_resolution_y) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
+            constexpr u32 k_fsp_depth_slice_count = 32u;
+            const u32 fsp_depth_tile_count = std::max(1u, fsp_depth_tile_count_x * fsp_depth_tile_count_y);
+            if(!fsp_depth_tile_slice_mask_buffer_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count     = fsp_depth_tile_count * k_fsp_depth_slice_count,
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_FspDepthTileSliceMaskBuffer"))
+            {
+                return false;
+            }
+        }
 
         return true;
     }
@@ -939,6 +969,8 @@ namespace ngl::render::app
             pso_fsp_visible_surface_prepare_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_prepare_cs.hlsl");
             pso_fsp_visible_surface_accumulate_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_accumulate_cs.hlsl");
             pso_fsp_visible_surface_finalize_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_finalize_cs.hlsl");
+            pso_fsp_depth_tile_slice_mask_ = CreateComputePSO("instant_rdv/fsp/fsp_depth_tile_slice_mask_cs.hlsl");
+            pso_fsp_tile_slice_cell_mark_ = CreateComputePSO("instant_rdv/fsp/fsp_tile_slice_cell_mark_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("instant_rdv/fsp/fsp_update_cs.hlsl");
@@ -2064,8 +2096,11 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass");
 
-                // Multi-pass: screen処理中の競合Atomicをワークバッファへ段階分離して削減する。
-                if(0 != InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_)
+                const int visible_surface_mode = std::clamp(InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_mode_, 0, 2);
+                const bool use_finalize_path = (0 != visible_surface_mode);
+
+                // finalize型の経路では、depth hint workだけを先に初期化する。
+                if(use_finalize_path)
                 {
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Prepare");
 
@@ -2081,11 +2116,11 @@ namespace ngl::render::app
                     p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
                 }
 
-                // 2) 画面空間Depthを集約してセルワークへ反映.
-                if(0 != InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_)
+                if(1 == visible_surface_mode)
                 {
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Accumulate");
 
+                    // Pixel accumulate multipass: 従来pixel単位の候補をwork bufferへ集約する比較用経路。
                     ngl::rhi::DescriptorSetDep desc_set = {};
                     pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
                     pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
@@ -2099,6 +2134,47 @@ namespace ngl::render::app
 
                     p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
                     p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
+                }
+                else if(2 == visible_surface_mode)
+                {
+                    // Tile slice mask: 全pixel depthをtile内で保守的に集約し、重いcell算出をtile/slice単位へ移す。
+                    {
+                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_TileSliceMask");
+
+                        ngl::rhi::DescriptorSetDep desc_set = {};
+                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "RWFspDepthTileSliceMaskBuffer", fsp_depth_tile_slice_mask_buffer_.uav.Get());
+
+                        p_command_list->SetPipelineState(pso_fsp_depth_tile_slice_mask_.Get());
+                        p_command_list->SetDescriptorSet(pso_fsp_depth_tile_slice_mask_.Get(), &desc_set);
+                        pso_fsp_depth_tile_slice_mask_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+
+                        p_command_list->ResourceUavBarrier(fsp_depth_tile_slice_mask_buffer_.buffer.Get());
+                    }
+                    {
+                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_TileSliceCellMark");
+
+                        constexpr u32 k_fsp_depth_tile_size = 8u;
+                        const u32 tile_count_x = (static_cast<u32>(std::max(hw_depth_size.x, 1)) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
+                        const u32 tile_count_y = (static_cast<u32>(std::max(hw_depth_size.y, 1)) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
+                        const u32 tile_count = std::max(1u, tile_count_x * tile_count_y);
+
+                        ngl::rhi::DescriptorSetDep desc_set = {};
+                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "FspDepthTileSliceMaskBuffer", fsp_depth_tile_slice_mask_buffer_.srv.Get());
+                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
+                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
+
+                        p_command_list->SetPipelineState(pso_fsp_tile_slice_cell_mark_.Get());
+                        p_command_list->SetDescriptorSet(pso_fsp_tile_slice_cell_mark_.Get(), &desc_set);
+                        pso_fsp_tile_slice_cell_mark_->DispatchHelper(p_command_list, tile_count, 1, 1);
+
+                        p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
+                        p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
+                    }
                 }
                 else
                 {
@@ -2125,7 +2201,7 @@ namespace ngl::render::app
                 }
 
                 // 3) セルワークから可視セルリスト確定 + 互換ミラー.
-                if(0 != InstantRasterDerivedVoxelScene::dbg_fsp_use_multipass_visible_surface_)
+                if(use_finalize_path)
                 {
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Finalize");
 

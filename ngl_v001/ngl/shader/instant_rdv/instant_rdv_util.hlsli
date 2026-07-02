@@ -73,6 +73,8 @@ Buffer<uint>                          FspCellVisibleFrameBuffer;
 RWBuffer<uint>                        RWFspCellVisibleFrameBuffer;
 Buffer<uint>                          FspCellDepthHintBuffer;
 RWBuffer<uint>                        RWFspCellDepthHintBuffer;
+Buffer<uint>                          FspDepthTileSliceMaskBuffer;
+RWBuffer<uint>                        RWFspDepthTileSliceMaskBuffer;
 
 Texture2D<float4>      FspProbeAtlasTex;
 RWTexture2D<float4>    RWFspProbeAtlasTex;
