@@ -200,6 +200,10 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_finalize_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_tile_slice_mask_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_tile_slice_cell_mark_ = {};
+        // 将来方式: Cell-driven + Depth Min/Max Pyramid.
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_minmax_pyramid_seed_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_minmax_pyramid_downsample_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_cell_depth_pyramid_mark_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_update_ = {};
@@ -264,6 +268,10 @@ namespace ngl::render::app
         ComputeBufferSet fsp_cell_visible_frame_buffer_ = {};
         ComputeBufferSet fsp_cell_depth_hint_buffer_ = {};
         ComputeBufferSet fsp_depth_tile_slice_mask_buffer_ = {};
+        // 全mipを持つdepth min/max pyramid本体。downsample時はmip別SRV/UAVを個別に生成して利用する。
+        ComputeTextureSet fsp_depth_minmax_pyramid_tex_ = {};
+        std::vector<rhi::RefSrvDep> fsp_depth_minmax_pyramid_mip_srvs_ = {};
+        std::vector<rhi::RefUavDep> fsp_depth_minmax_pyramid_mip_uavs_ = {};
         ComputeBufferSet fsp_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
@@ -319,7 +327,8 @@ namespace ngl::render::app
         static int dbg_fsp_lighting_interpolation_enable_;
         static int dbg_fsp_lighting_stochastic_sampling_enable_;
         static int dbg_fsp_probe_lifecycle_enable_;
-        // FSP可視サーフェイス抽出方式を切り替えるデバッグフラグ（0: legacy, 1: pixel multipass, 2: tile slice mask）。
+        // FSP可視サーフェイス抽出方式を切り替えるデバッグフラグ
+        // (0: legacy, 1: pixel multipass, 2: tile slice mask, 3: cell-driven depth pyramid)。
         static int dbg_fsp_visible_surface_mode_;
         static int dbg_fsp_probe_pool_size_;
         static int dbg_fsp_free_probe_count_;

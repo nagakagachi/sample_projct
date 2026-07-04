@@ -103,6 +103,7 @@ namespace ngl::render::app
         case 0: return "0: Legacy 1-pass";
         case 1: return "1: Pixel accumulate multipass";
         case 2: return "2: Full-res depth tile slice mask";
+        case 3: return "3: Cell-driven depth pyramid min/max";
         default: return "Unknown";
         }
     }
@@ -492,13 +493,13 @@ namespace ngl::render::app
                 }
                 {
                     // 可視セル抽出の実行経路を動的切替（計測/デバッグ用途）。
-                    ImGui::SliderInt("Visible Surface Mode", &dbg_fsp_visible_surface_mode_, 0, 2);
+                    ImGui::SliderInt("Visible Surface Mode", &dbg_fsp_visible_surface_mode_, 0, 3);
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
                             dbg_fsp_visible_surface_mode_ = 2;
                         ImGui::EndPopup();
                     }
-                    dbg_fsp_visible_surface_mode_ = std::clamp(dbg_fsp_visible_surface_mode_, 0, 2);
+                    dbg_fsp_visible_surface_mode_ = std::clamp(dbg_fsp_visible_surface_mode_, 0, 3);
                     ImGui::TextDisabled("%s", FspVisibleSurfaceModeLabel(dbg_fsp_visible_surface_mode_));
                 }
                 {
@@ -695,6 +696,9 @@ namespace ngl::render::app
         assp_probe_ray_result_buffer_ = {};
         assp_probe_total_ray_count_readback_buffer_ = {};
         fsp_depth_tile_slice_mask_buffer_ = {};
+        fsp_depth_minmax_pyramid_tex_ = {};
+        fsp_depth_minmax_pyramid_mip_srvs_.clear();
+        fsp_depth_minmax_pyramid_mip_uavs_.clear();
 
         for(int i = 0; i < 2; ++i)
         {
@@ -890,6 +894,57 @@ namespace ngl::render::app
                 return false;
             }
         }
+        {
+            // Cell-driven方式用のdepth min/max pyramid。
+            // 1枚のR32G32_FLOAT textureへ全mipを確保し、mip毎のSRV/UAVを個別生成してdownsampleに利用する。
+            rhi::TextureDep::Desc desc = {};
+            desc.type = rhi::ETextureType::Texture2D;
+            desc.width = assp_probe_base_resolution_x;
+            desc.height = assp_probe_base_resolution_y;
+            desc.depth = 1;
+            desc.array_size = 1;
+            desc.format = rhi::EResourceFormat::Format_R32G32_FLOAT;
+            desc.sample_count = 1;
+            desc.bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess;
+            desc.initial_state = rhi::EResourceState::Common;
+
+            // width/heightの大きい方を基準に、1x1まで到達するmip段数を確保する。
+            const u32 max_dim = static_cast<u32>(std::max(assp_probe_base_resolution_x, assp_probe_base_resolution_y));
+            u32 mip_count = 1u;
+            // D3D12のmip上限に合わせ、各段は切り捨て(>>1)で縮小する。
+            // 1920pxの場合: 1920->960->...->1 で 11 levels。
+            for(u32 dim = std::max(max_dim, 1u); dim > 1u; dim = dim >> 1u)
+            {
+                ++mip_count;
+            }
+            desc.mip_count = mip_count;
+
+            if(!fsp_depth_minmax_pyramid_tex_.Initialize(p_device, desc, "InstantRdv_FspDepthMinMaxPyramidTex"))
+            {
+                return false;
+            }
+
+            fsp_depth_minmax_pyramid_mip_srvs_.resize(mip_count);
+            fsp_depth_minmax_pyramid_mip_uavs_.resize(mip_count);
+            // downsample passは「src mipをSRVで読む / dst mipをUAVで書く」を段ごとに切り替えるため、
+            // mip単位のViewをあらかじめ全段分生成しておく。
+            for(u32 mip_index = 0; mip_index < mip_count; ++mip_index)
+            {
+                auto mip_srv = rhi::RefSrvDep(new rhi::ShaderResourceViewDep());
+                if(!mip_srv->InitializeAsTexture(p_device, fsp_depth_minmax_pyramid_tex_.texture.Get(), mip_index, 1, 0, 1))
+                {
+                    return false;
+                }
+                fsp_depth_minmax_pyramid_mip_srvs_[mip_index] = mip_srv;
+
+                auto mip_uav = rhi::RefUavDep(new rhi::UnorderedAccessViewDep());
+                if(!mip_uav->InitializeRwTexture(p_device, fsp_depth_minmax_pyramid_tex_.texture.Get(), mip_index, 0, 1))
+                {
+                    return false;
+                }
+                fsp_depth_minmax_pyramid_mip_uavs_[mip_index] = mip_uav;
+            }
+        }
 
         return true;
     }
@@ -971,6 +1026,9 @@ namespace ngl::render::app
             pso_fsp_visible_surface_finalize_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_finalize_cs.hlsl");
             pso_fsp_depth_tile_slice_mask_ = CreateComputePSO("instant_rdv/fsp/fsp_depth_tile_slice_mask_cs.hlsl");
             pso_fsp_tile_slice_cell_mark_ = CreateComputePSO("instant_rdv/fsp/fsp_tile_slice_cell_mark_cs.hlsl");
+            pso_fsp_depth_minmax_pyramid_seed_ = CreateComputePSO("instant_rdv/fsp/fsp_depth_minmax_pyramid_seed_cs.hlsl");
+            pso_fsp_depth_minmax_pyramid_downsample_ = CreateComputePSO("instant_rdv/fsp/fsp_depth_minmax_pyramid_downsample_cs.hlsl");
+            pso_fsp_cell_depth_pyramid_mark_ = CreateComputePSO("instant_rdv/fsp/fsp_cell_depth_pyramid_mark_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("instant_rdv/fsp/fsp_update_cs.hlsl");
@@ -2096,7 +2154,7 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass");
 
-                const int visible_surface_mode = std::clamp(InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_mode_, 0, 2);
+                const int visible_surface_mode = std::clamp(InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_mode_, 0, 3);
                 const bool use_finalize_path = (0 != visible_surface_mode);
 
                 // finalize型の経路では、depth hint workだけを先に初期化する。
@@ -2171,6 +2229,72 @@ namespace ngl::render::app
                         p_command_list->SetPipelineState(pso_fsp_tile_slice_cell_mark_.Get());
                         p_command_list->SetDescriptorSet(pso_fsp_tile_slice_cell_mark_.Get(), &desc_set);
                         pso_fsp_tile_slice_cell_mark_->DispatchHelper(p_command_list, tile_count, 1, 1);
+
+                        p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
+                        p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
+                    }
+                }
+                else if(3 == visible_surface_mode)
+                {
+                    // Cell-driven + depth pyramid:
+                    // 1) full-res depthからmin/max pyramidを構築
+                    // 2) 各FSP cellをscreen投影し、pyramid rangeと交差するセルのみmark
+                    fsp_depth_minmax_pyramid_tex_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+                    {
+                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_DepthPyramidSeed");
+
+                        ngl::rhi::DescriptorSetDep desc_set = {};
+                        pso_fsp_depth_minmax_pyramid_seed_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                        pso_fsp_depth_minmax_pyramid_seed_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                        pso_fsp_depth_minmax_pyramid_seed_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                        pso_fsp_depth_minmax_pyramid_seed_->SetView(&desc_set, "RWFspDepthMinMaxPyramidMip0Tex", fsp_depth_minmax_pyramid_mip_uavs_[0].Get());
+
+                        p_command_list->SetPipelineState(pso_fsp_depth_minmax_pyramid_seed_.Get());
+                        p_command_list->SetDescriptorSet(pso_fsp_depth_minmax_pyramid_seed_.Get(), &desc_set);
+                        pso_fsp_depth_minmax_pyramid_seed_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+
+                        p_command_list->ResourceUavBarrier(fsp_depth_minmax_pyramid_tex_.texture.Get());
+                    }
+                    {
+                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_DepthPyramidDownsample");
+
+                        const u32 mip_count = std::max<u32>(1u, fsp_depth_minmax_pyramid_tex_.texture->GetMipCount());
+                        // 逐次downsampleのため dst_mip は 1..N-1 を順方向に処理する。
+                        // 各段のUAV書き込み後にbarrierを入れて、次段SRV読み込みの可視性を保証する。
+                        for(u32 dst_mip = 1u; dst_mip < mip_count; ++dst_mip)
+                        {
+                            const u32 dst_width = fsp_depth_minmax_pyramid_tex_.texture->GetWidth(dst_mip);
+                            const u32 dst_height = fsp_depth_minmax_pyramid_tex_.texture->GetHeight(dst_mip);
+
+                            ngl::rhi::DescriptorSetDep desc_set = {};
+                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "RWFspDepthMinMaxPyramidSrcTex", fsp_depth_minmax_pyramid_mip_uavs_[dst_mip - 1].Get());
+                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "RWFspDepthMinMaxPyramidDstTex", fsp_depth_minmax_pyramid_mip_uavs_[dst_mip].Get());
+
+                            p_command_list->SetPipelineState(pso_fsp_depth_minmax_pyramid_downsample_.Get());
+                            p_command_list->SetDescriptorSet(pso_fsp_depth_minmax_pyramid_downsample_.Get(), &desc_set);
+                            pso_fsp_depth_minmax_pyramid_downsample_->DispatchHelper(
+                                p_command_list,
+                                std::max<u32>(1u, dst_width),
+                                std::max<u32>(1u, dst_height),
+                                1);
+
+                            p_command_list->ResourceUavBarrier(fsp_depth_minmax_pyramid_tex_.texture.Get());
+                        }
+                    }
+                    {
+                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_CellDepthPyramidMark");
+                        fsp_depth_minmax_pyramid_tex_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+
+                        ngl::rhi::DescriptorSetDep desc_set = {};
+                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "FspDepthMinMaxPyramidTex", fsp_depth_minmax_pyramid_tex_.srv.Get());
+                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
+                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
+
+                        p_command_list->SetPipelineState(pso_fsp_cell_depth_pyramid_mark_.Get());
+                        p_command_list->SetDescriptorSet(pso_fsp_cell_depth_pyramid_mark_.Get(), &desc_set);
+                        pso_fsp_cell_depth_pyramid_mark_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
 
                         p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
                         p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
