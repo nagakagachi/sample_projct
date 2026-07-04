@@ -5,10 +5,11 @@ FSP可視サーフェイス抽出用のtile slice cell markパス。
 tileのdepth slice min/max rangeから保守的なworld AABBを作り、交差しうるFSP cellをmarkする。
 #endif
 
-#define FSP_DEPTH_TILE_SIZE 8
-#define FSP_DEPTH_SLICE_COUNT 32
+// 1スレッド=1tile担当でcell markを進めるため、x方向の並列数を定義する。
+// 大きくしすぎると空回りスレッドが増え、小さすぎるとタイル走査の並列性が不足する。
 #define FSP_TILE_MARK_THREAD_GROUP_SIZE 64
 
+#include "fsp_depth_tile_slice_mask_common.hlsli"
 #include "../instant_rdv_util.hlsli"
 #include "../../include/scene_view_struct.hlsli"
 
@@ -16,12 +17,12 @@ ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 
 static const uint k_fsp_depth_hint_visible_flag = 0u;
 
-float FspDecodeDepthLogQDistance(uint depth_q)
+uint FspDepthRangePaddingQ(uint cascade_index)
 {
-    const float log_min = log2(0.05);
-    const float log_max = log2(65535.0);
-    const float depth_t = saturate(float(depth_q) / 65534.0);
-    return exp2(lerp(log_min, log_max, depth_t));
+    // ActiveProbe増加を抑えるための最終調整:
+    // - cascade0 (近景) は1量子だけ拡張し、動的オブジェクト境界での取り逃しを防ぐ
+    // - cascade1以降 (中遠景) は拡張しないことで、広いcellへの過剰markを抑制する
+    return (cascade_index == 0u) ? 1u : 0u;
 }
 
 float3 FspTileSliceCornerWs(float2 uv, float view_z)
@@ -91,23 +92,16 @@ void main_cs(
     [loop]
     for(uint slice_index = 0u; slice_index < FSP_DEPTH_SLICE_COUNT; ++slice_index)
     {
-        const uint slice_range_packed = FspDepthTileSliceMaskBuffer[tile_index * FSP_DEPTH_SLICE_COUNT + slice_index];
-        if(slice_range_packed == 0xffffffffu)
+        const uint slice_range_packed = FspDepthTileSliceMaskBuffer[FspDepthTileSliceLinearIndex(tile_index, slice_index)];
+        if(slice_range_packed == k_fsp_depth_tile_slice_range_unused)
         {
             continue;
         }
 
         // bitmaskだけでは遠景sliceが巨大な奥行き区間になり過剰markするため、実depth rangeを復元する。
-        const uint min_depth_q = slice_range_packed >> 16;
-        const uint max_depth_q = slice_range_packed & 0xffffu;
-        const uint padded_min_depth_q = (min_depth_q > 0u) ? (min_depth_q - 1u) : 0u;
-        const uint padded_max_depth_q = min(max_depth_q + 1u, 65534u);
-        const float view_z0 = FspDecodeDepthLogQDistance(padded_min_depth_q);
-        const float view_z1 = FspDecodeDepthLogQDistance(padded_max_depth_q);
-
-        float3 world_min = float3( 3.402823466e+38,  3.402823466e+38,  3.402823466e+38);
-        float3 world_max = float3(-3.402823466e+38, -3.402823466e+38, -3.402823466e+38);
-
+        uint min_depth_q = 0u;
+        uint max_depth_q = 0u;
+        FspUnpackDepthTileSliceRange(slice_range_packed, min_depth_q, max_depth_q);
         const float2 uvs[4] =
         {
             float2(uv_min.x, uv_min.y),
@@ -115,15 +109,6 @@ void main_cs(
             float2(uv_min.x, uv_max.y),
             float2(uv_max.x, uv_max.y)
         };
-
-        [unroll]
-        for(uint corner_index = 0u; corner_index < 4u; ++corner_index)
-        {
-            const float3 ws0 = FspTileSliceCornerWs(uvs[corner_index], view_z0);
-            const float3 ws1 = FspTileSliceCornerWs(uvs[corner_index], view_z1);
-            world_min = min(world_min, min(ws0, ws1));
-            world_max = max(world_max, max(ws0, ws1));
-        }
 
         const uint cascade_count = FspCascadeCount();
         [unroll]
@@ -133,6 +118,27 @@ void main_cs(
             {
                 break;
             }
+
+            // 量子化depth rangeをcascade別に微調整して、品質(近景の欠落防止)と
+            // 負荷(中遠景の過剰アクティブ化抑制)のバランスを取る。
+            const uint depth_padding_q = FspDepthRangePaddingQ(cascade_index);
+            const uint padded_min_depth_q = (min_depth_q > depth_padding_q) ? (min_depth_q - depth_padding_q) : 0u;
+            const uint padded_max_depth_q = min(max_depth_q + depth_padding_q, k_fsp_depth_q_max);
+            const float view_z0 = FspDecodeDepthLogQDistance(padded_min_depth_q);
+            const float view_z1 = FspDecodeDepthLogQDistance(padded_max_depth_q);
+
+            float3 world_min = float3( 3.402823466e+38,  3.402823466e+38,  3.402823466e+38);
+            float3 world_max = float3(-3.402823466e+38, -3.402823466e+38, -3.402823466e+38);
+
+            [unroll]
+            for(uint corner_index = 0u; corner_index < 4u; ++corner_index)
+            {
+                const float3 ws0 = FspTileSliceCornerWs(uvs[corner_index], view_z0);
+                const float3 ws1 = FspTileSliceCornerWs(uvs[corner_index], view_z1);
+                world_min = min(world_min, min(ws0, ws1));
+                world_max = max(world_max, max(ws0, ws1));
+            }
+
             FspMarkCellRange(cascade_index, world_min, world_max);
         }
     }
