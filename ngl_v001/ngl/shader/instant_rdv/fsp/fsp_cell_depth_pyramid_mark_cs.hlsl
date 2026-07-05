@@ -82,12 +82,13 @@ bool FspBuildCellScreenAabbAndDepthRange(
     out_uv_max = uv_max_clamped;
     return true;
 }
-
+#define FSP_DEPTH_PYRAMID_MIP_SPAN_THRESHOLD 4.0 // 4では深度差が大きいタイルで過剰に広い範囲のProbeがActive化される模様.
 bool FspHasDepthIntersection(float2 uv_min, float2 uv_max, float cell_depth_min, float cell_depth_max)
 {
     uint base_width = 1;
     uint base_height = 1;
     uint mip_count = 1;
+    // このpyramidは mip0 が half-res。ここで得るbase解像度は「深度判定用の基準グリッド」になる。
     FspDepthMinMaxPyramidTex.GetDimensions(0, base_width, base_height, mip_count);
 
     float2 span_px = (uv_max - uv_min) * float2(base_width, base_height);
@@ -95,7 +96,7 @@ bool FspHasDepthIntersection(float2 uv_min, float2 uv_max, float cell_depth_min,
     uint mip_index = 0u;
     // 1セルあたりのサンプル数が増えすぎないよう、AABBサイズに応じてmipを選択する。
     // 4px閾値は「広いAABBは粗いmipで保守判定、狭いAABBは細かいmipで過剰mark抑制」のバランス点。
-    while((span_max > 4.0) && ((mip_index + 1u) < mip_count))
+    while((span_max > FSP_DEPTH_PYRAMID_MIP_SPAN_THRESHOLD) && ((mip_index + 1u) < mip_count))
     {
         span_max *= 0.5;
         ++mip_index;

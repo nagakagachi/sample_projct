@@ -201,7 +201,6 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_tile_slice_mask_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_tile_slice_cell_mark_ = {};
         // 将来方式: Cell-driven + Depth Min/Max Pyramid.
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_minmax_pyramid_seed_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_minmax_pyramid_downsample_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_cell_depth_pyramid_mark_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
@@ -268,9 +267,9 @@ namespace ngl::render::app
         ComputeBufferSet fsp_cell_visible_frame_buffer_ = {};
         ComputeBufferSet fsp_cell_depth_hint_buffer_ = {};
         ComputeBufferSet fsp_depth_tile_slice_mask_buffer_ = {};
-        // 全mipを持つdepth min/max pyramid本体。downsample時はmip別SRV/UAVを個別に生成して利用する。
+        // 全mipを持つdepth min/max pyramid本体。
+        // mip0はフル解像度ではなく半解像度で生成し、以降をdownsampleで構築する。
         ComputeTextureSet fsp_depth_minmax_pyramid_tex_ = {};
-        std::vector<rhi::RefSrvDep> fsp_depth_minmax_pyramid_mip_srvs_ = {};
         std::vector<rhi::RefUavDep> fsp_depth_minmax_pyramid_mip_uavs_ = {};
         ComputeBufferSet fsp_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
