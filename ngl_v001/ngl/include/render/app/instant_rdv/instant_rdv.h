@@ -200,6 +200,10 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_finalize_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_tile_slice_mask_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_tile_slice_cell_mark_ = {};
+        // 新方式 SurfacePass: clear -> inject -> compact.
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_clear_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_inject_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
         // 将来方式: Cell-driven + Depth Min/Max Pyramid.
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_minmax_pyramid_downsample_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_cell_depth_pyramid_mark_ = {};
@@ -266,7 +270,11 @@ namespace ngl::render::app
         // 可視セル抽出用ワークバッファ（frame stamp / depth hint）。
         ComputeBufferSet fsp_cell_visible_frame_buffer_ = {};
         ComputeBufferSet fsp_cell_depth_hint_buffer_ = {};
+        // mode2 TileSliceMask用。screen 8x8 tile x log-depth slice のrangeを保持する。
         ComputeBufferSet fsp_depth_tile_slice_mask_buffer_ = {};
+        // mode4 SurfaceMask用。1bit = 1 global cell index の検出マスク。
+        // clear -> inject -> compact の3パス内だけで使い、最終的には SurfaceProbeCellList へ変換する。
+        ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};
         // 全mipを持つdepth min/max pyramid本体。
         // mip0はフル解像度ではなく半解像度で生成し、以降をdownsampleで構築する。
         ComputeTextureSet fsp_depth_minmax_pyramid_tex_ = {};
