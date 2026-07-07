@@ -96,24 +96,6 @@ namespace ngl::render::app
         }
     }
 
-    const char* FspVisibleSurfaceModeLabel(int mode)
-    {
-        // FSP SurfacePass is intentionally selectable at runtime so each
-        // extraction strategy can be compared without changing code.
-        // mode2 is kept as the existing tile-slice path for regression checks;
-        // the BBV-style bitmask prototype is added as mode4 instead of
-        // replacing existing behavior.
-        switch(mode)
-        {
-        case 0: return "0: Legacy 1-pass";
-        case 1: return "1: Pixel accumulate multipass";
-        case 2: return "2: Full-res depth tile slice mask";
-        case 3: return "3: Cell-driven depth pyramid min/max";
-        case 4: return "4: Surface mask clear/inject/compact";
-        default: return "Unknown";
-        }
-    }
-
     struct InstantRdvGiDispatchEntry
     {
         InstantRdvGiSolutionMode mode;
@@ -193,8 +175,6 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_interpolation_enable_ = k_default_instant_rdv_param.fsp_lighting_interpolation_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_stochastic_sampling_enable_ = k_default_instant_rdv_param.fsp_lighting_stochastic_sampling_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
-    // 新規tile slice経路をデフォルトにしつつ、比較検証のため旧経路へ戻せるようにする。
-    int InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_mode_ = 2;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ = 0;
@@ -498,20 +478,6 @@ namespace ngl::render::app
                     }
                 }
                 {
-                    // 可視セル抽出の実行経路を動的切替（計測/デバッグ用途）。
-                    // Default is mode2, which is the established tile-slice path.
-                    // mode4 is the new SurfaceMask prototype and must be selected
-                    // explicitly so existing captures keep the same behavior.
-                    ImGui::SliderInt("Visible Surface Mode", &dbg_fsp_visible_surface_mode_, 0, 4);
-                    if (ImGui::BeginPopupContextItem()) {
-                        if (ImGui::MenuItem("Reset to Default"))
-                            dbg_fsp_visible_surface_mode_ = 2;
-                        ImGui::EndPopup();
-                    }
-                    dbg_fsp_visible_surface_mode_ = std::clamp(dbg_fsp_visible_surface_mode_, 0, 4);
-                    ImGui::TextDisabled("%s", FspVisibleSurfaceModeLabel(dbg_fsp_visible_surface_mode_));
-                }
-                {
                     ImGui::SliderFloat("Relocation Offset Scale", &dbg_fsp_relocation_offset_scale_for_cascade_cell_size_, 0.01f, 10.0f);
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
@@ -704,10 +670,7 @@ namespace ngl::render::app
         assp_probe_ray_query_buffer_ = {};
         assp_probe_ray_result_buffer_ = {};
         assp_probe_total_ray_count_readback_buffer_ = {};
-        fsp_depth_tile_slice_mask_buffer_ = {};
         fsp_surface_cell_mask_buffer_ = {};
-        fsp_depth_minmax_pyramid_tex_ = {};
-        fsp_depth_minmax_pyramid_mip_uavs_.clear();
 
         for(int i = 0; i < 2; ++i)
         {
@@ -885,25 +848,6 @@ namespace ngl::render::app
             }
         }
         {
-            constexpr u32 k_fsp_depth_tile_size = 8u;
-            const u32 fsp_depth_tile_count_x = (static_cast<u32>(assp_probe_base_resolution_x) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
-            const u32 fsp_depth_tile_count_y = (static_cast<u32>(assp_probe_base_resolution_y) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
-            constexpr u32 k_fsp_depth_slice_count = 32u;
-            const u32 fsp_depth_tile_count = std::max(1u, fsp_depth_tile_count_x * fsp_depth_tile_count_y);
-            if(!fsp_depth_tile_slice_mask_buffer_.InitializeAsTyped(
-                p_device,
-                rhi::BufferDep::Desc{
-                    .element_byte_size = sizeof(uint32_t),
-                    .element_count     = fsp_depth_tile_count * k_fsp_depth_slice_count,
-                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
-                    .heap_type = rhi::EResourceHeapType::Default},
-                rhi::EResourceFormat::Format_R32_UINT,
-                "InstantRdv_FspDepthTileSliceMaskBuffer"))
-            {
-                return false;
-            }
-        }
-        {
             const u32 surface_mask_word_count = std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u);
             if(!fsp_surface_cell_mask_buffer_.InitializeAsTyped(
                 p_device,
@@ -918,50 +862,6 @@ namespace ngl::render::app
                 return false;
             }
         }
-        {
-            // Cell-driven方式用のdepth min/max pyramid。
-            // mip0は半解像度で生成し、以降をdownsampleで構築する。
-            rhi::TextureDep::Desc desc = {};
-            desc.type = rhi::ETextureType::Texture2D;
-            desc.width = (assp_probe_base_resolution_x + 1) / 2;
-            desc.height = (assp_probe_base_resolution_y + 1) / 2;
-            desc.depth = 1;
-            desc.array_size = 1;
-            desc.format = rhi::EResourceFormat::Format_R32G32_FLOAT;
-            desc.sample_count = 1;
-            desc.bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess;
-            desc.initial_state = rhi::EResourceState::Common;
-
-            // width/heightの大きい方を基準に、1x1まで到達するmip段数を確保する。
-            const u32 max_dim = static_cast<u32>(std::max(desc.width, desc.height));
-            u32 mip_count = 1u;
-            // D3D12のmip上限に合わせ、各段は切り捨て(>>1)で縮小する。
-            // 1920pxの場合: 1920->960->...->1 で 11 levels。
-            for(u32 dim = std::max(max_dim, 1u); dim > 1u; dim = dim >> 1u)
-            {
-                ++mip_count;
-            }
-            desc.mip_count = mip_count;
-
-            if(!fsp_depth_minmax_pyramid_tex_.Initialize(p_device, desc, "InstantRdv_FspDepthMinMaxPyramidTex"))
-            {
-                return false;
-            }
-
-            fsp_depth_minmax_pyramid_mip_uavs_.resize(mip_count);
-            // downsample passは「src mip / dst mip」をUAV同士で段ごとに切り替える。
-            // 全resourceをUnorderedAccess layoutに維持するため、mip単位UAVを全段分生成しておく。
-            for(u32 mip_index = 0; mip_index < mip_count; ++mip_index)
-            {
-                auto mip_uav = rhi::RefUavDep(new rhi::UnorderedAccessViewDep());
-                if(!mip_uav->InitializeRwTexture(p_device, fsp_depth_minmax_pyramid_tex_.texture.Get(), mip_index, 0, 1))
-                {
-                    return false;
-                }
-                fsp_depth_minmax_pyramid_mip_uavs_[mip_index] = mip_uav;
-            }
-        }
-
         return true;
     }
 
@@ -1036,17 +936,9 @@ namespace ngl::render::app
 
             pso_fsp_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("instant_rdv/fsp/fsp_begin_update_cs.hlsl");
-            pso_fsp_visible_surface_proc_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_pass_cs.hlsl");
-            pso_fsp_visible_surface_prepare_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_prepare_cs.hlsl");
-            pso_fsp_visible_surface_accumulate_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_accumulate_cs.hlsl");
-            pso_fsp_visible_surface_finalize_ = CreateComputePSO("instant_rdv/fsp/fsp_screen_space_finalize_cs.hlsl");
-            pso_fsp_depth_tile_slice_mask_ = CreateComputePSO("instant_rdv/fsp/fsp_depth_tile_slice_mask_cs.hlsl");
-            pso_fsp_tile_slice_cell_mark_ = CreateComputePSO("instant_rdv/fsp/fsp_tile_slice_cell_mark_cs.hlsl");
             pso_fsp_surface_mask_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_clear_cs.hlsl");
             pso_fsp_surface_mask_inject_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_inject_cs.hlsl");
             pso_fsp_surface_mask_compact_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_compact_cs.hlsl");
-            pso_fsp_depth_minmax_pyramid_downsample_ = CreateComputePSO("instant_rdv/fsp/fsp_depth_minmax_pyramid_downsample_cs.hlsl");
-            pso_fsp_cell_depth_pyramid_mark_ = CreateComputePSO("instant_rdv/fsp/fsp_cell_depth_pyramid_mark_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("instant_rdv/fsp/fsp_update_cs.hlsl");
@@ -1262,28 +1154,6 @@ namespace ngl::render::app
                                                .heap_type = rhi::EResourceHeapType::Default},
                                            rhi::EResourceFormat::Format_R32_UINT
                                         ,  resource_name.c_str());
-        }
-        {
-            fsp_cell_visible_frame_buffer_.InitializeAsTyped(p_device,
-                                           rhi::BufferDep::Desc{
-                                              .element_byte_size = sizeof(uint32_t),
-                                              .element_count     = fsp_total_cell_count_,
-
-                                              .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
-                                              .heap_type = rhi::EResourceHeapType::Default},
-                                          rhi::EResourceFormat::Format_R32_UINT
-                                        ,  "InstantRdv_FspCellVisibleFrameBuffer");
-        }
-        {
-            fsp_cell_depth_hint_buffer_.InitializeAsTyped(p_device,
-                                          rhi::BufferDep::Desc{
-                                              .element_byte_size = sizeof(uint32_t),
-                                              .element_count     = fsp_total_cell_count_,
-
-                                              .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
-                                              .heap_type = rhi::EResourceHeapType::Default},
-                                          rhi::EResourceFormat::Format_R32_UINT
-                                        ,  "InstantRdv_FspCellDepthHintBuffer");
         }
         {
             fsp_visible_surface_list_.InitializeAsTyped(p_device,
@@ -1557,8 +1427,6 @@ namespace ngl::render::app
                 pso_fsp_clear_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspActiveProbeListPrev", fsp_active_probe_list_[0].uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWFspActiveProbeListCurr", fsp_active_probe_list_[1].uav.Get());
-                pso_fsp_clear_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
-                pso_fsp_clear_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
 
@@ -1572,8 +1440,6 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_probe_free_stack_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[0].buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[1].buffer.Get());
-                p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
-                p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
                 p_command_list->ResourceBarrier(fsp_probe_atlas_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
             }
@@ -2172,272 +2038,67 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass");
 
-                const int visible_surface_mode = std::clamp(InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_mode_, 0, 4);
-                // SurfacePass produces SurfaceProbeCellList in two different ways:
-                // - mode1/2/3 mark per-cell work buffers first, then the common
-                //   finalize pass compacts visible cells into SurfaceProbeCellList.
-                // - mode0 and mode4 write SurfaceProbeCellList directly, so running
-                //   finalize after them would double-build or overwrite the list.
-                const bool use_finalize_path = (1 == visible_surface_mode) || (2 == visible_surface_mode) || (3 == visible_surface_mode);
-
-                // finalize型の経路では、depth hint workだけを先に初期化する。
-                if(use_finalize_path)
+                // SurfaceMask is the only FSP surface extraction path.
+                // A single bit represents one global FSP cell across all cascades:
+                // 1) Clear all mask words for this frame.
+                // 2) Scan depth and OR matching cell bits. Multiple pixels that hit
+                //    the same 32-cell word are wave-merged in the shader.
+                // 3) Scan set bits once and build SurfaceProbeCellList directly.
+                // The old finalize-style work buffers are no longer allocated.
                 {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Prepare");
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskClear");
 
-                    // 1) セルdepth hintワーク初期化.
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_fsp_visible_surface_prepare_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                    pso_fsp_visible_surface_prepare_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
-
-                    p_command_list->SetPipelineState(pso_fsp_visible_surface_prepare_.Get());
-                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_prepare_.Get(), &desc_set);
-                    pso_fsp_visible_surface_prepare_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
-
-                    p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
-                }
-
-                if(1 == visible_surface_mode)
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Accumulate");
-
-                    // Pixel accumulate multipass: 従来pixel単位の候補をwork bufferへ集約する比較用経路。
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
-                    pso_fsp_visible_surface_accumulate_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
-
-                    p_command_list->SetPipelineState(pso_fsp_visible_surface_accumulate_.Get());
-                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_accumulate_.Get(), &desc_set);
-                    pso_fsp_visible_surface_accumulate_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
-
-                    p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
-                }
-                else if(2 == visible_surface_mode)
-                {
-                    // mode2: existing tile-slice path.
-                    // This path is kept unchanged for performance/quality comparison.
-                    // Pass A scans full-resolution depth in 8x8 tiles and records
-                    // used log-depth slices plus actual min/max depth per slice.
-                    // Pass B expands each tile-slice range into conservative world
-                    // bounds and marks all potentially intersecting FSP cells.
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_TileSliceMask");
-
-                        ngl::rhi::DescriptorSetDep desc_set = {};
-                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                        pso_fsp_depth_tile_slice_mask_->SetView(&desc_set, "RWFspDepthTileSliceMaskBuffer", fsp_depth_tile_slice_mask_buffer_.uav.Get());
-
-                        p_command_list->SetPipelineState(pso_fsp_depth_tile_slice_mask_.Get());
-                        p_command_list->SetDescriptorSet(pso_fsp_depth_tile_slice_mask_.Get(), &desc_set);
-                        pso_fsp_depth_tile_slice_mask_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
-
-                        p_command_list->ResourceUavBarrier(fsp_depth_tile_slice_mask_buffer_.buffer.Get());
-                    }
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_TileSliceCellMark");
-
-                        // One dispatch thread handles one screen tile. The shader
-                        // loops over depth slices and cascades for that tile, so the
-                        // dispatch count is tile_count rather than pixel count.
-                        constexpr u32 k_fsp_depth_tile_size = 8u;
-                        const u32 tile_count_x = (static_cast<u32>(std::max(hw_depth_size.x, 1)) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
-                        const u32 tile_count_y = (static_cast<u32>(std::max(hw_depth_size.y, 1)) + k_fsp_depth_tile_size - 1u) / k_fsp_depth_tile_size;
-                        const u32 tile_count = std::max(1u, tile_count_x * tile_count_y);
-
-                        ngl::rhi::DescriptorSetDep desc_set = {};
-                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "FspDepthTileSliceMaskBuffer", fsp_depth_tile_slice_mask_buffer_.srv.Get());
-                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
-                        pso_fsp_tile_slice_cell_mark_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
-
-                        p_command_list->SetPipelineState(pso_fsp_tile_slice_cell_mark_.Get());
-                        p_command_list->SetDescriptorSet(pso_fsp_tile_slice_cell_mark_.Get(), &desc_set);
-                        pso_fsp_tile_slice_cell_mark_->DispatchHelper(p_command_list, tile_count, 1, 1);
-
-                        p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
-                        p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
-                    }
-                }
-                else if(4 == visible_surface_mode)
-                {
-                    // mode4: BBV-style SurfaceMask prototype.
-                    // The goal is to minimize UAV traffic compared with per-pixel
-                    // append/list writes. A single bit represents one global FSP
-                    // cell across all cascades:
-                    // 1) Clear all mask words for this frame.
-                    // 2) Scan depth and OR matching cell bits. Multiple pixels that
-                    //    hit the same 32-cell word are wave-merged in the shader so
-                    //    they usually become one InterlockedOr.
-                    // 3) Scan set bits once and build SurfaceProbeCellList directly.
-                    // Because step 3 already mirrors frame/depth state, the common
-                    // finalize pass is intentionally skipped for this mode.
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskClear");
-
-                        fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
-
-                        ngl::rhi::DescriptorSetDep desc_set = {};
-                        pso_fsp_surface_mask_clear_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                        pso_fsp_surface_mask_clear_->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
-
-                        p_command_list->SetPipelineState(pso_fsp_surface_mask_clear_.Get());
-                        p_command_list->SetDescriptorSet(pso_fsp_surface_mask_clear_.Get(), &desc_set);
-                        pso_fsp_surface_mask_clear_->DispatchHelper(
-                            p_command_list,
-                            std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
-                            1,
-                            1);
-
-                        p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
-                    }
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskInject");
-
-                        ngl::rhi::DescriptorSetDep desc_set = {};
-                        pso_fsp_surface_mask_inject_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                        pso_fsp_surface_mask_inject_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                        pso_fsp_surface_mask_inject_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                        pso_fsp_surface_mask_inject_->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
-
-                        p_command_list->SetPipelineState(pso_fsp_surface_mask_inject_.Get());
-                        p_command_list->SetDescriptorSet(pso_fsp_surface_mask_inject_.Get(), &desc_set);
-                        pso_fsp_surface_mask_inject_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
-
-                        p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
-                    }
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskCompact");
-
-                        // Compact dispatch is based on mask words, not pixels. Each
-                        // thread consumes up to 32 cells and appends only set bits.
-                        fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
-
-                        ngl::rhi::DescriptorSetDep desc_set = {};
-                        pso_fsp_surface_mask_compact_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                        pso_fsp_surface_mask_compact_->SetView(&desc_set, "FspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.srv.Get());
-                        pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
-                        pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
-                        pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
-                        pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
-
-                        p_command_list->SetPipelineState(pso_fsp_surface_mask_compact_.Get());
-                        p_command_list->SetDescriptorSet(pso_fsp_surface_mask_compact_.Get(), &desc_set);
-                        pso_fsp_surface_mask_compact_->DispatchHelper(
-                            p_command_list,
-                            std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
-                            1,
-                            1);
-
-                        p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
-                        p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
-                        p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
-                        p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
-                    }
-                }
-                else if(3 == visible_surface_mode)
-                {
-                    // Cell-driven + depth pyramid:
-                    // 1) full-res depth から half-res mip0 を生成
-                    // 2) mip0 から最小サイズまで downsample
-                    // 3) 各FSP cellをscreen投影し、pyramid rangeと交差するセルのみmark
-                    fsp_depth_minmax_pyramid_tex_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_DepthPyramidBuild");
-
-                        const u32 mip_count = std::max<u32>(1u, fsp_depth_minmax_pyramid_tex_.texture->GetMipCount());
-                        // mip0はhalf-res。dst_mip==0 のときだけ src に hardware depth を使い、
-                        // dst_mip>=1 は前段mipをsrcとして最小サイズまで縮小する。
-                        for(u32 dst_mip = 0u; dst_mip < mip_count; ++dst_mip)
-                        {
-                            const u32 dst_width = fsp_depth_minmax_pyramid_tex_.texture->GetWidth(dst_mip);
-                            const u32 dst_height = fsp_depth_minmax_pyramid_tex_.texture->GetHeight(dst_mip);
-
-                            ngl::rhi::DescriptorSetDep desc_set = {};
-                            // dst_mip==0 (half-res mip0生成) ではsrcは未使用。
-                            // 同一subresourceをsrc/dstで重ねないため、可能なら別mipをダミーで束縛する。
-                            const u32 src_mip = (dst_mip == 0u) ? ((mip_count > 1u) ? 1u : 0u) : (dst_mip - 1u);
-                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "RWFspDepthMinMaxPyramidSrcTex", fsp_depth_minmax_pyramid_mip_uavs_[src_mip].Get());
-                            pso_fsp_depth_minmax_pyramid_downsample_->SetView(&desc_set, "RWFspDepthMinMaxPyramidDstTex", fsp_depth_minmax_pyramid_mip_uavs_[dst_mip].Get());
-
-                            p_command_list->SetPipelineState(pso_fsp_depth_minmax_pyramid_downsample_.Get());
-                            p_command_list->SetDescriptorSet(pso_fsp_depth_minmax_pyramid_downsample_.Get(), &desc_set);
-                            pso_fsp_depth_minmax_pyramid_downsample_->DispatchHelper(
-                                p_command_list,
-                                std::max<u32>(1u, dst_width),
-                                std::max<u32>(1u, dst_height),
-                                1);
-
-                            p_command_list->ResourceUavBarrier(fsp_depth_minmax_pyramid_tex_.texture.Get());
-                        }
-                    }
-                    {
-                        NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_CellDepthPyramidMark");
-                        fsp_depth_minmax_pyramid_tex_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
-
-                        ngl::rhi::DescriptorSetDep desc_set = {};
-                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "FspDepthMinMaxPyramidTex", fsp_depth_minmax_pyramid_tex_.srv.Get());
-                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
-                        pso_fsp_cell_depth_pyramid_mark_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
-
-                        p_command_list->SetPipelineState(pso_fsp_cell_depth_pyramid_mark_.Get());
-                        p_command_list->SetDescriptorSet(pso_fsp_cell_depth_pyramid_mark_.Get(), &desc_set);
-                        pso_fsp_cell_depth_pyramid_mark_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
-
-                        p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
-                        p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
-                    }
-                }
-                else
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_Legacy");
-
-                    // Legacy 1-pass: 旧経路をそのまま実行（回帰比較/不具合切り分け用）。
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.uav.Get());
-                    pso_fsp_visible_surface_proc_->SetView(&desc_set, "RWFspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.uav.Get());
-
-                    p_command_list->SetPipelineState(pso_fsp_visible_surface_proc_.Get());
-                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_proc_.Get(), &desc_set);
-                    pso_fsp_visible_surface_proc_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
-
-                    p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(fsp_cell_visible_frame_buffer_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(fsp_cell_depth_hint_buffer_.buffer.Get());
-                }
-
-                // 3) セルワークから可視セルリスト確定 + 互換ミラー.
-                if(use_finalize_path)
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_MultiPass_Finalize");
+                    fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
 
                     ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "FspCellVisibleFrameBuffer", fsp_cell_visible_frame_buffer_.srv.Get());
-                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "FspCellDepthHintBuffer", fsp_cell_depth_hint_buffer_.srv.Get());
-                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
-                    pso_fsp_visible_surface_finalize_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                    pso_fsp_surface_mask_clear_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_surface_mask_clear_->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
 
-                    p_command_list->SetPipelineState(pso_fsp_visible_surface_finalize_.Get());
-                    p_command_list->SetDescriptorSet(pso_fsp_visible_surface_finalize_.Get(), &desc_set);
-                    pso_fsp_visible_surface_finalize_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
+                    p_command_list->SetPipelineState(pso_fsp_surface_mask_clear_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_surface_mask_clear_.Get(), &desc_set);
+                    pso_fsp_surface_mask_clear_->DispatchHelper(
+                        p_command_list,
+                        std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
+                        1,
+                        1);
+
+                    p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
+                }
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskInject");
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_surface_mask_inject_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_surface_mask_inject_.Get(), &desc_set);
+                    pso_fsp_surface_mask_inject_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+
+                    p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
+                }
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskCompact");
+
+                    // Compact dispatch is based on mask words, not pixels. Each
+                    // thread consumes up to 32 cells and appends only set bits.
+                    fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "FspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.srv.Get());
+                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWFspCellStateBuffer", fsp_buffer_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_surface_mask_compact_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_surface_mask_compact_.Get(), &desc_set);
+                    pso_fsp_surface_mask_compact_->DispatchHelper(
+                        p_command_list,
+                        std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
+                        1,
+                        1);
 
                     p_command_list->ResourceUavBarrier(fsp_buffer_.buffer.Get());
                     p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());

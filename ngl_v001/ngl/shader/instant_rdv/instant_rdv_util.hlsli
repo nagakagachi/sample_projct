@@ -69,14 +69,7 @@ Buffer<uint>                          FspActiveProbeListPrev;
 RWBuffer<uint>                        RWFspActiveProbeListPrev;
 Buffer<uint>                          FspActiveProbeListCurr;
 RWBuffer<uint>                        RWFspActiveProbeListCurr;
-Buffer<uint>                          FspCellVisibleFrameBuffer;
-RWBuffer<uint>                        RWFspCellVisibleFrameBuffer;
-Buffer<uint>                          FspCellDepthHintBuffer;
-RWBuffer<uint>                        RWFspCellDepthHintBuffer;
-// mode2 TileSliceMask path: screen tile x log-depth slice の packed depth range。
-Buffer<uint>                          FspDepthTileSliceMaskBuffer;
-RWBuffer<uint>                        RWFspDepthTileSliceMaskBuffer;
-// mode4 SurfaceMask path: 1bit = 1 global cell index の一時検出マスク。
+// SurfaceMask path: 1bit = 1 global cell index の一時検出マスク。
 Buffer<uint>                          FspSurfaceCellMaskBuffer;
 RWBuffer<uint>                        RWFspSurfaceCellMaskBuffer;
 

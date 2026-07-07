@@ -8,9 +8,6 @@ fsp_clear_voxel_cs.hlsl
 
 #include "../instant_rdv_util.hlsli"
 
-
-static const uint k_fsp_depth_hint_metric_init = 0xffffffffu;
-
 // DepthBufferに対してDispatch.
 [numthreads(96, 1, 1)]
 void main_cs(
@@ -36,8 +33,6 @@ void main_cs(
     {
         RWFspCellStateBuffer[dtid.x] = (FspProbeData)0;
         RWFspCellProbeIndexBuffer[dtid.x] = k_fsp_invalid_probe_index;
-        RWFspCellVisibleFrameBuffer[dtid.x] = 0;
-        RWFspCellDepthHintBuffer[dtid.x] = k_fsp_depth_hint_metric_init;
     }
 
     if(dtid.x < probe_pool_size)

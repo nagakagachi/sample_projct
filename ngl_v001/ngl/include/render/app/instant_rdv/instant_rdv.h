@@ -192,21 +192,10 @@ namespace ngl::render::app
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
-        // 旧来の1-pass可視サーフェイス抽出（デバッグ切替用に維持）。
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_proc_ = {};
-        // 高速化版の3-pass可視サーフェイス抽出。
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_prepare_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_accumulate_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_visible_surface_finalize_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_tile_slice_mask_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_tile_slice_cell_mark_ = {};
-        // 新方式 SurfacePass: clear -> inject -> compact.
+        // SurfacePass: BBV-style cell bitmask clear -> inject -> compact.
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_inject_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
-        // 将来方式: Cell-driven + Depth Min/Max Pyramid.
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_depth_minmax_pyramid_downsample_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_cell_depth_pyramid_mark_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_update_ = {};
@@ -267,18 +256,9 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_pool_buffer_ = {};
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
         ComputeBufferSet fsp_active_probe_list_[2] = {};
-        // 可視セル抽出用ワークバッファ（frame stamp / depth hint）。
-        ComputeBufferSet fsp_cell_visible_frame_buffer_ = {};
-        ComputeBufferSet fsp_cell_depth_hint_buffer_ = {};
-        // mode2 TileSliceMask用。screen 8x8 tile x log-depth slice のrangeを保持する。
-        ComputeBufferSet fsp_depth_tile_slice_mask_buffer_ = {};
-        // mode4 SurfaceMask用。1bit = 1 global cell index の検出マスク。
+        // SurfacePass用。1bit = 1 global cell index の検出マスク。
         // clear -> inject -> compact の3パス内だけで使い、最終的には SurfaceProbeCellList へ変換する。
         ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};
-        // 全mipを持つdepth min/max pyramid本体。
-        // mip0はフル解像度ではなく半解像度で生成し、以降をdownsampleで構築する。
-        ComputeTextureSet fsp_depth_minmax_pyramid_tex_ = {};
-        std::vector<rhi::RefUavDep> fsp_depth_minmax_pyramid_mip_uavs_ = {};
         ComputeBufferSet fsp_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
@@ -334,9 +314,6 @@ namespace ngl::render::app
         static int dbg_fsp_lighting_interpolation_enable_;
         static int dbg_fsp_lighting_stochastic_sampling_enable_;
         static int dbg_fsp_probe_lifecycle_enable_;
-        // FSP可視サーフェイス抽出方式を切り替えるデバッグフラグ
-        // (0: legacy, 1: pixel multipass, 2: tile slice mask, 3: cell-driven depth pyramid)。
-        static int dbg_fsp_visible_surface_mode_;
         static int dbg_fsp_probe_pool_size_;
         static int dbg_fsp_free_probe_count_;
         static int dbg_fsp_allocated_probe_count_;

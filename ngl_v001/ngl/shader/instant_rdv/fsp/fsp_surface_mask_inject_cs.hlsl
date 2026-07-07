@@ -4,7 +4,7 @@ fsp_surface_mask_inject_cs.hlsl
 FSP SurfacePass専用セルマスクの注入パス。
 DepthBufferを8x8 dispatchで走査し、交差セルのbitをcascade別に立てる。
 
-mode4 SurfaceMask path の中間パス。
+SurfaceMask path の中間パス。
 BBV injection と同じ発想で「pixelごとにリストへappend」せず、
 該当cellの1bitだけを立てる。複数pixelが同じcellを指すケースでは
 同じbitへのORに収束するため、後段のcompactで一意なcellだけを処理できる。
