@@ -154,6 +154,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_ = k_default_instant_rdv_param.debug_fsp_probe_use_relocated_pos;
     int InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
+    int InstantRasterDerivedVoxelScene::dbg_fsp_update_mode_ = 1; // 0: legacy single pass, 1: multipass(request/trace/resolve)
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_cascade_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_cascade_count_ = 1;
     float InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_ = k_default_instant_rdv_param.fsp_relocation_offset_scale_for_cascade_cell_size;
@@ -468,6 +469,18 @@ namespace ngl::render::app
                     }
                 }
                 {
+                    static const char* k_fsp_update_mode_items[] = {
+                        "Legacy SinglePass",
+                        "MultiPass (Request/Trace/Resolve)"
+                    };
+                    ImGui::Combo("Update Path", &dbg_fsp_update_mode_, k_fsp_update_mode_items, IM_ARRAYSIZE(k_fsp_update_mode_items));
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_update_mode_ = 1;
+                        ImGui::EndPopup();
+                    }
+                }
+                {
                     bool v = (0 != dbg_fsp_probe_lifecycle_enable_);
                     if (ImGui::Checkbox("Probe Lifecycle (Spawn/Relocate/Release)", &v))
                         dbg_fsp_probe_lifecycle_enable_ = v ? 1 : 0;
@@ -582,6 +595,14 @@ namespace ngl::render::app
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_atlas_uav = "RWFspProbeAtlasTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_packed_sh_srv = "FspProbePackedSHTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_packed_sh_uav = "RWFspProbePackedSHTex";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_request_srv = "FspProbeRayRequestBuffer";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_request_uav = "RWFspProbeRayRequestBuffer";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_total_ray_count_srv = "FspProbeTotalRayCountBuffer";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_total_ray_count_uav = "RWFspProbeTotalRayCountBuffer";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_trace_indirect_arg_srv = "FspProbeTraceIndirectArg";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_trace_indirect_arg_uav = "RWFspProbeTraceIndirectArg";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_result_srv = "FspProbeRayResultBuffer";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_result_uav = "RWFspProbeRayResultBuffer";
     constexpr InstantRdvShaderBindName k_shader_bind_name_asspprobe_srv = "AdaptiveScreenSpaceProbeTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_asspprobe_history_srv = "AdaptiveScreenSpaceProbeHistoryTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_asspprobe_uav = "RWAdaptiveScreenSpaceProbeTex";
@@ -862,6 +883,65 @@ namespace ngl::render::app
                 return false;
             }
         }
+        {
+            if(!fsp_probe_ray_request_buffer_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count     = fsp_probe_pool_size_,
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_FspProbeRayRequestBuffer"))
+            {
+                return false;
+            }
+        }
+        {
+            if(!fsp_probe_total_ray_count_buffer_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count     = 1,
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_FspProbeTotalRayCountBuffer"))
+            {
+                return false;
+            }
+        }
+        {
+            if(!fsp_probe_trace_indirect_arg_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count     = 3,
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::IndirectArg,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_FspProbeTraceIndirectArg"))
+            {
+                return false;
+            }
+        }
+        {
+            constexpr u32 k_fsp_ray_result_stride = 1u; // 1 ray -> 1 uint(hit voxel index + 1, 0 = sky).
+            const u32 ray_count_per_probe = k_fsp_probe_octmap_width * k_fsp_probe_octmap_width;
+            const u32 max_ray_count = fsp_probe_pool_size_ * ray_count_per_probe;
+            if(!fsp_probe_ray_result_buffer_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count     = max_ray_count * k_fsp_ray_result_stride,
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_FspProbeRayResultBuffer"))
+            {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -942,6 +1022,9 @@ namespace ngl::render::app
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_update_ = CreateComputePSO("instant_rdv/fsp/fsp_update_cs.hlsl");
+            pso_fsp_probe_ray_request_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_request_cs.hlsl");
+            pso_fsp_probe_ray_trace_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_trace_cs.hlsl");
+            pso_fsp_probe_ray_resolve_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_resolve_cs.hlsl");
             pso_fsp_sh_update_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_sh_update_cs.hlsl");
 
             pso_assp_probe_clear_ = CreateComputePSO("instant_rdv/assp/assp_probe_clear_cs.hlsl");
@@ -2170,8 +2253,11 @@ namespace ngl::render::app
                 fsp_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::IndirectArgument);
             }
             // Fsp Update Pass.
+            // 0: 旧 single-pass (legacy compare 用)
+            // 1: multipass request -> trace -> resolve (デフォルト)
+            if(0 == InstantRasterDerivedVoxelScene::dbg_fsp_update_mode_)
             {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate");
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_LegacySinglePass");
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_update_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
@@ -2195,6 +2281,75 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_probe_pool_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_probe_free_stack_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_probe_atlas_tex_.texture.Get());
+            }
+            else
+            {
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_MultiPass");
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_Request");
+
+                    fsp_probe_ray_request_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+                    fsp_probe_total_ray_count_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+                    fsp_probe_trace_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_probe_ray_request_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_probe_ray_request_->SetView(&desc_set, "FspActiveProbeListCurr", fsp_active_probe_curr_list.srv.Get());
+                    pso_fsp_probe_ray_request_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_request_uav.Get(), fsp_probe_ray_request_buffer_.uav.Get());
+                    pso_fsp_probe_ray_request_->SetView(&desc_set, k_shader_bind_name_fsp_probe_total_ray_count_uav.Get(), fsp_probe_total_ray_count_buffer_.uav.Get());
+                    pso_fsp_probe_ray_request_->SetView(&desc_set, k_shader_bind_name_fsp_probe_trace_indirect_arg_uav.Get(), fsp_probe_trace_indirect_arg_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_probe_ray_request_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_probe_ray_request_.Get(), &desc_set);
+                    p_command_list->DispatchIndirect(fsp_indirect_arg_.buffer.Get());
+
+                    p_command_list->ResourceUavBarrier(fsp_probe_ray_request_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_probe_total_ray_count_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_probe_trace_indirect_arg_.buffer.Get());
+                    fsp_probe_ray_request_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+                    fsp_probe_total_ray_count_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+                    fsp_probe_trace_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::IndirectArgument);
+                }
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_Trace");
+
+                    fsp_probe_ray_result_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_request_srv.Get(), fsp_probe_ray_request_buffer_.srv.Get());
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, k_shader_bind_name_fsp_probe_total_ray_count_srv.Get(), fsp_probe_total_ray_count_buffer_.srv.Get());
+                    pso_fsp_probe_ray_trace_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_result_uav.Get(), fsp_probe_ray_result_buffer_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_probe_ray_trace_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_probe_ray_trace_.Get(), &desc_set);
+                    p_command_list->DispatchIndirect(fsp_probe_trace_indirect_arg_.buffer.Get());
+
+                    p_command_list->ResourceUavBarrier(fsp_probe_ray_result_buffer_.buffer.Get());
+                    fsp_probe_ray_result_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+                }
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_Resolve");
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, "BitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.srv.Get());
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, k_shader_bind_name_fsp_probe_total_ray_count_srv.Get(), fsp_probe_total_ray_count_buffer_.srv.Get());
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_request_srv.Get(), fsp_probe_ray_request_buffer_.srv.Get());
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_result_srv.Get(), fsp_probe_ray_result_buffer_.srv.Get());
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
+                    pso_fsp_probe_ray_resolve_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
+
+                    p_command_list->SetPipelineState(pso_fsp_probe_ray_resolve_.Get());
+                    p_command_list->SetDescriptorSet(pso_fsp_probe_ray_resolve_.Get(), &desc_set);
+                    p_command_list->DispatchIndirect(fsp_probe_trace_indirect_arg_.buffer.Get());
+
+                    p_command_list->ResourceUavBarrier(fsp_probe_pool_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(fsp_probe_atlas_tex_.texture.Get());
+                }
             }
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspProbeShUpdate");

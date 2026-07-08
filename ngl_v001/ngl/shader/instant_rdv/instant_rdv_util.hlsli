@@ -72,6 +72,15 @@ RWBuffer<uint>                        RWFspActiveProbeListCurr;
 // SurfaceMask path: 1bit = 1 global cell index の一時検出マスク。
 Buffer<uint>                          FspSurfaceCellMaskBuffer;
 RWBuffer<uint>                        RWFspSurfaceCellMaskBuffer;
+// FSP update multipass (request/trace/resolve) 用のワークバッファ群。
+Buffer<uint>                          FspProbeRayRequestBuffer;
+RWBuffer<uint>                        RWFspProbeRayRequestBuffer;
+Buffer<uint>                          FspProbeTotalRayCountBuffer;
+RWBuffer<uint>                        RWFspProbeTotalRayCountBuffer;
+Buffer<uint>                          FspProbeTraceIndirectArg;
+RWBuffer<uint>                        RWFspProbeTraceIndirectArg;
+Buffer<uint>                          FspProbeRayResultBuffer;
+RWBuffer<uint>                        RWFspProbeRayResultBuffer;
 
 Texture2D<float4>      FspProbeAtlasTex;
 RWTexture2D<float4>    RWFspProbeAtlasTex;

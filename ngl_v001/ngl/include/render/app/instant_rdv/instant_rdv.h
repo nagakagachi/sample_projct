@@ -199,6 +199,9 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_update_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_request_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_trace_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_resolve_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_sh_update_ = {};
 
 
@@ -259,6 +262,12 @@ namespace ngl::render::app
         // SurfacePass用。1bit = 1 global cell index の検出マスク。
         // clear -> inject -> compact の3パス内だけで使い、最終的には SurfaceProbeCellList へ変換する。
         ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};
+        // FSP update multipass 用ワーク:
+        // request(active probe index list), trace indirect arg, total ray count, ray結果(hit voxel index+1 / 0=sky)。
+        ComputeBufferSet fsp_probe_ray_request_buffer_ = {};
+        ComputeBufferSet fsp_probe_trace_indirect_arg_ = {};
+        ComputeBufferSet fsp_probe_total_ray_count_buffer_ = {};
+        ComputeBufferSet fsp_probe_ray_result_buffer_ = {};
         ComputeBufferSet fsp_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
@@ -293,6 +302,7 @@ namespace ngl::render::app
         static int dbg_fsp_probe_debug_mode_;
         static int dbg_fsp_probe_use_relocated_pos_;
         static int dbg_fsp_update_ray_jitter_enable_;
+        static int dbg_fsp_update_mode_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
         static float dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;

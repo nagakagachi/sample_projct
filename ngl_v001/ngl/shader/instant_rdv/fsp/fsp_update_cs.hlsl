@@ -60,15 +60,6 @@ void main_cs(
         return;
     }
 
-    /*
-    // 処理スキップ機構. 指定カスケードのみ処理.
-    const uint target_cascade_index = cb_instant_rdv.frame_count % uint(max(cb_instant_rdv.fsp_cascade_count, 1));
-    if(cascade_index != target_cascade_index)
-    {
-        return;
-    }
-    */
-
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
     const float cascade_relocation_offset_normalize_distance = (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
     const float3 probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * cascade_relocation_offset_normalize_distance;

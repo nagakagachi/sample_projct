@@ -129,7 +129,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
 
     // fsp probeあたりのOctahedralMapAtlas解像度.
     #define k_fsp_probe_octmap_width (6)
-    // 旧 border 前提コード互換用エイリアス。現在は border なしの 8x8 をそのまま使う。
+    // 旧 border 前提コード互換用エイリアス。現在は border なし。
     #define k_fsp_probe_octmap_width_with_border (k_fsp_probe_octmap_width)
     // fsp
     #define k_fsp_probe_distance_max (50.0)
