@@ -11,8 +11,10 @@ ProbeAtlas を更新する。trace 側から radiance read/write を分離して
 #include "../instant_rdv_util.hlsli"
 
 #define FSP_OCTA_UPDATE_TEMPORAL_RATE (0.95)
-#define FSP_PROBE_RAY_COUNT_PER_PROBE (k_fsp_probe_octmap_width * k_fsp_probe_octmap_width)
 #define FSP_RAY_LINEAR_THREAD_GROUP_SIZE 128u
+#define FSP_RAY_RESULT_STRIDE 2u
+#define FSP_RAY_RESULT_PACKED_REQUEST_KEY 0u
+#define FSP_RAY_RESULT_HIT_INFO 1u
 
 [numthreads(FSP_RAY_LINEAR_THREAD_GROUP_SIZE, 1, 1)]
 void main_cs(
@@ -20,17 +22,24 @@ void main_cs(
     uint gindex : SV_GroupIndex,
     uint3 gid : SV_GroupID)
 {
-    const uint ray_global_index = gid.x * FSP_RAY_LINEAR_THREAD_GROUP_SIZE + gindex;
-    const uint total_ray_count = FspProbeTotalRayCountBuffer[0];
-    if(ray_global_index >= total_ray_count)
+    const uint result_linear_index = gid.x * FSP_RAY_LINEAR_THREAD_GROUP_SIZE + gindex;
+    const uint total_result_count = FspProbeRayResultBuffer[0];
+    if(result_linear_index >= total_result_count)
     {
         return;
     }
 
-    const uint probe_list_index = ray_global_index / FSP_PROBE_RAY_COUNT_PER_PROBE;
-    const uint local_ray_index = ray_global_index - probe_list_index * FSP_PROBE_RAY_COUNT_PER_PROBE;
-    const uint probe_index = FspProbeRayRequestBuffer[probe_list_index];
+    const uint result_word_offset = 1u + result_linear_index * FSP_RAY_RESULT_STRIDE;
+    const uint packed_request_key = FspProbeRayResultBuffer[result_word_offset + FSP_RAY_RESULT_PACKED_REQUEST_KEY];
+    const uint hit_voxel_index_plus_1 = FspProbeRayResultBuffer[result_word_offset + FSP_RAY_RESULT_HIT_INFO];
+
+    const uint probe_index = FspUnpackRayRequestProbeIndex(packed_request_key);
+    const uint oct_cell_index = FspUnpackRayRequestOctCellIndex(packed_request_key);
     if(probe_index >= (uint)cb_instant_rdv.fsp_probe_pool_size)
+    {
+        return;
+    }
+    if(oct_cell_index >= (k_fsp_probe_octmap_width * k_fsp_probe_octmap_width))
     {
         return;
     }
@@ -41,11 +50,9 @@ void main_cs(
         return;
     }
 
-    const uint oct_x = local_ray_index % k_fsp_probe_octmap_width;
-    const uint oct_y = local_ray_index / k_fsp_probe_octmap_width;
+    const uint oct_x = oct_cell_index % k_fsp_probe_octmap_width;
+    const uint oct_y = oct_cell_index / k_fsp_probe_octmap_width;
     const uint2 oct_cell_id = uint2(oct_x, oct_y);
-
-    const uint hit_voxel_index_plus_1 = FspProbeRayResultBuffer[ray_global_index];
     const bool is_sky_visible = (0u == hit_voxel_index_plus_1);
     const float sky_visibility = is_sky_visible ? 1.0 : 0.0;
     const float3 hit_radiance = is_sky_visible
@@ -57,8 +64,9 @@ void main_cs(
     const float4 atlas_curr = float4(hit_radiance, sky_visibility);
     RWFspProbeAtlasTex[atlas_texel_pos] = lerp(atlas_curr, atlas_prev, FSP_OCTA_UPDATE_TEMPORAL_RATE);
 
-    // 1probe=固定ray本数運用では local_ray_index==0 が probe単位の代表スレッドになる。
-    if(local_ray_index == 0u)
+    // 現状は「1 oct cell = 1 ray = 1 result」前提なので atlas への直書きで衝突しない。
+    // 将来 multi-ray per oct cell へ変更する場合は、ここを加算/集約方式へ差し替えること。
+    if(oct_cell_index == 0u)
     {
         probe_pool_data.last_update_frame = cb_instant_rdv.frame_count;
         RWFspProbePoolBuffer[probe_index] = probe_pool_data;

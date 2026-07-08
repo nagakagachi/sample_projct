@@ -75,8 +75,6 @@ RWBuffer<uint>                        RWFspSurfaceCellMaskBuffer;
 // FSP update multipass (request/trace/resolve) 用のワークバッファ群。
 Buffer<uint>                          FspProbeRayRequestBuffer;
 RWBuffer<uint>                        RWFspProbeRayRequestBuffer;
-Buffer<uint>                          FspProbeTotalRayCountBuffer;
-RWBuffer<uint>                        RWFspProbeTotalRayCountBuffer;
 Buffer<uint>                          FspProbeTraceIndirectArg;
 RWBuffer<uint>                        RWFspProbeTraceIndirectArg;
 Buffer<uint>                          FspProbeRayResultBuffer;
@@ -138,6 +136,23 @@ bool FspDecodeGlobalCellIndex(uint global_cell_index, out uint cascade_index, ou
     cascade_index = 0;
     local_cell_index = 0;
     return false;
+}
+
+// FSP multipass request/result の packed key ヘルパー.
+// [31:8] probe index, [7:0] oct cell index
+static const uint k_fsp_ray_request_oct_cell_bits = 8u;
+static const uint k_fsp_ray_request_oct_cell_mask = (1u << k_fsp_ray_request_oct_cell_bits) - 1u;
+uint FspPackRayRequestKey(uint probe_index, uint oct_cell_index)
+{
+    return (probe_index << k_fsp_ray_request_oct_cell_bits) | (oct_cell_index & k_fsp_ray_request_oct_cell_mask);
+}
+uint FspUnpackRayRequestProbeIndex(uint packed_key)
+{
+    return (packed_key >> k_fsp_ray_request_oct_cell_bits);
+}
+uint FspUnpackRayRequestOctCellIndex(uint packed_key)
+{
+    return (packed_key & k_fsp_ray_request_oct_cell_mask);
 }
 
 int3 FspLocalCellIndexToLinearCoord(uint local_cell_index, InstantRdvToroidalGridParam grid)

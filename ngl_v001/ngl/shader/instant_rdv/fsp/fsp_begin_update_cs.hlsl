@@ -52,6 +52,8 @@ void main_cs(
         // アトミックカウンタをクリア. 0番目はアトミックカウンタ用に予約している.
         RWSurfaceProbeCellList[0] = 0;
         RWFspActiveProbeListCurr[0] = 0;
+        RWFspProbeRayRequestBuffer[0] = 0;
+        RWFspProbeRayResultBuffer[0] = 0;
     }
 
     const uint prev_active_probe_count = FspActiveProbeListPrev[0];
