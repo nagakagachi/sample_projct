@@ -43,7 +43,7 @@ void main_cs(
     const int2 probe_tile_id = int2(FspProbeAtlasMapPos(probe_index));
 
     const FspProbePoolData probe_pool_data = FspProbePoolBuffer[probe_index];
-    if(0 == (probe_pool_data.flags & k_fsp_probe_flag_allocated))
+    if(probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index)
     {
         [unroll]
         for(uint coeff_index = 0; coeff_index < 4; ++coeff_index)

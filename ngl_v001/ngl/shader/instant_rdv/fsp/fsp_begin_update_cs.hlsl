@@ -16,7 +16,7 @@ Dispatchは全域としているが, 最適化としてはInvalidate領域サイ
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 
-#define FSP_STALE_FRAME_THRESHOLD (30u)
+#define FSP_STALE_FRAME_THRESHOLD (120u)
 
 void FspPushFreeProbeIndex(uint probe_index)
 {
@@ -69,10 +69,6 @@ void main_cs(
     }
 
     FspProbePoolData probe_pool_data = RWFspProbePoolBuffer[probe_index];
-    if(0 == (probe_pool_data.flags & k_fsp_probe_flag_allocated))
-    {
-        return;
-    }
     if(0 == cb_instant_rdv.fsp_probe_lifecycle_enable)
     {
         if(probe_pool_data.owner_cell_index != k_fsp_invalid_probe_index)
@@ -113,14 +109,14 @@ void main_cs(
     if(owner_cell_index != k_fsp_invalid_probe_index && RWFspCellProbeIndexBuffer[owner_cell_index] == probe_index)
     {
         RWFspCellProbeIndexBuffer[owner_cell_index] = k_fsp_invalid_probe_index;
-        RWFspCellStateBuffer[owner_cell_index] = (FspProbeData)0;
     }
 
     probe_pool_data.owner_cell_index = k_fsp_invalid_probe_index;
-    probe_pool_data.flags = 0;
+    probe_pool_data.reserved0 = 0;
     probe_pool_data.probe_offset_v3 = 0;
     probe_pool_data.last_update_frame = 0;
-    probe_pool_data.debug_last_released_frame = cb_instant_rdv.frame_count;
+    probe_pool_data.reserved1 = 0;
+    probe_pool_data.reserved2 = 0;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 
     FspPushFreeProbeIndex(probe_index);// 返却.

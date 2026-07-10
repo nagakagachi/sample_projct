@@ -3,17 +3,11 @@ fsp_surface_mask_compact_cs.hlsl
 
 FSP SurfacePass専用セルマスクのコンパクションパス。
 立っているbitを SurfaceProbeCellList へ詰め、既存FSP更新パスへ合流させる。
-
-SurfaceMask path の最終パス。
-このパスで SurfaceProbeCellList を直接構築し、FspCellStateBuffer に可視frameと
-depth hint を書く。旧 common finalize 用の中間バッファは使わない。
 #endif
 
 #define FSP_SURFACE_MASK_COMPACT_THREAD_GROUP_SIZE 128
 
 #include "../instant_rdv_util.hlsli"
-
-static const uint k_fsp_depth_hint_visible_flag = 0u;
 
 [numthreads(FSP_SURFACE_MASK_COMPACT_THREAD_GROUP_SIZE, 1, 1)]
 void main_cs(
@@ -72,11 +66,6 @@ void main_cs(
         {
             continue;
         }
-
-        // SurfaceMask正式採用後は中間の visible/depth-hint buffer を使わず、
-        // 後段が読む cell state に直接可視frameとdepth hintを反映する。
-        RWFspCellStateBuffer[global_cell_index].atomic_work = cb_instant_rdv.frame_count;
-        RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key = k_fsp_depth_hint_visible_flag;
 
         if(local_rank < writable_count)
         {

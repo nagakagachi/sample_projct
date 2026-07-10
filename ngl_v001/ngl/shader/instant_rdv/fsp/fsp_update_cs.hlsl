@@ -36,18 +36,8 @@ void main_cs(
     }
 
     FspProbePoolData probe_pool_data = RWFspProbePoolBuffer[probe_index];
-    if(0 == (probe_pool_data.flags & k_fsp_probe_flag_allocated))
-    {
-        return;
-    }
-
     const uint owner_cell_index = probe_pool_data.owner_cell_index;
     const bool has_valid_owner = (owner_cell_index != k_fsp_invalid_probe_index);
-    if(has_valid_owner)
-    {
-        RWFspCellStateBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-    }
-
     if(!has_valid_owner)
     {
         return;

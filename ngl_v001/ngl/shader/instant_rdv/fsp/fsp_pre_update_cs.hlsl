@@ -14,7 +14,6 @@ fsp_pre_update_cs.hlsl
 
 #define RAY_SAMPLE_COUNT_PER_VOXEL 8
 #define PROBE_UPDATE_TEMPORAL_RATE (0.025)
-static const uint k_fsp_depth_hint_metric_init = 0xffffffffu;
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 
@@ -104,7 +103,7 @@ bool FspTrySeedProbeFromUpperCascade(out FspProbePoolData src_probe_pool_data, f
         }
 
         const FspProbePoolData curr_src_probe_pool_data = RWFspProbePoolBuffer[src_probe_index];
-        if(0 == (curr_src_probe_pool_data.flags & k_fsp_probe_flag_allocated) || curr_src_probe_pool_data.owner_cell_index != src_global_cell_index)
+        if(curr_src_probe_pool_data.owner_cell_index != src_global_cell_index)
         {
             continue;
         }
@@ -169,14 +168,9 @@ void main_cs(
     if(!is_probe_lifecycle_enabled)
     {
         probe_pool_data.last_seen_frame = cb_instant_rdv.frame_count;
-        probe_pool_data.debug_last_observed_frame = cb_instant_rdv.frame_count;
         RWFspProbePoolBuffer[probe_index] = probe_pool_data;
 
         const uint owner_cell_index = probe_pool_data.owner_cell_index;
-        if(owner_cell_index != k_fsp_invalid_probe_index)
-        {
-            RWFspCellStateBuffer[owner_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
-        }
         return;
     }
     if(is_new_probe)
@@ -186,8 +180,9 @@ void main_cs(
     }
     probe_pool_data.owner_cell_index = global_cell_index;
     probe_pool_data.last_seen_frame = cb_instant_rdv.frame_count;
-    probe_pool_data.debug_last_observed_frame = cb_instant_rdv.frame_count;
-    probe_pool_data.flags |= k_fsp_probe_flag_allocated;
+    probe_pool_data.reserved0 = 0;
+    probe_pool_data.reserved1 = 0;
+    probe_pool_data.reserved2 = 0;
 
     // Cell中心.
     const float3 probe_cell_center = FspCalcCellCenterWs(cascade_index, local_cell_index);
@@ -197,11 +192,9 @@ void main_cs(
         const float half_cell_size = cascade.grid.cell_size * 0.5;
         const float cascade_relocation_offset_normalize_distance = (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
         const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * cascade_relocation_offset_normalize_distance;
-        // depth_hint key は可視候補の存在判定にのみ使い、位置決定はBBVベースで行う。
-        const uint depth_hint_packed = RWFspCellStateBuffer[global_cell_index].depth_hint_packed_key;
         const float3 to_camera_vec = view_origin - probe_cell_center;
         const float to_camera_len_sq = dot(to_camera_vec, to_camera_vec);
-        const bool has_surface_anchor = (depth_hint_packed != k_fsp_depth_hint_metric_init) && (to_camera_len_sq > 1e-6);
+        const bool has_surface_anchor = (to_camera_len_sq > 1e-6);
         const float3 surface_view_dir_ws = (to_camera_len_sq > 1e-6) ? (-to_camera_vec * rsqrt(to_camera_len_sq)) : 0.0.xxx;
         float3 seed_probe_offset = prev_probe_offset;
 
@@ -315,53 +308,5 @@ void main_cs(
         }
     }
 
-    // デバッグ表示・scratch path 互換のため、セル状態にも最低限ミラーしておく。
-    RWFspCellStateBuffer[global_cell_index].probe_offset_v3 = probe_pool_data.probe_offset_v3;
     RWFspProbePoolBuffer[probe_index] = probe_pool_data;
-
-    #if 0
-        // プローブデータの整理のため一旦ここでの書き込みは無効化. 全域更新のほうで検証中.
-        /*
-        // Probeレイサンプル.
-        {
-            for(int sample_index = 0; sample_index < RAY_SAMPLE_COUNT_PER_VOXEL; ++sample_index)
-            {
-                // 全域Probe更新.
-                #if 1
-                    // 球面Fibonacciシーケンス分布上をフルでトレースする.
-                    // 同時更新されるProbeのレイ方向がほとんど同じになるためか, Probe毎に乱数でサンプルするよりも数倍速くなる模様.
-                    const int num_fibonacci_point_max = 128;
-                    float3 sample_ray_dir = fibonacci_sphere_point((cb_instant_rdv.frame_count*RAY_SAMPLE_COUNT_PER_VOXEL + sample_index)%num_fibonacci_point_max, num_fibonacci_point_max);
-                #else
-                    // Probe毎にランダムな方向をサンプリングする.
-                    float3 sample_ray_dir = random_unit_vector3( float2( cb_instant_rdv.frame_count + sample_index, update_element_index + sample_index * 37 ) );
-                #endif
-
-                const float3 sample_ray_origin = probe_sample_pos_ws;            
-                    
-                // SkyVisibility raycast.
-                const float trace_distance = k_fsp_probe_distance_max;
-                int hit_voxel_index = -1;
-                    float4 debug_ray_info;
-                // リファクタリング版.
-                float4 curr_ray_t_ws = trace_bbv(
-                    hit_voxel_index, debug_ray_info,
-                    sample_ray_origin, sample_ray_dir, trace_distance, 
-                    cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size, cb_instant_rdv.bbv.grid_resolution,
-                    cb_instant_rdv.bbv.grid_toroidal_offset, BitmaskBrickVoxel);
-
-                // SkyVisibilityの方向平均を更新.
-                const float distance_probe_value = (0.0 > curr_ray_t_ws.x) ? 1.0 : 0.0;
-
-                    // ProbeOctMapの更新.
-                const float2 octmap_uv = OctEncode(sample_ray_dir);
-                const uint2 probe_2d_map_pos = FspProbeAtlasMapPos(probe_index);
-
-                // 境界部込のテクセル位置.
-                const uint2 octmap_atlas_texel_pos = probe_2d_map_pos * k_fsp_probe_octmap_width_with_border + 1 + clamp(uint2(octmap_uv * k_fsp_probe_octmap_width), 0, (k_fsp_probe_octmap_width - 1));
-                RWFspProbeAtlasTex[octmap_atlas_texel_pos] = lerp(RWFspProbeAtlasTex[octmap_atlas_texel_pos], distance_probe_value, PROBE_UPDATE_TEMPORAL_RATE);
-            }
-        }
-        */
-    #endif
 }

@@ -117,7 +117,7 @@ VS_OUTPUT main_vs(VS_INPUT input)
     output.voxel_probe_pos_ws = instance_pos;
     output.cascade_index = cascade_index;
     output.probe_index = probe_index;
-    output.probe_flags = probe_pool_data.flags;
+    output.probe_flags = (is_allocated && probe_pool_data.owner_cell_index == global_cell_index) ? 1u : 0u;
 
 	return output;
 }

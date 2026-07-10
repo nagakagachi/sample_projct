@@ -45,7 +45,7 @@ void main_cs(
     }
 
     FspProbePoolData probe_pool_data = RWFspProbePoolBuffer[probe_index];
-    if((0u == (probe_pool_data.flags & k_fsp_probe_flag_allocated)) || (probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index))
+    if(probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index)
     {
         return;
     }

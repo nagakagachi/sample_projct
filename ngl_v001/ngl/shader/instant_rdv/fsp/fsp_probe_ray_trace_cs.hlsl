@@ -40,7 +40,7 @@ void main_cs(
     if((probe_index < (uint)cb_instant_rdv.fsp_probe_pool_size) && (oct_cell_index < (k_fsp_probe_octmap_width * k_fsp_probe_octmap_width)))
     {
         const FspProbePoolData probe_pool_data = FspProbePoolBuffer[probe_index];
-        if((0u != (probe_pool_data.flags & k_fsp_probe_flag_allocated)) && (probe_pool_data.owner_cell_index != k_fsp_invalid_probe_index))
+        if(probe_pool_data.owner_cell_index != k_fsp_invalid_probe_index)
         {
             uint cascade_index = 0u;
             uint local_cell_index = 0u;

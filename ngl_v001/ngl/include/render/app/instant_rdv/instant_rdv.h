@@ -269,7 +269,6 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_trace_indirect_arg_ = {};
         ComputeBufferSet fsp_probe_resolve_indirect_arg_ = {};
         ComputeBufferSet fsp_probe_ray_result_buffer_ = {};
-        ComputeBufferSet fsp_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
         rhi::RefBufferDep fsp_visible_surface_list_readback_buffer_ = {};

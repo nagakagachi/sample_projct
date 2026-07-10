@@ -165,7 +165,7 @@ bool FspTryLoadPackedShL1FromCellIndex(out FspProbePackedShL1Sample result, uint
     }
 
     const FspProbePoolData probe_pool_data = FspProbePoolBuffer[probe_index];
-    if(0 == (probe_pool_data.flags & k_fsp_probe_flag_allocated) || probe_pool_data.owner_cell_index != global_cell_index)
+    if(probe_pool_data.owner_cell_index != global_cell_index)
     {
         return false;
     }
