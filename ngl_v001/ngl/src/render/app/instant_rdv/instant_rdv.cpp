@@ -153,7 +153,6 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_ = k_default_instant_rdv_param.debug_fsp_probe_use_relocated_pos;
     int InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
-    int InstantRasterDerivedVoxelScene::dbg_fsp_update_mode_ = 1; // 0: legacy single pass, 1: multipass(request/trace/resolve)
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_cascade_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_cascade_count_ = 1;
     float InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_ = k_default_instant_rdv_param.fsp_relocation_offset_scale_for_cascade_cell_size;
@@ -182,7 +181,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_assp_total_ray_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_assp_probe_count_ = 0;
-    int InstantRasterDerivedVoxelScene::dbg_gi_update_sample_mode_ = static_cast<int>(InstantRdvGiSolutionMode::Assp);
+    int InstantRasterDerivedVoxelScene::dbg_gi_update_sample_mode_ = static_cast<int>(InstantRdvGiSolutionMode::Fsp);
     float InstantRasterDerivedVoxelScene::dbg_bbv_depthtest_injection_fine_cells_default_ = k_depthtest_injection_default_fine_cells;
     float InstantRasterDerivedVoxelScene::dbg_bbv_depthtest_injection_fine_cells_ = dbg_bbv_depthtest_injection_fine_cells_default_;
 
@@ -218,7 +217,7 @@ namespace ngl::render::app
             ImGui::Text("GI Update Target (linked): %s", InstantRdvGiSolutionModeName(dbg_gi_update_sample_mode_));
 
             
-            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+            ImGui::SetNextItemOpen(false, ImGuiCond_FirstUseEver);
             if (ImGui::CollapsingHeader("Adaptive Screen Space Probe"))
             {
                 NGL_IMGUI_SCOPED_INDENT(10.0f);
@@ -350,89 +349,7 @@ namespace ngl::render::app
                 }
             }
 
-            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-            if (ImGui::CollapsingHeader("Voxel Debug"))
-            {
-                NGL_IMGUI_SCOPED_INDENT(10.0f);
-
-                // カテゴリ選択ラジオボタン.
-                if (ImGui::RadioButton("Off", dbg_view_category_ == -1)) { dbg_view_category_ = -1; }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("BBV", dbg_view_category_ == 0)) { dbg_view_category_ = 0; }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("FSP", dbg_view_category_ == 1)) { dbg_view_category_ = 1; }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("ASSP", dbg_view_category_ == 2)) { dbg_view_category_ = 2; }
-                if(dbg_view_category_ > 2) { dbg_view_category_ = 2; }
-
-                // カテゴリ別サブモードスライダ.
-                if (0 <= dbg_view_category_)
-                {
-                    const int k_sub_mode_max[] = { 14, 1, 7 };
-                    auto get_sub_mode_description = [](int category, int sub_mode) -> const char*
-                    {
-                        switch(category)
-                        {
-                        case 0: // BBV
-                            switch(sub_mode)
-                            {
-                            case 0: return "Trace: voxel ID color";
-                            case 1: return "Trace: fine voxel color";
-                            case 2: return "Trace: brick ID color";
-                            case 3: return "Trace: hit normal";
-                            case 4: return "Trace: hit depth";
-                            case 5: return "Trace: brick occupancy";
-                            case 6: return "Brick occupancy test trace";
-                            case 7: return "Top-down occupancy X-ray";
-                            case 8: return "Brick coarse-check count (alt)";
-                            case 9: return "Fine voxel/bitmask check count (alt)";
-                            case 10: return "Brick coarse-check count";
-                            case 11: return "Fine voxel/bitmask check count";
-                            case 12: return "Detail efficiency";
-                            case 13: return "Cone transmittance approximation";
-                            case 14: return "Resolved brick radiance";
-                            default: return "Unknown";
-                            }
-                        case 1: // FSP
-                            switch(sub_mode)
-                            {
-                            case 0: return "FSP Octahedral atlas RGBA";
-                            case 1: return "FSP packed SH RGBA";
-                            default: return "Unknown";
-                            }
-                        case 2: // ASSP
-                            switch(sub_mode)
-                            {
-                            case 0: return "ASSP probe atlas raw";
-                            case 1: return "ASSP packed SH raw";
-                            case 2: return "ASSP SH sample";
-                            case 3: return "Filtered variance mean";
-                            case 4: return "Filtered variance";
-                            case 5: return "Raw variance mean";
-                            case 6: return "Raw variance";
-                            case 7: return "Per-probe ray count";
-                            default: return "Unknown";
-                            }
-                        default:
-                            return "Unknown";
-                        }
-                    };
-                    const int sub_max = k_sub_mode_max[dbg_view_category_];
-                    // カテゴリ切替時にクランプ.
-                    if (dbg_view_sub_mode_ > sub_max) dbg_view_sub_mode_ = sub_max;
-                    if (dbg_view_sub_mode_ < 0) dbg_view_sub_mode_ = 0;
-                    ImGui::SliderInt("Sub Mode", &dbg_view_sub_mode_, 0, sub_max);
-                    if (ImGui::BeginPopupContextItem()) {
-                        if (ImGui::MenuItem("Reset to Default"))
-                            dbg_view_sub_mode_ = 0;
-                        ImGui::EndPopup();
-                    }
-                    ImGui::TextDisabled("Sub Mode %d: %s", dbg_view_sub_mode_, get_sub_mode_description(dbg_view_category_, dbg_view_sub_mode_));
-                }
-
-            }
-
-            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+            ImGui::SetNextItemOpen(true, ImGuiCond_FirstUseEver);
             if (ImGui::CollapsingHeader("Frustum Space Probe"))
             {
                 NGL_IMGUI_SCOPED_INDENT(10.0f);
@@ -468,18 +385,6 @@ namespace ngl::render::app
                     }
                 }
                 {
-                    static const char* k_fsp_update_mode_items[] = {
-                        "Legacy SinglePass",
-                        "MultiPass (Request/Trace/Resolve)"
-                    };
-                    ImGui::Combo("Update Path", &dbg_fsp_update_mode_, k_fsp_update_mode_items, IM_ARRAYSIZE(k_fsp_update_mode_items));
-                    if (ImGui::BeginPopupContextItem()) {
-                        if (ImGui::MenuItem("Reset to Default"))
-                            dbg_fsp_update_mode_ = 1;
-                        ImGui::EndPopup();
-                    }
-                }
-                {
                     bool v = (0 != dbg_fsp_probe_lifecycle_enable_);
                     if (ImGui::Checkbox("Probe Lifecycle (Spawn/Relocate/Release)", &v))
                         dbg_fsp_probe_lifecycle_enable_ = v ? 1 : 0;
@@ -499,6 +404,7 @@ namespace ngl::render::app
                 }
             }
 
+            ImGui::SetNextItemOpen(true, ImGuiCond_FirstUseEver);
             if (ImGui::CollapsingHeader("Probe Debug"))
             {
                 NGL_IMGUI_SCOPED_INDENT(10.0f);
@@ -584,6 +490,87 @@ namespace ngl::render::app
                         ImGui::EndPopup();
                     }
                     ImGui::TextDisabled("%s", BbvProbeDebugModeLabel(dbg_bbv_probe_debug_mode_));
+                }
+            }
+            
+            ImGui::SetNextItemOpen(false, ImGuiCond_FirstUseEver);
+            if (ImGui::CollapsingHeader("Voxel Debug"))
+            {
+                NGL_IMGUI_SCOPED_INDENT(10.0f);
+
+                // カテゴリ選択ラジオボタン.
+                if (ImGui::RadioButton("Off", dbg_view_category_ == -1)) { dbg_view_category_ = -1; }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("BBV", dbg_view_category_ == 0)) { dbg_view_category_ = 0; }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("FSP", dbg_view_category_ == 1)) { dbg_view_category_ = 1; }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("ASSP", dbg_view_category_ == 2)) { dbg_view_category_ = 2; }
+                if(dbg_view_category_ > 2) { dbg_view_category_ = 2; }
+
+                // カテゴリ別サブモードスライダ.
+                if (0 <= dbg_view_category_)
+                {
+                    const int k_sub_mode_max[] = { 14, 1, 7 };
+                    auto get_sub_mode_description = [](int category, int sub_mode) -> const char*
+                    {
+                        switch(category)
+                        {
+                        case 0: // BBV
+                            switch(sub_mode)
+                            {
+                            case 0: return "Trace: voxel ID color";
+                            case 1: return "Trace: fine voxel color";
+                            case 2: return "Trace: brick ID color";
+                            case 3: return "Trace: hit normal";
+                            case 4: return "Trace: hit depth";
+                            case 5: return "Trace: brick occupancy";
+                            case 6: return "Brick occupancy test trace";
+                            case 7: return "Top-down occupancy X-ray";
+                            case 8: return "Brick coarse-check count (alt)";
+                            case 9: return "Fine voxel/bitmask check count (alt)";
+                            case 10: return "Brick coarse-check count";
+                            case 11: return "Fine voxel/bitmask check count";
+                            case 12: return "Detail efficiency";
+                            case 13: return "Cone transmittance approximation";
+                            case 14: return "Resolved brick radiance";
+                            default: return "Unknown";
+                            }
+                        case 1: // FSP
+                            switch(sub_mode)
+                            {
+                            case 0: return "FSP Octahedral atlas RGBA";
+                            case 1: return "FSP packed SH RGBA";
+                            default: return "Unknown";
+                            }
+                        case 2: // ASSP
+                            switch(sub_mode)
+                            {
+                            case 0: return "ASSP probe atlas raw";
+                            case 1: return "ASSP packed SH raw";
+                            case 2: return "ASSP SH sample";
+                            case 3: return "Filtered variance mean";
+                            case 4: return "Filtered variance";
+                            case 5: return "Raw variance mean";
+                            case 6: return "Raw variance";
+                            case 7: return "Per-probe ray count";
+                            default: return "Unknown";
+                            }
+                        default:
+                            return "Unknown";
+                        }
+                    };
+                    const int sub_max = k_sub_mode_max[dbg_view_category_];
+                    // カテゴリ切替時にクランプ.
+                    if (dbg_view_sub_mode_ > sub_max) dbg_view_sub_mode_ = sub_max;
+                    if (dbg_view_sub_mode_ < 0) dbg_view_sub_mode_ = 0;
+                    ImGui::SliderInt("Sub Mode", &dbg_view_sub_mode_, 0, sub_max);
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_view_sub_mode_ = 0;
+                        ImGui::EndPopup();
+                    }
+                    ImGui::TextDisabled("Sub Mode %d: %s", dbg_view_sub_mode_, get_sub_mode_description(dbg_view_category_, dbg_view_sub_mode_));
                 }
             }
         }
@@ -1017,7 +1004,6 @@ namespace ngl::render::app
             pso_fsp_surface_mask_compact_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_compact_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
-            pso_fsp_update_ = CreateComputePSO("instant_rdv/fsp/fsp_update_cs.hlsl");
             pso_fsp_probe_ray_request_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_request_cs.hlsl");
             pso_fsp_probe_finalize_linear_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_finalize_linear_indirect_arg_cs.hlsl");
             pso_fsp_probe_ray_trace_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_trace_cs.hlsl");
@@ -2234,35 +2220,6 @@ namespace ngl::render::app
 
                 fsp_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::IndirectArgument);
             }
-            // Fsp Update Pass.
-            // 0: 旧 single-pass (legacy compare 用)
-            // 1: multipass request -> trace -> resolve (デフォルト)
-            if(0 == InstantRasterDerivedVoxelScene::dbg_fsp_update_mode_)
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_LegacySinglePass");
-
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_fsp_update_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                pso_fsp_update_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                pso_fsp_update_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
-                pso_fsp_update_->SetView(&desc_set, "BitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.srv.Get());
-
-                pso_fsp_update_->SetView(&desc_set, "FspActiveProbeListCurr", fsp_active_probe_curr_list.srv.Get());
-                pso_fsp_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
-                pso_fsp_update_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
-                pso_fsp_update_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
-                pso_fsp_update_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
-
-                p_command_list->SetPipelineState(pso_fsp_update_.Get());
-                p_command_list->SetDescriptorSet(pso_fsp_update_.Get(), &desc_set);
-                p_command_list->DispatchIndirect(fsp_indirect_arg_.buffer.Get());
-
-                p_command_list->ResourceUavBarrier(fsp_cell_probe_index_buffer_.buffer.Get());
-                p_command_list->ResourceUavBarrier(fsp_probe_pool_buffer_.buffer.Get());
-                p_command_list->ResourceUavBarrier(fsp_probe_free_stack_buffer_.buffer.Get());
-                p_command_list->ResourceUavBarrier(fsp_probe_atlas_tex_.texture.Get());
-            }
-            else
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspUpdate_MultiPass");
                 {

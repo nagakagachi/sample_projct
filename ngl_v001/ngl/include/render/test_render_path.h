@@ -45,7 +45,7 @@ namespace ngl::test
     struct RenderFeatureGi
     {
         render::app::InstantRasterDerivedVoxelScene* p_instant_rdv = {};
-        int sample_mode = EGiSampleMode_Assp;
+        int sample_mode = EGiSampleMode_Fsp;
         bool enable_sky_visibility = false;
         bool enable_radiance = false;
         float probe_sample_offset_view{0.0f};

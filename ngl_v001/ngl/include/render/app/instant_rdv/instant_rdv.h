@@ -198,7 +198,6 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_request_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_finalize_linear_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_trace_ = {};
@@ -302,7 +301,6 @@ namespace ngl::render::app
         static int dbg_fsp_probe_debug_mode_;
         static int dbg_fsp_probe_use_relocated_pos_;
         static int dbg_fsp_update_ray_jitter_enable_;
-        static int dbg_fsp_update_mode_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
         static float dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;
@@ -571,7 +569,7 @@ namespace ngl::render::app
 			
             rhi::ConstantBufferPooledHandle scene_cbv{};
             render::app::InstantRasterDerivedVoxelScene* p_instant_rdv = {};
-            int gi_sample_mode = 0;
+            int gi_sample_mode = 2;
 
             ngl::rtg::RtgResourceHandle h_depth{};
 		};

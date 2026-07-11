@@ -48,7 +48,7 @@ namespace ngl::render::task
             float sky_lit_intensity{1.0f};
 			
             render::app::InstantRasterDerivedVoxelScene* p_instant_rdv = {};
-            int gi_sample_mode = 1;
+            int gi_sample_mode = 2;
             bool is_enable_sky_visibility = false;
             bool is_enable_radiance = false;
             float probe_sample_offset_view{ 0.0f };// Probeサンプル位置をビュー方向にオフセットする量[距離単位].
