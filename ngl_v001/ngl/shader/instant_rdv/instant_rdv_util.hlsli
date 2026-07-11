@@ -181,6 +181,94 @@ bool FspTryGetGlobalCellIndexFromWorldPos(float3 pos_ws, uint cascade_index, out
     return false;
 }
 
+// 指定位置を含む最も細かいcascadeと、そのglobal cell indexを返す。
+bool FspTryGetFinestCascadeCellFromWorldPos(
+    float3 pos_ws,
+    out uint cascade_index,
+    out uint global_cell_index)
+{
+    const uint cascade_count = FspCascadeCount();
+    [loop]
+    for(uint ci = 0u; ci < cascade_count; ++ci)
+    {
+        if(FspTryGetGlobalCellIndexFromWorldPos(pos_ws, ci, global_cell_index))
+        {
+            cascade_index = ci;
+            return true;
+        }
+    }
+
+    cascade_index = 0u;
+    global_cell_index = k_fsp_invalid_probe_index;
+    return false;
+}
+
+// fine/coarse境界でLightingがcoarseを選択する確率を返す。
+// SurfacePassは0より大きい領域で両cascadeを登録し、確率選択時の欠損を防ぐ。
+float FspCalcCascadeBoundaryDitherRate(float3 sample_pos_ws, uint cascade_index)
+{
+    if((cascade_index + 1u) >= FspCascadeCount())
+    {
+        return 0.0;
+    }
+
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const FspCascadeGridParam coarse_cascade = FspGetCascadeParam(cascade_index + 1u);
+    const float3 cascade_max_pos =
+        cascade.grid.grid_min_pos + float3(cascade.grid.grid_resolution) * cascade.grid.cell_size;
+    const float3 dist_to_min = sample_pos_ws - cascade.grid.grid_min_pos;
+    const float3 dist_to_max = cascade_max_pos - sample_pos_ws;
+    const float boundary_dist = min(
+        min(dist_to_min.x, dist_to_max.x),
+        min(min(dist_to_min.y, dist_to_max.y), min(dist_to_min.z, dist_to_max.z)));
+    const float dither_width = max(coarse_cascade.grid.cell_size, cascade.grid.cell_size);
+    const float dither_rate = 1.0 - saturate(boundary_dist / max(dither_width, 1e-5));
+    if(dither_rate <= 0.0)
+    {
+        return 0.0;
+    }
+
+    uint coarse_global_cell_index = k_fsp_invalid_probe_index;
+    return FspTryGetGlobalCellIndexFromWorldPos(
+        sample_pos_ws,
+        cascade_index + 1u,
+        coarse_global_cell_index) ? dither_rate : 0.0;
+}
+
+// Surfaceを所有するfinest cascadeを返し、境界帯だけ隣接coarse cellも返す。
+uint FspGetSurfaceOwnerCells(float3 pos_ws, out uint2 global_cell_indices)
+{
+    global_cell_indices = k_fsp_invalid_probe_index.xx;
+
+    uint owner_cascade_index = 0u;
+    uint owner_global_cell_index = k_fsp_invalid_probe_index;
+    if(!FspTryGetFinestCascadeCellFromWorldPos(
+        pos_ws,
+        owner_cascade_index,
+        owner_global_cell_index))
+    {
+        return 0u;
+    }
+
+    global_cell_indices.x = owner_global_cell_index;
+    if(FspCalcCascadeBoundaryDitherRate(pos_ws, owner_cascade_index) <= 0.0)
+    {
+        return 1u;
+    }
+
+    uint coarse_global_cell_index = k_fsp_invalid_probe_index;
+    if(!FspTryGetGlobalCellIndexFromWorldPos(
+        pos_ws,
+        owner_cascade_index + 1u,
+        coarse_global_cell_index))
+    {
+        return 1u;
+    }
+
+    global_cell_indices.y = coarse_global_cell_index;
+    return 2u;
+}
+
 uint2 FspProbeAtlasMapPos(uint probe_index)
 {
     return uint2(probe_index % cb_instant_rdv.fsp_probe_atlas_tile_width, probe_index / cb_instant_rdv.fsp_probe_atlas_tile_width);

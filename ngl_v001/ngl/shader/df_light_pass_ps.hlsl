@@ -198,56 +198,22 @@ bool FspTryLoadPackedShL1FromCellIndex(out FspProbePackedShL1Sample result, uint
     return true;
 }
 
-// fine/coarse cascade の境界帯で coarse へ逃がす確率を返す。
-float FspCalcCascadeBoundaryDitherRate(float3 sample_pos_ws, uint cascade_index)
-{
-    if((cascade_index + 1u) >= FspCascadeCount())
-    {
-        return 0.0;
-    }
-
-    uint coarse_global_cell_index = k_fsp_invalid_probe_index;
-    if(!FspTryGetGlobalCellIndexFromWorldPos(sample_pos_ws, cascade_index + 1u, coarse_global_cell_index))
-    {
-        return 0.0;
-    }
-
-    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
-    const FspCascadeGridParam coarse_cascade = FspGetCascadeParam(cascade_index + 1u);
-    const float3 cascade_max_pos = cascade.grid.grid_min_pos + float3(cascade.grid.grid_resolution) * cascade.grid.cell_size;
-    const float3 dist_to_min = sample_pos_ws - cascade.grid.grid_min_pos;
-    const float3 dist_to_max = cascade_max_pos - sample_pos_ws;
-    const float boundary_dist = min(min(dist_to_min.x, dist_to_max.x), min(min(dist_to_min.y, dist_to_max.y), min(dist_to_min.z, dist_to_max.z)));
-    const float dither_width = max(coarse_cascade.grid.cell_size, cascade.grid.cell_size);
-    return 1.0 - saturate(boundary_dist / max(dither_width, 1e-5));
-}
-
 // ライティング時に使う cascade を 1 本だけ選ぶ。
 bool FspTrySelectLightingCascade(out uint cascade_index, float3 sample_pos_ws, float2 dither_seed)
 {
-    cascade_index = 0;
-
-    const uint cascade_count = FspCascadeCount();
-    [loop]
-    for(uint ci = 0; ci < cascade_count; ++ci)
+    uint global_cell_index = k_fsp_invalid_probe_index;
+    if(!FspTryGetFinestCascadeCellFromWorldPos(sample_pos_ws, cascade_index, global_cell_index))
     {
-        uint global_cell_index = k_fsp_invalid_probe_index;
-        if(!FspTryGetGlobalCellIndexFromWorldPos(sample_pos_ws, ci, global_cell_index))
-        {
-            continue;
-        }
-
-        cascade_index = ci;
-        // 境界帯だけ coarse cascade へ確率的に逃がし、ブレンドではなくディザで切り替える。
-        const float coarse_select_rate = FspCalcCascadeBoundaryDitherRate(sample_pos_ws, ci);
-        if(coarse_select_rate > 0.0 && interleaved_gradient_noise(dither_seed) < coarse_select_rate)
-        {
-            cascade_index = min(ci + 1u, cascade_count - 1u);
-        }
-        return true;
+        return false;
     }
 
-    return false;
+    // 境界帯だけcoarse cascadeへ確率的に逃がし、ブレンドではなくディザで切り替える。
+    const float coarse_select_rate = FspCalcCascadeBoundaryDitherRate(sample_pos_ws, cascade_index);
+    if(coarse_select_rate > 0.0 && interleaved_gradient_noise(dither_seed) < coarse_select_rate)
+    {
+        cascade_index = min(cascade_index + 1u, FspCascadeCount() - 1u);
+    }
+    return true;
 }
 
 // 最初に見つかった有効 probe をそのまま使う nearest 参照。

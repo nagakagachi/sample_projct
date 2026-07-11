@@ -153,6 +153,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_ = k_default_instant_rdv_param.debug_fsp_probe_use_relocated_pos;
     int InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
+    int InstantRasterDerivedVoxelScene::dbg_fsp_surface_pass_mode_ = 1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_cascade_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_cascade_count_ = 1;
     float InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_ = k_default_instant_rdv_param.fsp_relocation_offset_scale_for_cascade_cell_size;
@@ -381,6 +382,22 @@ namespace ngl::render::app
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
                             dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
+                        ImGui::EndPopup();
+                    }
+                }
+                {
+                    static const char* k_fsp_surface_pass_mode_items[] = {
+                        "SurfaceMask All Cascades",
+                        "SurfaceMask Ownership"
+                    };
+                    ImGui::Combo(
+                        "Surface Pass",
+                        &dbg_fsp_surface_pass_mode_,
+                        k_fsp_surface_pass_mode_items,
+                        IM_ARRAYSIZE(k_fsp_surface_pass_mode_items));
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_surface_pass_mode_ = 1;
                         ImGui::EndPopup();
                     }
                 }
@@ -1001,6 +1018,7 @@ namespace ngl::render::app
             pso_fsp_begin_update_ = CreateComputePSO("instant_rdv/fsp/fsp_begin_update_cs.hlsl");
             pso_fsp_surface_mask_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_clear_cs.hlsl");
             pso_fsp_surface_mask_inject_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_inject_cs.hlsl");
+            pso_fsp_surface_mask_ownership_inject_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_ownership_inject_cs.hlsl");
             pso_fsp_surface_mask_compact_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_compact_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
@@ -2093,13 +2111,7 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass");
 
-                // SurfaceMask is the only FSP surface extraction path.
-                // A single bit represents one global FSP cell across all cascades:
-                // 1) Clear all mask words for this frame.
-                // 2) Scan depth and OR matching cell bits. Multiple pixels that hit
-                //    the same 32-cell word are wave-merged in the shader.
-                // 3) Scan set bits once and build SurfaceProbeCellList directly.
-                // The old finalize-style work buffers are no longer allocated.
+                // bitmask clear/compactは十分小さいため共通化し、支配的なdepth injectだけを比較する。
                 {
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskClear");
 
@@ -2120,25 +2132,33 @@ namespace ngl::render::app
                     p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
                 }
                 {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskInject");
+                    const bool use_ownership =
+                        (0 != InstantRasterDerivedVoxelScene::dbg_fsp_surface_pass_mode_);
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                        p_command_list,
+                        use_ownership
+                            ? "FspSurfacePass_SurfaceMaskOwnershipInject"
+                            : "FspSurfacePass_SurfaceMaskAllCascadeInject");
+
+                    auto* p_inject_pso = use_ownership
+                        ? pso_fsp_surface_mask_ownership_inject_.Get()
+                        : pso_fsp_surface_mask_inject_.Get();
 
                     ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
-                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
-                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                    pso_fsp_surface_mask_inject_->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
+                    p_inject_pso->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+                    p_inject_pso->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+                    p_inject_pso->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                    p_inject_pso->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
 
-                    p_command_list->SetPipelineState(pso_fsp_surface_mask_inject_.Get());
-                    p_command_list->SetDescriptorSet(pso_fsp_surface_mask_inject_.Get(), &desc_set);
-                    pso_fsp_surface_mask_inject_->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
+                    p_command_list->SetPipelineState(p_inject_pso);
+                    p_command_list->SetDescriptorSet(p_inject_pso, &desc_set);
+                    p_inject_pso->DispatchHelper(p_command_list, hw_depth_size.x, hw_depth_size.y, 1);
 
                     p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
                 }
                 {
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskCompact");
 
-                    // Compact dispatch is based on mask words, not pixels. Each
-                    // thread consumes up to 32 cells and appends only set bits.
                     fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
 
                     ngl::rhi::DescriptorSetDep desc_set = {};
