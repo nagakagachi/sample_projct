@@ -72,6 +72,8 @@ namespace ngl::render::app
         case 5: return "5: Oct sky visibility (current dir)";
         case 6: return "6: SH radiance (reconstructed)";
         case 7: return "7: SH sky visibility (reconstructed)";
+        case 8: return "8: IrradianceVolume SH radiance";
+        case 9: return "9: IrradianceVolume SH sky visibility";
         default: return "Unknown mode";
         }
     }
@@ -463,7 +465,7 @@ namespace ngl::render::app
                     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
                     {
                         NGL_IMGUI_SCOPED_INDENT(10.0f);
-                        ImGui::SliderInt("Fsp Probe Mode", &dbg_fsp_probe_debug_mode_, -1, 8);
+                        ImGui::SliderInt("Fsp Probe Mode", &dbg_fsp_probe_debug_mode_, -1, 9);
                         if (ImGui::BeginPopupContextItem()) {
                             if (ImGui::MenuItem("Reset to Default"))
                                 dbg_fsp_probe_debug_mode_ = k_default_instant_rdv_param.debug_fsp_probe_mode;
@@ -1027,6 +1029,7 @@ namespace ngl::render::app
             pso_fsp_probe_ray_trace_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_trace_cs.hlsl");
             pso_fsp_probe_ray_resolve_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_resolve_cs.hlsl");
             pso_fsp_sh_update_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_sh_update_cs.hlsl");
+            pso_fsp_irradiance_volume_propagate_ = CreateComputePSO("instant_rdv/fsp/fsp_irradiance_volume_propagate_cs.hlsl");
 
             pso_assp_probe_clear_ = CreateComputePSO("instant_rdv/assp/assp_probe_clear_cs.hlsl");
             pso_assp_probe_begin_ = CreateComputePSO("instant_rdv/assp/assp_probe_begin_cs.hlsl");
@@ -2340,6 +2343,22 @@ namespace ngl::render::app
                 p_command_list->SetPipelineState(pso_fsp_sh_update_.Get());
                 p_command_list->SetDescriptorSet(pso_fsp_sh_update_.Get(), &desc_set);
                 p_command_list->DispatchIndirect(fsp_indirect_arg_.buffer.Get());
+
+                p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
+            }
+            {
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspIrradianceVolumePropagate");
+
+                ngl::rhi::DescriptorSetDep desc_set = {};
+                pso_fsp_irradiance_volume_propagate_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                pso_fsp_irradiance_volume_propagate_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+                pso_fsp_irradiance_volume_propagate_->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
+                pso_fsp_irradiance_volume_propagate_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
+                pso_fsp_irradiance_volume_propagate_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_uav.Get(), fsp_irradiance_volume_sh_buffer_.uav.Get());
+
+                p_command_list->SetPipelineState(pso_fsp_irradiance_volume_propagate_.Get());
+                p_command_list->SetDescriptorSet(pso_fsp_irradiance_volume_propagate_.Get(), &desc_set);
+                pso_fsp_irradiance_volume_propagate_->DispatchHelper(p_command_list, fsp_total_cell_count_, 1, 1);
 
                 p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
             }

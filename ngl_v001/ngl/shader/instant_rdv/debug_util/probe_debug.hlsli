@@ -23,6 +23,7 @@ struct VS_OUTPUT
     float3 pos_ws : POSITION_WS;
     float3 voxel_probe_pos_ws : VOXELPROBEPOSWS0;
     uint cascade_index : CASCADEINDEX0;
+    uint global_cell_index : GLOBALCELLINDEX0;
     uint probe_index : PROBEINDEX0;
     uint probe_flags : PROBEFLAGS0;
 };
@@ -74,23 +75,22 @@ VS_OUTPUT main_vs(VS_INPUT input)
         output.pos_ws = 0.0.xxx;
         output.voxel_probe_pos_ws = 0.0.xxx;
         output.cascade_index = 0;
+        output.global_cell_index = k_fsp_invalid_probe_index;
         output.probe_index = k_fsp_invalid_probe_index;
         output.probe_flags = 0;
         return output;
     }
 
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
-    const uint probe_index = FspCellProbeIndexBuffer[global_cell_index];
-    const bool is_allocated = (probe_index != k_fsp_invalid_probe_index);
+    uint probe_index = k_fsp_invalid_probe_index;
     FspProbePoolData probe_pool_data = (FspProbePoolData)0;
-    if(is_allocated)
-    {
-        probe_pool_data = FspProbePoolBuffer[probe_index];
-    }
+    const bool is_allocated = FspTryGetActiveProbeForCell(probe_index, probe_pool_data, global_cell_index);
     const bool use_relocated_probe_pos = (0 != cb_instant_rdv.debug_fsp_probe_use_relocated_pos);
     const float3 probe_offset = (is_allocated && use_relocated_probe_pos) ? decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size) : float3(0.0, 0.0, 0.0);
 
-    const float3 probe_pos_ws = FspCalcCellCenterWs(cascade_index, local_cell_index) + probe_offset;
+    const bool is_irradiance_volume_debug = (8 == cb_instant_rdv.debug_fsp_probe_mode) || (9 == cb_instant_rdv.debug_fsp_probe_mode);
+    const float3 cell_center_ws = FspCalcCellCenterWs(cascade_index, local_cell_index);
+    const float3 probe_pos_ws = is_irradiance_volume_debug ? cell_center_ws : (cell_center_ws + probe_offset);
 
 
     float4 color = float4(1,1,1,1);
@@ -98,7 +98,8 @@ VS_OUTPUT main_vs(VS_INPUT input)
     // 表示位置.
     const float3 instance_pos = probe_pos_ws;
     const bool is_selected_cascade = (cb_instant_rdv.debug_fsp_probe_cascade < 0) || (cb_instant_rdv.debug_fsp_probe_cascade == int(cascade_index));
-    float draw_scale = (is_allocated && is_selected_cascade) ? cb_instant_rdv.debug_probe_radius : 0.0;
+    const bool has_volume_sh = FspIrradianceVolumeHasValidSH(global_cell_index);
+    float draw_scale = (is_selected_cascade && ((is_irradiance_volume_debug && has_volume_sh) || ((!is_irradiance_volume_debug) && is_allocated))) ? cb_instant_rdv.debug_probe_radius : 0.0;
 
     const int vtx_index = particle_quad_index[ instance_vtx_id ];
     float3 quad_vtx_pos = particle_quad_pos[vtx_index] * draw_scale;
@@ -116,8 +117,9 @@ VS_OUTPUT main_vs(VS_INPUT input)
 
     output.voxel_probe_pos_ws = instance_pos;
     output.cascade_index = cascade_index;
+    output.global_cell_index = global_cell_index;
     output.probe_index = probe_index;
-    output.probe_flags = (is_allocated && probe_pool_data.owner_cell_index == global_cell_index) ? 1u : 0u;
+    output.probe_flags = is_allocated ? 1u : 0u;
 
 	return output;
 }
@@ -134,14 +136,19 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     {
         discard;
     }
-    if(input.probe_index == k_fsp_invalid_probe_index)
+    const bool is_irradiance_volume_debug = (8 == cb_instant_rdv.debug_fsp_probe_mode) || (9 == cb_instant_rdv.debug_fsp_probe_mode);
+    if((!is_irradiance_volume_debug) && input.probe_index == k_fsp_invalid_probe_index)
     {
         discard;
     }
-    const FspProbePoolData probe_pool_data = FspProbePoolBuffer[input.probe_index];
-    if(probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index)
+    FspProbePoolData probe_pool_data = (FspProbePoolData)0;
+    if(!is_irradiance_volume_debug)
     {
-        discard;
+        probe_pool_data = FspProbePoolBuffer[input.probe_index];
+        if(probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index)
+        {
+            discard;
+        }
     }
 
     const float3 dir_to_camera = normalize(view_origin - input.voxel_probe_pos_ws);
@@ -154,10 +161,14 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     normal_ws = normalize(normal_ws);
 
 
-    const uint2 oct_cell_id = min(uint2(OctEncode(normal_ws) * k_fsp_probe_octmap_width), uint2(k_fsp_probe_octmap_width - 1, k_fsp_probe_octmap_width - 1));
-    const uint2 octmap_texel_pos = FspProbeAtlasTexelCoord(input.probe_index, oct_cell_id);
-    const float4 octmap_sample = FspProbeAtlasTex.Load(int3(octmap_texel_pos, 0));
-    const uint owner_cell_index = probe_pool_data.owner_cell_index;
+    float4 octmap_sample = 0.0.xxxx;
+    if(!is_irradiance_volume_debug)
+    {
+        const uint2 oct_cell_id = min(uint2(OctEncode(normal_ws) * k_fsp_probe_octmap_width), uint2(k_fsp_probe_octmap_width - 1, k_fsp_probe_octmap_width - 1));
+        const uint2 octmap_texel_pos = FspProbeAtlasTexelCoord(input.probe_index, oct_cell_id);
+        octmap_sample = FspProbeAtlasTex.Load(int3(octmap_texel_pos, 0));
+    }
+    const uint owner_cell_index = is_irradiance_volume_debug ? input.global_cell_index : probe_pool_data.owner_cell_index;
     const float4 sh_basis = EvaluateL1ShBasis(normal_ws);
     const float4 sh_sky_vis = float4(
         FspIrradianceVolumeLoadCoeff(owner_cell_index, 0).r,
@@ -225,6 +236,20 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
         color = float4(pow(mapped_radiance, 1.0 / 2.2), 1.0);
     }
     else if(7 == cb_instant_rdv.debug_fsp_probe_mode)
+    {
+        const float sh_sky_visibility = max(0.0, dot(sh_sky_vis, sh_basis));
+        color = sh_sky_visibility.xxxx;
+    }
+    else if(8 == cb_instant_rdv.debug_fsp_probe_mode)
+    {
+        const float3 sh_radiance = max(0.0.xxx, float3(
+            dot(sh_radiance_r, sh_basis),
+            dot(sh_radiance_g, sh_basis),
+            dot(sh_radiance_b, sh_basis)));
+        const float3 mapped_radiance = sh_radiance / (1.0 + sh_radiance);
+        color = float4(pow(mapped_radiance, 1.0 / 2.2), 1.0);
+    }
+    else if(9 == cb_instant_rdv.debug_fsp_probe_mode)
     {
         const float sh_sky_visibility = max(0.0, dot(sh_sky_vis, sh_basis));
         color = sh_sky_visibility.xxxx;

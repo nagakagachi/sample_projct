@@ -865,7 +865,7 @@ bool AppGame::Initialize()
 
 #if 1
     // InstantRdv.
-    instant_rdv_.Initialize(&device, ngl::math::Vec3u(64), 3.0f, ngl::math::Vec3u(32), 2.0f, 5);
+    instant_rdv_.Initialize(&device, ngl::math::Vec3u(64), 3.0f, ngl::math::Vec3u(16), 2.0f, 5);
     ngl::render::app::InstantRasterDerivedVoxelScene::dbg_view_category_ = 3;
     ngl::render::app::InstantRasterDerivedVoxelScene::dbg_view_sub_mode_ = 0;
 #endif
