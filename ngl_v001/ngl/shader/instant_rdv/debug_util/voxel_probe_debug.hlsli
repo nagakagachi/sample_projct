@@ -63,8 +63,14 @@ VS_OUTPUT main_vs(VS_INPUT input)
     const uint instance_vtx_id = input.vertex_id % 6;
 
 
-    const int3 voxel_coord = index_to_voxel_coord(instance_id, cb_instant_rdv.bbv.grid_resolution);
-    const uint voxel_index = voxel_coord_to_index(voxel_coord_toroidal_mapping(voxel_coord, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_resolution), cb_instant_rdv.bbv.grid_resolution);
+    const int3 voxel_coord =
+        BbvMortonIndexToPhysicalVoxelCoord(instance_id, cb_instant_rdv.bbv.grid_resolution);
+    const uint voxel_index = BbvPhysicalVoxelCoordToMortonIndex(
+        voxel_coord_toroidal_mapping(
+            voxel_coord,
+            cb_instant_rdv.bbv.grid_toroidal_offset,
+            cb_instant_rdv.bbv.grid_resolution),
+        cb_instant_rdv.bbv.grid_resolution);
 
     // Bbv固有データ.
     const uint bbv_occupied_voxel_count = BitmaskBrickVoxel[bbv_voxel_coarse_occupancy_info_addr(voxel_index)];

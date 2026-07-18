@@ -325,15 +325,16 @@ void main_cs(
         }
         else if(1 == debug_sub_mode)
         {
-            // Dense IrradianceVolume SH を global cell index 順に2Dへ展開して表示する。
-            const uint global_cell_index = dtid.x + dtid.y * uint(cb_instant_rdv.fsp_cascade[0].grid.flatten_2d_width);
-            if(global_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
+            // Dense IrradianceVolume SH をX-major cell index順に2Dへ展開して表示する。
+            const uint irradiance_volume_cell_index =
+                dtid.x + dtid.y * uint(cb_instant_rdv.fsp_cascade[0].grid.flatten_2d_width);
+            if(irradiance_volume_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
             {
                 return;
             }
 
             // FSP IrradianceVolume SH texture raw RGBA.
-            RWTexWork[dtid.xy] = FspIrradianceVolumeLoadCoeff(global_cell_index, 0);
+            RWTexWork[dtid.xy] = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 0);
         }
     }
     // Category 2: ASSP.

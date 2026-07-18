@@ -42,9 +42,11 @@ void main_cs(
         return;
 
 
-    const int3 voxel_coord = index_to_voxel_coord(update_element_id, cb_instant_rdv.bbv.grid_resolution);
+    const int3 voxel_coord =
+        BbvMortonIndexToPhysicalVoxelCoord(update_element_id, cb_instant_rdv.bbv.grid_resolution);
     const int3 voxel_coord_toroidal = voxel_coord_toroidal_mapping(voxel_coord, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_resolution);
-    const uint voxel_index = voxel_coord_to_index(voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
+    const uint voxel_index =
+        BbvPhysicalVoxelCoordToMortonIndex(voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
 
     const uint bbv_addr = bbv_voxel_bitmask_data_addr(voxel_index);
     const uint bbv_occupied_voxel_count = BitmaskBrickVoxel[bbv_voxel_coarse_occupancy_info_addr(voxel_index)];
@@ -114,7 +116,11 @@ void main_cs(
                 if(all(prev_nearest_voxel_coord >= 0) && all(prev_nearest_voxel_coord < cb_instant_rdv.bbv.grid_resolution))
                 {
                     const int3 surface_voxel_coord_toroidal = voxel_coord_toroidal_mapping(prev_nearest_voxel_coord, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_resolution);
-                    const uint surface_occupied_voxel_count = BitmaskBrickVoxel[bbv_voxel_coarse_occupancy_info_addr(voxel_coord_to_index(surface_voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution))];
+                    const uint surface_occupied_voxel_count = BitmaskBrickVoxel[
+                        bbv_voxel_coarse_occupancy_info_addr(
+                            BbvPhysicalVoxelCoordToMortonIndex(
+                                surface_voxel_coord_toroidal,
+                                cb_instant_rdv.bbv.grid_resolution))];
                     if(0 != surface_occupied_voxel_count)
                     {
                         // 現在も有効なVoxelなら有効なDistanceとして利用.
@@ -136,7 +142,9 @@ void main_cs(
             if(all(neighbor_voxel_coord >= 0) && all(neighbor_voxel_coord < cb_instant_rdv.bbv.grid_resolution))
             {
                 const int3 neighbor_voxel_coord_toroidal = voxel_coord_toroidal_mapping(neighbor_voxel_coord, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_resolution);
-                const uint neighbor_voxel_index = voxel_coord_to_index(neighbor_voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
+                const uint neighbor_voxel_index = BbvPhysicalVoxelCoordToMortonIndex(
+                    neighbor_voxel_coord_toroidal,
+                    cb_instant_rdv.bbv.grid_resolution);
                 
                 const BbvOptionalData neighbor_voxel_optional_data = RWBitmaskBrickVoxelOptionData[neighbor_voxel_index];
 

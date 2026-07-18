@@ -18,7 +18,8 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
     uint candidate_voxel_index = 0;
     if(dtid.x < brick_count)
     {
-        const int3 voxel_coord_toroidal = index_to_voxel_coord(dtid.x, cb_instant_rdv.bbv.grid_resolution);
+        const int3 voxel_coord_toroidal =
+            BbvMortonIndexToPhysicalVoxelCoord(dtid.x, cb_instant_rdv.bbv.grid_resolution);
         const int3 voxel_coord_linear = voxel_coord_toroidal_mapping(
             voxel_coord_toroidal,
             cb_instant_rdv.bbv.grid_resolution - cb_instant_rdv.bbv.grid_toroidal_offset,

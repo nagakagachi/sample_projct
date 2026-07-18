@@ -30,7 +30,8 @@ void main_cs(
     }
 
     const int3 voxel_coord_toroidal = voxel_coord_toroidal_mapping(voxel_coord, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_resolution);
-    const uint voxel_index = voxel_coord_to_index(voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
+    const uint voxel_index =
+        BbvPhysicalVoxelCoordToMortonIndex(voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
 
     BbvOptionalData voxel_optional_data = RWBitmaskBrickVoxelOptionData[voxel_index];
     const uint sample_count = RWBbvRadianceAccumBuffer[bbv_radiance_accum_count_addr(voxel_index)];

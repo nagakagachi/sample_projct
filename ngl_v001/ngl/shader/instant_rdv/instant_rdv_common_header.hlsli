@@ -198,6 +198,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     // cell 側は probe index だけを持ち、probe 側に状態を寄せる。
     struct FspProbePoolData
     {
+        // FSP共通global cell index。cascade offset + X-major physical local index。
+        // BBVのMorton voxel indexとは異なるため、相互に流用しないこと。
         uint owner_cell_index;
         uint probe_offset_v3;// signed 10bit vector3 encode.
         uint last_seen_frame;
@@ -255,6 +257,9 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     struct NGL_CPP_ALIGN_16 FspCascadeGridParam
     {
         InstantRdvToroidalGridParam grid;
+        // 全cascadeは同じcubic power-of-two解像度を持ち、cell_sizeだけがcascadeごとに2倍になる。
+        // ActiveProbe/SurfaceMask/IrradianceVolumeは共通のX-major local indexとこのoffsetを使う。
+        // BBVだけは独立したMorton voxel index空間であり、このoffsetを使用しない。
         uint cell_offset;
         uint cell_count;
         uint dummy0;

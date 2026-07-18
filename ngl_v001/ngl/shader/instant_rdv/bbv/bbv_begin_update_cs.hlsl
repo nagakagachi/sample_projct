@@ -36,7 +36,7 @@ void main_cs(
 
     if(dtid.x < voxel_count)
     {
-        int3 voxel_coord = index_to_voxel_coord(dtid.x, cb_instant_rdv.bbv.grid_resolution);
+        int3 voxel_coord = BbvMortonIndexToPhysicalVoxelCoord(dtid.x, cb_instant_rdv.bbv.grid_resolution);
         // 移動によるInvalidateチェック..
         // バッファ上のVoxelアドレスをToroidalマッピング前の座標に変換. 修正版.
         int3 linear_voxel_coord = (voxel_coord - cb_instant_rdv.bbv.grid_toroidal_offset_prev + cb_instant_rdv.bbv.grid_resolution) % cb_instant_rdv.bbv.grid_resolution;

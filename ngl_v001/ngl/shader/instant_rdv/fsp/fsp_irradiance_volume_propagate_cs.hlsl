@@ -9,9 +9,11 @@ fsp_irradiance_volume_propagate_cs.hlsl
 
 #include "../instant_rdv_util.hlsli"
 
-bool FspIsCellCenterOccupied(uint cascade_index, uint local_cell_index)
+bool FspIsCellCenterOccupied(uint cascade_index, int3 linear_coord)
 {
-    const float3 cell_center_ws = FspCalcCellCenterWs(cascade_index, local_cell_index);
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const float3 cell_center_ws =
+        (float3(linear_coord) + 0.5.xxx) * cascade.grid.cell_size + cascade.grid.grid_min_pos;
     return read_bbv_voxel_from_world_pos(
         BitmaskBrickVoxel,
         cb_instant_rdv.bbv.grid_resolution,
@@ -19,15 +21,6 @@ bool FspIsCellCenterOccupied(uint cascade_index, uint local_cell_index)
         cb_instant_rdv.bbv.grid_min_pos,
         cb_instant_rdv.bbv.cell_size_inv,
         cell_center_ws) != 0u;
-}
-
-uint FspLinearCoordToLocalCellIndex(int3 linear_coord, FspCascadeGridParam cascade)
-{
-    const int3 toroidal_coord = voxel_coord_toroidal_mapping(
-        linear_coord,
-        cascade.grid.grid_toroidal_offset,
-        cascade.grid.grid_resolution);
-    return voxel_coord_to_index(toroidal_coord, cascade.grid.grid_resolution);
 }
 
 bool FspTryLoadNeighborSH(
@@ -49,12 +42,12 @@ bool FspTryLoadNeighborSH(
         return false;
     }
 
-    const uint neighbor_local_cell_index = FspLinearCoordToLocalCellIndex(neighbor_linear_coord, cascade);
-    const uint neighbor_global_cell_index = cascade.cell_offset + neighbor_local_cell_index;
-    out_coeff0 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_global_cell_index, 0)];
-    out_coeff1 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_global_cell_index, 1)];
-    out_coeff2 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_global_cell_index, 2)];
-    out_coeff3 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_global_cell_index, 3)];
+    const uint neighbor_irradiance_volume_cell_index =
+        FspIrradianceVolumeCellIndexFromLinearCoord(cascade_index, neighbor_linear_coord);
+    out_coeff0 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_irradiance_volume_cell_index, 0)];
+    out_coeff1 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_irradiance_volume_cell_index, 1)];
+    out_coeff2 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_irradiance_volume_cell_index, 2)];
+    out_coeff3 = RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(neighbor_irradiance_volume_cell_index, 3)];
     return FspIrradianceVolumeHasValidSHCoeff(out_coeff0, out_coeff1, out_coeff2, out_coeff3);
 }
 
@@ -65,27 +58,34 @@ void main_cs(
     uint3 gid : SV_GroupID,
     uint gindex : SV_GroupIndex)
 {
-    const uint global_cell_index = dtid.x;
-    if(global_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
+    const uint irradiance_volume_cell_index = dtid.x;
+    if(irradiance_volume_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
     {
-        return;
-    }
-
-    if(FspIsActiveProbeOwnedCell(global_cell_index))
-    {
-        // ActiveProbeのRT結果が最優先。伝播は未Activeの空間セルを埋めるだけで、観測セルは上書きしない。
         return;
     }
 
     uint cascade_index = 0u;
-    uint local_cell_index = 0u;
-    if(!FspDecodeGlobalCellIndex(global_cell_index, cascade_index, local_cell_index))
+    uint irradiance_volume_local_cell_index = 0u;
+    if(!FspDecodeGlobalCellIndex(
+        irradiance_volume_cell_index,
+        cascade_index,
+        irradiance_volume_local_cell_index))
     {
         return;
     }
 
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
-    const int3 linear_coord = FspLocalCellIndexToLinearCoord(local_cell_index, cascade.grid);
+    const int3 physical_coord = FspLocalCellIndexToPhysicalCoord(
+        irradiance_volume_local_cell_index,
+        cascade.grid.grid_resolution);
+    const int3 linear_coord =
+        (physical_coord - cascade.grid.grid_toroidal_offset) & (cascade.grid.grid_resolution - 1);
+    if(FspIsActiveProbeOwnedCell(irradiance_volume_cell_index))
+    {
+        // ActiveProbeのRT結果が最優先。伝播は未Activeの空間セルを埋めるだけで、観測セルは上書きしない。
+        return;
+    }
+
     const uint cell_parity = uint((linear_coord.x + linear_coord.y + linear_coord.z) & 1);
     // parityをフレームごとに切り替え、6近傍読みと同時書きの衝突を避ける。
     if(cell_parity != (cb_instant_rdv.frame_count & 1u))
@@ -93,7 +93,7 @@ void main_cs(
         return;
     }
 
-    if(FspIsCellCenterOccupied(cascade_index, local_cell_index))
+    if(FspIsCellCenterOccupied(cascade_index, linear_coord))
     {
         // 不透明セル内部は注入点ではないため、近傍伝播でSHを作らない。
         return;
@@ -146,8 +146,8 @@ void main_cs(
     }
 
     const float inv_count = rcp(float(valid_neighbor_count));
-    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 0)] = accum_coeff0 * inv_count;
-    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 1)] = accum_coeff1 * inv_count;
-    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 2)] = accum_coeff2 * inv_count;
-    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 3)] = accum_coeff3 * inv_count;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(irradiance_volume_cell_index, 0)] = accum_coeff0 * inv_count;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(irradiance_volume_cell_index, 1)] = accum_coeff1 * inv_count;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(irradiance_volume_cell_index, 2)] = accum_coeff2 * inv_count;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(irradiance_volume_cell_index, 3)] = accum_coeff3 * inv_count;
 }

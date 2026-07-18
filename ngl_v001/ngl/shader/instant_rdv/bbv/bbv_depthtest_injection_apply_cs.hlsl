@@ -72,7 +72,8 @@ void main_cs(
         if(all(voxel_coord >= 0) && all(voxel_coord < cb_instant_rdv.bbv.grid_resolution))
         {
             const int3 voxel_coord_toroidal = voxel_coord_toroidal_mapping(voxel_coord, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_resolution);
-            voxel_index = voxel_coord_to_index(voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
+            voxel_index =
+                BbvPhysicalVoxelCoordToMortonIndex(voxel_coord_toroidal, cb_instant_rdv.bbv.grid_resolution);
             {
                 // 占有ビットマスク.
                 const float3 voxel_coord_frac = frac(voxel_coordf);

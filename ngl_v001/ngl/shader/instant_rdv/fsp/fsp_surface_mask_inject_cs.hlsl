@@ -72,9 +72,8 @@ void main_cs(
     const float3 to_pixel_ray_vs = CalcViewSpaceRay(screen_uv, cb_ngl_sceneview.cb_proj_mtx);
     const float3 pixel_pos_ws = mul(cb_ngl_sceneview.cb_view_inv_mtx, float4((to_pixel_ray_vs / abs(to_pixel_ray_vs.z)) * view_z, 1.0));
 
-    // A single surface sample can belong to one cell per cascade. Mark all
-    // cascades so the compact pass can later emit global cell indices in the
-    // same address space used by the existing FSP update pipeline.
+    // A single surface sample can belong to one cell per cascade. These are
+    // FSP X-major global indices, not BBV Morton indices.
     const uint cascade_count = FspCascadeCount();
     [unroll]
     for(uint cascade_index = 0u; cascade_index < k_fsp_max_cascade_count; ++cascade_index)

@@ -55,6 +55,8 @@ RWBuffer<uint>    RWBbvRadianceAccumBuffer;
 Buffer<uint>		FrustumBrickList;
 RWBuffer<uint>		RWFrustumBrickList;
 
+// FSP cell-addressed resources use one global address space:
+// cascade.cell_offset + X-major physical local index.
 Buffer<uint>                          FspCellProbeIndexBuffer;
 RWBuffer<uint>                        RWFspCellProbeIndexBuffer;
 StructuredBuffer<FspProbePoolData>    FspProbePoolBuffer;
@@ -65,7 +67,7 @@ Buffer<uint>                          FspActiveProbeListPrev;
 RWBuffer<uint>                        RWFspActiveProbeListPrev;
 Buffer<uint>                          FspActiveProbeListCurr;
 RWBuffer<uint>                        RWFspActiveProbeListCurr;
-// SurfaceMask path: 1bit = 1 global cell index の一時検出マスク。
+// SurfaceMask path: 1bit = 1 FSP X-major global cell index の一時検出マスク。
 Buffer<uint>                          FspSurfaceCellMaskBuffer;
 RWBuffer<uint>                        RWFspSurfaceCellMaskBuffer;
 // FSP update multipass (request/trace/resolve) 用のワークバッファ群。
@@ -81,7 +83,7 @@ RWTexture2D<float4>    RWFspProbeAtlasTex;
 StructuredBuffer<float4>      FspIrradianceVolumeSHBuffer;
 RWStructuredBuffer<float4>    RWFspIrradianceVolumeSHBuffer;
 
-// 0番目はアトミックカウンタ, それ以降をリスト利用.
+// 0番目はアトミックカウンタ, それ以降はFSP X-major global cell index.
 Buffer<uint>		SurfaceProbeCellList;
 RWBuffer<uint>		RWSurfaceProbeCellList;
 
@@ -89,8 +91,8 @@ RWBuffer<uint>		RWSurfaceProbeCellList;
 // instant_rdvのメインパラメータ.
 ConstantBuffer<InstantRdvParam> cb_instant_rdv;
 
-uint voxel_coord_to_index(int3 coord, int3 resolution);
-int3 index_to_voxel_coord(uint index, int3 resolution);
+uint BbvPhysicalVoxelCoordToMortonIndex(int3 coord, int3 resolution);
+int3 BbvMortonIndexToPhysicalVoxelCoord(uint index, int3 resolution);
 int3 voxel_coord_toroidal_mapping(int3 voxel_coord, int3 toroidal_offset, int3 resolution);
 
 uint FspCascadeCount()
@@ -111,27 +113,20 @@ uint FspEncodeGlobalCellIndex(uint cascade_index, uint local_cell_index)
 
 bool FspDecodeGlobalCellIndex(uint global_cell_index, out uint cascade_index, out uint local_cell_index)
 {
+    // CPU初期化時に全cascadeのcell_count一致と連続offsetを検証している。
+    // この前提によりcascade配列scanを行わず、除算1回でglobal indexを分解できる。
     const uint cascade_count = FspCascadeCount();
-    [unroll]
-    for(uint ci = 0; ci < k_fsp_max_cascade_count; ++ci)
+    const uint cell_count_per_cascade = cb_instant_rdv.fsp_cascade[0].cell_count;
+    if(cell_count_per_cascade == 0u || global_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
     {
-        if(ci >= cascade_count)
-        {
-            break;
-        }
-
-        const FspCascadeGridParam cascade = cb_instant_rdv.fsp_cascade[ci];
-        if(cascade.cell_offset <= global_cell_index && global_cell_index < (cascade.cell_offset + cascade.cell_count))
-        {
-            cascade_index = ci;
-            local_cell_index = global_cell_index - cascade.cell_offset;
-            return true;
-        }
+        cascade_index = 0;
+        local_cell_index = 0;
+        return false;
     }
 
-    cascade_index = 0;
-    local_cell_index = 0;
-    return false;
+    cascade_index = global_cell_index / cell_count_per_cascade;
+    local_cell_index = global_cell_index - cascade_index * cell_count_per_cascade;
+    return cascade_index < cascade_count;
 }
 
 // FSP multipass request/result の packed key ヘルパー.
@@ -151,9 +146,29 @@ uint FspUnpackRayRequestOctCellIndex(uint packed_key)
     return (packed_key & k_fsp_ray_request_oct_cell_mask);
 }
 
+// FSPの全cell-addressed resourceで共有するX-major local index。
+// ActiveProbe lifecycle、SurfaceMask、IrradianceVolumeは必ずこのcodecを使う。
+// BBVだけはray traversalの空間局所性を優先して、下部のMorton codecを使い続ける。
+uint FspPhysicalCellCoordToLocalIndex(int3 physical_coord, int3 grid_resolution)
+{
+    return uint(physical_coord.x + physical_coord.y * grid_resolution.x +
+        physical_coord.z * grid_resolution.x * grid_resolution.y);
+}
+
+int3 FspLocalCellIndexToPhysicalCoord(uint local_cell_index, int3 grid_resolution)
+{
+    const uint slice_cell_count = uint(grid_resolution.x * grid_resolution.y);
+    const uint z = local_cell_index / slice_cell_count;
+    const uint slice_index = local_cell_index - z * slice_cell_count;
+    const uint y = slice_index / uint(grid_resolution.x);
+    const uint x = slice_index - y * uint(grid_resolution.x);
+    return int3(x, y, z);
+}
+
 int3 FspLocalCellIndexToLinearCoord(uint local_cell_index, InstantRdvToroidalGridParam grid)
 {
-    const int3 voxel_coord_toroidal = index_to_voxel_coord(local_cell_index, grid.grid_resolution);
+    const int3 voxel_coord_toroidal =
+        FspLocalCellIndexToPhysicalCoord(local_cell_index, grid.grid_resolution);
     return voxel_coord_toroidal_mapping(voxel_coord_toroidal, grid.grid_resolution - grid.grid_toroidal_offset, grid.grid_resolution);
 }
 
@@ -172,7 +187,8 @@ bool FspTryGetGlobalCellIndexFromWorldPos(float3 pos_ws, uint cascade_index, out
     if(all(voxel_coord >= 0) && all(voxel_coord < cascade.grid.grid_resolution))
     {
         const int3 voxel_coord_toroidal = voxel_coord_toroidal_mapping(voxel_coord, cascade.grid.grid_toroidal_offset, cascade.grid.grid_resolution);
-        const uint local_cell_index = voxel_coord_to_index(voxel_coord_toroidal, cascade.grid.grid_resolution);
+        const uint local_cell_index =
+            FspPhysicalCellCoordToLocalIndex(voxel_coord_toroidal, cascade.grid.grid_resolution);
         global_cell_index = cascade.cell_offset + local_cell_index;
         return true;
     }
@@ -279,22 +295,42 @@ uint2 FspProbeAtlasTexelCoord(uint probe_index, uint2 oct_cell_id)
     return FspProbeAtlasMapPos(probe_index) * k_fsp_probe_octmap_width + oct_cell_id;
 }
 
-uint FspIrradianceVolumeSHAddress(uint global_cell_index, uint coeff_index)
+int3 FspIrradianceVolumeToroidalPhysicalCoord(int3 linear_coord, InstantRdvToroidalGridParam grid)
 {
-    return global_cell_index * k_fsp_irradiance_volume_sh_float4_count + coeff_index;
+    // FSP IVはCPU初期化時に各軸同一かつ2冪と検証する。これが崩れると `& (N - 1)` はmoduloにならず、
+    // 誤ったcell参照や範囲外addressの原因になるため、任意解像度対応時はこの関数も同時に変更すること。
+    return (linear_coord + grid.grid_toroidal_offset) & (grid.grid_resolution - 1);
 }
 
-float4 FspIrradianceVolumeLoadCoeff(uint global_cell_index, uint coeff_index)
+uint FspIrradianceVolumeCellIndexFromPhysicalCoord(uint cascade_index, int3 physical_coord)
 {
-    return FspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, coeff_index)];
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    return cascade.cell_offset + FspPhysicalCellCoordToLocalIndex(physical_coord, cascade.grid.grid_resolution);
 }
 
-bool FspIrradianceVolumeHasValidSH(uint global_cell_index)
+uint FspIrradianceVolumeCellIndexFromLinearCoord(uint cascade_index, int3 linear_coord)
 {
-    const float4 coeff0 = FspIrradianceVolumeLoadCoeff(global_cell_index, 0);
-    const float4 coeff1 = FspIrradianceVolumeLoadCoeff(global_cell_index, 1);
-    const float4 coeff2 = FspIrradianceVolumeLoadCoeff(global_cell_index, 2);
-    const float4 coeff3 = FspIrradianceVolumeLoadCoeff(global_cell_index, 3);
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const int3 physical_coord = FspIrradianceVolumeToroidalPhysicalCoord(linear_coord, cascade.grid);
+    return cascade.cell_offset + FspPhysicalCellCoordToLocalIndex(physical_coord, cascade.grid.grid_resolution);
+}
+
+uint FspIrradianceVolumeSHAddress(uint irradiance_volume_cell_index, uint coeff_index)
+{
+    return irradiance_volume_cell_index * k_fsp_irradiance_volume_sh_float4_count + coeff_index;
+}
+
+float4 FspIrradianceVolumeLoadCoeff(uint irradiance_volume_cell_index, uint coeff_index)
+{
+    return FspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(irradiance_volume_cell_index, coeff_index)];
+}
+
+bool FspIrradianceVolumeHasValidSH(uint irradiance_volume_cell_index)
+{
+    const float4 coeff0 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 0);
+    const float4 coeff1 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 1);
+    const float4 coeff2 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 2);
+    const float4 coeff3 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 3);
     return any(abs(coeff0) > 0.0.xxxx) ||
         any(abs(coeff1) > 0.0.xxxx) ||
         any(abs(coeff2) > 0.0.xxxx) ||
@@ -436,38 +472,18 @@ float3 SspDecodeDirByNormal(float2 oct_uv, float3 basis_t_ws, float3 basis_b_ws,
 }
 
 
-#if 0
-    // シンプルなインデックスフラット化.
+// BBV専用Morton codec。ray traversal時の空間局所性を維持するため、BBVだけはZ-orderを使う。
+// 0..N^3-1を隙間なくMorton indexとして扱うには、BBV解像度がcubic power-of-twoである必要がある。
+// ActiveProbe/SurfaceMask/IrradianceVolumeはFSP X-major codecを使い、この関数を呼んではならない。
+uint BbvPhysicalVoxelCoordToMortonIndex(int3 coord, int3 resolution)
+{
+    return EncodeMortonCodeX10Y10Z10(coord);
+}
 
-    // Voxel座標からVoxelIndex計算.
-    uint voxel_coord_to_index(int3 coord, int3 resolution)
-    {
-        return coord.x + coord.y * resolution.x + coord.z * resolution.x * resolution.y;
-    }
-    // VoxelIndexからVoxel座標計算.
-    int3 index_to_voxel_coord(uint index, int3 resolution)
-    {
-        int z = index / (resolution.x * resolution.y);
-        index -= z * (resolution.x * resolution.y);
-        int y = index / resolution.x;
-        index -= y * resolution.x;
-        int x = index;
-        return int3(x, y, z);
-    }
-#else
-    // Z-Order Morton Codeによるインデックスフラット化. インデックスの局所化によるキャッシュ効率向上を意図.
-
-    // Voxel座標からVoxelIndex計算.
-    uint voxel_coord_to_index(int3 coord, int3 resolution)
-    {
-        return EncodeMortonCodeX10Y10Z10(coord);
-    }
-    // VoxelIndexからVoxel座標計算.
-    int3 index_to_voxel_coord(uint index, int3 resolution)
-    {
-        return DecodeMortonCodeX10Y10Z10(index);
-    }
-#endif
+int3 BbvMortonIndexToPhysicalVoxelCoord(uint index, int3 resolution)
+{
+    return DecodeMortonCodeX10Y10Z10(index);
+}
 
 
 // リニアなVoxel座標をループするToroidalマッピングに変換する.
@@ -598,7 +614,7 @@ uint bbv_radiance_resolve_dispatch_count()
 bool bbv_radiance_resolve_dispatch_index_to_voxel_coord(uint dispatch_index, out int3 voxel_coord)
 {
     const int3 group_grid_resolution = bbv_radiance_resolve_group_grid_resolution();
-    const int3 group_coord = index_to_voxel_coord(dispatch_index, group_grid_resolution);
+    const int3 group_coord = BbvMortonIndexToPhysicalVoxelCoord(dispatch_index, group_grid_resolution);
     // frame_count 下位 3bit を 2x2x2 group 内 local xyz へ割り当てて、8F で group 内全 Brick を巡回する。
     const uint phase = cb_instant_rdv.frame_count & (k_bbv_radiance_resolve_phase_count - 1);
     const int3 local_phase = int3(
@@ -786,7 +802,7 @@ uint read_bbv_voxel_from_world_pos(Buffer<uint> bbv_buffer, int3 grid_resolution
     if(all(voxel_coord >= 0) && all(voxel_coord < grid_resolution))
     {
         const int3 voxel_coord_toroidal = voxel_coord_toroidal_mapping(voxel_coord, bbv_grid_toroidal_offset, grid_resolution);
-        const uint voxel_index = voxel_coord_to_index(voxel_coord_toroidal, grid_resolution);
+        const uint voxel_index = BbvPhysicalVoxelCoordToMortonIndex(voxel_coord_toroidal, grid_resolution);
 
         const uint voxel_bbv_addr = bbv_voxel_bitmask_data_addr(voxel_index);
         // 占有ビットマスクの座標.
@@ -1065,7 +1081,7 @@ bool trace_bbv_brick_dda_range(
         const float brick_end_t = min(Min3(brick_next_t), trace_end_t);
 
         const int3 toroidal_map_pos = voxel_coord_toroidal_mapping(map_pos, bbv_grid_toroidal_offset, grid_resolution);
-        const uint voxel_index = voxel_coord_to_index(toroidal_map_pos, grid_resolution);
+        const uint voxel_index = BbvPhysicalVoxelCoordToMortonIndex(toroidal_map_pos, grid_resolution);
         inout_brick_check_count++;
         const bool bbv_occupied_flag = (0 != bbv_buffer[bbv_voxel_coarse_occupancy_info_addr(voxel_index)]);
         if(!intersection_bit_mode || bbv_occupied_flag)
@@ -1204,7 +1220,7 @@ bool trace_bbv_brick_transmittance_range(
         const float brick_segment_t = max(0.0, brick_end_t - brick_begin_t);
 
         const int3 toroidal_map_pos = voxel_coord_toroidal_mapping(map_pos, bbv_grid_toroidal_offset, grid_resolution);
-        const uint voxel_index = voxel_coord_to_index(toroidal_map_pos, grid_resolution);
+        const uint voxel_index = BbvPhysicalVoxelCoordToMortonIndex(toroidal_map_pos, grid_resolution);
         const uint brick_occupied_voxel_count = bbv_buffer[bbv_voxel_coarse_occupancy_info_addr(voxel_index)];
         if(0 != brick_occupied_voxel_count)
         {
@@ -1262,7 +1278,9 @@ float4 trace_bbv_build_hit_result(
     const float3 mini = ((final_pos - start_pos) + 0.5 * ray_component_validity - 0.5 * ray_dir_sign) * ray_dir_inv;
     const float hit_t = max(0.0, Max3(mini) * k_bbv_per_voxel_resolution_inv);
 
-    out_hit_voxel_index = voxel_coord_to_index(voxel_coord_toroidal_mapping(hit_map_pos, bbv_grid_toroidal_offset, grid_resolution), grid_resolution);
+    out_hit_voxel_index = BbvPhysicalVoxelCoordToMortonIndex(
+        voxel_coord_toroidal_mapping(hit_map_pos, bbv_grid_toroidal_offset, grid_resolution),
+        grid_resolution);
     const float3 hit_normal = select(hit_step_mask, -ray_dir_sign, 0.0);
     const float hit_t_ws = (hit_t + ray_trace_begin_t_offset) * cell_width_ws;
     return float4(hit_t_ws, hit_normal.x, hit_normal.y, hit_normal.z);

@@ -96,11 +96,19 @@ namespace ngl::render::app
         // 初期化
         struct InitArg
         {
+            // BBVはMorton X10Y10Z10を密なbuffer indexとして使うため、
+            // cubic power-of-twoかつ各軸1..1024。buffer count overflowも拒否する。
             math::Vec3u voxel_resolution = math::Vec3u(32);
             float       voxel_size = 3.0f;
             
+            // FSP共通grid解像度。全cascadeで同一値を使用する。
+            // ActiveProbe/SurfaceMask/IrradianceVolumeはすべてX-major。
+            // bit-mask Toroidal wrapと解析的cascade選択にはcubic power-of-twoかつ各軸4以上が必要。
+            // Initializeで検証する。
             math::Vec3u probe_resolution = math::Vec3u(32);
+            // Cascade 0のcell size。後続cascadeは厳密に2倍ずつ生成される。
             float       probe_cell_size = 3.0f;
+            // 1..k_fsp_max_cascade_count。shader constant-buffer配列長を超える値は拒否する。
             u32         probe_cascade_count = 5;
         };
         bool Initialize(ngl::rhi::DeviceDep* p_device, const InitArg& init_arg);

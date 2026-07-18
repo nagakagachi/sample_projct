@@ -135,23 +135,14 @@ FspProbePackedShL1Sample MakeZeroFspProbePackedShL1Sample()
     return result;
 }
 
-// SH パケットを重み付きで加算する。
-void AccumulateFspPackedShL1Sample(inout FspProbePackedShL1Sample accum, FspProbePackedShL1Sample sample_value, float weight)
-{
-    accum.sky_visibility_sh += sample_value.sky_visibility_sh * weight;
-    accum.radiance_sh_r += sample_value.radiance_sh_r * weight;
-    accum.radiance_sh_g += sample_value.radiance_sh_g * weight;
-    accum.radiance_sh_b += sample_value.radiance_sh_b * weight;
-}
-
 // Dense IrradianceVolume は全セルが有効SHを持つ前提で、final shading hot pathではvalidity判定をしない。
-FspProbePackedShL1Sample FspLoadPackedShL1FromCellIndexUnchecked(uint global_cell_index)
+FspProbePackedShL1Sample FspLoadPackedShL1FromCellIndexUnchecked(uint irradiance_volume_cell_index)
 {
     FspProbePackedShL1Sample result;
-    const float4 coeff0 = FspIrradianceVolumeLoadCoeff(global_cell_index, 0);
-    const float4 coeff1 = FspIrradianceVolumeLoadCoeff(global_cell_index, 1);
-    const float4 coeff2 = FspIrradianceVolumeLoadCoeff(global_cell_index, 2);
-    const float4 coeff3 = FspIrradianceVolumeLoadCoeff(global_cell_index, 3);
+    const float4 coeff0 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 0);
+    const float4 coeff1 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 1);
+    const float4 coeff2 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 2);
+    const float4 coeff3 = FspIrradianceVolumeLoadCoeff(irradiance_volume_cell_index, 3);
     result.sky_visibility_sh = float4(
         coeff0.r,
         coeff1.r,
@@ -175,17 +166,98 @@ FspProbePackedShL1Sample FspLoadPackedShL1FromCellIndexUnchecked(uint global_cel
     return result;
 }
 
-// ライティング時に使う cascade を 1 本だけ選ぶ。
+bool FspIsWorldPosInsideDenseIrradianceVolumeCascade(float3 sample_pos_ws, uint cascade_index)
+{
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const float3 grid_coordf = (sample_pos_ws - cascade.grid.grid_min_pos) * cascade.grid.cell_size_inv;
+    return all(grid_coordf >= 0.0.xxx) && all(grid_coordf < float3(cascade.grid.grid_resolution));
+}
+
+// CPU側で検証済みの「全cascade同一解像度」「cell sizeが1段ごとに2倍」
+// 「同じimportant pointを中心に各scaleでgrid snapする」という前提で候補levelを解析的に求める。
+// cascadeごとのgrid snap差は候補の前後1levelだけ実boundsを確認して吸収し、
+// 想定を超えるsnap差には最上位cascadeの追加判定で安全側へ倒す。
+// 2^3 gridでは±1補正で足りない配置があるため、CPU側で各軸4以上に制限する。
+bool FspTrySelectFinestDenseIrradianceVolumeCascade(out uint cascade_index, float3 sample_pos_ws)
+{
+    const uint cascade_count = FspCascadeCount();
+    const FspCascadeGridParam finest_cascade = FspGetCascadeParam(0);
+    const float3 finest_center_ws =
+        finest_cascade.grid.grid_min_pos +
+        float3(finest_cascade.grid.grid_resolution) * finest_cascade.grid.cell_size * 0.5;
+    const float max_dist_in_finest_cells =
+        max(max(abs(sample_pos_ws.x - finest_center_ws.x), abs(sample_pos_ws.y - finest_center_ws.y)),
+            abs(sample_pos_ws.z - finest_center_ws.z)) *
+        finest_cascade.grid.cell_size_inv;
+    const uint half_resolution = uint(finest_cascade.grid.grid_resolution.x >> 1);
+    const uint required_scale = max(
+        1u,
+        (uint)ceil(max_dist_in_finest_cells / max(float(half_resolution), 1.0)));
+    const uint estimated_cascade = min(
+        (required_scale <= 1u) ? 0u : uint(firstbithigh(required_scale - 1u) + 1),
+        cascade_count - 1u);
+    const uint first_candidate = (estimated_cascade > 0u) ? estimated_cascade - 1u : 0u;
+
+    [unroll]
+    for(uint candidate_offset = 0u; candidate_offset < 3u; ++candidate_offset)
+    {
+        const uint candidate_cascade = first_candidate + candidate_offset;
+        if(candidate_cascade >= cascade_count)
+        {
+            break;
+        }
+        if(FspIsWorldPosInsideDenseIrradianceVolumeCascade(sample_pos_ws, candidate_cascade))
+        {
+            cascade_index = candidate_cascade;
+            return true;
+        }
+    }
+
+    // Nested volumeの最上位は全有効領域を覆う。snap誤差が想定を超えた場合も1回の追加判定で欠損を避ける。
+    const uint coarsest_cascade = cascade_count - 1u;
+    if(coarsest_cascade < first_candidate || coarsest_cascade >= (first_candidate + 3u))
+    {
+        if(FspIsWorldPosInsideDenseIrradianceVolumeCascade(sample_pos_ws, coarsest_cascade))
+        {
+            cascade_index = coarsest_cascade;
+            return true;
+        }
+    }
+
+    cascade_index = 0u;
+    return false;
+}
+
+float FspCalcDenseIrradianceVolumeCascadeBoundaryDitherRate(float3 sample_pos_ws, uint cascade_index)
+{
+    if((cascade_index + 1u) >= FspCascadeCount())
+    {
+        return 0.0;
+    }
+
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const float3 cascade_max_pos =
+        cascade.grid.grid_min_pos + float3(cascade.grid.grid_resolution) * cascade.grid.cell_size;
+    const float3 dist_to_min = sample_pos_ws - cascade.grid.grid_min_pos;
+    const float3 dist_to_max = cascade_max_pos - sample_pos_ws;
+    const float boundary_dist = min(
+        min(dist_to_min.x, dist_to_max.x),
+        min(min(dist_to_min.y, dist_to_max.y), min(dist_to_min.z, dist_to_max.z)));
+    const float coarse_cell_size = FspGetCascadeParam(cascade_index + 1u).grid.cell_size;
+    return 1.0 - saturate(boundary_dist / max(coarse_cell_size, 1e-5));
+}
+
+// ライティング時に使うcascadeを1本だけ選ぶ。境界では親cascadeとの確率的遷移だけを行う。
 bool FspTrySelectLightingCascade(out uint cascade_index, float3 sample_pos_ws, float2 dither_seed)
 {
-    uint global_cell_index = k_fsp_invalid_probe_index;
-    if(!FspTryGetFinestCascadeCellFromWorldPos(sample_pos_ws, cascade_index, global_cell_index))
+    if(!FspTrySelectFinestDenseIrradianceVolumeCascade(cascade_index, sample_pos_ws))
     {
         return false;
     }
 
     // 境界帯だけcoarse cascadeへ確率的に逃がし、ブレンドではなくディザで切り替える。
-    const float coarse_select_rate = FspCalcCascadeBoundaryDitherRate(sample_pos_ws, cascade_index);
+    const float coarse_select_rate =
+        FspCalcDenseIrradianceVolumeCascadeBoundaryDitherRate(sample_pos_ws, cascade_index);
     if(coarse_select_rate > 0.0 && interleaved_gradient_noise(dither_seed) < coarse_select_rate)
     {
         cascade_index = min(cascade_index + 1u, FspCascadeCount() - 1u);
@@ -204,22 +276,50 @@ bool TrySampleFspPackedShL1Nearest(out FspProbePackedShL1Sample result, float3 s
         return false;
     }
 
-    uint global_cell_index = k_fsp_invalid_probe_index;
-    if(!FspTryGetGlobalCellIndexFromWorldPos(sample_pos_ws, cascade_index, global_cell_index))
-    {
-        return false;
-    }
-
-    result = FspLoadPackedShL1FromCellIndexUnchecked(global_cell_index);
+    const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const int3 linear_coord = clamp(
+        int3(floor((sample_pos_ws - cascade.grid.grid_min_pos) * cascade.grid.cell_size_inv)),
+        0,
+        cascade.grid.grid_resolution - 1);
+    const uint irradiance_volume_cell_index =
+        FspIrradianceVolumeCellIndexFromLinearCoord(cascade_index, linear_coord);
+    result = FspLoadPackedShL1FromCellIndexUnchecked(irradiance_volume_cell_index);
     return true;
 }
 
+float4 FspTrilinearLoadIrradianceVolumeCoeff(
+    uint4 sh_address_z0,
+    uint4 sh_address_z1,
+    uint coeff_index,
+    float3 lerp_rate)
+{
+    const float4 z0_y0 = lerp(
+        FspIrradianceVolumeSHBuffer[sh_address_z0.x + coeff_index],
+        FspIrradianceVolumeSHBuffer[sh_address_z0.y + coeff_index],
+        lerp_rate.x);
+    const float4 z0_y1 = lerp(
+        FspIrradianceVolumeSHBuffer[sh_address_z0.z + coeff_index],
+        FspIrradianceVolumeSHBuffer[sh_address_z0.w + coeff_index],
+        lerp_rate.x);
+    const float4 z1_y0 = lerp(
+        FspIrradianceVolumeSHBuffer[sh_address_z1.x + coeff_index],
+        FspIrradianceVolumeSHBuffer[sh_address_z1.y + coeff_index],
+        lerp_rate.x);
+    const float4 z1_y1 = lerp(
+        FspIrradianceVolumeSHBuffer[sh_address_z1.z + coeff_index],
+        FspIrradianceVolumeSHBuffer[sh_address_z1.w + coeff_index],
+        lerp_rate.x);
+    return lerp(
+        lerp(z0_y0, z0_y1, lerp_rate.y),
+        lerp(z1_y0, z1_y1, lerp_rate.y),
+        lerp_rate.z);
+}
+
 // Dense IrradianceVolume 前提の固定コスト Trilinear 参照。
-// 境界遷移はcascade選択時のditherだけで処理し、選択cascade内では8近傍を必ず1回ずつ読む。
+// CPU検証済みのcubic power-of-two解像度を使い、ToroidalMappingはx/y/z各軸の2座標だけ事前計算する。
+// 8セルごとのmodulo/Morton encodeは行わず、X-majorのrow/slice stride加算だけでaddressを構築する。
 bool TrySampleFspPackedShL1Interpolated(out FspProbePackedShL1Sample result, float3 sample_pos_ws, float2 dither_seed)
 {
-    result = MakeZeroFspProbePackedShL1Sample();
-
     uint cascade_index = 0;
     if(!FspTrySelectLightingCascade(cascade_index, sample_pos_ws, dither_seed))
     {
@@ -231,30 +331,40 @@ bool TrySampleFspPackedShL1Interpolated(out FspProbePackedShL1Sample result, flo
     const int3 base_coord = clamp(int3(floor(grid_coordf)), int3(0, 0, 0), cascade.grid.grid_resolution - 2);
     const float3 lerp_rate = saturate(grid_coordf - float3(base_coord));
 
-    [unroll]
-    for(int oz = 0; oz < 2; ++oz)
-    {
-        [unroll]
-        for(int oy = 0; oy < 2; ++oy)
-        {
-            [unroll]
-            for(int ox = 0; ox < 2; ++ox)
-            {
-                const int3 neighbor_coord = base_coord + int3(ox, oy, oz);
-                const float wx = (ox == 0) ? (1.0 - lerp_rate.x) : lerp_rate.x;
-                const float wy = (oy == 0) ? (1.0 - lerp_rate.y) : lerp_rate.y;
-                const float wz = (oz == 0) ? (1.0 - lerp_rate.z) : lerp_rate.z;
-                const float weight = wx * wy * wz;
+    const int3 physical_coord0 =
+        FspIrradianceVolumeToroidalPhysicalCoord(base_coord, cascade.grid);
+    const int3 physical_coord1 =
+        (physical_coord0 + 1) & (cascade.grid.grid_resolution - 1);
+    const uint row_stride = uint(cascade.grid.grid_resolution.x);
+    const uint slice_stride = uint(cascade.grid.grid_resolution.x * cascade.grid.grid_resolution.y);
+    const uint x0 = uint(physical_coord0.x);
+    const uint x1 = uint(physical_coord1.x);
+    const uint y0 = uint(physical_coord0.y) * row_stride;
+    const uint y1 = uint(physical_coord1.y) * row_stride;
+    const uint z0 = uint(physical_coord0.z) * slice_stride;
+    const uint z1 = uint(physical_coord1.z) * slice_stride;
+    const uint cascade_offset = cascade.cell_offset;
+    const uint4 cell_index_z0 = cascade_offset + uint4(
+        x0 + y0 + z0,
+        x1 + y0 + z0,
+        x0 + y1 + z0,
+        x1 + y1 + z0);
+    const uint4 cell_index_z1 = cascade_offset + uint4(
+        x0 + y0 + z1,
+        x1 + y0 + z1,
+        x0 + y1 + z1,
+        x1 + y1 + z1);
+    const uint4 sh_address_z0 = cell_index_z0 * k_fsp_irradiance_volume_sh_float4_count;
+    const uint4 sh_address_z1 = cell_index_z1 * k_fsp_irradiance_volume_sh_float4_count;
 
-                const int3 neighbor_coord_toroidal = voxel_coord_toroidal_mapping(neighbor_coord, cascade.grid.grid_toroidal_offset, cascade.grid.grid_resolution);
-                const uint local_cell_index = voxel_coord_to_index(neighbor_coord_toroidal, cascade.grid.grid_resolution);
-                const uint global_cell_index = cascade.cell_offset + local_cell_index;
-
-                const FspProbePackedShL1Sample probe_sh = FspLoadPackedShL1FromCellIndexUnchecked(global_cell_index);
-                AccumulateFspPackedShL1Sample(result, probe_sh, weight);
-            }
-        }
-    }
+    const float4 coeff0 = FspTrilinearLoadIrradianceVolumeCoeff(sh_address_z0, sh_address_z1, 0u, lerp_rate);
+    const float4 coeff1 = FspTrilinearLoadIrradianceVolumeCoeff(sh_address_z0, sh_address_z1, 1u, lerp_rate);
+    const float4 coeff2 = FspTrilinearLoadIrradianceVolumeCoeff(sh_address_z0, sh_address_z1, 2u, lerp_rate);
+    const float4 coeff3 = FspTrilinearLoadIrradianceVolumeCoeff(sh_address_z0, sh_address_z1, 3u, lerp_rate);
+    result.sky_visibility_sh = float4(coeff0.r, coeff1.r, coeff2.r, coeff3.r);
+    result.radiance_sh_r = float4(coeff0.g, coeff1.g, coeff2.g, coeff3.g);
+    result.radiance_sh_g = float4(coeff0.b, coeff1.b, coeff2.b, coeff3.b);
+    result.radiance_sh_b = float4(coeff0.a, coeff1.a, coeff2.a, coeff3.a);
 
     return true;
 }

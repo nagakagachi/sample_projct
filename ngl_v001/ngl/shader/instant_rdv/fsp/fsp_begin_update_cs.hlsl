@@ -101,7 +101,8 @@ void main_cs(
         else
         {
             const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
-            int3 voxel_coord = index_to_voxel_coord(local_cell_index, cascade.grid.grid_resolution);
+            int3 voxel_coord =
+                FspLocalCellIndexToPhysicalCoord(local_cell_index, cascade.grid.grid_resolution);
             const int3 linear_voxel_coord = (voxel_coord - cascade.grid.grid_toroidal_offset_prev + cascade.grid.grid_resolution) % cascade.grid.grid_resolution;
             const int3 voxel_coord_toroidal_curr = linear_voxel_coord - cascade.grid.grid_move_cell_delta;
             is_invalidate_area = any(voxel_coord_toroidal_curr < 0) || any(voxel_coord_toroidal_curr >= cascade.grid.grid_resolution);

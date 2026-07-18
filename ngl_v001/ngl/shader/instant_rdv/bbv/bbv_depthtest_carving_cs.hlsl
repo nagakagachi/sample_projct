@@ -51,7 +51,8 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
     // 全laneが同じ結果を使うことで、無駄なindex_to_voxel_coordを削減する。
     if(lane_index == slot_first_lane)
     {
-        const int3 voxel_coord_toroidal = index_to_voxel_coord(voxel_index, cb_instant_rdv.bbv.grid_resolution);
+        const int3 voxel_coord_toroidal =
+            BbvMortonIndexToPhysicalVoxelCoord(voxel_index, cb_instant_rdv.bbv.grid_resolution);
         voxel_coord_linear = voxel_coord_toroidal_mapping(
             voxel_coord_toroidal,
             cb_instant_rdv.bbv.grid_resolution - cb_instant_rdv.bbv.grid_toroidal_offset,

@@ -61,6 +61,7 @@ void main_cs(
         const uint bit_index = firstbitlow(remaining_bits);
         remaining_bits &= (remaining_bits - 1u);
 
+        // Preserve the FSP X-major global address; no Morton conversion belongs on this path.
         const uint global_cell_index = mask_word_index * 32u + bit_index;
         if(global_cell_index >= total_cell_count)
         {

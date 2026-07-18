@@ -19,6 +19,7 @@ Texture2D TexHardwareDepth;
 // wave内で同じuint wordを指すbitをまとめ、global AtomicOrを代表laneだけに限定する。
 void FspInjectOwnershipCellMaskWave(bool has_cell, uint global_cell_index)
 {
+    // global_cell_index is the shared FSP X-major address used by ActiveProbe and IrradianceVolume.
     const uint word_index = has_cell ? (global_cell_index >> 5u) : 0u;
     const uint bit_mask = has_cell ? (1u << (global_cell_index & 31u)) : 0u;
 

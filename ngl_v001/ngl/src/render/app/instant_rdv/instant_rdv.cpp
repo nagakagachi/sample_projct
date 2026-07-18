@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <string>
 
 #include "gfx/command_helper.h"
@@ -40,6 +41,99 @@ namespace ngl::render::app
 
     static constexpr u32 k_fsp_probe_pool_size = 1<<13;//10000;
     static constexpr u32 k_fsp_probe_surface_cell_count_max = 1024*4;// index list only; tile-sliceの一時的な候補増加で欠落しない余裕を持つ.
+    static constexpr u32 k_fsp_ray_request_oct_cell_bits = 8u;
+    static_assert(
+        k_fsp_probe_octmap_width * k_fsp_probe_octmap_width <= (1u << k_fsp_ray_request_oct_cell_bits),
+        "FSP ray request key reserves only 8 bits for the octahedral-map cell index.");
+    static_assert(
+        k_fsp_probe_pool_size <= ((1u << (32u - k_fsp_ray_request_oct_cell_bits)) - 1u),
+        "FSP probe index does not fit in the packed ray request key.");
+    static_assert(
+        k_fsp_irradiance_volume_sh_float4_count == 4,
+        "FSP IrradianceVolume shaders assume exactly four L1 SH float4 coefficients per cell.");
+
+    static bool ValidateFspInitArg(const BitmaskBrickVoxelGi::InitArg& init_arg)
+    {
+        const auto Fail = [](const char* message)
+        {
+            std::cout << "[ERROR] Invalid FSP configuration: " << message << std::endl;
+            return false;
+        };
+
+        const auto& bbv_resolution = init_arg.voxel_resolution;
+        if(bbv_resolution.x == 0u || bbv_resolution.y == 0u || bbv_resolution.z == 0u ||
+           bbv_resolution.x > 1024u || bbv_resolution.y > 1024u || bbv_resolution.z > 1024u)
+        {
+            return Fail("BBV voxel resolution must fit Morton X10Y10Z10 (1..1024 on every axis).");
+        }
+        if(bbv_resolution.x != bbv_resolution.y || bbv_resolution.x != bbv_resolution.z ||
+           (bbv_resolution.x & (bbv_resolution.x - 1u)) != 0u)
+        {
+            return Fail("BBV Morton buffer indexing requires a cubic power-of-two voxel resolution.");
+        }
+        if(!std::isfinite(init_arg.voxel_size) || init_arg.voxel_size <= 0.0f)
+        {
+            return Fail("BBV voxel size must be finite and greater than zero.");
+        }
+        const uint64_t bbv_voxel_count =
+            uint64_t(bbv_resolution.x) * uint64_t(bbv_resolution.y) * uint64_t(bbv_resolution.z);
+        if(bbv_voxel_count > uint64_t(std::numeric_limits<u32>::max()))
+        {
+            return Fail("BBV voxel count overflows u32.");
+        }
+        const uint64_t bbv_buffer_element_count =
+            bbv_voxel_count *
+            uint64_t(k_bbv_per_voxel_bitmask_u32_count + k_bbv_brick_data_u32_count);
+        if(bbv_buffer_element_count > uint64_t(std::numeric_limits<u32>::max()))
+        {
+            return Fail("BBV buffer element count overflows u32.");
+        }
+
+        const auto& resolution = init_arg.probe_resolution;
+        if(resolution.x < 4u || resolution.y < 4u || resolution.z < 4u)
+        {
+            return Fail("probe resolution must be at least 4 on every axis for analytic cascade selection.");
+        }
+        if(resolution.x != resolution.y || resolution.x != resolution.z)
+        {
+            return Fail("IrradianceVolume requires an equal resolution on all three axes.");
+        }
+        if((resolution.x & (resolution.x - 1u)) != 0u)
+        {
+            return Fail("IrradianceVolume resolution must be a power of two for bit-mask Toroidal wrapping.");
+        }
+        if(init_arg.probe_cascade_count == 0u || init_arg.probe_cascade_count > k_fsp_max_cascade_count)
+        {
+            return Fail("cascade count is outside the shader constant-buffer array range.");
+        }
+        if(!std::isfinite(init_arg.probe_cell_size) || init_arg.probe_cell_size <= 0.0f)
+        {
+            return Fail("probe cell size must be finite and greater than zero.");
+        }
+
+        const uint64_t cell_count_per_cascade =
+            uint64_t(resolution.x) * uint64_t(resolution.y) * uint64_t(resolution.z);
+        const uint64_t total_cell_count =
+            cell_count_per_cascade * uint64_t(init_arg.probe_cascade_count);
+        if(total_cell_count > uint64_t(std::numeric_limits<int>::max()))
+        {
+            return Fail("total IrradianceVolume cell count does not fit in the shader parameter.");
+        }
+        if(total_cell_count >
+            uint64_t(std::numeric_limits<u32>::max()) / uint64_t(k_fsp_irradiance_volume_sh_float4_count))
+        {
+            return Fail("IrradianceVolume SH buffer element count overflows u32.");
+        }
+
+        const float coarsest_cell_size = std::ldexp(
+            init_arg.probe_cell_size,
+            static_cast<int>(init_arg.probe_cascade_count - 1u));
+        if(!std::isfinite(coarsest_cell_size))
+        {
+            return Fail("coarsest cascade cell size overflows float.");
+        }
+        return true;
+    }
 
     enum class InstantRdvGiSolutionMode : int
     {
@@ -939,9 +1033,19 @@ namespace ngl::render::app
     // 初期化
     bool BitmaskBrickVoxelGi::Initialize(ngl::rhi::DeviceDep* p_device, const InitArg& init_arg)
     {
+        if(!p_device)
+        {
+            std::cout << "[ERROR] Invalid FSP configuration: device is null." << std::endl;
+            return false;
+        }
+        if(!ValidateFspInitArg(init_arg))
+        {
+            return false;
+        }
+
         bbv_grid_updater_.Initialize(init_arg.voxel_resolution, init_arg.voxel_size);
 
-        fsp_cascade_count_ = std::clamp<u32>(init_arg.probe_cascade_count, 1u, k_fsp_max_cascade_count);
+        fsp_cascade_count_ = init_arg.probe_cascade_count;
         fsp_grid_updaters_.resize(fsp_cascade_count_);
         fsp_cascade_cell_offset_array_.resize(fsp_cascade_count_);
         fsp_total_cell_count_ = 0;
@@ -953,6 +1057,34 @@ namespace ngl::render::app
                 fsp_cascade_cell_offset_array_[cascade_index] = fsp_total_cell_count_;
                 fsp_total_cell_count_ += fsp_grid_updaters_[cascade_index].Get().total_count;
                 cascade_cell_size *= 2.0f;
+            }
+        }
+        {
+            const u32 expected_cell_count_per_cascade =
+                init_arg.probe_resolution.x *
+                init_arg.probe_resolution.y *
+                init_arg.probe_resolution.z;
+            float expected_cell_size = init_arg.probe_cell_size;
+            for(u32 cascade_index = 0; cascade_index < fsp_cascade_count_; ++cascade_index)
+            {
+                const auto& cascade_grid = fsp_grid_updaters_[cascade_index].Get();
+                const bool has_expected_layout =
+                    cascade_grid.resolution.x == init_arg.probe_resolution.x &&
+                    cascade_grid.resolution.y == init_arg.probe_resolution.y &&
+                    cascade_grid.resolution.z == init_arg.probe_resolution.z &&
+                    cascade_grid.total_count == expected_cell_count_per_cascade &&
+                    fsp_cascade_cell_offset_array_[cascade_index] ==
+                        cascade_index * expected_cell_count_per_cascade &&
+                    cascade_grid.cell_size == expected_cell_size;
+                if(!has_expected_layout)
+                {
+                    std::cout
+                        << "[ERROR] Invalid FSP configuration: cascade layout no longer matches "
+                        << "the equal-resolution, contiguous-offset, 2x-scale IrradianceVolume assumptions."
+                        << std::endl;
+                    return false;
+                }
+                expected_cell_size *= 2.0f;
             }
         }
 
