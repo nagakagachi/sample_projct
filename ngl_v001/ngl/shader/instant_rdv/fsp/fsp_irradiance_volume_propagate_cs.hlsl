@@ -73,6 +73,7 @@ void main_cs(
 
     if(FspIsActiveProbeOwnedCell(global_cell_index))
     {
+        // ActiveProbeのRT結果が最優先。伝播は未Activeの空間セルを埋めるだけで、観測セルは上書きしない。
         return;
     }
 
@@ -94,6 +95,7 @@ void main_cs(
 
     if(FspIsCellCenterOccupied(cascade_index, local_cell_index))
     {
+        // 不透明セル内部は注入点ではないため、近傍伝播でSHを作らない。
         return;
     }
 

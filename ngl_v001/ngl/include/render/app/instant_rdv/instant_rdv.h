@@ -323,7 +323,6 @@ namespace ngl::render::app
         static float assp_ray_budget_scale_;
         static int assp_debug_freeze_frame_random_enable_;
         static int dbg_fsp_lighting_interpolation_enable_;
-        static int dbg_fsp_lighting_stochastic_sampling_enable_;
         static int dbg_fsp_probe_lifecycle_enable_;
         static int dbg_fsp_probe_pool_size_;
         static int dbg_fsp_free_probe_count_;

@@ -90,6 +90,7 @@ VS_OUTPUT main_vs(VS_INPUT input)
 
     const bool is_irradiance_volume_debug = (8 == cb_instant_rdv.debug_fsp_probe_mode) || (9 == cb_instant_rdv.debug_fsp_probe_mode);
     const float3 cell_center_ws = FspCalcCellCenterWs(cascade_index, local_cell_index);
+    // IrradianceVolume debugはActiveProbe配置ではなく、dense cell中心に有効SHセルを表示する。
     const float3 probe_pos_ws = is_irradiance_volume_debug ? cell_center_ws : (cell_center_ws + probe_offset);
 
 

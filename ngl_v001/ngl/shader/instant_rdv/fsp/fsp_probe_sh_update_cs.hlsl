@@ -73,6 +73,7 @@ void main_cs(
 
     const float texel_solid_angle = (4.0 * 3.14159265359) / float(k_fsp_probe_octmap_width * k_fsp_probe_octmap_width);
     const uint global_cell_index = probe_pool_data.owner_cell_index;
+    // Probe atlas はRT resolve用の中間履歴で、最終シェーディング用SHはowner cellのdense volumeへ集約する。
     RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 0)] = packed_sh_coeff0 * texel_solid_angle;
     RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 1)] = packed_sh_coeff1 * texel_solid_angle;
     RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 2)] = packed_sh_coeff2 * texel_solid_angle;

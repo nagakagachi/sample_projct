@@ -144,16 +144,7 @@ void AccumulateFspPackedShL1Sample(inout FspProbePackedShL1Sample accum, FspProb
     accum.radiance_sh_b += sample_value.radiance_sh_b * weight;
 }
 
-// SH パケット全体へ一様スケールを掛ける。
-void ScaleFspPackedShL1Sample(inout FspProbePackedShL1Sample sample_value, float scale)
-{
-    sample_value.sky_visibility_sh *= scale;
-    sample_value.radiance_sh_r *= scale;
-    sample_value.radiance_sh_g *= scale;
-    sample_value.radiance_sh_b *= scale;
-}
-
-// IrradianceVolume から global cell index 直結で packed SH をロードする。
+// Dense IrradianceVolume は全セルが有効SHを持つ前提で、final shading hot pathではvalidity判定をしない。
 FspProbePackedShL1Sample FspLoadPackedShL1FromCellIndexUnchecked(uint global_cell_index)
 {
     FspProbePackedShL1Sample result;
@@ -182,33 +173,6 @@ FspProbePackedShL1Sample FspLoadPackedShL1FromCellIndexUnchecked(uint global_cel
         coeff2.a,
         coeff3.a);
     return result;
-}
-
-bool FspTryLoadPackedShL1FromCellIndex(out FspProbePackedShL1Sample result, uint global_cell_index)
-{
-    result = MakeZeroFspProbePackedShL1Sample();
-
-    if(global_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
-    {
-        return false;
-    }
-
-    const float4 coeff0 = FspIrradianceVolumeLoadCoeff(global_cell_index, 0);
-    const float4 coeff1 = FspIrradianceVolumeLoadCoeff(global_cell_index, 1);
-    const float4 coeff2 = FspIrradianceVolumeLoadCoeff(global_cell_index, 2);
-    const float4 coeff3 = FspIrradianceVolumeLoadCoeff(global_cell_index, 3);
-    const bool has_written_sh =
-        any(abs(coeff0) > 0.0.xxxx) ||
-        any(abs(coeff1) > 0.0.xxxx) ||
-        any(abs(coeff2) > 0.0.xxxx) ||
-        any(abs(coeff3) > 0.0.xxxx);
-    if(!has_written_sh)
-    {
-        return false;
-    }
-
-    result = FspLoadPackedShL1FromCellIndexUnchecked(global_cell_index);
-    return true;
 }
 
 // ライティング時に使う cascade を 1 本だけ選ぶ。
@@ -251,6 +215,7 @@ bool TrySampleFspPackedShL1Nearest(out FspProbePackedShL1Sample result, float3 s
 }
 
 // Dense IrradianceVolume 前提の固定コスト Trilinear 参照。
+// 境界遷移はcascade選択時のditherだけで処理し、選択cascade内では8近傍を必ず1回ずつ読む。
 bool TrySampleFspPackedShL1Interpolated(out FspProbePackedShL1Sample result, float3 sample_pos_ws, float2 dither_seed)
 {
     result = MakeZeroFspProbePackedShL1Sample();
