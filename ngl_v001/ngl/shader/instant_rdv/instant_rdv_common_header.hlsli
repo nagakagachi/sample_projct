@@ -135,6 +135,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_fsp_probe_distance_max (50.0)
     // fsp
     #define k_fsp_probe_distance_max_inv (1.0 / k_fsp_probe_distance_max)
+    // FSP IrradianceVolume SH payload. 1 cell = RGBA * 4.
+    #define k_fsp_irradiance_volume_sh_float4_count (4)
     
     // Bbv 全体更新のフレーム負荷軽減用スキップ数. 0: スキップせずに1Fで全要素処理. 1: 1つ飛ばしでスキップ(半分).
     #define BBV_ALL_ELEMENT_UPDATE_SKIP_COUNT 60

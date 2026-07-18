@@ -151,7 +151,7 @@ namespace ngl::render::app
 
         ngl::rhi::ConstantBufferPooledHandle GetDispatchCbh() const { return cbh_dispatch_; }
         rhi::RefSrvDep GetFspProbeAtlasTex() const { return fsp_probe_atlas_tex_.srv; }
-        rhi::RefSrvDep GetFspProbePackedShTex() const { return fsp_probe_packed_sh_tex_.srv; }
+        rhi::RefSrvDep GetFspIrradianceVolumeSHBuffer() const { return fsp_irradiance_volume_sh_buffer_.srv; }
         rhi::RefSrvDep GetFspCellProbeIndexBuffer() const { return fsp_cell_probe_index_buffer_.srv; }
         rhi::RefSrvDep GetFspProbePoolBuffer() const { return fsp_probe_pool_buffer_.srv; }
         rhi::RefSrvDep GetAsspProbeTex() const { return assp_probe_tex_[assp_latest_filtered_frame_tex_index_].srv; }
@@ -270,7 +270,7 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_resolve_indirect_arg_ = {};
         ComputeBufferSet fsp_probe_ray_result_buffer_ = {};
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
-        ComputeTextureSet fsp_probe_packed_sh_tex_ = {};
+        ComputeBufferSet fsp_irradiance_volume_sh_buffer_ = {};
         rhi::RefBufferDep fsp_visible_surface_list_readback_buffer_ = {};
         rhi::RefBufferDep fsp_probe_free_stack_readback_buffer_ = {};
         rhi::RefBufferDep fsp_active_probe_list_readback_buffer_ = {};

@@ -2,8 +2,10 @@
 
 fsp_probe_sh_update_cs.hlsl
 
- FrustumSurfaceProbe の OctMap atlas から SkyVisibility + Radiance の packed L1 SH atlas を毎フレーム再構築する.
- atlas coeff order:
+ファイル説明:
+ FrustumSurfaceProbe の OctMap atlas から SkyVisibility + Radiance の L1 SH を作り、
+ cascaded dense IrradianceVolume へ global cell index 直結で書き込む。
+ coeff order:
    0 = Y00
    1 = Y1_{-1}(y)
    2 = Y1_0(z)
@@ -37,19 +39,9 @@ void main_cs(
         return;
     }
 
-    uint2 packed_sh_tex_size;
-    RWFspProbePackedSHTex.GetDimensions(packed_sh_tex_size.x, packed_sh_tex_size.y);
-    const int2 logical_sh_tex_size = int2(packed_sh_tex_size >> 1);
-    const int2 probe_tile_id = int2(FspProbeAtlasMapPos(probe_index));
-
     const FspProbePoolData probe_pool_data = FspProbePoolBuffer[probe_index];
     if(probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index)
     {
-        [unroll]
-        for(uint coeff_index = 0; coeff_index < 4; ++coeff_index)
-        {
-            RWFspProbePackedSHTex[FspPackedShAtlasTexelCoord(probe_tile_id, coeff_index, logical_sh_tex_size)] = 0.0.xxxx;
-        }
         return;
     }
 
@@ -80,8 +72,9 @@ void main_cs(
     }
 
     const float texel_solid_angle = (4.0 * 3.14159265359) / float(k_fsp_probe_octmap_width * k_fsp_probe_octmap_width);
-    RWFspProbePackedSHTex[FspPackedShAtlasTexelCoord(probe_tile_id, 0, logical_sh_tex_size)] = packed_sh_coeff0 * texel_solid_angle;
-    RWFspProbePackedSHTex[FspPackedShAtlasTexelCoord(probe_tile_id, 1, logical_sh_tex_size)] = packed_sh_coeff1 * texel_solid_angle;
-    RWFspProbePackedSHTex[FspPackedShAtlasTexelCoord(probe_tile_id, 2, logical_sh_tex_size)] = packed_sh_coeff2 * texel_solid_angle;
-    RWFspProbePackedSHTex[FspPackedShAtlasTexelCoord(probe_tile_id, 3, logical_sh_tex_size)] = packed_sh_coeff3 * texel_solid_angle;
+    const uint global_cell_index = probe_pool_data.owner_cell_index;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 0)] = packed_sh_coeff0 * texel_solid_angle;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 1)] = packed_sh_coeff1 * texel_solid_angle;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 2)] = packed_sh_coeff2 * texel_solid_angle;
+    RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, 3)] = packed_sh_coeff3 * texel_solid_angle;
 }

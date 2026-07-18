@@ -78,8 +78,8 @@ RWBuffer<uint>                        RWFspProbeRayResultBuffer;
 
 Texture2D<float4>      FspProbeAtlasTex;
 RWTexture2D<float4>    RWFspProbeAtlasTex;
-Texture2D<float4>      FspProbePackedSHTex;
-RWTexture2D<float4>    RWFspProbePackedSHTex;
+StructuredBuffer<float4>      FspIrradianceVolumeSHBuffer;
+RWStructuredBuffer<float4>    RWFspIrradianceVolumeSHBuffer;
 
 // 0番目はアトミックカウンタ, それ以降をリスト利用.
 Buffer<uint>		SurfaceProbeCellList;
@@ -279,34 +279,14 @@ uint2 FspProbeAtlasTexelCoord(uint probe_index, uint2 oct_cell_id)
     return FspProbeAtlasMapPos(probe_index) * k_fsp_probe_octmap_width + oct_cell_id;
 }
 
-int2 FspPackedShAtlasLogicalResolution()
+uint FspIrradianceVolumeSHAddress(uint global_cell_index, uint coeff_index)
 {
-    uint2 packed_sh_tex_size;
-    FspProbePackedSHTex.GetDimensions(packed_sh_tex_size.x, packed_sh_tex_size.y);
-    return int2(packed_sh_tex_size >> 1);
+    return global_cell_index * k_fsp_irradiance_volume_sh_float4_count + coeff_index;
 }
 
-int2 FspPackedShAtlasCoeffOffset(uint coeff_index, int2 logical_resolution)
+float4 FspIrradianceVolumeLoadCoeff(uint global_cell_index, uint coeff_index)
 {
-    switch(coeff_index)
-    {
-    default:
-    case 0: return int2(0, 0);
-    case 1: return int2(logical_resolution.x, 0);
-    case 2: return int2(0, logical_resolution.y);
-    case 3: return int2(logical_resolution.x, logical_resolution.y);
-    }
-}
-
-int2 FspPackedShAtlasTexelCoord(int2 probe_tile_id, uint coeff_index, int2 logical_resolution)
-{
-    return probe_tile_id + FspPackedShAtlasCoeffOffset(coeff_index, logical_resolution);
-}
-
-float4 FspPackedShAtlasLoadCoeff(int2 probe_tile_id, uint coeff_index)
-{
-    const int2 logical_resolution = FspPackedShAtlasLogicalResolution();
-    return FspProbePackedSHTex.Load(int3(FspPackedShAtlasTexelCoord(probe_tile_id, coeff_index, logical_resolution), 0));
+    return FspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, coeff_index)];
 }
 
 

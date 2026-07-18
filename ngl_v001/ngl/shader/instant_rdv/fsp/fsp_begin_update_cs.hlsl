@@ -5,6 +5,7 @@ fsp_begin_update_cs.hlsl
 
 各種バッファクリアや, 移動によって発生した領域のInValidateをする.
 Dispatchは全域としているが, 最適化としてはInvalidate領域サイズ分だけにしたい.
+無効化されたcellのIrradianceVolume SHも同時にクリアする。
 
 #endif
 
@@ -36,6 +37,15 @@ void FspPushCurrActiveProbeIndex(uint probe_index)
     if(active_list_index < cb_instant_rdv.fsp_active_probe_buffer_size)
     {
         RWFspActiveProbeListCurr[active_list_index + 1] = probe_index;
+    }
+}
+
+void FspClearIrradianceVolumeCell(uint global_cell_index)
+{
+    [unroll]
+    for(uint coeff_index = 0; coeff_index < k_fsp_irradiance_volume_sh_float4_count; ++coeff_index)
+    {
+        RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(global_cell_index, coeff_index)] = 0.0.xxxx;
     }
 }
 
@@ -109,6 +119,7 @@ void main_cs(
     if(owner_cell_index != k_fsp_invalid_probe_index && RWFspCellProbeIndexBuffer[owner_cell_index] == probe_index)
     {
         RWFspCellProbeIndexBuffer[owner_cell_index] = k_fsp_invalid_probe_index;
+        FspClearIrradianceVolumeCell(owner_cell_index);
     }
 
     probe_pool_data.owner_cell_index = k_fsp_invalid_probe_index;

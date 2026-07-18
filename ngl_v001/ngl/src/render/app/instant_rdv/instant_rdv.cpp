@@ -557,7 +557,7 @@ namespace ngl::render::app
                             switch(sub_mode)
                             {
                             case 0: return "FSP Octahedral atlas RGBA";
-                            case 1: return "FSP packed SH RGBA";
+                            case 1: return "FSP IrradianceVolume SH RGBA";
                             default: return "Unknown";
                             }
                         case 2: // ASSP
@@ -596,8 +596,8 @@ namespace ngl::render::app
     using InstantRdvShaderBindName = ngl::text::HashText<128>;
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_atlas_srv = "FspProbeAtlasTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_atlas_uav = "RWFspProbeAtlasTex";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_packed_sh_srv = "FspProbePackedSHTex";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_packed_sh_uav = "RWFspProbePackedSHTex";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_irradiance_volume_sh_srv = "FspIrradianceVolumeSHBuffer";
+    constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_irradiance_volume_sh_uav = "RWFspIrradianceVolumeSHBuffer";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_request_srv = "FspProbeRayRequestBuffer";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_request_uav = "RWFspProbeRayRequestBuffer";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_trace_indirect_arg_uav = "RWFspProbeTraceIndirectArg";
@@ -1270,21 +1270,16 @@ namespace ngl::render::app
 
             fsp_probe_atlas_tex_.Initialize(p_device, desc, "InstantRdv_FspProbeAtlasTex");
         }
-        // Frustum Surface Probe Packed SH テクスチャ.
+        // Frustum Surface Probe IrradianceVolume SH バッファ.
         {
-            rhi::TextureDep::Desc desc = {};
-            desc.type = rhi::ETextureType::Texture2D;
-            desc.width =  fsp_probe_atlas_tile_width_ * 2;
-            desc.height = fsp_probe_atlas_tile_height_ * 2;
-            desc.depth = 1;
-            desc.mip_count = 1;
-            desc.array_size = 1;
-            desc.format = rhi::EResourceFormat::Format_R16G16B16A16_FLOAT;
-            desc.sample_count = 1;
-            desc.bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess;
-            desc.initial_state = rhi::EResourceState::Common;
+            fsp_irradiance_volume_sh_buffer_.InitializeAsStructured(p_device,
+                                           rhi::BufferDep::Desc{
+                                               .element_byte_size = sizeof(float) * 4,
+                                               .element_count     = fsp_total_cell_count_ * k_fsp_irradiance_volume_sh_float4_count,
 
-            fsp_probe_packed_sh_tex_.Initialize(p_device, desc, "InstantRdv_FspProbePackedShTex");
+                                               .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                                               .heap_type = rhi::EResourceHeapType::Default}
+                                        ,  "InstantRdv_FspIrradianceVolumeSHBuffer");
         }
 
         if(!ResizeScreenProbeResources(p_device, math::Vec2i(1920, 1080)))
@@ -1501,6 +1496,7 @@ namespace ngl::render::app
                 pso_fsp_clear_->SetView(&desc_set, "RWFspActiveProbeListCurr", fsp_active_probe_list_[1].uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
+                pso_fsp_clear_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_uav.Get(), fsp_irradiance_volume_sh_buffer_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_fsp_clear_.Get());
                 p_command_list->SetDescriptorSet(pso_fsp_clear_.Get(), &desc_set);
@@ -1512,6 +1508,7 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[0].buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[1].buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
+                p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
                 p_command_list->ResourceBarrier(fsp_probe_atlas_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
             }
 
@@ -1529,7 +1526,6 @@ namespace ngl::render::app
                     p_command_list->ResourceBarrier(assp_probe_variance_tex_[i].texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
                     p_command_list->ResourceBarrier(assp_probe_tile_info_tex_[i].texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
                 }
-                p_command_list->ResourceBarrier(fsp_probe_packed_sh_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
                 p_command_list->ResourceBarrier(assp_probe_packed_sh_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
                 p_command_list->ResourceBarrier(assp_probe_best_prev_tile_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
 
@@ -2091,6 +2087,7 @@ namespace ngl::render::app
                 pso_fsp_begin_update_->SetView(&desc_set, "FspActiveProbeListPrev", fsp_active_probe_prev_list.srv.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, "RWFspActiveProbeListCurr", fsp_active_probe_curr_list.uav.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                pso_fsp_begin_update_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_uav.Get(), fsp_irradiance_volume_sh_buffer_.uav.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_request_uav.Get(), fsp_probe_ray_request_buffer_.uav.Get());
                 pso_fsp_begin_update_->SetView(&desc_set, k_shader_bind_name_fsp_probe_ray_result_uav.Get(), fsp_probe_ray_result_buffer_.uav.Get());
 
@@ -2103,6 +2100,7 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_probe_free_stack_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_active_probe_curr_list.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
+                p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_probe_ray_request_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_probe_ray_result_buffer_.buffer.Get());
             }
@@ -2337,13 +2335,13 @@ namespace ngl::render::app
                 pso_fsp_sh_update_->SetView(&desc_set, "FspActiveProbeListCurr", fsp_active_probe_curr_list.srv.Get());
                 pso_fsp_sh_update_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
                 pso_fsp_sh_update_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
-                pso_fsp_sh_update_->SetView(&desc_set, k_shader_bind_name_fsp_packed_sh_uav.Get(), fsp_probe_packed_sh_tex_.uav.Get());
+                pso_fsp_sh_update_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_uav.Get(), fsp_irradiance_volume_sh_buffer_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_fsp_sh_update_.Get());
                 p_command_list->SetDescriptorSet(pso_fsp_sh_update_.Get(), &desc_set);
                 p_command_list->DispatchIndirect(fsp_indirect_arg_.buffer.Get());
 
-                p_command_list->ResourceUavBarrier(fsp_probe_packed_sh_tex_.texture.Get());
+                p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
             }
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspReadbackCopy");
@@ -2384,7 +2382,7 @@ namespace ngl::render::app
             pso_bbv_debug_visualize_->SetView(&desc_set, "BitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
-            pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_fsp_packed_sh_srv.Get(), fsp_probe_packed_sh_tex_.srv.Get());
+            pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_srv.Get(), fsp_irradiance_volume_sh_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_asspprobe_srv.Get(), assp_probe_tex_[assp_latest_filtered_frame_tex_index_].srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_asspprobe_variance_srv.Get(), assp_probe_variance_tex_[assp_variance_curr_frame_tex_index_].srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_asspprobe_tile_info_srv.Get(), assp_probe_tile_info_tex_[assp_tile_info_curr_frame_tex_index_].srv.Get());
@@ -2451,7 +2449,7 @@ namespace ngl::render::app
             pso_fsp_debug_probe_->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_packed_sh_srv.Get(), fsp_probe_packed_sh_tex_.srv.Get());
+            pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_srv.Get(), fsp_irradiance_volume_sh_buffer_.srv.Get());
             pso_fsp_debug_probe_->SetView(&desc_set, "SmpLinearClamp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_clamp.Get());
 
 
@@ -2647,7 +2645,7 @@ namespace ngl::render::app
     {
         assert(bbvgi_instance_);
         p_pso->SetView(p_desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), bbvgi_instance_->GetFspProbeAtlasTex().Get());
-        p_pso->SetView(p_desc_set, k_shader_bind_name_fsp_packed_sh_srv.Get(), bbvgi_instance_->GetFspProbePackedShTex().Get());
+        p_pso->SetView(p_desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_srv.Get(), bbvgi_instance_->GetFspIrradianceVolumeSHBuffer().Get());
         p_pso->SetView(p_desc_set, "FspCellProbeIndexBuffer", bbvgi_instance_->GetFspCellProbeIndexBuffer().Get());
         p_pso->SetView(p_desc_set, "FspProbePoolBuffer", bbvgi_instance_->GetFspProbePoolBuffer().Get());
         p_pso->SetView(p_desc_set, k_shader_bind_name_asspprobe_tile_info_srv.Get(), bbvgi_instance_->GetAsspProbeTileInfoTex().Get());

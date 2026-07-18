@@ -153,28 +153,30 @@ void ScaleFspPackedShL1Sample(inout FspProbePackedShL1Sample sample_value, float
     sample_value.radiance_sh_b *= scale;
 }
 
-// cell -> probe の対応から packed SH を 1 probe 分ロードする。
+// IrradianceVolume から global cell index 直結で packed SH をロードする。
 bool FspTryLoadPackedShL1FromCellIndex(out FspProbePackedShL1Sample result, uint global_cell_index)
 {
     result = MakeZeroFspProbePackedShL1Sample();
 
-    const uint probe_index = FspCellProbeIndexBuffer[global_cell_index];
-    if(probe_index == k_fsp_invalid_probe_index || probe_index >= (uint)cb_instant_rdv.fsp_probe_pool_size)
+    if(global_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
     {
         return false;
     }
 
-    const FspProbePoolData probe_pool_data = FspProbePoolBuffer[probe_index];
-    if(probe_pool_data.owner_cell_index != global_cell_index)
+    const float4 coeff0 = FspIrradianceVolumeLoadCoeff(global_cell_index, 0);
+    const float4 coeff1 = FspIrradianceVolumeLoadCoeff(global_cell_index, 1);
+    const float4 coeff2 = FspIrradianceVolumeLoadCoeff(global_cell_index, 2);
+    const float4 coeff3 = FspIrradianceVolumeLoadCoeff(global_cell_index, 3);
+    const bool has_written_sh =
+        any(abs(coeff0) > 0.0.xxxx) ||
+        any(abs(coeff1) > 0.0.xxxx) ||
+        any(abs(coeff2) > 0.0.xxxx) ||
+        any(abs(coeff3) > 0.0.xxxx);
+    if(!has_written_sh)
     {
         return false;
     }
 
-    const int2 probe_tile_id = int2(FspProbeAtlasMapPos(probe_index));
-    const float4 coeff0 = FspPackedShAtlasLoadCoeff(probe_tile_id, 0);
-    const float4 coeff1 = FspPackedShAtlasLoadCoeff(probe_tile_id, 1);
-    const float4 coeff2 = FspPackedShAtlasLoadCoeff(probe_tile_id, 2);
-    const float4 coeff3 = FspPackedShAtlasLoadCoeff(probe_tile_id, 3);
     result.sky_visibility_sh = float4(
         coeff0.r,
         coeff1.r,

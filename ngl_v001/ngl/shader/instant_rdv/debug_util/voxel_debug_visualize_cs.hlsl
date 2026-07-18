@@ -325,14 +325,15 @@ void main_cs(
         }
         else if(1 == debug_sub_mode)
         {
-            const int2 texel_pos = dtid.xy * 0.1;
-            uint tex_width, tex_height;
-            FspProbePackedSHTex.GetDimensions(tex_width, tex_height);
-            if(any(int2(tex_width, tex_height) <= texel_pos))
+            // Dense IrradianceVolume SH を global cell index 順に2Dへ展開して表示する。
+            const uint global_cell_index = dtid.x + dtid.y * uint(cb_instant_rdv.fsp_cascade[0].grid.flatten_2d_width);
+            if(global_cell_index >= (uint)cb_instant_rdv.fsp_total_cell_count)
+            {
                 return;
+            }
 
-            // FSP packed SH texture raw RGBA.
-            RWTexWork[dtid.xy] = FspProbePackedSHTex.Load(uint3(texel_pos, 0));
+            // FSP IrradianceVolume SH texture raw RGBA.
+            RWTexWork[dtid.xy] = FspIrradianceVolumeLoadCoeff(global_cell_index, 0);
         }
     }
     // Category 2: ASSP.

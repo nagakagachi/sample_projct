@@ -2,6 +2,7 @@
 #if 0
 
 fsp_clear_voxel_cs.hlsl
+ファイル説明: FSP lifecycle バッファと IrradianceVolume SH を初期化する。
 
 #endif
 
@@ -32,6 +33,13 @@ void main_cs(
     if(dtid.x < cell_count)
     {
         RWFspCellProbeIndexBuffer[dtid.x] = k_fsp_invalid_probe_index;
+
+        // Dense IrradianceVolume SH は global cell index 直結の最終シェーディング参照先。
+        [unroll]
+        for(uint coeff_index = 0; coeff_index < k_fsp_irradiance_volume_sh_float4_count; ++coeff_index)
+        {
+            RWFspIrradianceVolumeSHBuffer[FspIrradianceVolumeSHAddress(dtid.x, coeff_index)] = 0.0.xxxx;
+        }
     }
 
     if(dtid.x < probe_pool_size)

@@ -139,6 +139,10 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
         discard;
     }
     const FspProbePoolData probe_pool_data = FspProbePoolBuffer[input.probe_index];
+    if(probe_pool_data.owner_cell_index == k_fsp_invalid_probe_index)
+    {
+        discard;
+    }
 
     const float3 dir_to_camera = normalize(view_origin - input.voxel_probe_pos_ws);
     const float3 quad_pose_side = normalize(cross(camera_up, -dir_to_camera));
@@ -153,28 +157,28 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     const uint2 oct_cell_id = min(uint2(OctEncode(normal_ws) * k_fsp_probe_octmap_width), uint2(k_fsp_probe_octmap_width - 1, k_fsp_probe_octmap_width - 1));
     const uint2 octmap_texel_pos = FspProbeAtlasTexelCoord(input.probe_index, oct_cell_id);
     const float4 octmap_sample = FspProbeAtlasTex.Load(int3(octmap_texel_pos, 0));
-    const int2 probe_tile_id = int2(int(input.probe_index % uint(cb_instant_rdv.fsp_probe_atlas_tile_width)), int(input.probe_index / uint(cb_instant_rdv.fsp_probe_atlas_tile_width)));
+    const uint owner_cell_index = probe_pool_data.owner_cell_index;
     const float4 sh_basis = EvaluateL1ShBasis(normal_ws);
     const float4 sh_sky_vis = float4(
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 0).r,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 1).r,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 2).r,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 3).r);
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 0).r,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 1).r,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 2).r,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 3).r);
     const float4 sh_radiance_r = float4(
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 0).g,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 1).g,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 2).g,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 3).g);
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 0).g,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 1).g,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 2).g,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 3).g);
     const float4 sh_radiance_g = float4(
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 0).b,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 1).b,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 2).b,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 3).b);
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 0).b,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 1).b,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 2).b,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 3).b);
     const float4 sh_radiance_b = float4(
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 0).a,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 1).a,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 2).a,
-        FspPackedShAtlasLoadCoeff(probe_tile_id, 3).a);
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 0).a,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 1).a,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 2).a,
+        FspIrradianceVolumeLoadCoeff(owner_cell_index, 3).a);
 
 
     
