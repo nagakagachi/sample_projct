@@ -15,6 +15,7 @@ ss_voxel_debug_visualize_cs.hlsl
 #include "../../include/scene_view_struct.hlsli"
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
+Texture2D TexHardwareDepth;
 
 RWTexture2D<float4>	RWTexWork;
 SamplerState		SmpLinearClamp;
@@ -307,6 +308,62 @@ void main_cs(
                 debug_color = pow(max(debug_color, 0.0.xxx), 1.0 / 2.2);
             }
             RWTexWork[dtid.xy] = float4(debug_color, 1.0);
+        }
+        else if(15 == debug_sub_mode)
+        {
+            const float surface_depth = TexHardwareDepth.Load(int3(texel_pos, 0)).r;
+            if(!isValidDepth(surface_depth))
+            {
+                RWTexWork[dtid.xy] = float4(0.02, 0.02, 0.02, 1.0);
+            }
+            else
+            {
+                const float surface_view_z =
+                    calc_view_z_from_ndc_z(surface_depth, cb_ngl_sceneview.cb_ndc_z_to_view_z_coef);
+                const float3 surface_pos_vs =
+                    CalcViewSpacePosition(screen_uv, surface_view_z, cb_ngl_sceneview.cb_proj_mtx);
+                const float3 surface_pos_ws =
+                    mul(cb_ngl_sceneview.cb_view_inv_mtx, float4(surface_pos_vs, 1.0));
+                const float surface_distance = dot(surface_pos_ws - view_origin, ray_dir_ws);
+
+                const float trace_distance = 10000.0;
+                int hit_voxel_index = -1;
+                float4 debug_ray_info;
+                const float4 hit_ray_t = trace_bbv_dev(
+                    hit_voxel_index,
+                    debug_ray_info,
+                    view_origin,
+                    ray_dir_ws,
+                    trace_distance,
+                    cb_instant_rdv.bbv.grid_min_pos,
+                    cb_instant_rdv.bbv.cell_size,
+                    cb_instant_rdv.bbv.grid_resolution,
+                    cb_instant_rdv.bbv.grid_toroidal_offset,
+                    BitmaskBrickVoxel,
+                    false);
+
+                if(hit_ray_t.x < 0.0)
+                {
+                    RWTexWork[dtid.xy] = float4(0.02, 0.02, 0.02, 1.0);
+                }
+                else
+                {
+                    const float fine_cell_size =
+                        cb_instant_rdv.bbv.cell_size / float(k_bbv_per_voxel_resolution);
+                    const float delta_fine_cells =
+                        (hit_ray_t.x - surface_distance) / max(fine_cell_size, 1e-3);
+                    const float signed_amount =
+                        saturate(abs(delta_fine_cells) / 8.0);
+                    const float3 neutral_color = float3(0.01, 0.01, 0.01);
+                    const float3 front_color = float3(1.0, 0.0, 0.0);
+                    const float3 behind_color = float3(0.0, 0.18, 1.0);
+                    const float front_amount = 0.35 + 0.65 * signed_amount;
+                    const float3 relation_color = (delta_fine_cells < 0.0)
+                        ? lerp(neutral_color, front_color, front_amount)
+                        : lerp(neutral_color, behind_color, signed_amount);
+                    RWTexWork[dtid.xy] = float4(relation_color, 1.0);
+                }
+            }
         }
     }
     // Category 1: FSP.

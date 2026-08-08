@@ -613,7 +613,7 @@ namespace ngl::render::app
                 // カテゴリ別サブモードスライダ.
                 if (0 <= dbg_view_category_)
                 {
-                    const int k_sub_mode_max[] = { 14, 1, 7 };
+                    const int k_sub_mode_max[] = { 15, 1, 7 };
                     auto get_sub_mode_description = [](int category, int sub_mode) -> const char*
                     {
                         switch(category)
@@ -636,6 +636,7 @@ namespace ngl::render::app
                             case 12: return "Detail efficiency";
                             case 13: return "Cone transmittance approximation";
                             case 14: return "Resolved brick radiance";
+                            case 15: return "BBV hit vs Depth Surface relation";
                             default: return "Unknown";
                             }
                         case 1: // FSP
