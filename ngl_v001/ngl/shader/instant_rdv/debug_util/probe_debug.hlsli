@@ -88,7 +88,7 @@ VS_OUTPUT main_vs(VS_INPUT input)
     const bool use_relocated_probe_pos = (0 != cb_instant_rdv.debug_fsp_probe_use_relocated_pos);
     const float3 probe_offset = (is_allocated && use_relocated_probe_pos) ? decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size) : float3(0.0, 0.0, 0.0);
 
-    const bool is_irradiance_volume_debug = (8 == cb_instant_rdv.debug_fsp_probe_mode) || (9 == cb_instant_rdv.debug_fsp_probe_mode);
+    const bool is_irradiance_volume_debug = (0 <= cb_instant_rdv.debug_fsp_irradiance_volume_mode);
     const float3 cell_center_ws = FspCalcCellCenterWs(cascade_index, local_cell_index);
     // IrradianceVolume debugはActiveProbe配置ではなく、dense cell中心に有効SHセルを表示する。
     const float3 probe_pos_ws = is_irradiance_volume_debug ? cell_center_ws : (cell_center_ws + probe_offset);
@@ -137,7 +137,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     {
         discard;
     }
-    const bool is_irradiance_volume_debug = (8 == cb_instant_rdv.debug_fsp_probe_mode) || (9 == cb_instant_rdv.debug_fsp_probe_mode);
+    const bool is_irradiance_volume_debug = (0 <= cb_instant_rdv.debug_fsp_irradiance_volume_mode);
     if((!is_irradiance_volume_debug) && input.probe_index == k_fsp_invalid_probe_index)
     {
         discard;
@@ -243,6 +243,25 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     }
     else if(8 == cb_instant_rdv.debug_fsp_probe_mode)
     {
+        const float3 bbv_voxel_coord_f =
+            (input.voxel_probe_pos_ws - cb_instant_rdv.bbv.grid_min_pos) * cb_instant_rdv.bbv.cell_size_inv;
+        const int3 bbv_voxel_coord = int3(floor(bbv_voxel_coord_f));
+        const bool inside_bbv = all(bbv_voxel_coord >= 0) &&
+            all(bbv_voxel_coord < cb_instant_rdv.bbv.grid_resolution);
+        const bool embedded_in_bbv = inside_bbv &&
+            (0u != read_bbv_voxel_from_world_pos(
+                BitmaskBrickVoxel,
+                cb_instant_rdv.bbv.grid_resolution,
+                cb_instant_rdv.bbv.grid_toroidal_offset,
+                cb_instant_rdv.bbv.grid_min_pos,
+                cb_instant_rdv.bbv.cell_size_inv,
+                input.voxel_probe_pos_ws));
+        color = !inside_bbv
+            ? float4(0.2, 0.5, 1.0, 1.0)
+            : (embedded_in_bbv ? float4(1.0, 0.15, 0.1, 1.0) : float4(0.2, 1.0, 0.3, 1.0));
+    }
+    else if(0 == cb_instant_rdv.debug_fsp_irradiance_volume_mode)
+    {
         const float3 sh_radiance = max(0.0.xxx, float3(
             dot(sh_radiance_r, sh_basis),
             dot(sh_radiance_g, sh_basis),
@@ -250,7 +269,7 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
         const float3 mapped_radiance = sh_radiance / (1.0 + sh_radiance);
         color = float4(pow(mapped_radiance, 1.0 / 2.2), 1.0);
     }
-    else if(9 == cb_instant_rdv.debug_fsp_probe_mode)
+    else if(1 == cb_instant_rdv.debug_fsp_irradiance_volume_mode)
     {
         const float sh_sky_visibility = max(0.0, dot(sh_sky_vis, sh_basis));
         color = sh_sky_visibility.xxxx;

@@ -166,8 +166,7 @@ namespace ngl::render::app
         case 5: return "5: Oct sky visibility (current dir)";
         case 6: return "6: SH radiance (reconstructed)";
         case 7: return "7: SH sky visibility (reconstructed)";
-        case 8: return "8: IrradianceVolume SH radiance";
-        case 9: return "9: IrradianceVolume SH sky visibility";
+        case 8: return "8: ActiveProbe BBV occupancy (outside / embedded / free)";
         default: return "Unknown mode";
         }
     }
@@ -178,6 +177,17 @@ namespace ngl::render::app
         {
         case 3: return "Age(frames)=frame_count-last_seen, 0->green, 15->yellow, 30+->red";
         default: return "";
+        }
+    }
+
+    const char* FspIrradianceVolumeDebugModeLabel(int mode)
+    {
+        switch(mode)
+        {
+        case -1: return "-1: Disabled";
+        case 0: return "0: SH radiance";
+        case 1: return "1: SH sky visibility";
+        default: return "Unknown mode";
         }
     }
 
@@ -247,6 +257,8 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_view_sub_mode_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_bbv_probe_debug_mode_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_ = -1;
+    int InstantRasterDerivedVoxelScene::dbg_fsp_irradiance_volume_debug_mode_ = -1;
+    int InstantRasterDerivedVoxelScene::dbg_fsp_probe_depth_test_ = 1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_ = k_default_instant_rdv_param.debug_fsp_probe_use_relocated_pos;
     int InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_surface_pass_mode_ = 1;
@@ -548,7 +560,8 @@ namespace ngl::render::app
                     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
                     {
                         NGL_IMGUI_SCOPED_INDENT(10.0f);
-                        ImGui::SliderInt("Fsp Probe Mode", &dbg_fsp_probe_debug_mode_, -1, 9);
+                        if (ImGui::SliderInt("ActiveProbe Mode", &dbg_fsp_probe_debug_mode_, -1, 8))
+                            dbg_fsp_irradiance_volume_debug_mode_ = -1;
                         if (ImGui::BeginPopupContextItem()) {
                             if (ImGui::MenuItem("Reset to Default"))
                                 dbg_fsp_probe_debug_mode_ = k_default_instant_rdv_param.debug_fsp_probe_mode;
@@ -579,6 +592,19 @@ namespace ngl::render::app
                             ImGui::EndPopup();
                         }
                         ImGui::TextDisabled("-1 = all cascades");
+
+                        if (ImGui::SliderInt("IrradianceVolume Mode", &dbg_fsp_irradiance_volume_debug_mode_, -1, 1))
+                            dbg_fsp_probe_debug_mode_ = -1;
+                        if (ImGui::BeginPopupContextItem()) {
+                            if (ImGui::MenuItem("Reset to Default"))
+                                dbg_fsp_irradiance_volume_debug_mode_ = -1;
+                            ImGui::EndPopup();
+                        }
+                        ImGui::TextDisabled("%s", FspIrradianceVolumeDebugModeLabel(dbg_fsp_irradiance_volume_debug_mode_));
+                        bool depth_test = (0 != dbg_fsp_probe_depth_test_);
+                        if (ImGui::Checkbox("Probe Depth Test", &depth_test))
+                            dbg_fsp_probe_depth_test_ = depth_test ? 1 : 0;
+                        ImGui::TextDisabled("ON: SceneDepth occlusion, OFF: always visible.");
                     }
                 }
 
@@ -677,6 +703,7 @@ namespace ngl::render::app
                 }
             }
         }
+
     }
 
     using InstantRdvShaderBindName = ngl::text::HashText<128>;
@@ -1195,7 +1222,7 @@ namespace ngl::render::app
 
                     gpso_desc.depth_stencil_state.depth_enable = true;
                     gpso_desc.depth_stencil_state.depth_func = ngl::rhi::ECompFunc::Greater; // ReverseZ.
-                    gpso_desc.depth_stencil_state.depth_write_enable = true;
+                    gpso_desc.depth_stencil_state.depth_write_enable = false;
                     gpso_desc.depth_stencil_state.stencil_enable = false;
                     gpso_desc.depth_stencil_format = rhi::EResourceFormat::Format_D32_FLOAT;
                     
@@ -1235,6 +1262,8 @@ namespace ngl::render::app
 
                     auto* pso_cache = p_device->GetPipelineStateCache();
                     pso_fsp_debug_probe_ = pso_cache->GetOrCreate(p_device, gpso_desc);
+                    gpso_desc.depth_stencil_state.depth_enable = false;
+                    pso_fsp_debug_probe_no_depth_ = pso_cache->GetOrCreate(p_device, gpso_desc);
                 }
             }
         }
@@ -1564,6 +1593,7 @@ namespace ngl::render::app
             param.debug_view_sub_mode = InstantRasterDerivedVoxelScene::dbg_view_sub_mode_;
             param.debug_bbv_probe_mode = InstantRasterDerivedVoxelScene::dbg_bbv_probe_debug_mode_;
             param.debug_fsp_probe_mode = InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_;
+            param.debug_fsp_irradiance_volume_mode = InstantRasterDerivedVoxelScene::dbg_fsp_irradiance_volume_debug_mode_;
             param.debug_fsp_probe_use_relocated_pos = InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_;
             param.debug_fsp_update_ray_jitter_enable = InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_;
             param.debug_fsp_probe_cascade = InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_cascade_;
@@ -2578,24 +2608,29 @@ namespace ngl::render::app
             p_command_list->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
             p_command_list->DrawInstanced(6 * bbv_grid_updater_.Get().total_count, 1, 0, 0);
         }
-        if (0 <= InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_)
+        if (0 <= InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_ ||
+            0 <= InstantRasterDerivedVoxelScene::dbg_fsp_irradiance_volume_debug_mode_)
         {
             NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspProbeDebug");
 
-            p_command_list->SetPipelineState(pso_fsp_debug_probe_.Get());
+            auto* pso_fsp_debug_probe = (0 != InstantRasterDerivedVoxelScene::dbg_fsp_probe_depth_test_)
+                ? pso_fsp_debug_probe_.Get()
+                : pso_fsp_debug_probe_no_depth_.Get();
+            p_command_list->SetPipelineState(pso_fsp_debug_probe);
             ngl::rhi::DescriptorSetDep desc_set = {};
 
-            pso_fsp_debug_probe_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
+            pso_fsp_debug_probe->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
 
-            pso_fsp_debug_probe_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-            pso_fsp_debug_probe_->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_srv.Get(), fsp_irradiance_volume_sh_buffer_.srv.Get());
-            pso_fsp_debug_probe_->SetView(&desc_set, "SmpLinearClamp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_clamp.Get());
+            pso_fsp_debug_probe->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+            pso_fsp_debug_probe->SetView(&desc_set, "FspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.srv.Get());
+            pso_fsp_debug_probe->SetView(&desc_set, "FspProbePoolBuffer", fsp_probe_pool_buffer_.srv.Get());
+            pso_fsp_debug_probe->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+            pso_fsp_debug_probe->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
+            pso_fsp_debug_probe->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_srv.Get(), fsp_irradiance_volume_sh_buffer_.srv.Get());
+            pso_fsp_debug_probe->SetView(&desc_set, "SmpLinearClamp", gfx::GlobalRenderResource::Instance().default_resource_.sampler_linear_clamp.Get());
 
 
-            p_command_list->SetDescriptorSet(pso_fsp_debug_probe_.Get(), &desc_set);
+            p_command_list->SetDescriptorSet(pso_fsp_debug_probe, &desc_set);
 
             p_command_list->SetPrimitiveTopology(ngl::rhi::EPrimitiveTopology::TriangleList);
             p_command_list->DrawInstanced(6 * fsp_total_cell_count_, 1, 0, 0);

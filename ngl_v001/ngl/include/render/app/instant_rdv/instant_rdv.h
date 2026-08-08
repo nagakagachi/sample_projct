@@ -218,6 +218,7 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_debug_visualize_ = {};
         ngl::rhi::RhiRef<ngl::rhi::GraphicsPipelineStateDep> pso_bbv_debug_probe_ = {};
         ngl::rhi::RhiRef<ngl::rhi::GraphicsPipelineStateDep> pso_fsp_debug_probe_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::GraphicsPipelineStateDep> pso_fsp_debug_probe_no_depth_ = {};
 
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_assp_probe_clear_ = {};
@@ -309,6 +310,8 @@ namespace ngl::render::app
         
         static int dbg_bbv_probe_debug_mode_;
         static int dbg_fsp_probe_debug_mode_;
+        static int dbg_fsp_irradiance_volume_debug_mode_;
+        static int dbg_fsp_probe_depth_test_;
         static int dbg_fsp_probe_use_relocated_pos_;
         static int dbg_fsp_update_ray_jitter_enable_;
         static int dbg_fsp_surface_pass_mode_;
