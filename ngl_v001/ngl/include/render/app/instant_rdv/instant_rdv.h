@@ -193,6 +193,7 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_brick_count_aggregate_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_element_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_aabb_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_ = {};
@@ -343,6 +344,7 @@ namespace ngl::render::app
         static int dbg_assp_total_ray_count_;
         static int dbg_assp_probe_count_;
         static int dbg_gi_update_sample_mode_;
+        static int dbg_bbv_depth_cull_mode_;
         static float dbg_bbv_depthtest_injection_fine_cells_default_;
         static float dbg_bbv_depthtest_injection_fine_cells_;
 

@@ -34,6 +34,51 @@ namespace ngl::render::app
     static constexpr size_t k_sizeof_FspProbePoolData  = sizeof(FspProbePoolData);
     static constexpr u32 k_max_update_probe_work_count = 1024;
     static constexpr float k_depthtest_injection_default_fine_cells = 2.0f;
+    static constexpr size_t k_bbv_depth_cull_plane_count = 6;
+
+    static std::array<math::Vec4, k_bbv_depth_cull_plane_count> CalcBbvDepthCullFrustumPlanes(
+        const math::Mat34& view_mat,
+        const math::Mat44& proj_mat)
+    {
+        // Native cull uses clip = proj * view * world. These are the same
+        // homogeneous clip inequalities used by the existing center test.
+        const math::Mat44 view_mat44(
+            view_mat.r0,
+            view_mat.r1,
+            view_mat.r2,
+            math::Vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        const math::Mat44 world_to_clip = proj_mat * view_mat44;
+        const math::Vec4 clip_x = world_to_clip.r0;
+        const math::Vec4 clip_y = world_to_clip.r1;
+        const math::Vec4 clip_z = world_to_clip.r2;
+        const math::Vec4 clip_w = world_to_clip.r3;
+
+        const bool is_reverse_z = proj_mat.m[2][3] > 0.0f;
+        std::array<math::Vec4, k_bbv_depth_cull_plane_count> planes = {
+            clip_w + clip_x,
+            clip_w - clip_x,
+            clip_w + clip_y,
+            clip_w - clip_y,
+            is_reverse_z ? (clip_w - clip_z) : clip_z,
+            is_reverse_z ? clip_z : (clip_w - clip_z)
+        };
+
+        for (math::Vec4& plane : planes)
+        {
+            const float normal_length = math::Vec3(plane.x, plane.y, plane.z).Length();
+            if (std::isfinite(normal_length) && normal_length > 1.0e-20f)
+            {
+                plane = plane / normal_length;
+            }
+            else
+            {
+                // Infinite-far projections have no finite far-plane boundary.
+                plane = math::Vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            }
+        }
+        return planes;
+    }
+
     static float CalcDepthtestInjectionWorldOffsetFromFineCells(float injection_fine_cells, float bbv_cell_size)
     {
         return bbv_cell_size * (injection_fine_cells * float(k_bbv_per_voxel_resolution_inv));
@@ -290,6 +335,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_assp_total_ray_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_assp_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_gi_update_sample_mode_ = static_cast<int>(InstantRdvGiSolutionMode::Fsp);
+    int InstantRasterDerivedVoxelScene::dbg_bbv_depth_cull_mode_ = 1;
     float InstantRasterDerivedVoxelScene::dbg_bbv_depthtest_injection_fine_cells_default_ = k_depthtest_injection_default_fine_cells;
     float InstantRasterDerivedVoxelScene::dbg_bbv_depthtest_injection_fine_cells_ = dbg_bbv_depthtest_injection_fine_cells_default_;
 
@@ -322,6 +368,15 @@ namespace ngl::render::app
             ImGui::TextDisabled(
                 "Default: %.2f fine cells",
                 InstantRasterDerivedVoxelScene::dbg_bbv_depthtest_injection_fine_cells_default_);
+            {
+                static const char* k_depth_cull_mode_items[] = {
+                    "Legacy (Brick-center XY)",
+                    "AABB (six frustum planes)"
+                };
+                dbg_bbv_depth_cull_mode_ = std::clamp(dbg_bbv_depth_cull_mode_, 0, 1);
+                ImGui::Combo("Depth Cull Mode", &dbg_bbv_depth_cull_mode_, k_depth_cull_mode_items, IM_ARRAYSIZE(k_depth_cull_mode_items));
+                ImGui::TextDisabled("0: legacy center XY, 1: conservative world-space Brick AABB");
+            }
             ImGui::Text("GI Update Target (linked): %s", InstantRdvGiSolutionModeName(dbg_gi_update_sample_mode_));
 
             
@@ -1161,6 +1216,7 @@ namespace ngl::render::app
             pso_bbv_brick_count_aggregate_ = CreateComputePSO("instant_rdv/bbv/bbv_brick_count_aggregate_cs.hlsl");
             pso_bbv_element_update_ = CreateComputePSO("instant_rdv/bbv/bbv_element_update_cs.hlsl");
             pso_bbv_depthtest_frustum_cull_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_frustum_cull_cs.hlsl");
+            pso_bbv_depthtest_frustum_cull_aabb_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_frustum_cull_aabb_cs.hlsl");
             pso_bbv_depthtest_carving_indirect_arg_build_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_carving_indirect_arg_build_cs.hlsl");
             pso_bbv_depthtest_injection_apply_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_injection_apply_cs.hlsl");
             pso_bbv_depthtest_carving_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_carving_cs.hlsl");
@@ -1723,17 +1779,25 @@ namespace ngl::render::app
             rhi::ConstantBufferPooledHandle cbh_injection_view_info
         )
         {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvDepthTestFrustumCull");
+            NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                p_command_list,
+                (InstantRasterDerivedVoxelScene::dbg_bbv_depth_cull_mode_ == 1)
+                    ? "BbvDepthTestFrustumCull_AABB"
+                    : "BbvDepthTestFrustumCull_Legacy");
 
             ngl::rhi::DescriptorSetDep desc_set = {};
-            pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-            pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
-            pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
-            pso_bbv_depthtest_frustum_cull_->SetView(&desc_set, "RWFrustumBrickList", bbv_depthtest_frustum_brick_list_.uav.Get());
+            auto* pso_depthtest_frustum_cull =
+                (InstantRasterDerivedVoxelScene::dbg_bbv_depth_cull_mode_ == 1)
+                    ? pso_bbv_depthtest_frustum_cull_aabb_.Get()
+                    : pso_bbv_depthtest_frustum_cull_.Get();
+            pso_depthtest_frustum_cull->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+            pso_depthtest_frustum_cull->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
+            pso_depthtest_frustum_cull->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
+            pso_depthtest_frustum_cull->SetView(&desc_set, "RWFrustumBrickList", bbv_depthtest_frustum_brick_list_.uav.Get());
 
-            p_command_list->SetPipelineState(pso_bbv_depthtest_frustum_cull_.Get());
-            p_command_list->SetDescriptorSet(pso_bbv_depthtest_frustum_cull_.Get(), &desc_set);
-            pso_bbv_depthtest_frustum_cull_->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
+            p_command_list->SetPipelineState(pso_depthtest_frustum_cull);
+            p_command_list->SetDescriptorSet(pso_depthtest_frustum_cull, &desc_set);
+            pso_depthtest_frustum_cull->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
             p_command_list->ResourceUavBarrier(bbv_depthtest_frustum_brick_list_.buffer.Get());
         };
         auto func_call_depthtest_carving_indirect_arg_build_pass = [this](
@@ -1830,6 +1894,11 @@ namespace ngl::render::app
                     );
                     p->cb_is_main_view = is_main_view_update ? 1 : 0;
                     p->cb_padding0 = math::Vec2i(0, 0);
+                    const auto frustum_planes = CalcBbvDepthCullFrustumPlanes(target_depth_info.view_mat, target_depth_info.proj_mat);
+                    for (size_t plane_index = 0; plane_index < frustum_planes.size(); ++plane_index)
+                    {
+                        p->cb_frustum_planes[plane_index] = frustum_planes[plane_index];
+                    }
                 }
                 cbh_injection_view_info->buffer.Unmap();
             }
@@ -1911,6 +1980,11 @@ namespace ngl::render::app
                 view_info.atlas_resolution.y);
             p->cb_is_main_view = 1;
             p->cb_padding0 = math::Vec2i(0, 0);
+            const auto frustum_planes = CalcBbvDepthCullFrustumPlanes(view_info.view_mat, view_info.proj_mat);
+            for (size_t plane_index = 0; plane_index < frustum_planes.size(); ++plane_index)
+            {
+                p->cb_frustum_planes[plane_index] = frustum_planes[plane_index];
+            }
             cbh_injection_view_info->buffer.Unmap();
         }
 

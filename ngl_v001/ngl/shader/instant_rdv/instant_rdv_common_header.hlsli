@@ -230,6 +230,10 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int     cb_is_main_view;
         float   cb_near_plane_view_z;
         int2    cb_padding0;
+
+        // World-space frustum planes for conservative BBV AABB culling.
+        // Plane equation is dot(plane.xyz, world_position) + plane.w >= 0.
+        float4  cb_frustum_planes[6];
     };
 
 
