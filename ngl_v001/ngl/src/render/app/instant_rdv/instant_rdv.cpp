@@ -327,6 +327,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::assp_debug_freeze_frame_random_enable_ = k_default_instant_rdv_param.assp_debug_freeze_frame_random_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_lighting_interpolation_enable_ = k_default_instant_rdv_param.fsp_lighting_interpolation_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
+    int InstantRasterDerivedVoxelScene::dbg_fsp_warm_start_enable_ = k_default_instant_rdv_param.fsp_warm_start_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ = 0;
@@ -560,6 +561,16 @@ namespace ngl::render::app
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
                             dbg_fsp_probe_lifecycle_enable_ = k_default_instant_rdv_param.fsp_probe_lifecycle_enable;
+                        ImGui::EndPopup();
+                    }
+                }
+                {
+                    bool v = (0 != dbg_fsp_warm_start_enable_);
+                    if (ImGui::Checkbox("Probe Warm Start", &v))
+                        dbg_fsp_warm_start_enable_ = v ? 1 : 0;
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_warm_start_enable_ = k_default_instant_rdv_param.fsp_warm_start_enable;
                         ImGui::EndPopup();
                     }
                 }
@@ -1612,6 +1623,7 @@ namespace ngl::render::app
                 param.fsp_active_probe_buffer_size = static_cast<int>(fsp_probe_pool_size_);
                 param.fsp_lighting_interpolation_enable = InstantRasterDerivedVoxelScene::dbg_fsp_lighting_interpolation_enable_;
                 param.fsp_probe_lifecycle_enable = InstantRasterDerivedVoxelScene::dbg_fsp_probe_lifecycle_enable_;
+                param.fsp_warm_start_enable = InstantRasterDerivedVoxelScene::dbg_fsp_warm_start_enable_;
                 param.fsp_relocation_offset_scale_for_cascade_cell_size = InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;
                 param.fsp_cascade_count = static_cast<int>(fsp_cascade_count_);
                 param.fsp_total_cell_count = static_cast<int>(fsp_total_cell_count_);

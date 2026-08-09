@@ -335,7 +335,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int fsp_probe_pool_size NGL_CPP_MEMBER_INIT({});
         int fsp_active_probe_buffer_size NGL_CPP_MEMBER_INIT({});
         int fsp_lighting_interpolation_enable NGL_CPP_MEMBER_INIT({1});
-        int fsp_dummy_padding0 NGL_CPP_MEMBER_INIT({});
+        int fsp_warm_start_enable NGL_CPP_MEMBER_INIT({1});
         int fsp_dummy_padding1 NGL_CPP_MEMBER_INIT({});
         int fsp_probe_lifecycle_enable NGL_CPP_MEMBER_INIT({1});
         int fsp_cascade_count NGL_CPP_MEMBER_INIT({1});

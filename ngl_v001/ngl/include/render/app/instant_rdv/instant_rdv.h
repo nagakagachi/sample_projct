@@ -336,6 +336,7 @@ namespace ngl::render::app
         static int assp_debug_freeze_frame_random_enable_;
         static int dbg_fsp_lighting_interpolation_enable_;
         static int dbg_fsp_probe_lifecycle_enable_;
+        static int dbg_fsp_warm_start_enable_;
         static int dbg_fsp_probe_pool_size_;
         static int dbg_fsp_free_probe_count_;
         static int dbg_fsp_allocated_probe_count_;

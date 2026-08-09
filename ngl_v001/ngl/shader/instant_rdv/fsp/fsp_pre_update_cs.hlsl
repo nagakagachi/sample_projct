@@ -80,42 +80,84 @@ void FspCopyProbeAtlas(uint dst_probe_index, uint src_probe_index)
     }
 }
 
-bool FspTrySeedProbeFromUpperCascade(out FspProbePoolData src_probe_pool_data, float3 sample_pos_ws, uint dst_cascade_index, uint dst_probe_index)
+bool FspTrySeedProbeFromNearestActiveProbe(
+    float3 sample_pos_ws,
+    uint dst_cascade_index,
+    uint dst_probe_index)
 {
-    src_probe_pool_data = (FspProbePoolData)0;
-
-    // 新規 probe の黒初期値を避けるため、同じ world pos を含む上位 cascade の
-    // 安定済み probe atlas をそのまま seed として使う。
     const uint cascade_count = FspCascadeCount();
     [loop]
-    for(uint src_cascade_index = dst_cascade_index + 1; src_cascade_index < cascade_count; ++src_cascade_index)
+    for(uint cascade_offset = 0; cascade_offset < cascade_count - dst_cascade_index; ++cascade_offset)
     {
-        uint src_global_cell_index = k_fsp_invalid_probe_index;
-        if(!FspTryGetGlobalCellIndexFromWorldPos(sample_pos_ws, src_cascade_index, src_global_cell_index))
+        const uint src_cascade_index = dst_cascade_index + cascade_offset;
+        const FspCascadeGridParam src_cascade = FspGetCascadeParam(src_cascade_index);
+        const float3 continuous_coord =
+            (sample_pos_ws - src_cascade.grid.grid_min_pos) *
+            src_cascade.grid.cell_size_inv - 0.5.xxx;
+        const int3 center_coord = int3(floor(continuous_coord));
+        const int3 resolution = src_cascade.grid.grid_resolution;
+        uint best_probe_index = k_fsp_invalid_probe_index;
+        float best_distance_sq = 3.402823466e+38;
+
+        [loop]
+        for(int z = -1; z <= 1; ++z)
         {
-            continue;
+            for(int y = -1; y <= 1; ++y)
+            {
+                for(int x = -1; x <= 1; ++x)
+                {
+                    const int3 logical_coord = center_coord + int3(x, y, z);
+                    if(any(logical_coord < 0) || any(logical_coord >= resolution))
+                    {
+                        continue;
+                    }
+
+                    const int3 physical_coord = voxel_coord_toroidal_mapping(
+                        logical_coord,
+                        src_cascade.grid.grid_toroidal_offset,
+                        resolution);
+                    const uint local_cell_index = FspPhysicalCellCoordToLocalIndex(
+                        physical_coord,
+                        resolution);
+                    const uint src_global_cell_index =
+                        FspEncodeGlobalCellIndex(src_cascade_index, local_cell_index);
+                    const uint src_probe_index = RWFspCellProbeIndexBuffer[src_global_cell_index];
+                    if(src_probe_index == k_fsp_invalid_probe_index ||
+                       src_probe_index >= (uint)cb_instant_rdv.fsp_probe_pool_size ||
+                       src_probe_index == dst_probe_index)
+                    {
+                        continue;
+                    }
+
+                    const FspProbePoolData src_probe_pool_data =
+                        RWFspProbePoolBuffer[src_probe_index];
+                    if(src_probe_pool_data.owner_cell_index != src_global_cell_index ||
+                       src_probe_pool_data.last_update_frame == 0)
+                    {
+                        continue;
+                    }
+
+                    const float3 source_position_ws =
+                        FspCalcCellCenterWs(src_cascade_index, local_cell_index) +
+                        decode_uint_to_range1_vec3(src_probe_pool_data.probe_offset_v3) *
+                        (src_cascade.grid.cell_size *
+                         cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
+                    const float3 delta = source_position_ws - sample_pos_ws;
+                    const float distance_sq = dot(delta, delta);
+                    if(distance_sq < best_distance_sq)
+                    {
+                        best_distance_sq = distance_sq;
+                        best_probe_index = src_probe_index;
+                    }
+                }
+            }
         }
 
-        const uint src_probe_index = RWFspCellProbeIndexBuffer[src_global_cell_index];
-        if(src_probe_index == k_fsp_invalid_probe_index || src_probe_index >= (uint)cb_instant_rdv.fsp_probe_pool_size)
+        if(best_probe_index != k_fsp_invalid_probe_index)
         {
-            continue;
+            FspCopyProbeAtlas(dst_probe_index, best_probe_index);
+            return true;
         }
-
-        const FspProbePoolData curr_src_probe_pool_data = RWFspProbePoolBuffer[src_probe_index];
-        if(curr_src_probe_pool_data.owner_cell_index != src_global_cell_index)
-        {
-            continue;
-        }
-        // 同フレームに新規割り当てされた source は atlas 初期化中の可能性があるため使わない。
-        if(curr_src_probe_pool_data.last_update_frame == 0)
-        {
-            continue;
-        }
-
-        FspCopyProbeAtlas(dst_probe_index, src_probe_index);
-        src_probe_pool_data = curr_src_probe_pool_data;
-        return true;
     }
 
     return false;
@@ -297,13 +339,22 @@ void main_cs(
 
     if(is_new_probe)
     {
-        FspProbePoolData src_probe_pool_data = (FspProbePoolData)0;
-        if(FspTrySeedProbeFromUpperCascade(src_probe_pool_data, probe_sample_pos_ws, cascade_index, probe_index))
+        if(cb_instant_rdv.fsp_warm_start_enable != 0)
         {
+            if(FspTrySeedProbeFromNearestActiveProbe(
+                probe_sample_pos_ws,
+                cascade_index,
+                probe_index))
+            {
+            }
+            else
+            {
+                // source が見つからない場合だけ新規割り当て時に明示的に初期化する。
+                FspClearProbeAtlas(probe_index);
+            }
         }
         else
         {
-            // source が見つからない場合だけ新規割り当て時に明示的に初期化する。
             FspClearProbeAtlas(probe_index);
         }
     }
