@@ -22,6 +22,7 @@ struct VS_OUTPUT
     float4 color : COLOR0;
     float3 pos_ws : POSITION_WS;
     float3 voxel_probe_pos_ws : VOXELPROBEPOSWS0;
+    float3 relocated_probe_pos_ws : RELOCATEDPROBEPOSWS0;
     uint cascade_index : CASCADEINDEX0;
     uint global_cell_index : GLOBALCELLINDEX0;
     uint probe_index : PROBEINDEX0;
@@ -74,6 +75,7 @@ VS_OUTPUT main_vs(VS_INPUT input)
         output.color = 0.0.xxxx;
         output.pos_ws = 0.0.xxx;
         output.voxel_probe_pos_ws = 0.0.xxx;
+        output.relocated_probe_pos_ws = 0.0.xxx;
         output.cascade_index = 0;
         output.global_cell_index = k_fsp_invalid_probe_index;
         output.probe_index = k_fsp_invalid_probe_index;
@@ -117,6 +119,7 @@ VS_OUTPUT main_vs(VS_INPUT input)
     output.pos_ws = pos_ws;
 
     output.voxel_probe_pos_ws = instance_pos;
+    output.relocated_probe_pos_ws = cell_center_ws + ((is_allocated) ? decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size) : 0.0.xxx);
     output.cascade_index = cascade_index;
     output.global_cell_index = global_cell_index;
     output.probe_index = probe_index;
@@ -259,6 +262,33 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
         color = !inside_bbv
             ? float4(0.2, 0.5, 1.0, 1.0)
             : (embedded_in_bbv ? float4(1.0, 0.15, 0.1, 1.0) : float4(0.2, 1.0, 0.3, 1.0));
+    }
+    else if(9 == cb_instant_rdv.debug_fsp_probe_mode)
+    {
+        const float3 camera_position_ws = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
+        const float3 segment = input.relocated_probe_pos_ws - camera_position_ws;
+        const float segment_length = length(segment);
+        const float3 segment_direction = (segment_length > 1e-4) ? segment / segment_length : float3(0.0, 0.0, 1.0);
+        const float3 grid_min_ws = cb_instant_rdv.bbv.grid_min_pos;
+        const float3 grid_max_ws = grid_min_ws + float3(cb_instant_rdv.bbv.grid_resolution) * cb_instant_rdv.bbv.cell_size;
+        const bool target_inside_bbv = all(input.relocated_probe_pos_ws >= grid_min_ws) && all(input.relocated_probe_pos_ws < grid_max_ws);
+        int hit_voxel_index = -1;
+        float4 trace_debug = 0.0.xxxx;
+        const float4 hit = trace_bbv(
+            hit_voxel_index,
+            trace_debug,
+            camera_position_ws,
+            segment_direction,
+            segment_length,
+            cb_instant_rdv.bbv.grid_min_pos,
+            cb_instant_rdv.bbv.cell_size,
+            cb_instant_rdv.bbv.grid_resolution,
+            cb_instant_rdv.bbv.grid_toroidal_offset,
+            BitmaskBrickVoxel);
+        const bool blocked = target_inside_bbv && hit.x >= 0.0;
+        color = !target_inside_bbv
+            ? float4(0.2, 0.5, 1.0, 1.0)
+            : (blocked ? float4(1.0, 0.15, 0.1, 1.0) : float4(0.2, 1.0, 0.3, 1.0));
     }
     else if(0 == cb_instant_rdv.debug_fsp_irradiance_volume_mode)
     {

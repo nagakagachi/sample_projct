@@ -212,6 +212,7 @@ namespace ngl::render::app
         case 6: return "6: SH radiance (reconstructed)";
         case 7: return "7: SH sky visibility (reconstructed)";
         case 8: return "8: ActiveProbe BBV occupancy (outside / embedded / free)";
+        case 9: return "9: Camera-to-relocated-probe BBV reachability (outside / blocked / reached)";
         default: return "Unknown mode";
         }
     }
@@ -626,7 +627,7 @@ namespace ngl::render::app
                     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
                     {
                         NGL_IMGUI_SCOPED_INDENT(10.0f);
-                        if (ImGui::SliderInt("ActiveProbe Mode", &dbg_fsp_probe_debug_mode_, -1, 8))
+                        if (ImGui::SliderInt("ActiveProbe Mode", &dbg_fsp_probe_debug_mode_, -1, 9))
                             dbg_fsp_irradiance_volume_debug_mode_ = -1;
                         if (ImGui::BeginPopupContextItem()) {
                             if (ImGui::MenuItem("Reset to Default"))
