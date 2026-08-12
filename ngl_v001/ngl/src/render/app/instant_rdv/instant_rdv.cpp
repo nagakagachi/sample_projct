@@ -308,6 +308,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_ = k_default_instant_rdv_param.debug_fsp_probe_use_relocated_pos;
     int InstantRasterDerivedVoxelScene::dbg_fsp_update_ray_jitter_enable_ = k_default_instant_rdv_param.debug_fsp_update_ray_jitter_enable;
     int InstantRasterDerivedVoxelScene::dbg_fsp_surface_pass_mode_ = 1;
+    int InstantRasterDerivedVoxelScene::dbg_fsp_surface_detection_source_ = 1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_cascade_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_cascade_count_ = 1;
     float InstantRasterDerivedVoxelScene::dbg_fsp_relocation_offset_scale_for_cascade_cell_size_ = k_default_instant_rdv_param.fsp_relocation_offset_scale_for_cascade_cell_size;
@@ -552,6 +553,22 @@ namespace ngl::render::app
                     if (ImGui::BeginPopupContextItem()) {
                         if (ImGui::MenuItem("Reset to Default"))
                             dbg_fsp_surface_pass_mode_ = 1;
+                        ImGui::EndPopup();
+                    }
+                }
+                {
+                    static const char* k_fsp_surface_detection_source_items[] = {
+                        "Legacy FSP Surface Pass",
+                        "Integrated BBV Depth Injection"
+                    };
+                    ImGui::Combo(
+                        "Surface Detection Source",
+                        &dbg_fsp_surface_detection_source_,
+                        k_fsp_surface_detection_source_items,
+                        IM_ARRAYSIZE(k_fsp_surface_detection_source_items));
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (ImGui::MenuItem("Reset to Default"))
+                            dbg_fsp_surface_detection_source_ = 1;
                         ImGui::EndPopup();
                     }
                 }
@@ -1231,6 +1248,7 @@ namespace ngl::render::app
             pso_bbv_depthtest_frustum_cull_aabb_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_frustum_cull_aabb_cs.hlsl");
             pso_bbv_depthtest_carving_indirect_arg_build_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_carving_indirect_arg_build_cs.hlsl");
             pso_bbv_depthtest_injection_apply_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_injection_apply_cs.hlsl");
+            pso_bbv_depthtest_injection_apply_fsp_surface_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_injection_apply_fsp_surface_cs.hlsl");
             pso_bbv_depthtest_carving_ = CreateComputePSO("instant_rdv/bbv/bbv_depthtest_carving_cs.hlsl");
 
             pso_fsp_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_clear_voxel_cs.hlsl");
@@ -1525,6 +1543,10 @@ namespace ngl::render::app
                         const ngl::render::task::RenderPassViewInfo& main_view_info, const math::Vec2i& render_resolution
                         )
     {
+        fsp_surface_detection_source_frame_ =
+            std::clamp(InstantRasterDerivedVoxelScene::dbg_fsp_surface_detection_source_, 0, 1);
+        fsp_surface_pass_mode_frame_ =
+            std::clamp(InstantRasterDerivedVoxelScene::dbg_fsp_surface_pass_mode_, 0, 1);
         NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "InstantRdv_Dispatch_Begin");
 
         auto& global_res = gfx::GlobalRenderResource::Instance();
@@ -1786,6 +1808,26 @@ namespace ngl::render::app
         NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "Dispatch_Bbv_OccupancyUpdate_View");
         auto& global_res = gfx::GlobalRenderResource::Instance();
 
+        if(fsp_surface_detection_source_frame_ != 0)
+        {
+            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskClear_Integrated");
+
+            fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
+
+            ngl::rhi::DescriptorSetDep desc_set = {};
+            pso_fsp_surface_mask_clear_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+            pso_fsp_surface_mask_clear_->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
+
+            p_command_list->SetPipelineState(pso_fsp_surface_mask_clear_.Get());
+            p_command_list->SetDescriptorSet(pso_fsp_surface_mask_clear_.Get(), &desc_set);
+            pso_fsp_surface_mask_clear_->DispatchHelper(
+                p_command_list,
+                std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
+                1,
+                1);
+            p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
+        }
+
 
         auto func_call_depthtest_frustum_pass = [this](
             rhi::GraphicsCommandListDep* p_command_list,
@@ -1834,21 +1876,37 @@ namespace ngl::render::app
         auto func_call_depthtest_injection_pass = [this](
             rhi::GraphicsCommandListDep* p_command_list,
             rhi::ConstantBufferPooledHandle cbh_injection_view_info,
-            const InjectionSourceDepthBufferViewInfo& target_depth_info
+            const InjectionSourceDepthBufferViewInfo& target_depth_info,
+            bool integrate_fsp_surface
         )
         {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvDepthTestInjection");
+            NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                p_command_list,
+                integrate_fsp_surface
+                    ? "BbvDepthTestInjection_IntegratedFspSurface"
+                    : "BbvDepthTestInjection");
 
+            auto* pso = integrate_fsp_surface
+                ? pso_bbv_depthtest_injection_apply_fsp_surface_.Get()
+                : pso_bbv_depthtest_injection_apply_.Get();
             ngl::rhi::DescriptorSetDep desc_set = {};
-            pso_bbv_depthtest_injection_apply_->SetView(&desc_set, "TexHardwareDepth", target_depth_info.hw_depth_srv.Get());
-            pso_bbv_depthtest_injection_apply_->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
-            pso_bbv_depthtest_injection_apply_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-            pso_bbv_depthtest_injection_apply_->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
+            pso->SetView(&desc_set, "TexHardwareDepth", target_depth_info.hw_depth_srv.Get());
+            pso->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
+            pso->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+            pso->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
+            if(integrate_fsp_surface)
+            {
+                pso->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
+            }
 
-            p_command_list->SetPipelineState(pso_bbv_depthtest_injection_apply_.Get());
-            p_command_list->SetDescriptorSet(pso_bbv_depthtest_injection_apply_.Get(), &desc_set);
-            pso_bbv_depthtest_injection_apply_->DispatchHelper(p_command_list, target_depth_info.atlas_resolution.x, target_depth_info.atlas_resolution.y, 1);  // Screen処理でDispatch.
+            p_command_list->SetPipelineState(pso);
+            p_command_list->SetDescriptorSet(pso, &desc_set);
+            pso->DispatchHelper(p_command_list, target_depth_info.atlas_resolution.x, target_depth_info.atlas_resolution.y, 1);
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
+            if(integrate_fsp_surface)
+            {
+                p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
+            }
         };
         auto func_call_depthtest_carving_pass = [this](
             rhi::GraphicsCommandListDep* p_command_list,
@@ -1906,7 +1964,9 @@ namespace ngl::render::app
                         target_depth_info.atlas_resolution.y
                     );
                     p->cb_is_main_view = is_main_view_update ? 1 : 0;
-                    p->cb_padding0 = math::Vec2i(0, 0);
+                    p->cb_fsp_surface_pass_mode =
+                        fsp_surface_pass_mode_frame_;
+                    p->cb_padding0 = 0;
                     const auto frustum_planes = CalcBbvDepthCullFrustumPlanes(target_depth_info.view_mat, target_depth_info.proj_mat);
                     for (size_t plane_index = 0; plane_index < frustum_planes.size(); ++plane_index)
                     {
@@ -1939,7 +1999,11 @@ namespace ngl::render::app
             // これにより Frustum ActiveList には Empty Brick を含めず、Carving 起動数を最小化できる。
             if(target_depth_info.is_enable_injection_pass)
             {
-                func_call_depthtest_injection_pass(p_command_list, cbh_injection_view_info, target_depth_info);
+                func_call_depthtest_injection_pass(
+                    p_command_list,
+                    cbh_injection_view_info,
+                    target_depth_info,
+                    fsp_surface_detection_source_frame_ != 0 && i == (num_depth_buffer - 1));
             }
             if(target_depth_info.is_enable_removal_pass)
             {
@@ -1992,7 +2056,9 @@ namespace ngl::render::app
                 view_info.atlas_resolution.x,
                 view_info.atlas_resolution.y);
             p->cb_is_main_view = 1;
-            p->cb_padding0 = math::Vec2i(0, 0);
+            p->cb_fsp_surface_pass_mode =
+                fsp_surface_pass_mode_frame_;
+            p->cb_padding0 = 0;
             const auto frustum_planes = CalcBbvDepthCullFrustumPlanes(view_info.view_mat, view_info.proj_mat);
             for (size_t plane_index = 0; plane_index < frustum_planes.size(); ++plane_index)
             {
@@ -2353,6 +2419,7 @@ namespace ngl::render::app
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass");
 
                 // bitmask clear/compactは十分小さいため共通化し、支配的なdepth injectだけを比較する。
+                if(fsp_surface_detection_source_frame_ == 0)
                 {
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfacePass_SurfaceMaskClear");
 
@@ -2372,9 +2439,10 @@ namespace ngl::render::app
 
                     p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
                 }
+                if(fsp_surface_detection_source_frame_ == 0)
                 {
                     const bool use_ownership =
-                        (0 != InstantRasterDerivedVoxelScene::dbg_fsp_surface_pass_mode_);
+                        (0 != fsp_surface_pass_mode_frame_);
                     NGL_RHI_GPU_SCOPED_EVENT_MARKER(
                         p_command_list,
                         use_ownership

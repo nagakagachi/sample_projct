@@ -229,7 +229,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         // MainView由来なら1, ShadowView由来なら0.
         int     cb_is_main_view;
         float   cb_near_plane_view_z;
-        int2    cb_padding0;
+        int     cb_fsp_surface_pass_mode;
+        int     cb_padding0;
 
         // World-space frustum planes for conservative BBV AABB culling.
         // Plane equation is dot(plane.xyz, world_position) + plane.w >= 0.

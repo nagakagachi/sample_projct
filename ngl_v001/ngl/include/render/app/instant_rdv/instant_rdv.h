@@ -170,6 +170,8 @@ namespace ngl::render::app
         bool ResizeScreenProbeResources(ngl::rhi::DeviceDep* p_device, const math::Vec2i& render_resolution);
 
         bool is_first_dispatch_ = true;
+        int fsp_surface_detection_source_frame_ = 0;
+        int fsp_surface_pass_mode_frame_ = 1;
 
         u32 frame_count_{};
 
@@ -196,6 +198,7 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_aabb_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_fsp_surface_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_ = {};
 
 
@@ -316,6 +319,7 @@ namespace ngl::render::app
         static int dbg_fsp_probe_use_relocated_pos_;
         static int dbg_fsp_update_ray_jitter_enable_;
         static int dbg_fsp_surface_pass_mode_;
+        static int dbg_fsp_surface_detection_source_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
         static float dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;
