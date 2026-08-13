@@ -229,11 +229,11 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         // MainView由来なら1, ShadowView由来なら0.
         int     cb_is_main_view;
         float   cb_near_plane_view_z;
-        int     cb_fsp_surface_pass_mode;
-        int     cb_padding0;
+        // 後続のFrustum平面配列を従来の定数バッファ配置へ揃えるためのパディング。
+        int2    cb_padding0;
 
-        // World-space frustum planes for conservative BBV AABB culling.
-        // Plane equation is dot(plane.xyz, world_position) + plane.w >= 0.
+        // 保守的なBBV AABBカリング用のワールド空間Frustum平面。
+        // 平面式は dot(plane.xyz, world_position) + plane.w >= 0。
         float4  cb_frustum_planes[6];
     };
 
@@ -384,8 +384,11 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
 #endif
 
 #ifdef NGL_SHADER_CPP_INCLUDE
+    static_assert(offsetof(BbvSurfaceInjectionViewInfo, cb_frustum_planes) == 272, "BbvSurfaceInjectionViewInfo::cb_frustum_planes layout mismatch");
+    static_assert((sizeof(BbvSurfaceInjectionViewInfo) % 16) == 0, "BbvSurfaceInjectionViewInfo size must be 16-byte aligned");
     static_assert((sizeof(InstantRdvToroidalGridParam) % 16) == 0, "InstantRdvToroidalGridParam size must be 16-byte aligned");
     static_assert((sizeof(InstantRdvParam) % 16) == 0, "InstantRdvParam size must be 16-byte aligned");
+    static_assert((offsetof(InstantRdvParam, fsp_cascade) % 16) == 0, "InstantRdvParam::fsp_cascade must start on a 16-byte boundary");
     static_assert((offsetof(InstantRdvParam, tex_main_view_depth_size) % 16) == 0, "InstantRdvParam::tex_main_view_depth_size must start on a 16-byte boundary");
 #endif
 

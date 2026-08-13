@@ -16,7 +16,7 @@ bool reject_by_frustum_plane(float4 plane, float3 brick_center_ws, float3 brick_
     const float3 normal = plane.xyz;
     if(dot(normal, normal) <= 1e-20)
     {
-        // Infinite-far projections have no finite far-plane boundary.
+        // 無限遠投影では有限な遠平面境界がないため、検査しない。
         return false;
     }
 
@@ -29,7 +29,7 @@ bool is_brick_inside_frustum_aabb(float3 brick_center_ws, float brick_size_ws)
 {
     const float3 brick_extents_ws = 0.5 * brick_size_ws.xxx;
 
-    // Near/far first for early rejection on mobile.
+    // モバイルでの早期棄却のため、近/遠平面を先に検査する。
     if(reject_by_frustum_plane(cb_injection_src_view_info.cb_frustum_planes[4], brick_center_ws, brick_extents_ws) ||
        reject_by_frustum_plane(cb_injection_src_view_info.cb_frustum_planes[5], brick_center_ws, brick_extents_ws))
     {

@@ -1,6 +1,6 @@
 ﻿/*
     instant_rdv.h
-    instant-rdv (Instant Raster Derived Voxel Scene).
+    Instant Raster Derived Voxel Sceneの公開型・描画パス定義。
 */
 
 #pragma once
@@ -170,9 +170,6 @@ namespace ngl::render::app
         bool ResizeScreenProbeResources(ngl::rhi::DeviceDep* p_device, const math::Vec2i& render_resolution);
 
         bool is_first_dispatch_ = true;
-        int fsp_surface_detection_source_frame_ = 0;
-        int fsp_surface_pass_mode_frame_ = 1;
-
         u32 frame_count_{};
 
         math::Vec3 important_point_ = {0,0,0};
@@ -194,11 +191,10 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_resolve_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_brick_count_aggregate_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_element_update_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_aabb_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_fsp_surface_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_fsp_surface_ownership_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_ = {};
 
 
@@ -206,8 +202,6 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
         // SurfacePass: BBV-style cell bitmask clear -> inject -> compact.
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_clear_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_inject_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_ownership_inject_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
@@ -318,8 +312,6 @@ namespace ngl::render::app
         static int dbg_fsp_probe_depth_test_;
         static int dbg_fsp_probe_use_relocated_pos_;
         static int dbg_fsp_update_ray_jitter_enable_;
-        static int dbg_fsp_surface_pass_mode_;
-        static int dbg_fsp_surface_detection_source_;
         static int dbg_fsp_probe_debug_cascade_;
         static int dbg_fsp_cascade_count_;
         static float dbg_fsp_relocation_offset_scale_for_cascade_cell_size_;
@@ -349,7 +341,6 @@ namespace ngl::render::app
         static int dbg_assp_total_ray_count_;
         static int dbg_assp_probe_count_;
         static int dbg_gi_update_sample_mode_;
-        static int dbg_bbv_depth_cull_mode_;
         static float dbg_bbv_depthtest_injection_fine_cells_default_;
         static float dbg_bbv_depthtest_injection_fine_cells_;
 
