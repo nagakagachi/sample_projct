@@ -1,7 +1,7 @@
 #if 0
 fsp_surface_mask_compact_cs.hlsl
 
-FSP SurfacePass専用セルマスクのコンパクションパス。
+FSP SurfaceCellMaskのコンパクションパス。
 立っているbitを SurfaceProbeCellList へ詰め、既存FSP更新パスへ合流させる。
 #endif
 

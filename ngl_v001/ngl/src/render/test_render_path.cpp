@@ -359,10 +359,10 @@ namespace ngl::test
                         }
                         task_instant_rdv_begin->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
-                    // InstantRdv View Voxel Injection Pass.
-                    auto* task_instant_rdv_view_voxel_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvViewVoxelInjection>();
+                    // InstantRdv View BBV Occupancy Injection Pass.
+                    auto* task_instant_rdv_view_bbv_occupancy_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvViewBbvOccupancyInjection>();
                     {
-                        ngl::render::app::RenderTaskInstantRdvViewVoxelInjection::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvViewBbvOccupancyInjection::SetupDesc setup_desc{};
                         {
 							setup_desc.w = screen_w;
 							setup_desc.h = screen_h;
@@ -404,7 +404,7 @@ namespace ngl::test
 									setup_desc.depth_buffer_info.sub_array.push_back(shadow_depth_info);
                             }   
                         }
-                        task_instant_rdv_view_voxel_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_view_bbv_occupancy_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
                     // InstantRdv Update.
                     auto* task_instant_rdv_update = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvUpdate>();
@@ -486,9 +486,9 @@ namespace ngl::test
 
 				// ----------------------------------------
 				// After Lighting Pass.
-                    auto* task_instant_rdv_view_voxel_radiance_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvViewVoxelRadianceInjection>();
+                    auto* task_instant_rdv_view_bbv_radiance_injection = rtg_builder.AppendTaskNode<ngl::render::app::RenderTaskInstantRdvViewBbvRadianceInjection>();
                     {
-                        ngl::render::app::RenderTaskInstantRdvViewVoxelRadianceInjection::SetupDesc setup_desc{};
+                        ngl::render::app::RenderTaskInstantRdvViewBbvRadianceInjection::SetupDesc setup_desc{};
                         {
                             setup_desc.w = screen_w;
                             setup_desc.h = screen_h;
@@ -505,7 +505,7 @@ namespace ngl::test
                             setup_desc.view_info.is_enable_radiance_injection_pass =
                                 (render_frame_desc.feature_config.gi.enable_instant_rdv_all_injection_pass && render_frame_desc.feature_config.gi.enable_instant_rdv_main_view_injection_pass) && true;
                         }
-                        task_instant_rdv_view_voxel_radiance_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
+                        task_instant_rdv_view_bbv_radiance_injection->Setup(rtg_builder, p_device, view_info, setup_desc);
                     }
 
 				auto* task_after_light = rtg_builder.AppendTaskNode<ngl::render::task::TaskAfterLightPass>();

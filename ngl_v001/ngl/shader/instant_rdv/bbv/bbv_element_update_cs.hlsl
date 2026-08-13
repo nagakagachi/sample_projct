@@ -29,7 +29,7 @@ void main_cs(
     const uint elem_count = cb_instant_rdv.bbv.grid_resolution.x * cb_instant_rdv.bbv.grid_resolution.y * cb_instant_rdv.bbv.grid_resolution.z;
 
     /*
-    // 動作検証のためこのシェーダはスキップなしの全体更新.
+    // 全Voxelを毎フレーム更新する方式.
     const uint update_element_id = dtid.x;
     if(elem_count <= update_element_id)
         return;
@@ -96,7 +96,7 @@ void main_cs(
     }
 
 
-    // DistanceField的な情報の検証. 一旦無効化.
+    // DistanceField的な情報. 現在は無効化.
     // 実際にはマルチスレッド考慮せずに近傍情報参照しているため, 定常状態になるまでは一部正しくない距離情報が格納される場合がある近似処理に注意.
     int3 nearest_surface_dist = int3(1<<10, 1<<10, 1<<10);// 初期値は10bit範囲外としておく.
     /*

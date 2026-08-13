@@ -1,11 +1,9 @@
 
 #if 0
 
-bbv_depthtest_injection_apply_cs.hlsl
+bbv_occupancy_injection_apply_cs.hlsl
 
-DepthTest ベース更新向けの Legacy 相当 Injection。
-Legacy Injection と独立した専用シェーダとして維持し、
-DepthTest 側の挙動調整が Legacy 側へ影響しないようにする。
+DepthBufferからBBV占有Voxelを更新するInjection。
 
 #endif
 
@@ -15,7 +13,7 @@ DepthTest 側の挙動調整が Legacy 側へ影響しないようにする。
 // SceneView定数バッファ構造定義.
 #include "../../include/scene_view_struct.hlsli"
 
-// Injection元のDepthDeputhBufferのView情報.
+// Injection元のDepthBufferのView情報.
 ConstantBuffer<BbvSurfaceInjectionViewInfo> cb_injection_src_view_info;
 
 Texture2D			TexHardwareDepth;
@@ -60,8 +58,8 @@ void main_cs(
         const float3 to_pixel_vec_vs = pixel_pos_vs - view_ray_origin_vs;
         const float to_pixel_len_sq = dot(to_pixel_vec_vs, to_pixel_vec_vs);
         const float inv_to_pixel_len = rsqrt(max(to_pixel_len_sq, 1e-10));
-        // 表面注入がRemovalで落ちやすいケース向けに、固定ワールド距離だけ視線奥へシフト.
-        pixel_pos_vs += (to_pixel_vec_vs * inv_to_pixel_len) * cb_instant_rdv.bbv_depthtest_injection_world_offset;
+        // Injectionした占有が直後のRemovalで削られやすいケースに備え、固定ワールド距離だけ視線奥へシフト.
+        pixel_pos_vs += (to_pixel_vec_vs * inv_to_pixel_len) * cb_instant_rdv.bbv_occupancy_injection_world_offset;
 
         const float3 pixel_pos_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(pixel_pos_vs, 1.0));
 

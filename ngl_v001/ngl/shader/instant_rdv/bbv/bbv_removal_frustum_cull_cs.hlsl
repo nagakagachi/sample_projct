@@ -1,9 +1,9 @@
 #if 0
-bbv_depthtest_frustum_cull_aabb_cs.hlsl
+bbv_removal_frustum_cull_cs.hlsl
 
-DepthTest 用の保守的な World-space Brick AABB Frustum Cull。
+BBV Removal用の保守的なWorld-space Brick AABB Frustum Cull。
 Plane距離 + 投影AABB半径が負のときだけBrickを棄却する。
-近/遠平面を先に検査し、Legacyの候補リスト、wave compaction、
+近/遠平面を先に検査し、候補リスト、wave compaction、
 indirect carving downstreamは変更しない。
 #endif
 
@@ -47,7 +47,7 @@ bool is_brick_inside_frustum_aabb(float3 brick_center_ws, float brick_size_ws)
     return true;
 }
 
-[numthreads(k_bbv_depthtest_carving_thread_group_size, 1, 1)]
+[numthreads(k_bbv_removal_carving_thread_group_size, 1, 1)]
 void main_cs(uint3 dtid : SV_DispatchThreadID)
 {
     const uint brick_count = bbv_brick_count();

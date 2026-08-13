@@ -127,7 +127,7 @@ void main_cs(
         if(to_pixel_len_sq > 1e-10)
         {
             ray_dir_ws = normalize(to_pixel_vec_ws);
-            pos_ws += ray_dir_ws * cb_instant_rdv.bbv_depthtest_injection_world_offset;
+            pos_ws += ray_dir_ws * cb_instant_rdv.bbv_occupancy_injection_world_offset;
         }
     }
 

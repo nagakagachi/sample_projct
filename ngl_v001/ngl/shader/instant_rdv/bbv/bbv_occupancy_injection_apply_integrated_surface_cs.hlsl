@@ -1,10 +1,10 @@
 /*
-    bbv_depthtest_injection_apply_fsp_surface_ownership_cs.hlsl
-    Ownership選択時のFSP表面セル検出を統合したBBV Depth Injection。
+    bbv_occupancy_injection_apply_integrated_surface_cs.hlsl
+    BBV Occupancy InjectionとFSP SurfaceCell検出を統合したMainView用Injection。
 
     MainViewのDepth pixelでBBV占有を書き込み、同じパスで所有Cascadeの
-    FSP SurfaceCellMaskをマーキングする。Ownership専用とすることで、
-    All Cascades向けのCascade分岐と全Cascade走査を実行しない。
+    FSP SurfaceCellMaskをSurface owner cellへ限定してマーキングし、
+    全Cascade走査を実行しない。
 */
 
 #define TILE_WIDTH 8
@@ -39,7 +39,7 @@ void FspInjectCellMaskWave(bool has_cell, uint global_cell_index)
     }
 }
 
-// BBV占有とOwnership限定のFSP SurfaceCell検出を同じDepth走査で実行する。
+// BBV占有とSurface owner cell限定のFSP SurfaceCell検出を同じDepth走査で実行する。
 [numthreads(TILE_WIDTH, TILE_WIDTH, 1)]
 void main_cs(uint3 dtid : SV_DispatchThreadID)
 {
@@ -69,7 +69,7 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
             cb_injection_src_view_info.cb_view_inv_mtx,
             float4(pixel_pos_vs, 1.0));
 
-        // BBV側だけを視線奥へずらし、LegacyのRemoval対策を維持する。
+        // BBV側だけを視線奥へずらし、Injection直後のRemovalによる消失を抑える。
         const float3 view_ray_origin_vs = CalcViewSpacePosition(
             screen_uv,
             cb_injection_src_view_info.cb_near_plane_view_z,
@@ -81,7 +81,7 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
             cb_injection_src_view_info.cb_view_inv_mtx,
             float4(to_pixel_vec_vs * inv_to_pixel_len, 0.0));
         injection_pos_ws = surface_pos_ws +
-            view_ray_ws * cb_instant_rdv.bbv_depthtest_injection_world_offset;
+            view_ray_ws * cb_instant_rdv.bbv_occupancy_injection_world_offset;
     }
 
     // Injection位置をBBVのBrick/FineVoxel座標へ変換する。
@@ -136,7 +136,7 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
         return;
     }
 
-    // Ownershipでは最細Cascadeと境界帯の隣接Cascadeだけを対象にする。
+    // Surface owner cellとして最細Cascadeと境界帯の隣接Cascadeだけを対象にする。
     uint2 owner_cells = k_fsp_invalid_probe_index.xx;
     const uint owner_count = FspGetSurfaceOwnerCells(surface_pos_ws, owner_cells);
     FspInjectCellMaskWave(owner_count > 0u, owner_cells.x);

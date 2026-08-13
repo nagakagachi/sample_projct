@@ -191,16 +191,16 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_resolve_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_brick_count_aggregate_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_element_update_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_frustum_cull_aabb_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_indirect_arg_build_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_injection_apply_fsp_surface_ownership_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_depthtest_carving_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_frustum_cull_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_carving_indirect_arg_build_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_integrated_surface_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_carving_ = {};
 
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
-        // SurfacePass: BBV-style cell bitmask clear -> inject -> compact.
+        // FSP SurfaceCellMaskのclear -> integrated surface injection -> compact.
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
@@ -247,8 +247,8 @@ namespace ngl::render::app
 
         // 深度テストベース更新用 ActiveList.
         // 0番は active counter, 1..N は voxel index.
-        ComputeBufferSet bbv_depthtest_frustum_brick_list_ = {};
-        ComputeBufferSet bbv_depthtest_frustum_indirect_arg_ = {};
+        ComputeBufferSet bbv_removal_frustum_brick_list_ = {};
+        ComputeBufferSet bbv_removal_frustum_indirect_arg_ = {};
 
 
         // Frustum Surface Probe. Fsp.
@@ -268,7 +268,7 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_pool_buffer_ = {};
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
         ComputeBufferSet fsp_active_probe_list_[2] = {};
-        // SurfacePass用。1bit = 1 global cell index の検出マスク。
+        // FSP SurfaceCellMask用。1bit = 1 global cell indexの検出マスク。
         // clear -> inject -> compact の3パス内だけで使い、最終的には SurfaceProbeCellList へ変換する。
         ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};
         // FSP update multipass 用ワーク:
@@ -341,8 +341,8 @@ namespace ngl::render::app
         static int dbg_assp_total_ray_count_;
         static int dbg_assp_probe_count_;
         static int dbg_gi_update_sample_mode_;
-        static float dbg_bbv_depthtest_injection_fine_cells_default_;
-        static float dbg_bbv_depthtest_injection_fine_cells_;
+        static float dbg_bbv_occupancy_injection_fine_cells_default_;
+        static float dbg_bbv_occupancy_injection_fine_cells_;
 
         // デバッグメニューを描画する. ImGuiウィンドウ内で呼び出すこと.
         static void DrawDebugMenu(
@@ -445,7 +445,7 @@ namespace ngl::render::app
 		}
 	};
 
-    class RenderTaskInstantRdvViewVoxelRadianceInjection : public ngl::rtg::IGraphicsTaskNode
+    class RenderTaskInstantRdvViewBbvRadianceInjection : public ngl::rtg::IGraphicsTaskNode
     {
     public:
 		struct SetupDesc
@@ -476,7 +476,7 @@ namespace ngl::render::app
 				{
 					command_list_allocator.Alloc(1);
 					auto gfx_commandlist = command_list_allocator.GetOrCreate(0);
-					NGL_RHI_GPU_SCOPED_EVENT_MARKER(gfx_commandlist, "RenderTaskInstantRdvViewVoxelRadianceInjection");
+					NGL_RHI_GPU_SCOPED_EVENT_MARKER(gfx_commandlist, "RenderTaskInstantRdvViewBbvRadianceInjection");
 
                     InjectionSourceDepthBufferViewInfo injection_view_info = desc_.view_info;
                     {
@@ -495,7 +495,7 @@ namespace ngl::render::app
     };
     
 
-    class RenderTaskInstantRdvViewVoxelInjection : public ngl::rtg::IGraphicsTaskNode
+    class RenderTaskInstantRdvViewBbvOccupancyInjection : public ngl::rtg::IGraphicsTaskNode
     {
     public:
 		struct SetupDesc
@@ -537,7 +537,7 @@ namespace ngl::render::app
 				{
 					command_list_allocator.Alloc(1);
 					auto gfx_commandlist = command_list_allocator.GetOrCreate(0);
-					NGL_RHI_GPU_SCOPED_EVENT_MARKER(gfx_commandlist, "RenderTaskInstantRdvViewVoxelInjection");
+					NGL_RHI_GPU_SCOPED_EVENT_MARKER(gfx_commandlist, "RenderTaskInstantRdvViewBbvOccupancyInjection");
 
                     InjectionSourceDepthBufferInfo injection_depth_buffer_info{};
                     {

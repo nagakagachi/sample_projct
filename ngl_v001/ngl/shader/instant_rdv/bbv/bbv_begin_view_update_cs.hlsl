@@ -4,7 +4,7 @@
 bbv_begin_view_update_cs.hlsl
 
 BbvのView毎の処理の開始用処理.
-DepthTest Frustum ActiveListのカウンタをリセットする。
+BBV Removal Frustum ActiveListのカウンタをリセットする。
 
 #endif
 

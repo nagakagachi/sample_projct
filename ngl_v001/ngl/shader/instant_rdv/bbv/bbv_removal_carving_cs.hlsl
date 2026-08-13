@@ -1,7 +1,7 @@
 #if 0
-bbv_depthtest_carving_cs.hlsl
+bbv_removal_carving_cs.hlsl
 
-DepthTestCarving ベース更新向けの Carving。
+BBV Removal用のCarving。
 Frustum 候補 Brick に対して bitcell 単位の深度テストを行い、
 手前側の fine voxel だけを削る。
 #endif
@@ -13,7 +13,7 @@ Frustum 候補 Brick に対して bitcell 単位の深度テストを行い、
 ConstantBuffer<BbvSurfaceInjectionViewInfo> cb_injection_src_view_info;
 Texture2D TexHardwareDepth;
 
-[numthreads(k_bbv_depthtest_carving_thread_group_size, 1, 1)]
+[numthreads(k_bbv_removal_carving_thread_group_size, 1, 1)]
 void main_cs(uint3 dtid : SV_DispatchThreadID)
 {
     const uint active_brick_count = FrustumBrickList[0];

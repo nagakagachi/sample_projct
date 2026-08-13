@@ -1,10 +1,10 @@
 #if 0
 fsp_surface_mask_clear_cs.hlsl
 
-FSP SurfacePass専用セルマスクのクリアパス。
+FSP SurfaceCellMaskのクリアパス。
 1bit = 1 global cell index のビット配列を毎フレーム0初期化する。
 
-SurfaceMask path の先頭パス。
+SurfaceCellMask処理の先頭パス。
 検出マスクは前フレームのbitを再利用できないため毎フレームclearする。
 Buffer clear APIではなくcomputeで実行しているのは、既存のFSP dispatch/marker列に
 揃えて可視化しやすくし、将来必要なら部分clearへ拡張しやすくするため。

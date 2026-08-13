@@ -120,8 +120,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     // dispatch 自体も group 単位に圧縮し、未選択 Brick を起動しない前提の固定設定。
     #define k_bbv_radiance_resolve_brick_group_resolution (2)
     #define k_bbv_radiance_resolve_phase_count (k_bbv_radiance_resolve_brick_group_resolution * k_bbv_radiance_resolve_brick_group_resolution * k_bbv_radiance_resolve_brick_group_resolution)
-    // DepthTest carving 系 1D Compute の thread group size.
-    #define k_bbv_depthtest_carving_thread_group_size (128)
+    // Depth Removal carving系1D Computeのthread group size.
+    #define k_bbv_removal_carving_thread_group_size (128)
 
 
     #define k_bbv_per_voxel_resolution_inv (1.0 / float(k_bbv_per_voxel_resolution))
@@ -284,9 +284,9 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int3 bbv_indirect_cs_thread_group_size NGL_CPP_MEMBER_INIT({});// IndirectArg計算のためにVoxel更新ComputeShaderのThreadGroupサイズを格納.
         int bbv_visible_voxel_buffer_size NGL_CPP_MEMBER_INIT({});// 更新プローブ用のワークサイズ.
         int bbv_hollow_voxel_buffer_size NGL_CPP_MEMBER_INIT({});// 削除用中空Voxel情報のワークサイズ.
-        // DepthTest専用Injectionで、サーフェイス座標を視線奥へ固定ワールド距離オフセットする量.
+        // BBV Occupancy Injectionで、サーフェイス座標を視線奥へ固定ワールド距離オフセットする量.
         // 2.13 fine cells 相当を既定にする。BBV cell=3.0 / fine=8 の場合は約 0.799。
-        float bbv_depthtest_injection_world_offset NGL_CPP_MEMBER_INIT({2.13f * 3.0f * k_bbv_per_voxel_resolution_inv});
+        float bbv_occupancy_injection_world_offset NGL_CPP_MEMBER_INIT({2.13f * 3.0f * k_bbv_per_voxel_resolution_inv});
         int dummy1 NGL_CPP_MEMBER_INIT({});
 
         // Temporal再利用重みの最小値.
