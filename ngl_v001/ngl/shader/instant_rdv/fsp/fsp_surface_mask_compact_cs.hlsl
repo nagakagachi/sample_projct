@@ -17,7 +17,7 @@ void main_cs(
     uint gindex : SV_GroupIndex)
 {
     const uint total_cell_count = (uint)max(cb_instant_rdv.fsp_total_cell_count, 0);
-    const uint mask_word_count = (total_cell_count + 31u) / 32u;
+    const uint mask_word_count = FspSurfaceMaskWordCount();
     const uint mask_word_index = dtid.x;
     if(mask_word_index >= mask_word_count)
     {
@@ -62,8 +62,12 @@ void main_cs(
         remaining_bits &= (remaining_bits - 1u);
 
         // Preserve the FSP X-major global address; no Morton conversion belongs on this path.
-        const uint global_cell_index = mask_word_index * 32u + bit_index;
-        if(global_cell_index >= total_cell_count)
+        uint global_cell_index = k_fsp_invalid_probe_index;
+        if(!FspGetGlobalCellIndexFromSurfaceMaskBit(
+            mask_word_index,
+            bit_index,
+            global_cell_index) ||
+           global_cell_index >= total_cell_count)
         {
             continue;
         }

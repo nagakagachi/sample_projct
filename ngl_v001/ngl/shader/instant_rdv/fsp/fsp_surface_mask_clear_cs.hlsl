@@ -2,7 +2,7 @@
 fsp_surface_mask_clear_cs.hlsl
 
 FSP SurfaceCellMaskのクリアパス。
-1bit = 1 global cell index のビット配列を毎フレーム0初期化する。
+Cascadeごとの8x8x8 Brick bitmaskを毎フレーム0初期化する。
 
 SurfaceCellMask処理の先頭パス。
 検出マスクは前フレームのbitを再利用できないため毎フレームclearする。
@@ -21,8 +21,7 @@ void main_cs(
     uint3 gid : SV_GroupID,
     uint gindex : SV_GroupIndex)
 {
-    const uint total_cell_count = (uint)max(cb_instant_rdv.fsp_total_cell_count, 0);
-    const uint mask_word_count = (total_cell_count + 31u) / 32u;
+    const uint mask_word_count = FspSurfaceMaskWordCount();
     if(dtid.x >= mask_word_count)
     {
         return;

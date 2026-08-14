@@ -25,6 +25,8 @@ param(
     [int]$TimeoutSec = 900,
     [string]$BaselineJson = "",
     [string]$Tag = "candidate",
+    [ValidateSet("startup", "gbuffer")]
+    [string]$BenchmarkView = "startup",
     [ValidateSet("Hidden", "Minimized", "Normal")]
     [string]$AppWindowStyle = "Hidden"
 )
@@ -66,7 +68,8 @@ $benchmarkArgs = @(
     "--benchmark-measure", "$MeasureFrames",
     "--benchmark-ready-delta-frames", "$ReadyDeltaStableFrames",
     "--benchmark-output", "$candidateDir",
-    "--benchmark-tag", "$Tag"
+    "--benchmark-tag", "$Tag",
+    "--benchmark-view", "$BenchmarkView"
 )
 
 Write-Host "[perf] Running benchmark: $appExeAbs $($benchmarkArgs -join ' ')"

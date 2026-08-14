@@ -129,6 +129,10 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
 
     // fsp probeあたりのOctahedralMapAtlas解像度.
     #define k_fsp_probe_octmap_width (6)
+    // FSP SurfaceCell検出Maskの空間局所化単位。1 Brickは8x8x8 cell=512bit=16 uint。
+    #define k_fsp_surface_mask_brick_resolution (8)
+    #define k_fsp_surface_mask_brick_bit_count (k_fsp_surface_mask_brick_resolution * k_fsp_surface_mask_brick_resolution * k_fsp_surface_mask_brick_resolution)
+    #define k_fsp_surface_mask_brick_word_count ((k_fsp_surface_mask_brick_bit_count + 31) / 32)
     // 旧 border 前提コード互換用エイリアス。現在は border なし。
     #define k_fsp_probe_octmap_width_with_border (k_fsp_probe_octmap_width)
     // fsp
@@ -182,7 +186,9 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     {
         // ジオメトリ表面を含むBrickまでの相対ベクトル. ジオメトリ表面を含むBrickは0, それ以外はマンハッタン距離.
         int3 to_surface_vector;
-        uint dummy0;
+        // MainView Injectionが最後に触れたFrame generation。
+        // Surface候補抽出のdirty markerとして使用し、毎Frameの物理clearは行わない。
+        uint surface_touched_generation;
 
         // Screen-space から Resolve した Brick radiance.
         float3 resolved_radiance;
@@ -322,7 +328,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
 
         // SpatialFilter 深度差重み影響度.
         float ss_probe_spatial_filter_depth_exp_scale NGL_CPP_MEMBER_INIT({float(SCREEN_SPACE_PROBE_SPATIAL_FILTER_DEPTH_EXP_SCALE)});
-        int dummy3_2 NGL_CPP_MEMBER_INIT({0});
+        int fsp_surface_mask_generation_enable NGL_CPP_MEMBER_INIT({1});
         int dummy3_3 NGL_CPP_MEMBER_INIT({0});
         int dummy3_4 NGL_CPP_MEMBER_INIT({0});
         int2 dummy3_5_6 NGL_CPP_MEMBER_INIT({});// fsp開始を16byte alignに揃えるためのパディング.

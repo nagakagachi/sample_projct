@@ -100,6 +100,58 @@ static bool dbgw_enable_gtao_demo = false;
 // Camera.
 static float dbgw_camera_speed = 15.0f;  // 10.0f;
 
+enum class EMeasurementViewLocation : int
+{
+    Startup = 0,
+    GBufferStress = 1,
+    Count
+};
+
+static int dbgw_measurement_view_location = static_cast<int>(EMeasurementViewLocation::Startup);
+static int dbgw_applied_measurement_view_location = static_cast<int>(EMeasurementViewLocation::Startup);
+
+struct MeasurementViewLocation
+{
+    const char* label;
+    const char* command_name;
+    ngl::math::Vec3 position;
+    ngl::math::Mat33 pose;
+};
+
+static const std::array<MeasurementViewLocation, static_cast<size_t>(EMeasurementViewLocation::Count)>& GetMeasurementViewLocations()
+{
+    // 起動時Viewは既存のsample_app初期カメラを固定し、GBuffer候補は既存コメントの原点近傍カメラを計測地点として再利用する。
+    static const std::array<MeasurementViewLocation, static_cast<size_t>(EMeasurementViewLocation::Count)> locations = {{
+        {"Startup", "startup", {16.0f, 5.5f, -20.0f}, ngl::math::Mat33::RotAxisY(ngl::math::Deg2Rad(-40.0f))},
+        {"GBuffer stress candidate", "gbuffer", {0.0f, 2.0f, -5.0f}, ngl::math::Mat33::Identity()}
+    }};
+    return locations;
+}
+
+static int ParseMeasurementViewLocation(const std::string& command_name)
+{
+    const auto& locations = GetMeasurementViewLocations();
+    for (size_t index = 0; index < locations.size(); ++index)
+    {
+        if (command_name == locations[index].command_name)
+        {
+            return static_cast<int>(index);
+        }
+    }
+    return static_cast<int>(EMeasurementViewLocation::Startup);
+}
+
+static void ApplyMeasurementViewLocation(
+    int location_index,
+    ngl::math::Vec3& camera_pos,
+    ngl::math::Mat33& camera_pose)
+{
+    const auto& locations = GetMeasurementViewLocations();
+    const int clamped_index = std::clamp(location_index, 0, static_cast<int>(locations.size()) - 1);
+    camera_pos = locations[clamped_index].position;
+    camera_pose = locations[clamped_index].pose;
+}
+
 // DLight.
 static float dbgw_dlit_angle_v   = 0.4f;
 static float dbgw_dlit_angle_h   = 4.1f;
@@ -138,6 +190,7 @@ struct BenchmarkCliOptions
     ngl::u32 ready_delta_stable_frames = 30;
     std::string output_dir = "artifacts\\perf\\latest";
     std::string tag = {};
+    std::string view_location = "startup";
 };
 static BenchmarkCliOptions g_benchmark_cli = {};
 
@@ -422,12 +475,17 @@ static void ParseCommandLineArgs(int argc, char** argv)
             g_benchmark_cli.tag = argv[++i];
             g_benchmark_cli.enabled = true;
         }
+        else if (arg == "--benchmark-view" && (i + 1) < argc)
+        {
+            g_benchmark_cli.view_location = argv[++i];
+            g_benchmark_cli.enabled = true;
+        }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout
                 << "Usage: sample_app [--benchmark] [--benchmark-warmup N] [--benchmark-measure N] "
                 << "[--benchmark-start-timeout-sec S] [--benchmark-min-ready-sec S] "
-                << "[--benchmark-output PATH] [--benchmark-tag LABEL]" << std::endl
+                << "[--benchmark-output PATH] [--benchmark-tag LABEL] [--benchmark-view startup|gbuffer]" << std::endl
                 << "       [--benchmark-ready-delta-frames N]" << std::endl
                 << "  benchmark aliases: benchmark / bench / perf-run / ベンチマーク" << std::endl;
         }
@@ -897,6 +955,11 @@ void AppGame::ConfigureBenchmarkFromCli()
     benchmark_ready_delta_stable_frames_ = std::max<ngl::u32>(1u, g_benchmark_cli.ready_delta_stable_frames);
     benchmark_output_dir_ = g_benchmark_cli.output_dir;
     benchmark_tag_ = g_benchmark_cli.tag;
+    dbgw_measurement_view_location = ParseMeasurementViewLocation(g_benchmark_cli.view_location);
+    ApplyMeasurementViewLocation(dbgw_measurement_view_location, camera_pos_, camera_pose_);
+    prev_camera_pos_ = camera_pos_;
+    prev_camera_pose_ = camera_pose_;
+    dbgw_applied_measurement_view_location = dbgw_measurement_view_location;
 
     // ベンチマーク実行時はUI操作依存を外す.
     dbgw_test_window_enable = false;
@@ -910,6 +973,7 @@ void AppGame::ConfigureBenchmarkFromCli()
               << " start_timeout_sec=" << benchmark_start_timeout_seconds_
               << " measure=" << benchmark_measure_frames_
               << " delta_stable_frames=" << benchmark_ready_delta_stable_frames_
+              << " view=" << GetMeasurementViewLocations()[dbgw_measurement_view_location].command_name
               << " output=" << benchmark_output_dir_ << std::endl;
 }
 
@@ -1171,11 +1235,21 @@ bool AppGame::ExecuteApp()
 
     // 操作系.
     {
+    if (dbgw_measurement_view_location != dbgw_applied_measurement_view_location)
+    {
+        ApplyMeasurementViewLocation(dbgw_measurement_view_location, camera_pos_, camera_pose_);
         prev_camera_pose_ = camera_pose_;
         prev_camera_pos_ = camera_pos_;
+        dbgw_applied_measurement_view_location = dbgw_measurement_view_location;
+    }
+    else
+    {
+        prev_camera_pose_ = camera_pose_;
+        prev_camera_pos_ = camera_pos_;
+    }
 
-        if (!benchmark_enabled_)
-        {
+    if (!benchmark_enabled_)
+    {
             player_controller.UpdateFrame(window_, delta_sec, camera_pose_, camera_pos_);
             camera_pose_ = player_controller.camera_pose_;
             camera_pos_  = player_controller.camera_pos_;
@@ -1206,6 +1280,20 @@ bool AppGame::ExecuteApp()
             NGL_IMGUI_SCOPED_INDENT(10.0f);
             ImGui::Text("Camera Dir:			%.3f, %.3f, %.3f", camera_pose_.GetColumn2().x, camera_pose_.GetColumn2().y, camera_pose_.GetColumn2().z);
             ImGui::Text("Camera Pos:			%.3f, %.3f, %.3f", camera_pos_.x, camera_pos_.y, camera_pos_.z);
+
+            const auto& measurement_views = GetMeasurementViewLocations();
+            const char* measurement_view_labels[] = {
+                measurement_views[0].label,
+                measurement_views[1].label
+            };
+            if (ImGui::Combo("Measurement View", &dbgw_measurement_view_location, measurement_view_labels, static_cast<int>(measurement_views.size())))
+            {
+                dbgw_measurement_view_location = std::clamp(
+                    dbgw_measurement_view_location,
+                    0,
+                    static_cast<int>(measurement_views.size()) - 1);
+            }
+            ImGui::TextDisabled("Select a fixed camera for repeatable GPU measurements.");
 
             ImGui::SliderFloat("Camera Speed", &dbgw_camera_speed, 0.5f, 100.0f);
         }

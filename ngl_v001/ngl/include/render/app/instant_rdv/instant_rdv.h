@@ -196,6 +196,11 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_integrated_surface_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_carving_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_touched_brick_clear_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_touched_brick_scan_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_touched_fsp_candidate_clear_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_touched_fsp_candidate_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_candidate_indirect_arg_ = {};
 
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
@@ -241,6 +246,9 @@ namespace ngl::render::app
         ComputeBufferSet bbv_buffer_ = {};
         ComputeBufferSet bbv_optional_data_buffer_ = {};
         ComputeBufferSet bbv_radiance_accum_buffer_ = {};
+        ComputeBufferSet bbv_surface_touched_brick_list_ = {};
+        ComputeBufferSet bbv_surface_touched_fsp_candidate_list_ = {};
+        ComputeBufferSet bbv_surface_candidate_indirect_arg_ = {};
 
         ngl::u32     bbv_hollow_voxel_list_count_max_ = {};
         ngl::u32     bbv_fine_update_voxel_count_max_ = {};
@@ -268,9 +276,10 @@ namespace ngl::render::app
         ComputeBufferSet fsp_probe_pool_buffer_ = {};
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
         ComputeBufferSet fsp_active_probe_list_[2] = {};
-        // FSP SurfaceCellMask用。1bit = 1 global cell indexの検出マスク。
-        // clear -> inject -> compact の3パス内だけで使い、最終的には SurfaceProbeCellList へ変換する。
+        // FSP SurfaceCellMask用。Cascadeごとの8x8x8 Brick内16ワードへ格納する。
+        // clear -> inject -> compact の3パス内だけで使い、最終的にはglobal cell indexへ戻す。
         ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};
+        ngl::u32 fsp_surface_mask_word_count_ = {};
         // FSP update multipass 用ワーク:
         // request/result の 0番は atomic counter。1..N に payload を append する。
         ComputeBufferSet fsp_probe_ray_request_buffer_ = {};
@@ -280,6 +289,8 @@ namespace ngl::render::app
         ComputeTextureSet fsp_probe_atlas_tex_ = {};
         ComputeBufferSet fsp_irradiance_volume_sh_buffer_ = {};
         rhi::RefBufferDep fsp_visible_surface_list_readback_buffer_ = {};
+        rhi::RefBufferDep bbv_surface_touched_brick_list_readback_buffer_ = {};
+        rhi::RefBufferDep bbv_surface_touched_fsp_candidate_list_readback_buffer_ = {};
         rhi::RefBufferDep fsp_probe_free_stack_readback_buffer_ = {};
         rhi::RefBufferDep fsp_active_probe_list_readback_buffer_ = {};
 
@@ -338,6 +349,13 @@ namespace ngl::render::app
         static int dbg_fsp_allocated_probe_count_;
         static int dbg_fsp_active_probe_count_;
         static int dbg_fsp_visible_surface_cell_count_;
+        static int dbg_bbv_surface_touched_brick_count_;
+        static int dbg_bbv_surface_touched_fsp_candidate_count_;
+        static int dbg_bbv_fsp_candidate_missing_count_;
+        static int dbg_bbv_fsp_candidate_extra_count_;
+        static int dbg_bbv_fsp_candidate_duplicate_count_;
+        static bool dbg_fsp_use_bbv_surface_candidates_;
+        static bool dbg_fsp_debug_readback_enable_;
         static int dbg_assp_total_ray_count_;
         static int dbg_assp_probe_count_;
         static int dbg_gi_update_sample_mode_;

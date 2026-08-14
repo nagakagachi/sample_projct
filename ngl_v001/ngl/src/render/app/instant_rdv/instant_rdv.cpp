@@ -10,6 +10,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
+#include <iterator>
 #include <limits>
 #include <string>
 
@@ -333,6 +335,13 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_ = 0;
+    int InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_brick_count_ = 0;
+    int InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_fsp_candidate_count_ = 0;
+    int InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_missing_count_ = 0;
+    int InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_extra_count_ = 0;
+    int InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_duplicate_count_ = 0;
+    bool InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_ = false;
+    bool InstantRasterDerivedVoxelScene::dbg_fsp_debug_readback_enable_ = true;
     int InstantRasterDerivedVoxelScene::dbg_assp_total_ray_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_assp_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_gi_update_sample_mode_ = static_cast<int>(InstantRdvGiSolutionMode::Fsp);
@@ -596,6 +605,14 @@ namespace ngl::render::app
                         ImGui::Text("Free Probes: %d", dbg_fsp_free_probe_count_);
                         ImGui::Text("Active Probes: %d", dbg_fsp_active_probe_count_);
                         ImGui::Text("Visible Surface Cells: %d", dbg_fsp_visible_surface_cell_count_);
+                        ImGui::Text("BBV Touched Bricks: %d", dbg_bbv_surface_touched_brick_count_);
+                        ImGui::Text("BBV->FSP AABB Candidates: %d", dbg_bbv_surface_touched_fsp_candidate_count_);
+                        ImGui::Text("Candidate Missing: %d", dbg_bbv_fsp_candidate_missing_count_);
+                        ImGui::Text("Candidate Extra: %d", dbg_bbv_fsp_candidate_extra_count_);
+                        ImGui::Text("Candidate Duplicate: %d", dbg_bbv_fsp_candidate_duplicate_count_);
+                        ImGui::Checkbox(
+                            "Use BBV Surface Candidates",
+                            &dbg_fsp_use_bbv_surface_candidates_);
                     }
 
                     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1023,12 +1040,38 @@ namespace ngl::render::app
             }
         }
         {
-            const u32 surface_mask_word_count = std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u);
+            fsp_surface_mask_word_count_ = 0u;
+            for(const auto& cascade_grid_updater : fsp_grid_updaters_)
+            {
+                const auto& resolution = cascade_grid_updater.Get().resolution;
+                const u32 brick_count_x =
+                    (resolution.x + k_fsp_surface_mask_brick_resolution - 1u) /
+                    k_fsp_surface_mask_brick_resolution;
+                const u32 brick_count_y =
+                    (resolution.y + k_fsp_surface_mask_brick_resolution - 1u) /
+                    k_fsp_surface_mask_brick_resolution;
+                const u32 brick_count_z =
+                    (resolution.z + k_fsp_surface_mask_brick_resolution - 1u) /
+                    k_fsp_surface_mask_brick_resolution;
+                const uint64_t cascade_word_count =
+                    uint64_t(brick_count_x) *
+                    uint64_t(brick_count_y) *
+                    uint64_t(brick_count_z) *
+                    uint64_t(k_fsp_surface_mask_brick_word_count);
+                if(cascade_word_count > uint64_t(std::numeric_limits<u32>::max()) -
+                    uint64_t(fsp_surface_mask_word_count_))
+                {
+                    std::cout << "[ERROR] FSP SurfaceCellMask word count overflows u32." << std::endl;
+                    return false;
+                }
+                fsp_surface_mask_word_count_ += static_cast<u32>(cascade_word_count);
+            }
+            fsp_surface_mask_word_count_ = std::max<u32>(1u, fsp_surface_mask_word_count_);
             if(!fsp_surface_cell_mask_buffer_.InitializeAsTyped(
                 p_device,
                 rhi::BufferDep::Desc{
                     .element_byte_size = sizeof(uint32_t),
-                    .element_count     = surface_mask_word_count,
+                    .element_count     = fsp_surface_mask_word_count_,
                     .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
                     .heap_type = rhi::EResourceHeapType::Default},
                 rhi::EResourceFormat::Format_R32_UINT,
@@ -1111,6 +1154,31 @@ namespace ngl::render::app
         {
             return false;
         }
+        char* use_bbv_surface_candidates = nullptr;
+        size_t use_bbv_surface_candidates_length = 0;
+        if(_dupenv_s(
+               &use_bbv_surface_candidates,
+               &use_bbv_surface_candidates_length,
+               "NGL_FSP_USE_BBV_SURFACE_CANDIDATES") == 0 &&
+           use_bbv_surface_candidates != nullptr)
+        {
+            InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_ =
+                std::atoi(use_bbv_surface_candidates) != 0;
+        }
+        std::free(use_bbv_surface_candidates);
+
+        char* enable_fsp_debug_readback = nullptr;
+        size_t enable_fsp_debug_readback_length = 0;
+        if(_dupenv_s(
+               &enable_fsp_debug_readback,
+               &enable_fsp_debug_readback_length,
+               "NGL_FSP_DEBUG_READBACK") == 0 &&
+           enable_fsp_debug_readback != nullptr)
+        {
+            InstantRasterDerivedVoxelScene::dbg_fsp_debug_readback_enable_ =
+                std::atoi(enable_fsp_debug_readback) != 0;
+        }
+        std::free(enable_fsp_debug_readback);
 
         bbv_grid_updater_.Initialize(init_arg.voxel_resolution, init_arg.voxel_size);
 
@@ -1206,6 +1274,11 @@ namespace ngl::render::app
             pso_bbv_occupancy_injection_apply_ = CreateComputePSO("instant_rdv/bbv/bbv_occupancy_injection_apply_cs.hlsl");
             pso_bbv_occupancy_injection_apply_integrated_surface_ = CreateComputePSO("instant_rdv/bbv/bbv_occupancy_injection_apply_integrated_surface_cs.hlsl");
             pso_bbv_removal_carving_ = CreateComputePSO("instant_rdv/bbv/bbv_removal_carving_cs.hlsl");
+            pso_bbv_surface_touched_brick_clear_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_touched_brick_clear_cs.hlsl");
+            pso_bbv_surface_touched_brick_scan_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_touched_brick_scan_cs.hlsl");
+            pso_bbv_surface_touched_fsp_candidate_clear_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_touched_fsp_candidate_clear_cs.hlsl");
+            pso_bbv_surface_touched_fsp_candidate_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_touched_fsp_candidate_cs.hlsl");
+            pso_bbv_surface_candidate_indirect_arg_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_candidate_indirect_arg_cs.hlsl");
 
             pso_fsp_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("instant_rdv/fsp/fsp_begin_update_cs.hlsl");
@@ -1435,6 +1508,56 @@ namespace ngl::render::app
             InitializeReadbackBuffer(p_device, fsp_visible_surface_list_readback_buffer_, fsp_visible_surface_list_.buffer->GetDesc(), "InstantRdv_FspVisibleSurfaceListReadback");
         }
         {
+            bbv_surface_touched_brick_list_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count = bbv_grid_updater_.Get().total_count + 1u,
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_BbvSurfaceTouchedBrickList");
+            InitializeReadbackBuffer(
+                p_device,
+                bbv_surface_touched_brick_list_readback_buffer_,
+                bbv_surface_touched_brick_list_.buffer->GetDesc(),
+                "InstantRdv_BbvSurfaceTouchedBrickListReadback");
+        }
+        {
+            const uint64_t candidate_element_count =
+                uint64_t(bbv_grid_updater_.Get().total_count) * 16ull + 1ull;
+            if(candidate_element_count > uint64_t(std::numeric_limits<u32>::max()))
+            {
+                std::cout << "[ERROR] BBV SurfaceTouchedFspCandidateList size overflows u32." << std::endl;
+                return false;
+            }
+            bbv_surface_touched_fsp_candidate_list_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count = static_cast<u32>(candidate_element_count),
+                    .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_BbvSurfaceTouchedFspCandidateList");
+            InitializeReadbackBuffer(
+                p_device,
+                bbv_surface_touched_fsp_candidate_list_readback_buffer_,
+                bbv_surface_touched_fsp_candidate_list_.buffer->GetDesc(),
+                "InstantRdv_BbvSurfaceTouchedFspCandidateListReadback");
+        }
+        {
+            bbv_surface_candidate_indirect_arg_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count = 3u,
+                    .bind_flag = rhi::ResourceBindFlag::UnorderedAccess | rhi::ResourceBindFlag::IndirectArg,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_BbvSurfaceCandidateIndirectArg");
+        }
+        {
             fsp_indirect_arg_.InitializeAsTyped(p_device,
                                            rhi::BufferDep::Desc{
                                                .element_byte_size = sizeof(uint32_t),
@@ -1597,7 +1720,8 @@ namespace ngl::render::app
                 param.fsp_total_cell_count = static_cast<int>(fsp_total_cell_count_);
                 param.fsp_probe_atlas_tile_width = static_cast<int>(fsp_probe_atlas_tile_width_);
                 param.fsp_probe_atlas_tile_height = static_cast<int>(fsp_probe_atlas_tile_height_);
-
+                param.fsp_surface_mask_generation_enable =
+                    InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_ ? 0 : 1;
                 for(u32 cascade_index = 0; cascade_index < fsp_cascade_count_; ++cascade_index)
                 {
                     const auto& cascade_grid = fsp_grid_updaters_[cascade_index].Get();
@@ -1767,7 +1891,7 @@ namespace ngl::render::app
             p_command_list->SetDescriptorSet(pso_fsp_surface_mask_clear_.Get(), &desc_set);
             pso_fsp_surface_mask_clear_->DispatchHelper(
                 p_command_list,
-                std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
+                fsp_surface_mask_word_count_,
                 1,
                 1);
             p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
@@ -1835,6 +1959,11 @@ namespace ngl::render::app
             if(integrate_surface_detection)
             {
                 pso->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
+                pso->SetView(&desc_set, "RWBitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.uav.Get());
+                pso->SetView(
+                    &desc_set,
+                    "RWBbvSurfaceTouchedFspCandidateList",
+                    bbv_surface_touched_fsp_candidate_list_.uav.Get());
             }
 
             p_command_list->SetPipelineState(pso);
@@ -1844,6 +1973,7 @@ namespace ngl::render::app
             if(integrate_surface_detection)
             {
                 p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
+                p_command_list->ResourceUavBarrier(bbv_surface_touched_fsp_candidate_list_.buffer.Get());
             }
         };
         auto func_call_bbv_removal_carving_pass = [this](
@@ -1866,6 +1996,24 @@ namespace ngl::render::app
             p_command_list->DispatchIndirect(bbv_removal_frustum_indirect_arg_.buffer.Get());
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
         };
+
+        if(InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_)
+        {
+            bbv_surface_touched_fsp_candidate_list_.ResourceBarrier(
+                p_command_list,
+                rhi::EResourceState::UnorderedAccess);
+            ngl::rhi::DescriptorSetDep raw_clear_desc_set = {};
+            pso_bbv_surface_touched_fsp_candidate_clear_->SetView(
+                &raw_clear_desc_set,
+                "RWBbvSurfaceTouchedFspCandidateList",
+                bbv_surface_touched_fsp_candidate_list_.uav.Get());
+            p_command_list->SetPipelineState(pso_bbv_surface_touched_fsp_candidate_clear_.Get());
+            p_command_list->SetDescriptorSet(
+                pso_bbv_surface_touched_fsp_candidate_clear_.Get(),
+                &raw_clear_desc_set);
+            pso_bbv_surface_touched_fsp_candidate_clear_->DispatchHelper(p_command_list, 1, 1, 1);
+            p_command_list->ResourceUavBarrier(bbv_surface_touched_fsp_candidate_list_.buffer.Get());
+        }
 
         // viewごとにDepthBufferのInjection / Removal Passを実行.
         const int num_depth_buffer = 1 + static_cast<int>(depth_buffer_info.sub_array.size());
@@ -1961,6 +2109,103 @@ namespace ngl::render::app
             pso_bbv_brick_count_aggregate_->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
 
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
+        }
+
+        if(InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_)
+        {
+            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvSurfaceTouchedBrickScan");
+
+            bbv_surface_touched_brick_list_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::UnorderedAccess);
+
+            ngl::rhi::DescriptorSetDep clear_desc_set = {};
+            pso_bbv_surface_touched_brick_clear_->SetView(
+                &clear_desc_set, "RWBbvSurfaceTouchedBrickList", bbv_surface_touched_brick_list_.uav.Get());
+            p_command_list->SetPipelineState(pso_bbv_surface_touched_brick_clear_.Get());
+            p_command_list->SetDescriptorSet(pso_bbv_surface_touched_brick_clear_.Get(), &clear_desc_set);
+            pso_bbv_surface_touched_brick_clear_->DispatchHelper(p_command_list, 1, 1, 1);
+            p_command_list->ResourceUavBarrier(bbv_surface_touched_brick_list_.buffer.Get());
+
+            bbv_surface_touched_fsp_candidate_list_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::ShaderRead);
+            bbv_surface_candidate_indirect_arg_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::UnorderedAccess);
+            ngl::rhi::DescriptorSetDep raw_indirect_arg_desc_set = {};
+            pso_bbv_surface_candidate_indirect_arg_->SetView(
+                &raw_indirect_arg_desc_set,
+                "BbvSurfaceTouchedFspCandidateList",
+                bbv_surface_touched_fsp_candidate_list_.srv.Get());
+            pso_bbv_surface_candidate_indirect_arg_->SetView(
+                &raw_indirect_arg_desc_set,
+                "RWBbvSurfaceCandidateIndirectArg",
+                bbv_surface_candidate_indirect_arg_.uav.Get());
+            p_command_list->SetPipelineState(pso_bbv_surface_candidate_indirect_arg_.Get());
+            p_command_list->SetDescriptorSet(
+                pso_bbv_surface_candidate_indirect_arg_.Get(),
+                &raw_indirect_arg_desc_set);
+            pso_bbv_surface_candidate_indirect_arg_->DispatchHelper(p_command_list, 1, 1, 1);
+            bbv_surface_candidate_indirect_arg_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::IndirectArgument);
+
+            ngl::rhi::DescriptorSetDep scan_desc_set = {};
+            pso_bbv_surface_touched_brick_scan_->SetView(
+                &scan_desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+            pso_bbv_surface_touched_brick_scan_->SetView(
+                &scan_desc_set,
+                "BbvSurfaceTouchedFspCandidateList",
+                bbv_surface_touched_fsp_candidate_list_.srv.Get());
+            pso_bbv_surface_touched_brick_scan_->SetView(
+                &scan_desc_set, "RWBbvSurfaceTouchedBrickList", bbv_surface_touched_brick_list_.uav.Get());
+            p_command_list->SetPipelineState(pso_bbv_surface_touched_brick_scan_.Get());
+            p_command_list->SetDescriptorSet(pso_bbv_surface_touched_brick_scan_.Get(), &scan_desc_set);
+            p_command_list->DispatchIndirect(bbv_surface_candidate_indirect_arg_.buffer.Get());
+            p_command_list->ResourceUavBarrier(bbv_surface_touched_brick_list_.buffer.Get());
+            bbv_surface_touched_brick_list_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::ShaderRead);
+
+            bbv_surface_candidate_indirect_arg_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::UnorderedAccess);
+            ngl::rhi::DescriptorSetDep indirect_arg_desc_set = {};
+            pso_bbv_surface_candidate_indirect_arg_->SetView(
+                &indirect_arg_desc_set,
+                "BbvSurfaceTouchedFspCandidateList",
+                bbv_surface_touched_brick_list_.srv.Get());
+            pso_bbv_surface_candidate_indirect_arg_->SetView(
+                &indirect_arg_desc_set,
+                "RWBbvSurfaceCandidateIndirectArg",
+                bbv_surface_candidate_indirect_arg_.uav.Get());
+            p_command_list->SetPipelineState(pso_bbv_surface_candidate_indirect_arg_.Get());
+            p_command_list->SetDescriptorSet(
+                pso_bbv_surface_candidate_indirect_arg_.Get(),
+                &indirect_arg_desc_set);
+            pso_bbv_surface_candidate_indirect_arg_->DispatchHelper(p_command_list, 1, 1, 1);
+            bbv_surface_candidate_indirect_arg_.ResourceBarrier(
+                p_command_list, rhi::EResourceState::IndirectArgument);
+
+            ngl::rhi::DescriptorSetDep candidate_desc_set = {};
+            pso_bbv_surface_touched_fsp_candidate_->SetView(
+                &candidate_desc_set,
+                "cb_instant_rdv",
+                &cbh_dispatch_->cbv);
+            pso_bbv_surface_touched_fsp_candidate_->SetView(
+                &candidate_desc_set,
+                "BbvSurfaceTouchedBrickList",
+                bbv_surface_touched_brick_list_.srv.Get());
+            pso_bbv_surface_touched_fsp_candidate_->SetView(
+                &candidate_desc_set,
+                "BitmaskBrickVoxel",
+                bbv_buffer_.srv.Get());
+            pso_bbv_surface_touched_fsp_candidate_->SetView(
+                &candidate_desc_set,
+                "RWFspSurfaceCellMaskBuffer",
+                fsp_surface_cell_mask_buffer_.uav.Get());
+            {
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvSurfaceTouchedFspFineVoxel");
+                p_command_list->SetPipelineState(pso_bbv_surface_touched_fsp_candidate_.Get());
+                p_command_list->SetDescriptorSet(pso_bbv_surface_touched_fsp_candidate_.Get(), &candidate_desc_set);
+                p_command_list->DispatchIndirect(bbv_surface_candidate_indirect_arg_.buffer.Get());
+                p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
+            }
         }
 
     }
@@ -2294,7 +2539,6 @@ namespace ngl::render::app
         const u32 fsp_active_probe_prev_list_index = 1u - fsp_active_probe_curr_list_index;
         auto& fsp_active_probe_curr_list = fsp_active_probe_list_[fsp_active_probe_curr_list_index];
         auto& fsp_active_probe_prev_list = fsp_active_probe_list_[fsp_active_probe_prev_list_index];
-
         // FSP.
         {
             // Fsp Prev Active IndirectArg生成.
@@ -2349,27 +2593,25 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfaceMaskProcessing");
 
-                // SurfaceCellMaskはMainViewの統合Surface Injection結果をcompactする。
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfaceMaskCompact");
+                // SurfaceCellMaskはDepth InjectionまたはTouched FineVoxel列挙結果をcompactする。
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfaceMaskCompact");
 
-                    fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+                fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
 
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "FspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.srv.Get());
-                    pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                ngl::rhi::DescriptorSetDep desc_set = {};
+                pso_fsp_surface_mask_compact_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                pso_fsp_surface_mask_compact_->SetView(&desc_set, "FspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.srv.Get());
+                pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
 
-                    p_command_list->SetPipelineState(pso_fsp_surface_mask_compact_.Get());
-                    p_command_list->SetDescriptorSet(pso_fsp_surface_mask_compact_.Get(), &desc_set);
-                    pso_fsp_surface_mask_compact_->DispatchHelper(
-                        p_command_list,
-                        std::max<u32>(1u, (fsp_total_cell_count_ + 31u) / 32u),
-                        1,
-                        1);
+                p_command_list->SetPipelineState(pso_fsp_surface_mask_compact_.Get());
+                p_command_list->SetDescriptorSet(pso_fsp_surface_mask_compact_.Get(), &desc_set);
+                pso_fsp_surface_mask_compact_->DispatchHelper(
+                    p_command_list,
+                    fsp_surface_mask_word_count_,
+                    1,
+                    1);
 
-                    p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
-                }
+                p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
             }
             // Fsp IndirectArg生成.
             {
@@ -2379,7 +2621,10 @@ namespace ngl::render::app
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_generate_indirect_arg_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "ProbeIndexList", fsp_visible_surface_list_.srv.Get());
+                pso_fsp_generate_indirect_arg_->SetView(
+                    &desc_set,
+                    "ProbeIndexList",
+                    fsp_visible_surface_list_.srv.Get());
                 pso_fsp_generate_indirect_arg_->SetView(&desc_set, "RWFspIndirectArg", fsp_indirect_arg_.uav.Get());
 
                 p_command_list->SetPipelineState(pso_fsp_generate_indirect_arg_.Get());
@@ -2397,7 +2642,10 @@ namespace ngl::render::app
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
                 pso_fsp_pre_update_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
 
-                pso_fsp_pre_update_->SetView(&desc_set, "SurfaceProbeCellList", fsp_visible_surface_list_.srv.Get());
+                pso_fsp_pre_update_->SetView(
+                    &desc_set,
+                    "SurfaceProbeCellList",
+                    fsp_visible_surface_list_.srv.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());
@@ -2555,18 +2803,29 @@ namespace ngl::render::app
 
                 p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
             }
+            if(InstantRasterDerivedVoxelScene::dbg_fsp_debug_readback_enable_)
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspReadbackCopy");
 
                 p_command_list->ResourceBarrier(fsp_visible_surface_list_.buffer.Get(), rhi::EResourceState::UnorderedAccess, rhi::EResourceState::CopySrc);
+                bbv_surface_touched_brick_list_.ResourceBarrier(
+                    p_command_list, rhi::EResourceState::CopySrc);
+                bbv_surface_touched_fsp_candidate_list_.ResourceBarrier(
+                    p_command_list, rhi::EResourceState::CopySrc);
                 p_command_list->ResourceBarrier(fsp_probe_free_stack_buffer_.buffer.Get(), rhi::EResourceState::UnorderedAccess, rhi::EResourceState::CopySrc);
                 p_command_list->ResourceBarrier(fsp_active_probe_curr_list.buffer.Get(), rhi::EResourceState::UnorderedAccess, rhi::EResourceState::CopySrc);
 
                 p_command_list->CopyResource(fsp_visible_surface_list_readback_buffer_.Get(), fsp_visible_surface_list_.buffer.Get());
+                p_command_list->CopyResource(bbv_surface_touched_brick_list_readback_buffer_.Get(), bbv_surface_touched_brick_list_.buffer.Get());
+                p_command_list->CopyResource(bbv_surface_touched_fsp_candidate_list_readback_buffer_.Get(), bbv_surface_touched_fsp_candidate_list_.buffer.Get());
                 p_command_list->CopyResource(fsp_probe_free_stack_readback_buffer_.Get(), fsp_probe_free_stack_buffer_.buffer.Get());
                 p_command_list->CopyResource(fsp_active_probe_list_readback_buffer_.Get(), fsp_active_probe_curr_list.buffer.Get());
 
                 p_command_list->ResourceBarrier(fsp_visible_surface_list_.buffer.Get(), rhi::EResourceState::CopySrc, rhi::EResourceState::UnorderedAccess);
+                bbv_surface_touched_brick_list_.ResourceBarrier(
+                    p_command_list, rhi::EResourceState::ShaderRead);
+                bbv_surface_touched_fsp_candidate_list_.ResourceBarrier(
+                    p_command_list, rhi::EResourceState::UnorderedAccess);
                 p_command_list->ResourceBarrier(fsp_probe_free_stack_buffer_.buffer.Get(), rhi::EResourceState::CopySrc, rhi::EResourceState::UnorderedAccess);
                 p_command_list->ResourceBarrier(fsp_active_probe_curr_list.buffer.Get(), rhi::EResourceState::CopySrc, rhi::EResourceState::UnorderedAccess);
             }
@@ -2741,11 +3000,168 @@ namespace ngl::render::app
             }
             return 0;
         };
+        auto read_list = [](rhi::RefBufferDep buffer, uint32_t max_element_count)
+        {
+            std::vector<uint32_t> values;
+            if(buffer.Get() == nullptr)
+            {
+                return values;
+            }
+            if(auto* mapped = buffer->MapAs<uint32_t>())
+            {
+                const uint32_t count = std::min(mapped[0], max_element_count);
+                values.reserve(count);
+                for(uint32_t i = 0u; i < count; ++i)
+                {
+                    values.push_back(mapped[i + 1u]);
+                }
+                buffer->Unmap();
+            }
+            return values;
+        };
 
         InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ = static_cast<int>(fsp_probe_pool_size_);
         InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_ = read_counter(fsp_probe_free_stack_readback_buffer_);
         InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_ = read_counter(fsp_active_probe_list_readback_buffer_);
         InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_ = read_counter(fsp_visible_surface_list_readback_buffer_);
+        auto* touched_brick_mapped =
+            bbv_surface_touched_brick_list_readback_buffer_.Get() != nullptr
+                ? bbv_surface_touched_brick_list_readback_buffer_->MapAs<uint32_t>()
+                : nullptr;
+        if(touched_brick_mapped != nullptr)
+        {
+            const uint32_t brick_count = bbv_grid_updater_.Get().total_count;
+            const uint32_t reported_count = touched_brick_mapped[0];
+            const uint32_t checked_count = std::min(reported_count, brick_count);
+            uint32_t invalid_count = reported_count > brick_count ? reported_count - brick_count : 0u;
+            std::vector<uint8_t> seen(brick_count, 0u);
+            for(uint32_t i = 0u; i < checked_count; ++i)
+            {
+                const uint32_t brick_index = touched_brick_mapped[i + 1u];
+                if(brick_index >= brick_count)
+                {
+                    ++invalid_count;
+                    continue;
+                }
+                if(seen[brick_index] != 0u)
+                {
+                    ++invalid_count;
+                }
+                seen[brick_index] = 1u;
+            }
+            bbv_surface_touched_brick_list_readback_buffer_->Unmap();
+            InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_brick_count_ =
+                static_cast<int>(checked_count);
+            if(invalid_count != 0u)
+            {
+                std::cout << "[ERROR] BBV SurfaceTouchedBrickList validation failed: "
+                          << invalid_count << " invalid or duplicate entries." << std::endl;
+            }
+        }
+        else
+        {
+            InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_brick_count_ = 0;
+        }
+        if(InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_)
+        {
+            InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_fsp_candidate_count_ = 0;
+            InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_missing_count_ = 0;
+            InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_extra_count_ = 0;
+            InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_duplicate_count_ = 0;
+        }
+        else
+        {
+            InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_fsp_candidate_count_ =
+                read_counter(bbv_surface_touched_fsp_candidate_list_readback_buffer_);
+
+            const uint32_t fsp_list_capacity = fsp_visible_surface_buffer_size_;
+            const uint32_t candidate_list_capacity = bbv_grid_updater_.Get().total_count * 16u;
+            auto baseline_cells = read_list(fsp_visible_surface_list_readback_buffer_, fsp_list_capacity);
+            auto candidate_cells = read_list(
+                bbv_surface_touched_fsp_candidate_list_readback_buffer_,
+                candidate_list_capacity);
+            std::sort(baseline_cells.begin(), baseline_cells.end());
+            std::sort(candidate_cells.begin(), candidate_cells.end());
+
+            const auto unique_end = std::unique(candidate_cells.begin(), candidate_cells.end());
+            InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_duplicate_count_ =
+                static_cast<int>(std::distance(unique_end, candidate_cells.end()));
+            candidate_cells.erase(unique_end, candidate_cells.end());
+
+            std::vector<uint32_t> missing_cells;
+            std::vector<uint32_t> extra_cells;
+            std::set_difference(
+                baseline_cells.begin(),
+                baseline_cells.end(),
+                candidate_cells.begin(),
+                candidate_cells.end(),
+                std::back_inserter(missing_cells));
+            std::set_difference(
+                candidate_cells.begin(),
+                candidate_cells.end(),
+                baseline_cells.begin(),
+                baseline_cells.end(),
+                std::back_inserter(extra_cells));
+            InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_missing_count_ =
+                static_cast<int>(missing_cells.size());
+            InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_extra_count_ =
+                static_cast<int>(extra_cells.size());
+            static int previous_baseline_count = -1;
+            static int previous_candidate_count = -1;
+            static int previous_missing_count = -1;
+            static int previous_extra_count = -1;
+            static int previous_duplicate_count = -1;
+            const int baseline_count = static_cast<int>(baseline_cells.size());
+            const int candidate_count = static_cast<int>(candidate_cells.size());
+            if(baseline_count != previous_baseline_count ||
+               candidate_count != previous_candidate_count ||
+               InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_missing_count_ != previous_missing_count ||
+               InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_extra_count_ != previous_extra_count ||
+               InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_duplicate_count_ != previous_duplicate_count)
+            {
+                std::cout << "[FspCandidateCompare] baseline=" << baseline_count
+                          << " candidate_unique=" << candidate_count
+                          << " missing=" << InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_missing_count_
+                          << " extra=" << InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_extra_count_
+                          << " duplicate=" << InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_duplicate_count_
+                          << std::endl;
+                previous_baseline_count = baseline_count;
+                previous_candidate_count = candidate_count;
+                previous_missing_count = InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_missing_count_;
+                previous_extra_count = InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_extra_count_;
+                previous_duplicate_count = InstantRasterDerivedVoxelScene::dbg_bbv_fsp_candidate_duplicate_count_;
+            }
+        }
+        const int raw_touched_brick_count =
+            InstantRasterDerivedVoxelScene::dbg_fsp_use_bbv_surface_candidates_
+                ? read_counter(bbv_surface_touched_fsp_candidate_list_readback_buffer_)
+                : 0;
+        static int previous_active_probe_count = -1;
+        static int previous_visible_surface_cell_count = -1;
+        static int previous_touched_brick_count = -1;
+        static int previous_raw_touched_brick_count = -1;
+        if(InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_ != previous_active_probe_count ||
+           InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_ != previous_visible_surface_cell_count ||
+           InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_brick_count_ != previous_touched_brick_count ||
+           raw_touched_brick_count != previous_raw_touched_brick_count)
+        {
+            std::cout << "[FspReadback] active="
+                      << InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_
+                      << " visible_cells="
+                      << InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_
+                      << " touched_bricks="
+                      << InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_brick_count_
+                      << " raw_touched_bricks="
+                      << raw_touched_brick_count
+                      << std::endl;
+            previous_active_probe_count =
+                InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_;
+            previous_visible_surface_cell_count =
+                InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_;
+            previous_touched_brick_count =
+                InstantRasterDerivedVoxelScene::dbg_bbv_surface_touched_brick_count_;
+            previous_raw_touched_brick_count = raw_touched_brick_count;
+        }
         InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ =
             std::max(0, InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ - InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_);
     }
@@ -2783,7 +3199,10 @@ namespace ngl::render::app
     {
         if(bbvgi_instance_)
         {
-            bbvgi_instance_->UpdateFspDebugReadback();
+            if(InstantRasterDerivedVoxelScene::dbg_fsp_debug_readback_enable_)
+            {
+                bbvgi_instance_->UpdateFspDebugReadback();
+            }
             bbvgi_instance_->UpdateAsspDebugReadback();
             bbvgi_instance_->Dispatch_Begin(p_command_list, scene_cbv, main_view_info, render_resolution);
         }

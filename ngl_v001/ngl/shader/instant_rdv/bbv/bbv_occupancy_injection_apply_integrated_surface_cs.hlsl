@@ -18,27 +18,6 @@ ConstantBuffer<BbvSurfaceInjectionViewInfo> cb_injection_src_view_info;
 // ShadowViewやDepth Atlasを含むInjection元のハードウェア深度。
 Texture2D TexHardwareDepth;
 
-// 同一Wave内で同じuint wordを指すbitをまとめ、AtomicOrを代表laneだけに限定する。
-void FspInjectCellMaskWave(bool has_cell, uint global_cell_index)
-{
-    const uint word_index = has_cell ? (global_cell_index >> 5u) : 0u;
-    const uint bit_mask = has_cell ? (1u << (global_cell_index & 31u)) : 0u;
-    uint4 pending_lanes = WaveActiveBallot(has_cell);
-    while(ballot_any(pending_lanes))
-    {
-        const uint leader_lane = first_lane_from_ballot(pending_lanes);
-        const uint leader_word_index = WaveReadLaneAt(word_index, leader_lane);
-        const bool is_same_word = has_cell && (word_index == leader_word_index);
-        const uint4 same_word_lanes = WaveActiveBallot(is_same_word);
-        const uint merged_mask = WaveActiveBitOr(is_same_word ? bit_mask : 0u);
-        if(WaveGetLaneIndex() == leader_lane)
-        {
-            InterlockedOr(RWFspSurfaceCellMaskBuffer[leader_word_index], merged_mask);
-        }
-        pending_lanes &= ~same_word_lanes;
-    }
-}
-
 // BBV占有とSurface owner cell限定のFSP SurfaceCell検出を同じDepth走査で実行する。
 [numthreads(TILE_WIDTH, TILE_WIDTH, 1)]
 void main_cs(uint3 dtid : SV_DispatchThreadID)
@@ -126,19 +105,50 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
         {
             const uint bbv_addr = bbv_voxel_bitmask_data_addr(leader_voxel);
             InterlockedOr(RWBitmaskBrickVoxel[bbv_addr + leader_u32_offset], merged_append);
+
+            // 同一Frame内にMainView Injectionが触れたBrickを世代番号で記録する。
+            // 同じBrickへの再訪は同じ値を書くだけで、dirty list appendは行わない。
+            if(cb_injection_src_view_info.cb_is_main_view != 0 &&
+               cb_instant_rdv.fsp_surface_mask_generation_enable == 0)
+            {
+                uint previous_generation = 0u;
+                InterlockedExchange(
+                    RWBitmaskBrickVoxelOptionData[leader_voxel].surface_touched_generation,
+                    cb_instant_rdv.frame_count + 1u,
+                    previous_generation);
+                if(previous_generation != cb_instant_rdv.frame_count + 1u)
+                {
+                    uint raw_append_index = 0u;
+                    InterlockedAdd(
+                        RWBbvSurfaceTouchedFspCandidateList[0],
+                        1u,
+                        raw_append_index);
+                    if(raw_append_index < bbv_brick_count())
+                    {
+                        RWBbvSurfaceTouchedFspCandidateList[raw_append_index + 1u] =
+                            leader_voxel;
+                    }
+                }
+            }
         }
         pending_lanes &= ~same_target_lanes;
     }
 
     // FSP Surface候補はMainViewだけから生成する。
-    if(cb_injection_src_view_info.cb_is_main_view == 0 || !has_surface)
+    if(cb_injection_src_view_info.cb_is_main_view == 0 ||
+       !has_surface ||
+       cb_instant_rdv.fsp_surface_mask_generation_enable == 0)
     {
         return;
     }
 
     // Surface owner cellとして最細Cascadeと境界帯の隣接Cascadeだけを対象にする。
-    uint2 owner_cells = k_fsp_invalid_probe_index.xx;
-    const uint owner_count = FspGetSurfaceOwnerCells(surface_pos_ws, owner_cells);
-    FspInjectCellMaskWave(owner_count > 0u, owner_cells.x);
-    FspInjectCellMaskWave(owner_count > 1u, owner_cells.y);
+    uint2 owner_mask_words = 0u.xx;
+    uint2 owner_mask_bits = 0u.xx;
+    const uint owner_count = FspGetSurfaceOwnerMaskAddresses(
+        surface_pos_ws,
+        owner_mask_words,
+        owner_mask_bits);
+    FspInjectCellMaskWave(owner_count > 0u, owner_mask_words.x, owner_mask_bits.x);
+    FspInjectCellMaskWave(owner_count > 1u, owner_mask_words.y, owner_mask_bits.y);
 }
