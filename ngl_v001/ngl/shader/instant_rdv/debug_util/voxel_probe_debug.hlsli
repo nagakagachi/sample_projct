@@ -10,8 +10,6 @@
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 
-SamplerState        SmpLinearClamp;
-
 struct VS_INPUT
 {
 	uint vertex_id	:	SV_VertexID;
@@ -52,11 +50,6 @@ VS_OUTPUT main_vs(VS_INPUT input)
 
 
 	VS_OUTPUT output = (VS_OUTPUT)0;
-
-	const float3 camera_dir = GetViewDirFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
-    const float3 camera_up = GetViewUpDirFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
-    const float3 camera_right = GetViewRightDirFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
-	const float3 view_origin = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
 
     //　VertexIDからインスタンスID,三角形ID,三角形内頂点IDを計算.
     const uint instance_id = input.vertex_id / 6;
@@ -157,43 +150,9 @@ float4 main_ps(VS_OUTPUT input) : SV_TARGET0
     if(0 == cb_instant_rdv.debug_bbv_probe_mode)
     {
         const float surface_distance = length_int_vector3(voxel_optional_data.to_surface_vector);
-        #if 1
-            // 距離をグレースケールで可視化.
-            float distance_color = saturate(surface_distance/8.0);
-            
-            distance_color = pow(distance_color, 2.0);// 適当ガンマ
-            color = float4(distance_color, distance_color, distance_color, 1.0);
-        #else
-            // 整数距離を色変えでわかりやすく可視化.
-            if(0.0 > surface_distance)
-            {
-                color = float4(0,0,0.25,1);
-            }
-            else if((1<<10)*3 == surface_distance)
-            {
-                color = float4(0,1,1,1);// 無効値.
-            }
-            else if(0.0 == surface_distance)
-            {
-                color = float4(0,0,0,1);
-            }
-            else if(1.0 == surface_distance)
-            {
-                color = float4(1,0,0,1);
-            }
-            else if(2.0 == surface_distance)
-            {
-                color = float4(0,1,0,1);
-            }
-            else if(3.0 == surface_distance)
-            {
-                color = float4(0,0,1,1);
-            }
-            else
-            {
-                color = float4(1,1,1,1);
-            }
-        #endif
+        float distance_color = saturate(surface_distance / 8.0);
+        distance_color = pow(distance_color, 2.0);
+        color = float4(distance_color, distance_color, distance_color, 1.0);
     }
 
 	return color;

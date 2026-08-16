@@ -117,17 +117,31 @@ void main_cs(
     // 始点は従来通り pixel world position を使う。
     float3 pos_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(CalcViewSpacePosition(screen_uv, view_z, cb_injection_src_view_info.cb_proj_mtx), 1.0));
 
+    const bool use_surface_brick_pool_position =
+        cb_injection_src_view_info.cb_is_main_view != 0 &&
+        cb_injection_src_view_info.cb_padding0.x != 0;
     float3 ray_dir_ws = 0.0.xxx;
+    if(!use_surface_brick_pool_position)
     {
-        const float2 near_far_plane_d = GetNearFarPlaneDepthFromProjectionMatrix(cb_injection_src_view_info.cb_proj_mtx);
-        const float near_plane_view_z = calc_view_z_from_ndc_z(near_far_plane_d.x, cb_injection_src_view_info.cb_ndc_z_to_view_z_coef);
-        const float3 view_ray_origin_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(CalcViewSpacePosition(screen_uv, near_plane_view_z, cb_injection_src_view_info.cb_proj_mtx), 1.0));
+        const float2 near_far_plane_d =
+            GetNearFarPlaneDepthFromProjectionMatrix(
+                cb_injection_src_view_info.cb_proj_mtx);
+        const float near_plane_view_z = calc_view_z_from_ndc_z(
+            near_far_plane_d.x,
+            cb_injection_src_view_info.cb_ndc_z_to_view_z_coef);
+        const float3 view_ray_origin_ws = mul(
+            cb_injection_src_view_info.cb_view_inv_mtx,
+            float4(CalcViewSpacePosition(
+                screen_uv,
+                near_plane_view_z,
+                cb_injection_src_view_info.cb_proj_mtx), 1.0));
         const float3 to_pixel_vec_ws = pos_ws - view_ray_origin_ws;
         const float to_pixel_len_sq = dot(to_pixel_vec_ws, to_pixel_vec_ws);
         if(to_pixel_len_sq > 1e-10)
         {
             ray_dir_ws = normalize(to_pixel_vec_ws);
-            pos_ws += ray_dir_ws * cb_instant_rdv.bbv_occupancy_injection_world_offset;
+            pos_ws += ray_dir_ws *
+                cb_instant_rdv.bbv_occupancy_injection_world_offset;
         }
     }
 

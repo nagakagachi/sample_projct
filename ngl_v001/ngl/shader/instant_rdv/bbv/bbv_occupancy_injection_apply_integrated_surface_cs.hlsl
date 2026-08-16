@@ -106,30 +106,6 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
             const uint bbv_addr = bbv_voxel_bitmask_data_addr(leader_voxel);
             InterlockedOr(RWBitmaskBrickVoxel[bbv_addr + leader_u32_offset], merged_append);
 
-            // 同一Frame内にMainView Injectionが触れたBrickを世代番号で記録する。
-            // 同じBrickへの再訪は同じ値を書くだけで、dirty list appendは行わない。
-            if(cb_injection_src_view_info.cb_is_main_view != 0 &&
-               cb_instant_rdv.fsp_surface_mask_generation_enable == 0)
-            {
-                uint previous_generation = 0u;
-                InterlockedExchange(
-                    RWBitmaskBrickVoxelOptionData[leader_voxel].surface_touched_generation,
-                    cb_instant_rdv.frame_count + 1u,
-                    previous_generation);
-                if(previous_generation != cb_instant_rdv.frame_count + 1u)
-                {
-                    uint raw_append_index = 0u;
-                    InterlockedAdd(
-                        RWBbvSurfaceTouchedFspCandidateList[0],
-                        1u,
-                        raw_append_index);
-                    if(raw_append_index < bbv_brick_count())
-                    {
-                        RWBbvSurfaceTouchedFspCandidateList[raw_append_index + 1u] =
-                            leader_voxel;
-                    }
-                }
-            }
         }
         pending_lanes &= ~same_target_lanes;
     }

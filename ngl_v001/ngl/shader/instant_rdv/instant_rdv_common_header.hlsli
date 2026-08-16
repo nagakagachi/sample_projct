@@ -123,6 +123,13 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     // Depth Removal carving系1D Computeのthread group size.
     #define k_bbv_removal_carving_thread_group_size (128)
 
+    // MainView SurfaceBrickPool. 1 SurfaceBrickはBBV 1 Brickと同じ512bit maskを持つ。
+    #define k_bbv_surface_brick_pool_capacity (4096)
+    #define k_bbv_surface_brick_pool_mask_word_count (k_bbv_per_voxel_bitmask_u32_count)
+    #define k_bbv_surface_brick_pool_entry_u32_count (1 + k_bbv_surface_brick_pool_mask_word_count)
+    #define k_bbv_surface_brick_pool_state_reserved_index (0xffff)
+    #define k_bbv_surface_brick_pool_state_overflow_index (0xfffe)
+
 
     #define k_bbv_per_voxel_resolution_inv (1.0 / float(k_bbv_per_voxel_resolution))
     #define k_bbv_per_voxel_resolution_vec3i int3(k_bbv_per_voxel_resolution, k_bbv_per_voxel_resolution, k_bbv_per_voxel_resolution)
@@ -186,10 +193,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     {
         // ジオメトリ表面を含むBrickまでの相対ベクトル. ジオメトリ表面を含むBrickは0, それ以外はマンハッタン距離.
         int3 to_surface_vector;
-        // MainView Injectionが最後に触れたFrame generation。
-        // Surface候補抽出のdirty markerとして使用し、毎Frameの物理clearは行わない。
-        uint surface_touched_generation;
-
         // Screen-space から Resolve した Brick radiance.
         float3 resolved_radiance;
         // Resolve に寄与した sample count.
@@ -382,6 +385,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         float assp_ray_budget_no_history_bias NGL_CPP_MEMBER_INIT({1.0f});
         float assp_ray_budget_scale NGL_CPP_MEMBER_INIT({1.0f});
         int assp_debug_freeze_frame_random_enable NGL_CPP_MEMBER_INIT({0});
+        // 既存CBレイアウトを維持するための末尾パディング。
+        // xはSurfaceBrickPool初回State Grid clearのsentinelとして再利用する。
         int3 assp_dummy_padding1 NGL_CPP_MEMBER_INIT({});
     };
 #ifdef NGL_SHADER_CPP_INCLUDE

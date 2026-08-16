@@ -50,11 +50,6 @@ RWBuffer<uint>		RWBitmaskBrickVoxel;
 StructuredBuffer<BbvOptionalData>		BitmaskBrickVoxelOptionData;
 RWStructuredBuffer<BbvOptionalData>	RWBitmaskBrickVoxelOptionData;
 RWBuffer<uint>    RWBbvRadianceAccumBuffer;
-Buffer<uint>       BbvSurfaceTouchedBrickList;
-RWBuffer<uint>    RWBbvSurfaceTouchedBrickList;
-Buffer<uint>       BbvSurfaceTouchedFspCandidateList;
-RWBuffer<uint>     RWBbvSurfaceTouchedFspCandidateList;
-
 // 深度テストベース更新用のBrickリスト. 1..N に候補 Brick index+1 を格納し、0 は無効値.
 Buffer<uint>		FrustumBrickList;
 RWBuffer<uint>		RWFrustumBrickList;
