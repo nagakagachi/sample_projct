@@ -814,7 +814,8 @@ uint bbv_radiance_accum_count_addr(uint voxel_index)
 
 int2 bbv_radiance_injection_tile_grid_resolution(int2 src_resolution)
 {
-    return (src_resolution + (k_bbv_radiance_injection_tile_width - 1)) / k_bbv_radiance_injection_tile_width;
+    return (src_resolution + (k_bbv_radiance_injection_tile_width - 1)) /
+        k_bbv_radiance_injection_tile_width;
 }
 
 int2 bbv_radiance_injection_group_grid_resolution(int2 src_resolution)
@@ -825,11 +826,11 @@ int2 bbv_radiance_injection_group_grid_resolution(int2 src_resolution)
 
 bool bbv_radiance_injection_group_coord_to_tile_coord(int2 group_coord, out int2 tile_coord, int2 src_resolution)
 {
-    // frame_count 下位 2bit を 2x2 tile group 内 local xy へ割り当てて、4F で group 内全 tile を巡回する。
-    const uint phase = cb_instant_rdv.frame_count & (k_bbv_radiance_injection_phase_count - 1);
+    const uint tile_phase =
+        cb_instant_rdv.frame_count % k_bbv_radiance_injection_phase_count;
     const int2 local_phase = int2(
-        phase & 1,
-        (phase >> 1) & 1);
+        tile_phase & 1,
+        (tile_phase >> 1) & 1);
     tile_coord = group_coord * k_bbv_radiance_injection_tile_group_resolution + local_phase;
 
     // 端の不完全 group だけ範囲外 tile が出るので、そこだけ無効化する。

@@ -276,8 +276,12 @@ namespace ngl::render::app
     static math::Vec2u CalcBbvRadianceInjectionDispatchResolution(const math::Vec2u& src_resolution)
     {
         const math::Vec2u tile_grid_resolution(
-            (src_resolution.x + (k_bbv_radiance_injection_tile_width - 1u)) / k_bbv_radiance_injection_tile_width,
-            (src_resolution.y + (k_bbv_radiance_injection_tile_width - 1u)) / k_bbv_radiance_injection_tile_width);
+            (src_resolution.x +
+             k_bbv_radiance_injection_tile_width - 1u) /
+                k_bbv_radiance_injection_tile_width,
+            (src_resolution.y +
+             k_bbv_radiance_injection_tile_width - 1u) /
+                k_bbv_radiance_injection_tile_width);
         // radiance injection は全 screen tile を起動せず、2x2 group 数ぶんだけ threadgroup を起動する。
         const math::Vec2u group_grid_resolution(
             (tile_grid_resolution.x + (k_bbv_radiance_injection_tile_group_resolution - 1u)) / k_bbv_radiance_injection_tile_group_resolution,
@@ -2194,8 +2198,18 @@ namespace ngl::render::app
                         &desc_set);
                     pso_bbv_surface_brick_pool_build_->DispatchHelper(
                         p_command_list,
-                        target_depth_info.atlas_resolution.x,
-                        target_depth_info.atlas_resolution.y,
+                        ((target_depth_info.atlas_resolution.x +
+                          k_bbv_surface_brick_pool_build_thread_width *
+                              k_bbv_surface_brick_pool_build_pixel_skip_stride - 1) /
+                         (k_bbv_surface_brick_pool_build_thread_width *
+                          k_bbv_surface_brick_pool_build_pixel_skip_stride)) *
+                            k_bbv_surface_brick_pool_build_thread_width,
+                        ((target_depth_info.atlas_resolution.y +
+                          k_bbv_surface_brick_pool_build_thread_height *
+                              k_bbv_surface_brick_pool_build_pixel_skip_stride - 1) /
+                         (k_bbv_surface_brick_pool_build_thread_height *
+                          k_bbv_surface_brick_pool_build_pixel_skip_stride)) *
+                            k_bbv_surface_brick_pool_build_thread_height,
                         1);
 
                     p_command_list->ResourceUavBarrier(
@@ -2650,9 +2664,11 @@ namespace ngl::render::app
             cbh_injection_view_info->buffer.Unmap();
         }
 
+        if(k_bbv_radiance_injection_frame_skip_count == 0 ||
+           (frame_count_ %
+            (k_bbv_radiance_injection_frame_skip_count + 1)) == 0)
         {
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvRadianceInjection");
+            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvRadianceInjection");
                 const auto injection_dispatch_resolution = CalcBbvRadianceInjectionDispatchResolution(math::Vec2u(
                     static_cast<u32>(view_info.atlas_resolution.x),
                     static_cast<u32>(view_info.atlas_resolution.y)));
@@ -2688,7 +2704,6 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(bbv_radiance_accum_buffer_.buffer.Get());
                 p_command_list->ResourceUavBarrier(bbv_optional_data_buffer_.buffer.Get());
             }
-        }
     }
     
     void BitmaskBrickVoxelGi::Dispatch_Bbv_Main(rhi::GraphicsCommandListDep* p_command_list,

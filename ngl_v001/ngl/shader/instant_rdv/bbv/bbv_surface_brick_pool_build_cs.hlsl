@@ -3,9 +3,9 @@
     MainView Depthを1回走査し、Screen Tile内でSurface候補を集約する。
 */
 
-#define SURFACE_BRICK_POOL_BUILD_TILE_WIDTH 16
-#define SURFACE_BRICK_POOL_BUILD_TILE_HEIGHT 8
-#define SURFACE_BRICK_POOL_BUILD_THREAD_COUNT 128
+#define SURFACE_BRICK_POOL_BUILD_TILE_WIDTH k_bbv_surface_brick_pool_build_thread_width
+#define SURFACE_BRICK_POOL_BUILD_TILE_HEIGHT k_bbv_surface_brick_pool_build_thread_height
+#define SURFACE_BRICK_POOL_BUILD_THREAD_COUNT (SURFACE_BRICK_POOL_BUILD_TILE_WIDTH * SURFACE_BRICK_POOL_BUILD_TILE_HEIGHT)
 #define SURFACE_BRICK_POOL_TILE_HASH_SIZE 256
 #define SURFACE_BRICK_POOL_TILE_HASH_EMPTY 0xffffffffu
 
@@ -71,19 +71,31 @@ void main_cs(
     }
     GroupMemoryBarrierWithGroupSync();
 
+    const uint pixel_phase_count =
+        k_bbv_surface_brick_pool_build_pixel_skip_stride *
+        k_bbv_surface_brick_pool_build_pixel_skip_stride;
+    const uint pixel_phase =
+        cb_instant_rdv.frame_count % pixel_phase_count;
+    const uint2 pixel_phase_offset = uint2(
+        pixel_phase % k_bbv_surface_brick_pool_build_pixel_skip_stride,
+        pixel_phase / k_bbv_surface_brick_pool_build_pixel_skip_stride);
+    const uint2 sample_coord = dtid.xy *
+        k_bbv_surface_brick_pool_build_pixel_skip_stride +
+        pixel_phase_offset;
+
     bool has_surface = false;
     uint packed_key = 0u;
     uint bit_mask = 0u;
 
-    if(!any(dtid.xy >= cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw))
+    if(!any(sample_coord >= cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw))
     {
         const float depth = TexHardwareDepth.Load(int3(
-            dtid.xy + cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy,
+            sample_coord + cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy,
             0)).r;
         if(depth > 0.0 && depth < 1.0)
         {
             const float2 screen_uv =
-                (float2(dtid.xy) + 0.5.xx) /
+                (float2(sample_coord) + 0.5.xx) /
                 float2(cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw);
             const float surface_view_z = calc_view_z_from_ndc_z(
                 depth,

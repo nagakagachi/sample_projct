@@ -105,11 +105,12 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_bbv_radiance_injection_tile_width (16)
     #define k_bbv_radiance_injection_tile_group_resolution (2)
     #define k_bbv_radiance_injection_phase_count (k_bbv_radiance_injection_tile_group_resolution * k_bbv_radiance_injection_tile_group_resolution)
-    // 追加の間引き定数. 1で無効、2以上でよりアグレッシブに間引く。
-    // ピクセル単位のサブサンプリング間隔。2なら概ね1/2、4なら概ね1/4の密度で注入。
-    #define k_bbv_radiance_injection_pixel_skip_stride (1)
     // フレーム間引き。N=0で毎フレーム実行、N>0で (N+1) フレームに1回実行。
     #define k_bbv_radiance_injection_frame_skip_count (0)
+    #define k_bbv_surface_brick_pool_build_thread_width (16)
+    #define k_bbv_surface_brick_pool_build_thread_height (8)
+    // Radianceの既存2x2 tile位相と同じ、1フレーム約1/4の画素密度。
+    #define k_bbv_surface_brick_pool_build_pixel_skip_stride (2)
     // Empty始点時の短距離フォールバック探索長（単位: Brick長）。
     // 1.0で「最大1Brick先まで」探索する。
     #define k_bbv_radiance_short_ray_length_in_brick (1.0)

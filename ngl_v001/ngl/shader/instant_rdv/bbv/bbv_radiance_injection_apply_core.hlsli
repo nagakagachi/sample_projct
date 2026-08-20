@@ -83,27 +83,13 @@ void main_cs(
         return;
     }
 
-    const int2 src_texel_in_view = tile_coord * k_bbv_radiance_injection_tile_width + int2(gtid.xy);
+    const int2 src_texel_in_view =
+        tile_coord * k_bbv_radiance_injection_tile_width +
+        int2(gtid.xy);
     if(any(src_texel_in_view >= src_resolution))
     {
         return;
     }
-
-    // 追加間引き: 既存の2x2位相更新の上に、ピクセル単位でさらにサンプル密度を下げる。
-    #if (1 < k_bbv_radiance_injection_pixel_skip_stride)
-        const uint pixel_skip_hash = (uint(src_texel_in_view.x) + uint(src_texel_in_view.y) * 3u + cb_instant_rdv.frame_count) % k_bbv_radiance_injection_pixel_skip_stride;
-        if(0 != pixel_skip_hash)
-        {
-            return;
-        }
-    #endif
-    // 追加間引き: フレーム単位でRadiance注入自体をスキップし、更新コストを抑える。
-    #if (0 < k_bbv_radiance_injection_frame_skip_count)
-        if(0 != (cb_instant_rdv.frame_count % (k_bbv_radiance_injection_frame_skip_count + 1)))
-        {
-            return;
-        }
-    #endif
 
     const int2 src_texel = src_texel_in_view + cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy;
     const float depth = TexHardwareDepth.Load(int3(src_texel, 0)).r;
