@@ -316,6 +316,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_view_category_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_view_sub_mode_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_bbv_probe_debug_mode_ = -1;
+    int InstantRasterDerivedVoxelScene::dbg_bbv_depth_test_enable_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_irradiance_volume_debug_mode_ = -1;
     int InstantRasterDerivedVoxelScene::dbg_fsp_probe_depth_test_ = 1;
@@ -762,6 +763,14 @@ namespace ngl::render::app
                     if (dbg_view_sub_mode_ < 0) dbg_view_sub_mode_ = 0;
                     ImGui::SliderInt("Sub Mode", &dbg_view_sub_mode_, 0, sub_max);
                     ImGui::TextDisabled("Sub Mode %d: %s", dbg_view_sub_mode_, get_sub_mode_description(dbg_view_category_, dbg_view_sub_mode_));
+
+                    if (0 == dbg_view_category_)
+                    {
+                        bool bbv_depth_test = (0 != dbg_bbv_depth_test_enable_);
+                        if (ImGui::Checkbox("Depth Test", &bbv_depth_test))
+                            dbg_bbv_depth_test_enable_ = bbv_depth_test ? 1 : 0;
+                        ImGui::TextDisabled("ON: MainView Depth SRVで遮蔽判定、OFF: 常に表示");
+                    }
                 }
             }
         }
@@ -1859,6 +1868,7 @@ namespace ngl::render::app
             param.debug_view_category = InstantRasterDerivedVoxelScene::dbg_view_category_;
             param.debug_view_sub_mode = InstantRasterDerivedVoxelScene::dbg_view_sub_mode_;
             param.debug_bbv_probe_mode = InstantRasterDerivedVoxelScene::dbg_bbv_probe_debug_mode_;
+            param.debug_bbv_depth_test_enable = InstantRasterDerivedVoxelScene::dbg_bbv_depth_test_enable_;
             param.debug_fsp_probe_mode = InstantRasterDerivedVoxelScene::dbg_fsp_probe_debug_mode_;
             param.debug_fsp_irradiance_volume_mode = InstantRasterDerivedVoxelScene::dbg_fsp_irradiance_volume_debug_mode_;
             param.debug_fsp_probe_use_relocated_pos = InstantRasterDerivedVoxelScene::dbg_fsp_probe_use_relocated_pos_;
@@ -3287,6 +3297,7 @@ namespace ngl::render::app
             ngl::rhi::DescriptorSetDep desc_set = {};
             pso_bbv_debug_visualize_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
             pso_bbv_debug_visualize_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+            pso_bbv_debug_visualize_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, "BitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(

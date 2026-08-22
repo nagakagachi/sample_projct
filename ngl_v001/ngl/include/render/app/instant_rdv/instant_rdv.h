@@ -326,6 +326,7 @@ namespace ngl::render::app
         
         
         static int dbg_bbv_probe_debug_mode_;
+        static int dbg_bbv_depth_test_enable_;
         static int dbg_fsp_probe_debug_mode_;
         static int dbg_fsp_irradiance_volume_debug_mode_;
         static int dbg_fsp_probe_depth_test_;

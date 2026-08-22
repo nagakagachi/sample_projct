@@ -6,6 +6,7 @@
 #include "../../include/scene_view_struct.hlsli"
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
+Texture2D<float> TexHardwareDepth;
 Buffer<uint> BbvSurfaceBrickPoolBuffer;
 Buffer<uint> BbvSurfaceBrickPoolStateBuffer;
 
@@ -62,6 +63,46 @@ bool try_get_surface_pool_fine_voxel(
         entry_address + 1u + mask_word] & (1u << mask_bit));
 }
 
+bool bbv_debug_depth_test(float3 hit_pos_ws, int2 texel_pos)
+{
+    if(0 == cb_instant_rdv.debug_bbv_depth_test_enable)
+    {
+        return true;
+    }
+
+    const float3 hit_pos_vs = mul(
+        cb_ngl_sceneview.cb_view_mtx,
+        float4(hit_pos_ws, 1.0));
+    const float4 hit_pos_cs = mul(
+        cb_ngl_sceneview.cb_proj_mtx,
+        float4(hit_pos_vs, 1.0));
+    if(abs(hit_pos_cs.w) <= 1e-6)
+    {
+        return false;
+    }
+
+    const float hit_ndc_z = hit_pos_cs.z / hit_pos_cs.w;
+    if(hit_ndc_z < 0.0 || hit_ndc_z > 1.0)
+    {
+        return false;
+    }
+
+    const float scene_depth = TexHardwareDepth.Load(int3(texel_pos, 0)).r;
+    if(!isValidDepth(scene_depth))
+    {
+        return true;
+    }
+
+    const float hit_view_z = mul(
+        cb_ngl_sceneview.cb_view_mtx,
+        float4(hit_pos_ws, 1.0)).z;
+    const float scene_view_z = calc_view_z_from_ndc_z(
+        scene_depth,
+        cb_ngl_sceneview.cb_ndc_z_to_view_z_coef);
+    // MainViewは左手系なので、View Zが小さい方がカメラに近い。
+    return hit_view_z <= scene_view_z + 1e-3;
+}
+
 // デバッグテクスチャに対してDispatch.
 [numthreads(16, 16, 1)]
 void main_cs(
@@ -105,38 +146,48 @@ void main_cs(
             float4 debug_color = float4(0, 0, 1, 0);
             if(0.0 <= curr_ray_t_ws.x)
             {
-                const float fog_rate0 = pow(saturate((curr_ray_t_ws.x - 20.0)/100.0), 1.0/1.2);
-                const float fog_rate1 = saturate((curr_ray_t_ws.x - 70.0)/500.0);
-
-                // デバッグ用テクスチャにモード別描画.
-                if(0 == debug_sub_mode)
+                const float3 hit_pos_ws =
+                    view_origin + ray_dir_ws * curr_ray_t_ws.x;
+                const bool depth_test_pass = bbv_debug_depth_test(hit_pos_ws, texel_pos);
+                if(!depth_test_pass)
                 {
-                    // FineVoxel unique ID color.
-                    const float3 fine_voxel_id = floor(
-                        (view_origin + ray_dir_ws * (curr_ray_t_ws.x + 0.001) -
-                         cb_instant_rdv.bbv.grid_min_pos) *
-                        (cb_instant_rdv.bbv.cell_size_inv * float(k_bbv_per_voxel_resolution)));
-                    debug_color.xyz = float3(
-                        noise_float_to_float(fine_voxel_id.xyzz),
-                        noise_float_to_float(fine_voxel_id.xzyy),
-                        noise_float_to_float(fine_voxel_id.xyzx));
+                    debug_color = float4(0.01, 0.01, 0.01, 1.0);
                 }
-                else if(1 == debug_sub_mode)
+                else
                 {
-                    // FineVoxel hit colored by its containing Brick ID.
-                    debug_color.xyz = float3(
-                        noise_float_to_float(hit_voxel_index),
-                        noise_float_to_float(hit_voxel_index * 2),
-                        noise_float_to_float(hit_voxel_index * 3));
+                    const float fog_rate0 = pow(saturate((curr_ray_t_ws.x - 20.0)/100.0), 1.0/1.2);
+                    const float fog_rate1 = saturate((curr_ray_t_ws.x - 70.0)/500.0);
 
-                    // 簡易フォグ.
-                    debug_color.xyz = lerp(debug_color.xyz, float3(1,1,1), fog_rate0 * 0.8);
-                    debug_color.xyz = lerp(debug_color.xyz, float3(0.1,0.1,1), fog_rate1 * 0.8);
-                }
-                else if(3 == debug_sub_mode)
-                {
-                    // Bbvセルの深度を可視化.
-                    debug_color.xyz = float4(saturate(curr_ray_t_ws.x/100.0), saturate(curr_ray_t_ws.x/100.0), saturate(curr_ray_t_ws.x/100.0), 1);
+                    // デバッグ用テクスチャにモード別描画.
+                    if(0 == debug_sub_mode)
+                    {
+                        // FineVoxel unique ID color.
+                        const float3 fine_voxel_id = floor(
+                            (hit_pos_ws -
+                             cb_instant_rdv.bbv.grid_min_pos) *
+                            (cb_instant_rdv.bbv.cell_size_inv * float(k_bbv_per_voxel_resolution)));
+                        debug_color.xyz = float3(
+                            noise_float_to_float(fine_voxel_id.xyzz),
+                            noise_float_to_float(fine_voxel_id.xzyy),
+                            noise_float_to_float(fine_voxel_id.xyzx));
+                    }
+                    else if(1 == debug_sub_mode)
+                    {
+                        // FineVoxel hit colored by its containing Brick ID.
+                        debug_color.xyz = float3(
+                            noise_float_to_float(hit_voxel_index),
+                            noise_float_to_float(hit_voxel_index * 2),
+                            noise_float_to_float(hit_voxel_index * 3));
+
+                        // 簡易フォグ.
+                        debug_color.xyz = lerp(debug_color.xyz, float3(1,1,1), fog_rate0 * 0.8);
+                        debug_color.xyz = lerp(debug_color.xyz, float3(0.1,0.1,1), fog_rate1 * 0.8);
+                    }
+                    else if(3 == debug_sub_mode)
+                    {
+                        // Bbvセルの深度を可視化.
+                        debug_color.xyz = float3(saturate(curr_ray_t_ws.x/100.0), saturate(curr_ray_t_ws.x/100.0), saturate(curr_ray_t_ws.x/100.0));
+                    }
                 }
             }
             RWTexWork[dtid.xy] = debug_color;
@@ -156,12 +207,21 @@ void main_cs(
             float4 debug_color = float4(0, 0, 1, 0);
             if(0.0 <= curr_ray_t_ws.x)
             {
-                // Brick IDを可視化.
-                debug_color.xyz = float4(noise_float_to_float(hit_voxel_index), noise_float_to_float(hit_voxel_index*2), noise_float_to_float(hit_voxel_index*3), 1);
-                
-                // 簡易フォグ.
-                debug_color.xyz = lerp(debug_color.xyz, float3(1,1,1), pow(saturate((curr_ray_t_ws.x - 20.0)/100.0), 1.0/1.2) * 0.8);
-                debug_color.xyz = lerp(debug_color.xyz, float3(0.1,0.1,1), saturate((curr_ray_t_ws.x - 70.0)/500.0) * 0.8);
+                const float3 hit_pos_ws =
+                    view_origin + ray_dir_ws * curr_ray_t_ws.x;
+                if(!bbv_debug_depth_test(hit_pos_ws, texel_pos))
+                {
+                    debug_color = float4(0.01, 0.01, 0.01, 1.0);
+                }
+                else
+                {
+                    // Brick IDを可視化.
+                    debug_color.xyz = float3(noise_float_to_float(hit_voxel_index), noise_float_to_float(hit_voxel_index*2), noise_float_to_float(hit_voxel_index*3));
+
+                    // 簡易フォグ.
+                    debug_color.xyz = lerp(debug_color.xyz, float3(1,1,1), pow(saturate((curr_ray_t_ws.x - 20.0)/100.0), 1.0/1.2) * 0.8);
+                    debug_color.xyz = lerp(debug_color.xyz, float3(0.1,0.1,1), saturate((curr_ray_t_ws.x - 70.0)/500.0) * 0.8);
+                }
             }
             RWTexWork[dtid.xy] = debug_color;
         }
@@ -203,9 +263,18 @@ void main_cs(
             float3 debug_color = float3(0.0, 0.0, 0.0);
             if(0.0 <= curr_ray_t_ws.x)
             {
-                const BbvOptionalData voxel_optional_data = BitmaskBrickVoxelOptionData[hit_voxel_index];
-                debug_color = voxel_optional_data.resolved_radiance / (1.0 + voxel_optional_data.resolved_radiance);
-                debug_color = pow(max(debug_color, 0.0.xxx), 1.0 / 2.2);
+                const float3 hit_pos_ws =
+                    view_origin + ray_dir_ws * curr_ray_t_ws.x;
+                if(!bbv_debug_depth_test(hit_pos_ws, texel_pos))
+                {
+                    debug_color = float3(0.01, 0.01, 0.01);
+                }
+                else
+                {
+                    const BbvOptionalData voxel_optional_data = BitmaskBrickVoxelOptionData[hit_voxel_index];
+                    debug_color = voxel_optional_data.resolved_radiance / (1.0 + voxel_optional_data.resolved_radiance);
+                    debug_color = pow(max(debug_color, 0.0.xxx), 1.0 / 2.2);
+                }
             }
             RWTexWork[dtid.xy] = float4(debug_color, 1.0);
         }
@@ -221,6 +290,7 @@ void main_cs(
             uint surface_brick_index = 0u;
             uint3 surface_fine_coord = 0u.xxx;
             float surface_hit_distance = 0.0;
+            float3 surface_hit_pos_ws = 0.0.xxx;
 
             [loop]
             for(uint attempt = 0u;
@@ -254,6 +324,7 @@ void main_cs(
                     surface_fine_coord))
                 {
                     found_surface = true;
+                    surface_hit_pos_ws = hit_pos_ws;
                     surface_hit_distance =
                         k_trace_distance - remaining_distance + hit_ray_t.x;
                     break;
@@ -265,6 +336,11 @@ void main_cs(
                     break;
                 search_origin_ws += ray_dir_ws * advance_distance;
                 remaining_distance -= advance_distance;
+            }
+            if(found_surface &&
+               !bbv_debug_depth_test(surface_hit_pos_ws, texel_pos))
+            {
+                found_surface = false;
             }
 
             if(!found_surface)

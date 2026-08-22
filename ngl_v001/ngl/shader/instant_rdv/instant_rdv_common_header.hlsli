@@ -366,6 +366,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         int debug_view_category NGL_CPP_MEMBER_INIT({-1});
         
         int debug_bbv_probe_mode NGL_CPP_MEMBER_INIT({-1});
+        int debug_bbv_depth_test_enable NGL_CPP_MEMBER_INIT({0});
         int debug_fsp_probe_mode NGL_CPP_MEMBER_INIT({-1});
         int debug_fsp_irradiance_volume_mode NGL_CPP_MEMBER_INIT({-1});
         int debug_fsp_probe_use_relocated_pos NGL_CPP_MEMBER_INIT({1});
