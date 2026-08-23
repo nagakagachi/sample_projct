@@ -157,14 +157,15 @@ void main_cs(
                 {
                     const float fog_rate0 = pow(saturate((curr_ray_t_ws.x - 20.0)/100.0), 1.0/1.2);
                     const float fog_rate1 = saturate((curr_ray_t_ws.x - 70.0)/500.0);
+                    const float3 color_sample_pos_ws =
+                        view_origin + ray_dir_ws * (curr_ray_t_ws.x + 0.001);
 
                     // デバッグ用テクスチャにモード別描画.
                     if(0 == debug_sub_mode)
                     {
-                        // FineVoxel unique ID color.
+                        // World-space FineVoxel ID color. Storage/Toroidal座標は使用しない.
                         const float3 fine_voxel_id = floor(
-                            (hit_pos_ws -
-                             cb_instant_rdv.bbv.grid_min_pos) *
+                            color_sample_pos_ws *
                             (cb_instant_rdv.bbv.cell_size_inv * float(k_bbv_per_voxel_resolution)));
                         debug_color.xyz = float3(
                             noise_float_to_float(fine_voxel_id.xyzz),
@@ -173,7 +174,7 @@ void main_cs(
                     }
                     else if(1 == debug_sub_mode)
                     {
-                        // FineVoxel hit colored by its containing Brick ID.
+                        // Storage/Toroidal Brick ID color.
                         debug_color.xyz = float3(
                             noise_float_to_float(hit_voxel_index),
                             noise_float_to_float(hit_voxel_index * 2),
@@ -215,8 +216,11 @@ void main_cs(
                 }
                 else
                 {
-                    // Brick IDを可視化.
-                    debug_color.xyz = float3(noise_float_to_float(hit_voxel_index), noise_float_to_float(hit_voxel_index*2), noise_float_to_float(hit_voxel_index*3));
+                    // Storage/Toroidal Brick IDを可視化.
+                    debug_color.xyz = float3(
+                        noise_float_to_float(hit_voxel_index),
+                        noise_float_to_float(hit_voxel_index * 2),
+                        noise_float_to_float(hit_voxel_index * 3));
 
                     // 簡易フォグ.
                     debug_color.xyz = lerp(debug_color.xyz, float3(1,1,1), pow(saturate((curr_ray_t_ws.x - 20.0)/100.0), 1.0/1.2) * 0.8);
