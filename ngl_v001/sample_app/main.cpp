@@ -111,6 +111,8 @@ class PlayerController
 {
 private:
     bool prev_mouse_r_ = false;
+    bool prev_shift_ = false;
+    bool slow_camera_control_ = false;
 
 public:
     ngl::math::Mat33 camera_pose_{};
@@ -595,23 +597,16 @@ bool AppGame::Initialize()
                 ngl::gfx::ResMeshData::LoadDesc loaddesc{};
 
                 ngl::math::Mat44 tr = ngl::math::Mat44::Identity();
-#if 0
-                // 蜘蛛
-                constexpr int tessellation_level = 4;  // 0で無効、1以上で有効.
-                mc->Initialize(&device, &gfx_scene_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device, mesh_file_spider, &loaddesc), {}, tessellation_level);
-                tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 3.0f, 1.0f));
-#else
-                constexpr int tessellation_level = 9;
+                constexpr int tessellation_level = 9;  // 0で無効、1以上で有効.
 #if 1
-                mc->Initialize(&device, &gfx_scene_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device, mesh_file_spider, &loaddesc), procedural_mesh_data, tessellation_level);
-#else
+                // 蜘蛛
                 mc->Initialize(&device, &gfx_scene_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device, mesh_file_spider, &loaddesc), {}, tessellation_level);
-                tr.SetDiagonal(ngl::math::Vec4(60.0f));
-                tr = ngl::math::Mat44::RotAxisY(ngl::math::k_pi_f * 0.1f) * ngl::math::Mat44::RotAxisZ(ngl::math::k_pi_f * -0.15f) * ngl::math::Mat44::RotAxisX(ngl::math::k_pi_f * 0.65f) * tr;
-#endif
-#endif
+                tr.SetDiagonal(ngl::math::Vec4(spider_base_scale * 9.0f));
+                tr.SetColumn3(ngl::math::Vec4(-8.0f, 12.0f, 2.0f, 0.0f));
+#else
+                mc->Initialize(&device, &gfx_scene_, ResourceMan.LoadResource<ngl::gfx::ResMeshData>(&device, mesh_file_spider, &loaddesc), procedural_mesh_data, tessellation_level);
                 tr.SetColumn3(ngl::math::Vec4(0.0f, 10.0f, 0.0f, 0.0f));
-
+#endif
                 mc->SetTransform(ngl::math::Mat34(tr));
             }
 #endif
@@ -1216,7 +1211,15 @@ void AppGame::RenderApp(ngl::fwk::RtgFrameRenderSubmitCommandBuffer& out_rtg_com
 
 void PlayerController::UpdateFrame(ngl::platform::CoreWindow& window, float delta_sec, const ngl::math::Mat33& prev_camera_pose, const ngl::math::Vec3& prev_camera_pos)
 {
-    float camera_translate_speed = dbgw_camera_speed;
+    const bool shift_pressed = window.Dep().GetVirtualKeyState()[VK_SHIFT] != 0;
+    if (shift_pressed && !prev_shift_)
+    {
+        slow_camera_control_ = !slow_camera_control_;
+    }
+    prev_shift_ = shift_pressed;
+
+    const float camera_control_speed_scale = slow_camera_control_ ? 0.25f : 1.0f;
+    float camera_translate_speed = dbgw_camera_speed * camera_control_speed_scale;
 
     const auto mouse_pos       = window.Dep().GetMousePosition();
     const auto mouse_pos_delta = window.Dep().GetMousePositionDelta();
@@ -1260,7 +1263,7 @@ void PlayerController::UpdateFrame(ngl::platform::CoreWindow& window, float delt
             if (true)
             {
                 // 適当に回転量へ.
-                const auto rot_rad = ngl::math::k_pi_f * mouse_diff * 0.001f;
+                const auto rot_rad = ngl::math::k_pi_f * mouse_diff * 0.001f * camera_control_speed_scale;
                 auto rot_yaw       = ngl::math::Mat33::RotAxisY(rot_rad.x);
                 auto rot_pitch     = ngl::math::Mat33::RotAxisX(rot_rad.y);
                 // 回転.
