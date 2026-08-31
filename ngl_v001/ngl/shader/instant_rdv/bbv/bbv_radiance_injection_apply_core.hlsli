@@ -6,11 +6,21 @@
 #ifndef NGL_INSTANT_RDV_RADIANCE_ENABLE_SHORT_RAY_FALLBACK
     #define NGL_INSTANT_RDV_RADIANCE_ENABLE_SHORT_RAY_FALLBACK 0
 #endif
+// MainView縮小Surface経路の切替。
+// 1: 縮小Surface Sample (view Z / oct法線 / 信頼度) を入力とし、
+//    Occupancy注入と同一のサーフェイス位置・オフセット方向へRadianceを注入する。
+// 0: 従来通りフル解像度Depthを2x2 tile位相で読むLegacy経路。
+#ifndef NGL_INSTANT_RDV_RADIANCE_USE_REDUCED_SURFACE
+    #define NGL_INSTANT_RDV_RADIANCE_USE_REDUCED_SURFACE 0
+#endif
 
 ConstantBuffer<BbvSurfaceInjectionViewInfo> cb_injection_src_view_info;
 
 Texture2D TexHardwareDepth;
 Texture2D<float4> TexInputRadiance;
+#if NGL_INSTANT_RDV_RADIANCE_USE_REDUCED_SURFACE
+Texture2D<float4> TexReducedSurfaceBuffer;
+#endif
 
 bool bbv_try_calc_voxel_index_from_pos_ws(float3 pos_ws, out uint voxel_index)
 {
@@ -71,6 +81,68 @@ void main_cs(
 )
 {
     const int2 src_resolution = cb_injection_src_view_info.cb_view_depth_buffer_offset_size.zw;
+#if NGL_INSTANT_RDV_RADIANCE_USE_REDUCED_SURFACE
+    // 縮小Surface経路:
+    // 1 threadが縮小テクスチャの1 texelを担当する (フル解像度の1/16スレッド数)。
+    // tile位相によるgroup間引きは行わず、Jitterは縮小バッファ生成側が担う。
+    uint sample_width;
+    uint sample_height;
+    TexReducedSurfaceBuffer.GetDimensions(sample_width, sample_height);
+    if(any(dtid.xy >= uint2(sample_width, sample_height)))
+    {
+        return;
+    }
+
+    // x=view Z, yz=world法線oct, w=法線信頼度。
+    // view Z <= 0 は「無効Depth (スカイ等)」として生成側が書いたsentinel。
+    const float4 surface_sample =
+        TexReducedSurfaceBuffer.Load(int3(dtid.xy, 0));
+    if(surface_sample.x <= 0.0)
+    {
+        return;
+    }
+    // 縮小バッファ生成時と同じJitter規則で、このtexelの元となった
+    // フル解像度texelを逆算する。入力Radianceの読み出し位置と
+    // サーフェイス位置復元のUVを、生成時のsample点と厳密に一致させるため。
+    const int2 src_texel_in_view = int2(
+        ReducedSurfaceBufferSourceTexel(
+            dtid.xy,
+            uint2(src_resolution),
+            cb_instant_rdv.frame_count));
+    const int2 src_texel =
+        src_texel_in_view +
+        cb_injection_src_view_info.cb_view_depth_buffer_offset_size.xy;
+    const float2 screen_uv =
+        (float2(src_texel_in_view) + 0.5.xx) /
+        float2(src_resolution);
+    const float3 pos_vs = CalcViewSpacePosition(
+        screen_uv,
+        surface_sample.x,
+        cb_injection_src_view_info.cb_proj_mtx);
+    float3 pos_ws = mul(
+        cb_injection_src_view_info.cb_view_inv_mtx,
+        float4(pos_vs, 1.0));
+    const float pos_len_sq = dot(pos_vs, pos_vs);
+    const float3 view_ray_vs = pos_len_sq > 1e-10
+        ? pos_vs * rsqrt(pos_len_sq)
+        : float3(0.0, 0.0, 1.0);
+    const float3 view_ray_ws = normalize(mul(
+        cb_injection_src_view_info.cb_view_inv_mtx,
+        float4(view_ray_vs, 0.0)));
+    // オフセット方向は法線信頼度でブレンドする。
+    //   信頼度1: 法線の奥方向 (-normal)。斜め見下ろし等でもボクセルと一致しやすい。
+    //   信頼度0: View奥方向へフォールバック (法線推定失敗時)。
+    // Occupancy注入 (reduced_surface版) と同一の方向・距離を使うことで、
+    // Radianceが必ずOccupancyと同じFineVoxelへ注入されるようにする。
+    const float3 surface_normal_ws =
+        normalize(OctDecode(surface_sample.yz));
+    float3 ray_dir_ws = normalize(lerp(
+        view_ray_ws,
+        -surface_normal_ws,
+        saturate(surface_sample.w)));
+    pos_ws += ray_dir_ws *
+        cb_instant_rdv.bbv_occupancy_injection_world_offset;
+#else
     const int2 group_grid_resolution = bbv_radiance_injection_group_grid_resolution(src_resolution);
     if(any(int2(gid.xy) >= group_grid_resolution))
     {
@@ -103,12 +175,10 @@ void main_cs(
     // 始点は従来通り pixel world position を使う。
     float3 pos_ws = mul(cb_injection_src_view_info.cb_view_inv_mtx, float4(CalcViewSpacePosition(screen_uv, view_z, cb_injection_src_view_info.cb_proj_mtx), 1.0));
 
-    const bool use_surface_brick_pool_position =
-        cb_injection_src_view_info.cb_is_main_view != 0 &&
-        cb_injection_src_view_info.cb_padding0.x != 0;
     float3 ray_dir_ws = 0.0.xxx;
-    if(!use_surface_brick_pool_position)
     {
+        // Legacy経路: 縮小Surfaceの法線情報は無いため、
+        // 従来通りView ray方向 (カメラ→pixel) の奥側へ固定オフセットする。
         const float2 near_far_plane_d =
             GetNearFarPlaneDepthFromProjectionMatrix(
                 cb_injection_src_view_info.cb_proj_mtx);
@@ -130,6 +200,7 @@ void main_cs(
                 cb_instant_rdv.bbv_occupancy_injection_world_offset;
         }
     }
+#endif
 
     uint voxel_index = 0;
     if(!bbv_try_calc_voxel_index_from_pos_ws(pos_ws, voxel_index))

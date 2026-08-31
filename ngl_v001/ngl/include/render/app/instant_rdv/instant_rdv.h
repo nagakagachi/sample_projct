@@ -187,7 +187,9 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_begin_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_begin_view_update_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_reduced_surface_buffer_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_injection_apply_short_ray_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_injection_apply_reduced_surface_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_radiance_resolve_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_brick_count_aggregate_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_element_update_ = {};
@@ -195,22 +197,14 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_carving_indirect_arg_build_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_integrated_surface_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_occupancy_injection_apply_reduced_surface_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_carving_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_removal_carving_surface_pool_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_clear_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_build_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_candidate_indirect_arg_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_allocate_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_merge_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_indirect_arg_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_inject_ = {};
-        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_bbv_surface_brick_pool_to_fsp_mask_ = {};
 
 
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_debug_stats_collect_ = {};
-        // FSP SurfaceCellMaskのclear -> Legacy/Pool surface injection -> compact.
+        // FSP SurfaceCellMaskのclear -> surface injection -> compact.
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
@@ -251,13 +245,7 @@ namespace ngl::render::app
         ComputeBufferSet bbv_buffer_ = {};
         ComputeBufferSet bbv_optional_data_buffer_ = {};
         ComputeBufferSet bbv_radiance_accum_buffer_ = {};
-        ComputeBufferSet bbv_surface_brick_pool_state_buffer_ = {};
-        ComputeBufferSet bbv_surface_brick_pool_buffer_ = {};
-        ComputeBufferSet bbv_surface_brick_pool_candidate_buffer_ = {};
-        ComputeBufferSet bbv_surface_brick_pool_candidate_indirect_arg_ = {};
-        ComputeBufferSet bbv_surface_brick_pool_indirect_arg_ = {};
-        ComputeBufferSet bbv_surface_brick_pool_debug_buffer_ = {};
-        ngl::u32 bbv_surface_brick_pool_candidate_capacity_ = {};
+        ComputeTextureSet reduced_surface_buffer_tex_ = {};
 
         ngl::u32     bbv_hollow_voxel_list_count_max_ = {};
         ngl::u32     bbv_fine_update_voxel_count_max_ = {};
@@ -299,8 +287,6 @@ namespace ngl::render::app
         ComputeBufferSet fsp_irradiance_volume_sh_buffer_ = {};
         ComputeBufferSet fsp_debug_stats_buffer_ = {};
         rhi::RefBufferDep fsp_debug_stats_readback_buffer_ = {};
-        rhi::RefBufferDep bbv_surface_brick_pool_readback_buffer_ = {};
-        rhi::RefBufferDep bbv_surface_brick_pool_debug_readback_buffer_ = {};
 
         
         ComputeTextureSet assp_probe_tile_info_tex_[2] = {}; // f16_rgba, 1/4解像度のASSPタイル情報.
@@ -358,11 +344,7 @@ namespace ngl::render::app
         static int dbg_fsp_allocated_probe_count_;
         static int dbg_fsp_active_probe_count_;
         static int dbg_fsp_visible_surface_cell_count_;
-        static int dbg_bbv_surface_brick_pool_unique_count_;
-        static int dbg_bbv_surface_brick_pool_overflow_count_;
-        static int dbg_bbv_surface_brick_pool_contention_count_;
-        static int dbg_bbv_surface_brick_pool_capacity_;
-        static bool dbg_bbv_surface_brick_pool_enable_;
+        static bool dbg_main_view_reduced_surface_enable_;
         static bool dbg_fsp_debug_readback_enable_;
         static int dbg_assp_total_ray_count_;
         static int dbg_assp_probe_count_;

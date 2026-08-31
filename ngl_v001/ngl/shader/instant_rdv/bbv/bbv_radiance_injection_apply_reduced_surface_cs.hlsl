@@ -1,0 +1,3 @@
+#define NGL_INSTANT_RDV_RADIANCE_ENABLE_SHORT_RAY_FALLBACK 1
+#define NGL_INSTANT_RDV_RADIANCE_USE_REDUCED_SURFACE 1
+#include "bbv_radiance_injection_apply_core.hlsli"

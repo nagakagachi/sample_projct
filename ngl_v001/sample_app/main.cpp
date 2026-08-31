@@ -191,6 +191,7 @@ struct BenchmarkCliOptions
     std::string output_dir = "artifacts\\perf\\latest";
     std::string tag = {};
     std::string view_location = "startup";
+    int main_view_reduced_surface = -1;
 };
 static BenchmarkCliOptions g_benchmark_cli = {};
 
@@ -482,13 +483,26 @@ static void ParseCommandLineArgs(int argc, char** argv)
             g_benchmark_cli.view_location = argv[++i];
             g_benchmark_cli.enabled = true;
         }
+        else if (arg == "--main-view-reduced-surface" && (i + 1) < argc)
+        {
+            const std::string value = argv[++i] ? argv[i] : "";
+            if(value == "on")
+            {
+                g_benchmark_cli.main_view_reduced_surface = 1;
+            }
+            else if(value == "off")
+            {
+                g_benchmark_cli.main_view_reduced_surface = 0;
+            }
+        }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout
                 << "Usage: sample_app [--benchmark] [--benchmark-warmup N] [--benchmark-measure N] "
                 << "[--benchmark-start-timeout-sec S] [--benchmark-min-ready-sec S] "
                 << "[--benchmark-output PATH] [--benchmark-tag LABEL] [--benchmark-view startup|gbuffer]" << std::endl
-                << "       [--benchmark-ready-delta-frames N]" << std::endl
+                << "       [--benchmark-ready-delta-frames N] "
+                << "[--main-view-reduced-surface on|off]" << std::endl
                 << "  benchmark aliases: benchmark / bench / perf-run / ベンチマーク" << std::endl;
         }
     }
@@ -955,6 +969,12 @@ void AppGame::ConfigureBenchmarkFromCli()
     prev_camera_pos_ = camera_pos_;
     prev_camera_pose_ = camera_pose_;
     dbgw_applied_measurement_view_location = dbgw_measurement_view_location;
+    if(g_benchmark_cli.main_view_reduced_surface >= 0)
+    {
+        ngl::render::app::InstantRasterDerivedVoxelScene::
+            dbg_main_view_reduced_surface_enable_ =
+                g_benchmark_cli.main_view_reduced_surface != 0;
+    }
 
     // ベンチマーク実行時はUI操作依存を外す.
     dbgw_test_window_enable = false;
@@ -1122,6 +1142,20 @@ bool AppGame::SaveBenchmarkReport() const
         ofs << "  \"measure_frames_target\": " << benchmark_measure_frames_ << ",\n";
         ofs << "  \"measure_frames_captured\": " << benchmark_captured_frame_counter_ << ",\n";
         ofs << "  \"app_frames_total\": " << benchmark_app_frame_counter_ << ",\n";
+        ofs << "  \"main_view_reduced_surface\": "
+            << (ngl::render::app::InstantRasterDerivedVoxelScene::
+                    dbg_main_view_reduced_surface_enable_
+                    ? "true"
+                    : "false")
+            << ",\n";
+        ofs << "  \"fsp_visible_surface_cell_count\": "
+            << ngl::render::app::InstantRasterDerivedVoxelScene::
+                dbg_fsp_visible_surface_cell_count_
+            << ",\n";
+        ofs << "  \"fsp_active_probe_count\": "
+            << ngl::render::app::InstantRasterDerivedVoxelScene::
+                dbg_fsp_active_probe_count_
+            << ",\n";
         ofs << "  \"markers\": [\n";
         for (size_t i = 0; i < summaries.size(); ++i)
         {

@@ -7,61 +7,10 @@
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 Texture2D<float> TexHardwareDepth;
-Buffer<uint> BbvSurfaceBrickPoolBuffer;
-Buffer<uint> BbvSurfaceBrickPoolStateBuffer;
+Texture2D<float4> TexReducedSurfaceBuffer;
+SamplerState SmpReducedSurfaceBuffer;
 
 RWTexture2D<float4>	RWTexWork;
-
-bool try_get_surface_pool_fine_voxel(
-    float3 pos_ws,
-    out uint out_brick_index,
-    out uint3 out_fine_coord)
-{
-    const float3 voxel_coordf =
-        (pos_ws - cb_instant_rdv.bbv.grid_min_pos) *
-        cb_instant_rdv.bbv.cell_size_inv;
-    const int3 voxel_coord = int3(floor(voxel_coordf));
-    if(any(voxel_coord < 0) ||
-       any(voxel_coord >= cb_instant_rdv.bbv.grid_resolution))
-    {
-        out_brick_index = 0u;
-        out_fine_coord = 0u.xxx;
-        return false;
-    }
-
-    const int3 toroidal_coord = voxel_coord_toroidal_mapping(
-        voxel_coord,
-        cb_instant_rdv.bbv.grid_toroidal_offset,
-        cb_instant_rdv.bbv.grid_resolution);
-    const uint brick_index = BbvPhysicalVoxelCoordToMortonIndex(
-        toroidal_coord,
-        cb_instant_rdv.bbv.grid_resolution);
-    const uint packed_state = BbvSurfaceBrickPoolStateBuffer[brick_index];
-    const uint state_generation = packed_state >> 16u;
-    const uint pool_index = packed_state & 0xffffu;
-    const uint current_generation =
-        max(1u, cb_instant_rdv.frame_count & 0xffffu);
-
-    out_brick_index = brick_index;
-    out_fine_coord = uint3(
-        saturate(frac(voxel_coordf)) *
-        float(k_bbv_per_voxel_resolution));
-    if(state_generation != current_generation ||
-       pool_index == 0u ||
-       pool_index > (uint)k_bbv_surface_brick_pool_capacity)
-    {
-        return false;
-    }
-
-    const uint entry_address = 1u +
-        (pool_index - 1u) *
-        (uint)k_bbv_surface_brick_pool_entry_u32_count;
-    uint mask_word = 0u;
-    uint mask_bit = 0u;
-    calc_bbv_bitcell_info(mask_word, mask_bit, out_fine_coord);
-    return 0u != (BbvSurfaceBrickPoolBuffer[
-        entry_address + 1u + mask_word] & (1u << mask_bit));
-}
 
 bool bbv_debug_depth_test(float3 hit_pos_ws, int2 texel_pos)
 {
@@ -131,6 +80,43 @@ void main_cs(
     // Category 0: BBV.
     if(0 == debug_category)
     {
+        if(6 == debug_sub_mode || 7 == debug_sub_mode)
+        {
+            if(0 == cb_instant_rdv.main_view_reduced_surface_enable)
+            {
+                RWTexWork[dtid.xy] = float4(0.0, 0.0, 0.0, 1.0);
+                return;
+            }
+
+            const float4 surface_sample =
+                TexReducedSurfaceBuffer.SampleLevel(
+                    SmpReducedSurfaceBuffer,
+                    screen_uv,
+                    0.0);
+            if(surface_sample.x <= 0.0)
+            {
+                RWTexWork[dtid.xy] = float4(0.0, 0.0, 0.0, 1.0);
+                return;
+            }
+
+            if(6 == debug_sub_mode)
+            {
+                const float3 normal_ws = normalize(
+                    OctDecode(surface_sample.yz));
+                RWTexWork[dtid.xy] = float4(
+                    normal_ws * 0.5 + 0.5,
+                    1.0);
+            }
+            else
+            {
+                const float confidence = saturate(surface_sample.w);
+                RWTexWork[dtid.xy] = float4(
+                    confidence.xxx,
+                    1.0);
+            }
+            return;
+        }
+
         if((0 == debug_sub_mode) || (1 == debug_sub_mode) || (3 == debug_sub_mode))
         {
             // Voxel単位Traceのテスト.
@@ -281,91 +267,6 @@ void main_cs(
                 }
             }
             RWTexWork[dtid.xy] = float4(debug_color, 1.0);
-        }
-        else if(6 == debug_sub_mode)
-        {
-            // BBV本体を通過し、SurfaceBrickPoolに属するFineVoxelだけを検索する。
-            const uint k_surface_trace_attempt_count = 32u;
-            const float k_trace_distance = 10000.0;
-            const float k_trace_advance_epsilon = 1e-3;
-            float3 search_origin_ws = view_origin;
-            float remaining_distance = k_trace_distance;
-            bool found_surface = false;
-            uint surface_brick_index = 0u;
-            uint3 surface_fine_coord = 0u.xxx;
-            float surface_hit_distance = 0.0;
-            float3 surface_hit_pos_ws = 0.0.xxx;
-
-            [loop]
-            for(uint attempt = 0u;
-                attempt < k_surface_trace_attempt_count &&
-                remaining_distance > 0.0;
-                ++attempt)
-            {
-                int hit_voxel_index = -1;
-                float4 debug_ray_info;
-                const float4 hit_ray_t = trace_bbv_dev(
-                    hit_voxel_index,
-                    debug_ray_info,
-                    search_origin_ws,
-                    ray_dir_ws,
-                    remaining_distance,
-                    cb_instant_rdv.bbv.grid_min_pos,
-                    cb_instant_rdv.bbv.cell_size,
-                    cb_instant_rdv.bbv.grid_resolution,
-                    cb_instant_rdv.bbv.grid_toroidal_offset,
-                    BitmaskBrickVoxel,
-                    false);
-                if(hit_ray_t.x < 0.0)
-                {
-                    break;
-                }
-
-                const float3 hit_pos_ws = search_origin_ws + ray_dir_ws * hit_ray_t.x;
-                if(try_get_surface_pool_fine_voxel(
-                    hit_pos_ws,
-                    surface_brick_index,
-                    surface_fine_coord))
-                {
-                    found_surface = true;
-                    surface_hit_pos_ws = hit_pos_ws;
-                    surface_hit_distance =
-                        k_trace_distance - remaining_distance + hit_ray_t.x;
-                    break;
-                }
-
-                const float advance_distance =
-                    max(hit_ray_t.x + k_trace_advance_epsilon, k_trace_advance_epsilon);
-                if(advance_distance >= remaining_distance)
-                    break;
-                search_origin_ws += ray_dir_ws * advance_distance;
-                remaining_distance -= advance_distance;
-            }
-            if(found_surface &&
-               !bbv_debug_depth_test(surface_hit_pos_ws, texel_pos))
-            {
-                found_surface = false;
-            }
-
-            if(!found_surface)
-            {
-                RWTexWork[dtid.xy] = float4(0.01, 0.01, 0.01, 1.0);
-            }
-            else
-            {
-                const float3 local_color =
-                    (float3(surface_fine_coord) + 0.5.xxx) /
-                    float(k_bbv_per_voxel_resolution);
-                const float3 fine_color = float3(
-                    noise_float_to_float(surface_fine_coord.x),
-                    noise_float_to_float(surface_fine_coord.y + 17u),
-                    noise_float_to_float(surface_fine_coord.z + 37u));
-                const float depth_fade = saturate(surface_hit_distance / 100.0);
-                RWTexWork[dtid.xy] = float4(
-                    lerp(fine_color * 0.45, fine_color, local_color) *
-                        (1.0 - depth_fade * 0.35),
-                    1.0);
-            }
         }
     }
     // Category 1: FSP.

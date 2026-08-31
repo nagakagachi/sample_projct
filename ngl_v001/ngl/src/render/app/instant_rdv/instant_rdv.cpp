@@ -37,14 +37,6 @@ namespace ngl::render::app
     static constexpr u32 k_max_update_probe_work_count = 1024;
     static constexpr float k_occupancy_injection_default_fine_cells = 2.0f;
     static constexpr size_t k_bbv_depth_cull_plane_count = 6;
-    static constexpr u32 k_bbv_surface_brick_pool_capacity_native =
-        k_bbv_surface_brick_pool_capacity;
-    static_assert(
-        k_bbv_surface_brick_pool_mask_word_count == 16,
-        "SurfaceBrickPool requires the BBV 8x8x8 uint[16] mask layout.");
-    static_assert(
-        k_bbv_surface_brick_pool_capacity_native < k_bbv_surface_brick_pool_state_reserved_index,
-        "SurfaceBrickPool capacity must leave packed state reservation values unused.");
 
     static std::array<math::Vec4, k_bbv_depth_cull_plane_count> CalcBbvFrustumPlanes(
         const math::Mat34& view_mat,
@@ -348,11 +340,7 @@ namespace ngl::render::app
     int InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_ = 0;
-    int InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_unique_count_ = 0;
-    int InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_overflow_count_ = 0;
-    int InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_contention_count_ = 0;
-    int InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_capacity_ = k_bbv_surface_brick_pool_capacity_native;
-    bool InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_enable_ = false;
+    bool InstantRasterDerivedVoxelScene::dbg_main_view_reduced_surface_enable_ = true;
     bool InstantRasterDerivedVoxelScene::dbg_fsp_debug_readback_enable_ = true;
     int InstantRasterDerivedVoxelScene::dbg_assp_total_ray_count_ = 0;
     int InstantRasterDerivedVoxelScene::dbg_assp_probe_count_ = 0;
@@ -390,10 +378,12 @@ namespace ngl::render::app
                 "Default: %.2f fine cells",
                 InstantRasterDerivedVoxelScene::dbg_bbv_occupancy_injection_fine_cells_default_);
             ImGui::Checkbox(
-                "MainView SurfaceBrickPool (Legacy/Pool)",
-                &InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_enable_);
+                "MainView Reduced Surface Sample",
+                &InstantRasterDerivedVoxelScene::dbg_main_view_reduced_surface_enable_);
             ImGui::TextDisabled(
-                "Pool: exact MainView Depth surface FineVoxel; Legacy keeps the offset path.");
+                "1/4 x 1/4 jittered Depth + approximate normal for Occupancy/FSP/Radiance.");
+            ImGui::TextDisabled(
+                "Carving and ShadowView keep the full-resolution Legacy path.");
             ImGui::TextDisabled("Removal Cull: conservative world-space Brick AABB");
             ImGui::Text("GI Update Target (linked): %s", InstantRdvGiSolutionModeName(dbg_gi_update_sample_mode_));
 
@@ -622,16 +612,6 @@ namespace ngl::render::app
                         ImGui::Text("Free Probes: %d", dbg_fsp_free_probe_count_);
                         ImGui::Text("Active Probes: %d", dbg_fsp_active_probe_count_);
                         ImGui::Text("Visible Surface Cells: %d", dbg_fsp_visible_surface_cell_count_);
-                        ImGui::Text(
-                            "SurfaceBrickPool: %d / %d",
-                            dbg_bbv_surface_brick_pool_unique_count_,
-                            dbg_bbv_surface_brick_pool_capacity_);
-                        ImGui::Text(
-                            "SurfaceBrickPool Overflow: %d",
-                            dbg_bbv_surface_brick_pool_overflow_count_);
-                        ImGui::Text(
-                            "SurfaceBrickPool CAS Contention: %d",
-                            dbg_bbv_surface_brick_pool_contention_count_);
                     }
 
                     if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
@@ -716,7 +696,7 @@ namespace ngl::render::app
                 // カテゴリ別サブモードスライダ.
                 if (0 <= dbg_view_category_)
                 {
-                    const int k_sub_mode_max[] = { 6, 1, 7 };
+                    const int k_sub_mode_max[] = { 7, 1, 7 };
                     auto get_sub_mode_description = [](int category, int sub_mode) -> const char*
                     {
                         switch(category)
@@ -730,7 +710,8 @@ namespace ngl::render::app
                             case 3: return "FineVoxel HitDepth";
                             case 4: return "Brick (Brick Color)";
                             case 5: return "TopDown Density";
-                            case 6: return "Surface FineVoxel";
+                            case 6: return "Reduced Surface Normal";
+                            case 7: return "Reduced Surface Confidence";
                             default: return "Unknown";
                             }
                         case 1: // FSP
@@ -770,6 +751,11 @@ namespace ngl::render::app
                         if (ImGui::Checkbox("Depth Test", &bbv_depth_test))
                             dbg_bbv_depth_test_enable_ = bbv_depth_test ? 1 : 0;
                         ImGui::TextDisabled("ON: MainView Depth SRVで遮蔽判定、OFF: 常に表示");
+                        if(dbg_view_sub_mode_ == 7 || dbg_view_sub_mode_ == 8)
+                        {
+                            ImGui::TextDisabled(
+                                "Requires MainView Reduced Surface Sample.");
+                        }
                     }
                 }
             }
@@ -787,15 +773,6 @@ namespace ngl::render::app
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_trace_indirect_arg_uav = "RWFspProbeTraceIndirectArg";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_result_srv = "FspProbeRayResultBuffer";
     constexpr InstantRdvShaderBindName k_shader_bind_name_fsp_probe_ray_result_uav = "RWFspProbeRayResultBuffer";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool = "BbvSurfaceBrickPoolBuffer";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_state = "BbvSurfaceBrickPoolStateBuffer";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_uav = "RWBbvSurfaceBrickPool";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_state_uav = "RWBbvSurfaceBrickPoolState";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_candidate = "BbvSurfaceBrickPoolCandidateBuffer";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_candidate_uav = "RWBbvSurfaceBrickPoolCandidate";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_candidate_indirect_arg = "RWBbvSurfaceBrickPoolCandidateIndirectArg";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_indirect_arg = "RWBbvSurfaceBrickPoolIndirectArg";
-    constexpr InstantRdvShaderBindName k_shader_bind_name_bbv_surface_brick_pool_debug = "RWBbvSurfaceBrickPoolDebug";
     constexpr InstantRdvShaderBindName k_shader_bind_name_asspprobe_srv = "AdaptiveScreenSpaceProbeTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_asspprobe_history_srv = "AdaptiveScreenSpaceProbeHistoryTex";
     constexpr InstantRdvShaderBindName k_shader_bind_name_asspprobe_uav = "RWAdaptiveScreenSpaceProbeTex";
@@ -884,10 +861,38 @@ namespace ngl::render::app
         assp_probe_ray_query_buffer_ = {};
         assp_probe_ray_result_buffer_ = {};
         assp_probe_total_ray_count_readback_buffer_ = {};
+        reduced_surface_buffer_tex_ = {};
         fsp_surface_cell_mask_buffer_ = {};
-        bbv_surface_brick_pool_candidate_buffer_ = {};
-        bbv_surface_brick_pool_candidate_capacity_ = 0u;
 
+        {
+            rhi::TextureDep::Desc desc = {};
+            desc.type = rhi::ETextureType::Texture2D;
+            desc.width =
+                (assp_probe_base_resolution_x +
+                 k_reduced_surface_buffer_downscale - 1) /
+                k_reduced_surface_buffer_downscale;
+            desc.height =
+                (assp_probe_base_resolution_y +
+                 k_reduced_surface_buffer_downscale - 1) /
+                k_reduced_surface_buffer_downscale;
+            desc.depth = 1;
+            desc.mip_count = 1;
+            desc.array_size = 1;
+            desc.format = rhi::EResourceFormat::Format_R32G32B32A32_FLOAT;
+            desc.sample_count = 1;
+            desc.bind_flag =
+                rhi::ResourceBindFlag::ShaderResource |
+                rhi::ResourceBindFlag::UnorderedAccess;
+            desc.initial_state = rhi::EResourceState::Common;
+
+            if(!reduced_surface_buffer_tex_.Initialize(
+                p_device,
+                desc,
+                "InstantRdv_ReducedSurfaceBuffer"))
+            {
+                return false;
+            }
+        }
         for(int i = 0; i < 2; ++i)
         {
             rhi::TextureDep::Desc desc = {};
@@ -1163,34 +1168,6 @@ namespace ngl::render::app
                 return false;
             }
         }
-        {
-            const uint64_t candidate_capacity =
-                uint64_t(assp_probe_base_resolution_x) *
-                uint64_t(assp_probe_base_resolution_y);
-            const uint64_t candidate_element_count =
-                1ull + candidate_capacity * 2ull;
-            if(candidate_capacity > uint64_t(std::numeric_limits<u32>::max()) ||
-               candidate_element_count > uint64_t(std::numeric_limits<u32>::max()))
-            {
-                std::cout << "[ERROR] SurfaceBrickPool candidate buffer size overflows u32." << std::endl;
-                return false;
-            }
-            bbv_surface_brick_pool_candidate_capacity_ =
-                static_cast<u32>(candidate_capacity);
-            if(!bbv_surface_brick_pool_candidate_buffer_.InitializeAsTyped(
-                   p_device,
-                   rhi::BufferDep::Desc{
-                       .element_byte_size = sizeof(uint32_t),
-                       .element_count = static_cast<u32>(candidate_element_count),
-                       .bind_flag = rhi::ResourceBindFlag::ShaderResource |
-                           rhi::ResourceBindFlag::UnorderedAccess,
-                       .heap_type = rhi::EResourceHeapType::Default},
-                   rhi::EResourceFormat::Format_R32_UINT,
-                   "InstantRdv_BbvSurfaceBrickPoolCandidate"))
-            {
-                return false;
-            }
-        }
         return true;
     }
 
@@ -1218,19 +1195,6 @@ namespace ngl::render::app
                 std::atoi(enable_fsp_debug_readback) != 0;
         }
         std::free(enable_fsp_debug_readback);
-
-        char* enable_surface_brick_pool = nullptr;
-        size_t enable_surface_brick_pool_length = 0;
-        if(_dupenv_s(
-               &enable_surface_brick_pool,
-               &enable_surface_brick_pool_length,
-               "NGL_BBV_SURFACE_BRICK_POOL") == 0 &&
-           enable_surface_brick_pool != nullptr)
-        {
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_enable_ =
-                std::atoi(enable_surface_brick_pool) != 0;
-        }
-        std::free(enable_surface_brick_pool);
 
         bbv_grid_updater_.Initialize(init_arg.voxel_resolution, init_arg.voxel_size);
 
@@ -1317,7 +1281,9 @@ namespace ngl::render::app
             pso_bbv_clear_  = CreateComputePSO("instant_rdv/bbv/bbv_clear_voxel_cs.hlsl");
             pso_bbv_begin_update_ = CreateComputePSO("instant_rdv/bbv/bbv_begin_update_cs.hlsl");
             pso_bbv_begin_view_update_ = CreateComputePSO("instant_rdv/bbv/bbv_begin_view_update_cs.hlsl");
+            pso_reduced_surface_buffer_build_ = CreateComputePSO("instant_rdv/reduced_surface_buffer_build_cs.hlsl");
             pso_bbv_radiance_injection_apply_short_ray_ = CreateComputePSO("instant_rdv/bbv/bbv_radiance_injection_apply_short_ray_cs.hlsl");
+            pso_bbv_radiance_injection_apply_reduced_surface_ = CreateComputePSO("instant_rdv/bbv/bbv_radiance_injection_apply_reduced_surface_cs.hlsl");
             pso_bbv_radiance_resolve_ = CreateComputePSO("instant_rdv/bbv/bbv_radiance_resolve_cs.hlsl");
             pso_bbv_brick_count_aggregate_ = CreateComputePSO("instant_rdv/bbv/bbv_brick_count_aggregate_cs.hlsl");
             pso_bbv_element_update_ = CreateComputePSO("instant_rdv/bbv/bbv_element_update_cs.hlsl");
@@ -1325,16 +1291,8 @@ namespace ngl::render::app
             pso_bbv_removal_carving_indirect_arg_build_ = CreateComputePSO("instant_rdv/bbv/bbv_removal_carving_indirect_arg_build_cs.hlsl");
             pso_bbv_occupancy_injection_apply_ = CreateComputePSO("instant_rdv/bbv/bbv_occupancy_injection_apply_cs.hlsl");
             pso_bbv_occupancy_injection_apply_integrated_surface_ = CreateComputePSO("instant_rdv/bbv/bbv_occupancy_injection_apply_integrated_surface_cs.hlsl");
+            pso_bbv_occupancy_injection_apply_reduced_surface_ = CreateComputePSO("instant_rdv/bbv/bbv_occupancy_injection_apply_reduced_surface_cs.hlsl");
             pso_bbv_removal_carving_ = CreateComputePSO("instant_rdv/bbv/bbv_removal_carving_cs.hlsl");
-            pso_bbv_removal_carving_surface_pool_ = CreateComputePSO("instant_rdv/bbv/bbv_removal_carving_surface_pool_cs.hlsl");
-            pso_bbv_surface_brick_pool_clear_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_clear_cs.hlsl");
-            pso_bbv_surface_brick_pool_build_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_build_cs.hlsl");
-            pso_bbv_surface_brick_pool_candidate_indirect_arg_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_candidate_indirect_arg_cs.hlsl");
-            pso_bbv_surface_brick_pool_allocate_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_allocate_cs.hlsl");
-            pso_bbv_surface_brick_pool_merge_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_merge_cs.hlsl");
-            pso_bbv_surface_brick_pool_indirect_arg_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_indirect_arg_cs.hlsl");
-            pso_bbv_surface_brick_pool_inject_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_inject_cs.hlsl");
-            pso_bbv_surface_brick_pool_to_fsp_mask_ = CreateComputePSO("instant_rdv/bbv/bbv_surface_brick_pool_to_fsp_mask_cs.hlsl");
 
             pso_fsp_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_clear_voxel_cs.hlsl");
             pso_fsp_begin_update_ = CreateComputePSO("instant_rdv/fsp/fsp_begin_update_cs.hlsl");
@@ -1470,94 +1428,6 @@ namespace ngl::render::app
                                                .heap_type = rhi::EResourceHeapType::Default},
                                            rhi::EResourceFormat::Format_R32_UINT
                                         ,   "InstantRdv_BbvBuffer");
-        }
-        {
-            const uint64_t pool_element_count =
-                1ull +
-                uint64_t(k_bbv_surface_brick_pool_capacity_native) *
-                    uint64_t(k_bbv_surface_brick_pool_entry_u32_count);
-            if(pool_element_count > uint64_t(std::numeric_limits<u32>::max()))
-            {
-                std::cout << "[ERROR] SurfaceBrickPool buffer size overflows u32." << std::endl;
-                return false;
-            }
-            if(!bbv_surface_brick_pool_state_buffer_.InitializeAsTyped(
-                   p_device,
-                   rhi::BufferDep::Desc{
-                       .element_byte_size = sizeof(uint32_t),
-                       .element_count = voxel_count,
-                       .bind_flag = rhi::ResourceBindFlag::ShaderResource |
-                           rhi::ResourceBindFlag::UnorderedAccess,
-                       .heap_type = rhi::EResourceHeapType::Default},
-                   rhi::EResourceFormat::Format_R32_UINT,
-                   "InstantRdv_BbvSurfaceBrickPoolState"))
-            {
-                return false;
-            }
-            if(!bbv_surface_brick_pool_buffer_.InitializeAsTyped(
-                   p_device,
-                   rhi::BufferDep::Desc{
-                       .element_byte_size = sizeof(uint32_t),
-                       .element_count = static_cast<u32>(pool_element_count),
-                       .bind_flag = rhi::ResourceBindFlag::ShaderResource |
-                           rhi::ResourceBindFlag::UnorderedAccess,
-                       .heap_type = rhi::EResourceHeapType::Default},
-                   rhi::EResourceFormat::Format_R32_UINT,
-                   "InstantRdv_BbvSurfaceBrickPool"))
-            {
-                return false;
-            }
-            if(!bbv_surface_brick_pool_indirect_arg_.InitializeAsTyped(
-                   p_device,
-                   rhi::BufferDep::Desc{
-                       .element_byte_size = sizeof(uint32_t),
-                       .element_count = 3u,
-                       .bind_flag = rhi::ResourceBindFlag::UnorderedAccess |
-                           rhi::ResourceBindFlag::IndirectArg,
-                       .heap_type = rhi::EResourceHeapType::Default},
-                   rhi::EResourceFormat::Format_R32_UINT,
-                   "InstantRdv_BbvSurfaceBrickPoolIndirectArg"))
-            {
-                return false;
-            }
-            if(!bbv_surface_brick_pool_candidate_indirect_arg_.InitializeAsTyped(
-                   p_device,
-                   rhi::BufferDep::Desc{
-                       .element_byte_size = sizeof(uint32_t),
-                       .element_count = 3u,
-                       .bind_flag = rhi::ResourceBindFlag::UnorderedAccess |
-                           rhi::ResourceBindFlag::IndirectArg,
-                       .heap_type = rhi::EResourceHeapType::Default},
-                   rhi::EResourceFormat::Format_R32_UINT,
-                   "InstantRdv_BbvSurfaceBrickPoolCandidateIndirectArg"))
-            {
-                return false;
-            }
-            if(!bbv_surface_brick_pool_debug_buffer_.InitializeAsTyped(
-                   p_device,
-                   rhi::BufferDep::Desc{
-                       .element_byte_size = sizeof(uint32_t),
-                       .element_count = 2u,
-                       .bind_flag = rhi::ResourceBindFlag::UnorderedAccess,
-                       .heap_type = rhi::EResourceHeapType::Default},
-                   rhi::EResourceFormat::Format_R32_UINT,
-                   "InstantRdv_BbvSurfaceBrickPoolDebug"))
-            {
-                return false;
-            }
-            if(!InitializeReadbackBuffer(
-                   p_device,
-                   bbv_surface_brick_pool_readback_buffer_,
-                   bbv_surface_brick_pool_buffer_.buffer->GetDesc(),
-                   "InstantRdv_BbvSurfaceBrickPoolReadback") ||
-               !InitializeReadbackBuffer(
-                   p_device,
-                   bbv_surface_brick_pool_debug_readback_buffer_,
-                   bbv_surface_brick_pool_debug_buffer_.buffer->GetDesc(),
-                   "InstantRdv_BbvSurfaceBrickPoolDebugReadback"))
-            {
-                return false;
-            }
         }
         {
             bbv_removal_frustum_brick_list_.InitializeAsTyped(p_device,
@@ -1819,9 +1689,6 @@ namespace ngl::render::app
                 param.bbv_occupancy_injection_world_offset = CalcOccupancyInjectionWorldOffsetFromFineCells(
                     InstantRasterDerivedVoxelScene::dbg_bbv_occupancy_injection_fine_cells_,
                     bbv_grid_updater_.Get().cell_size);
-                // 既存CB末尾の予約パディングを初回State Grid clearのsentinel
-                // として再利用する。SurfaceBrickPool定数はcommon headerから参照する。
-                param.assp_dummy_padding1.x = is_first_dispatch ? 1 : 0;
             }
             // Fsp
             {
@@ -1838,6 +1705,11 @@ namespace ngl::render::app
                 param.fsp_probe_atlas_tile_width = static_cast<int>(fsp_probe_atlas_tile_width_);
                 param.fsp_probe_atlas_tile_height = static_cast<int>(fsp_probe_atlas_tile_height_);
                 param.fsp_surface_mask_generation_enable = 1;
+                param.main_view_reduced_surface_enable =
+                    InstantRasterDerivedVoxelScene::
+                        dbg_main_view_reduced_surface_enable_
+                        ? 1
+                        : 0;
                 for(u32 cascade_index = 0; cascade_index < fsp_cascade_count_; ++cascade_index)
                 {
                     const auto& cascade_grid = fsp_grid_updaters_[cascade_index].Get();
@@ -2014,77 +1886,8 @@ namespace ngl::render::app
             p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
         }
 
-        const bool use_surface_brick_pool =
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_enable_;
-        if(use_surface_brick_pool)
-        {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvSurfaceBrickPool_Clear");
-
-            bbv_surface_brick_pool_state_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::UnorderedAccess);
-            bbv_surface_brick_pool_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::UnorderedAccess);
-            bbv_surface_brick_pool_debug_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::UnorderedAccess);
-            bbv_surface_brick_pool_candidate_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::UnorderedAccess);
-
-            ngl::rhi::DescriptorSetDep desc_set = {};
-            pso_bbv_surface_brick_pool_clear_->SetView(
-                &desc_set,
-                "cb_instant_rdv",
-                &cbh_dispatch_->cbv);
-            pso_bbv_surface_brick_pool_clear_->SetView(
-                &desc_set,
-                k_shader_bind_name_bbv_surface_brick_pool_state_uav.Get(),
-                bbv_surface_brick_pool_state_buffer_.uav.Get());
-            pso_bbv_surface_brick_pool_clear_->SetView(
-                &desc_set,
-                k_shader_bind_name_bbv_surface_brick_pool_uav.Get(),
-                bbv_surface_brick_pool_buffer_.uav.Get());
-            pso_bbv_surface_brick_pool_clear_->SetView(
-                &desc_set,
-                k_shader_bind_name_bbv_surface_brick_pool_debug.Get(),
-                bbv_surface_brick_pool_debug_buffer_.uav.Get());
-            pso_bbv_surface_brick_pool_clear_->SetView(
-                &desc_set,
-                k_shader_bind_name_bbv_surface_brick_pool_candidate_uav.Get(),
-                bbv_surface_brick_pool_candidate_buffer_.uav.Get());
-
-            p_command_list->SetPipelineState(pso_bbv_surface_brick_pool_clear_.Get());
-            p_command_list->SetDescriptorSet(pso_bbv_surface_brick_pool_clear_.Get(), &desc_set);
-            const bool clear_surface_brick_pool_state =
-                frame_count_ == 1u || (frame_count_ & 0xffffu) == 0u;
-            const u32 surface_brick_pool_element_count =
-                1u +
-                k_bbv_surface_brick_pool_capacity_native *
-                    k_bbv_surface_brick_pool_entry_u32_count;
-            const u32 surface_brick_pool_clear_thread_count =
-                clear_surface_brick_pool_state
-                    ? std::max(
-                        bbv_grid_updater_.Get().total_count,
-                        surface_brick_pool_element_count)
-                    : surface_brick_pool_element_count;
-            pso_bbv_surface_brick_pool_clear_->DispatchHelper(
-                p_command_list,
-                surface_brick_pool_clear_thread_count,
-                1,
-                1);
-
-            p_command_list->ResourceUavBarrier(
-                bbv_surface_brick_pool_state_buffer_.buffer.Get());
-            p_command_list->ResourceUavBarrier(
-                bbv_surface_brick_pool_buffer_.buffer.Get());
-            p_command_list->ResourceUavBarrier(
-                bbv_surface_brick_pool_debug_buffer_.buffer.Get());
-            p_command_list->ResourceUavBarrier(
-                bbv_surface_brick_pool_candidate_buffer_.buffer.Get());
-        }
-
+        const bool use_reduced_surface =
+            InstantRasterDerivedVoxelScene::dbg_main_view_reduced_surface_enable_;
 
         auto func_call_bbv_removal_frustum_pass = [this](
             rhi::GraphicsCommandListDep* p_command_list,
@@ -2127,20 +1930,38 @@ namespace ngl::render::app
             rhi::GraphicsCommandListDep* p_command_list,
             rhi::ConstantBufferPooledHandle cbh_injection_view_info,
             const InjectionSourceDepthBufferViewInfo& target_depth_info,
-            bool integrate_surface_detection
+            bool integrate_surface_detection,
+            bool use_reduced_surface
         )
         {
             NGL_RHI_GPU_SCOPED_EVENT_MARKER(
                 p_command_list,
-                integrate_surface_detection
+                use_reduced_surface
+                    ? "BbvOccupancyInjection_ReducedSurface"
+                    : integrate_surface_detection
                     ? "BbvOccupancyInjection_IntegratedSurface"
                     : "BbvOccupancyInjection");
 
-            auto* pso = integrate_surface_detection
-                ? pso_bbv_occupancy_injection_apply_integrated_surface_.Get()
-                : pso_bbv_occupancy_injection_apply_.Get();
+            auto* pso = use_reduced_surface
+                ? pso_bbv_occupancy_injection_apply_reduced_surface_.Get()
+                : integrate_surface_detection
+                    ? pso_bbv_occupancy_injection_apply_integrated_surface_.Get()
+                    : pso_bbv_occupancy_injection_apply_.Get();
             ngl::rhi::DescriptorSetDep desc_set = {};
-            pso->SetView(&desc_set, "TexHardwareDepth", target_depth_info.hw_depth_srv.Get());
+            if(use_reduced_surface)
+            {
+                pso->SetView(
+                    &desc_set,
+                    "TexReducedSurfaceBuffer",
+                    reduced_surface_buffer_tex_.srv.Get());
+            }
+            else
+            {
+                pso->SetView(
+                    &desc_set,
+                    "TexHardwareDepth",
+                    target_depth_info.hw_depth_srv.Get());
+            }
             pso->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
             pso->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
             pso->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
@@ -2152,340 +1973,38 @@ namespace ngl::render::app
 
             p_command_list->SetPipelineState(pso);
             p_command_list->SetDescriptorSet(pso, &desc_set);
-            pso->DispatchHelper(p_command_list, target_depth_info.atlas_resolution.x, target_depth_info.atlas_resolution.y, 1);
+            const u32 dispatch_width = use_reduced_surface
+                ? reduced_surface_buffer_tex_.texture->GetWidth()
+                : static_cast<u32>(target_depth_info.atlas_resolution.x);
+            const u32 dispatch_height = use_reduced_surface
+                ? reduced_surface_buffer_tex_.texture->GetHeight()
+                : static_cast<u32>(target_depth_info.atlas_resolution.y);
+            pso->DispatchHelper(
+                p_command_list,
+                dispatch_width,
+                dispatch_height,
+                1);
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
             if(integrate_surface_detection)
             {
                 p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
             }
         };
-        auto func_call_bbv_surface_brick_pool_main_view = [this](
-            rhi::GraphicsCommandListDep* p_command_list,
-            rhi::ConstantBufferPooledHandle cbh_injection_view_info,
-            const InjectionSourceDepthBufferViewInfo& target_depth_info,
-            bool enable_bbv_injection)
-        {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                p_command_list,
-                "BbvSurfaceBrickPool_MainViewTotal");
-
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                    p_command_list,
-                    "BbvSurfaceBrickPool_Build");
-
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                        p_command_list,
-                        "BbvSurfaceBrickPool_TileBuild");
-
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_bbv_surface_brick_pool_build_->SetView(
-                        &desc_set,
-                        "TexHardwareDepth",
-                        target_depth_info.hw_depth_srv.Get());
-                    pso_bbv_surface_brick_pool_build_->SetView(
-                        &desc_set,
-                        "cb_injection_src_view_info",
-                        &cbh_injection_view_info->cbv);
-                    pso_bbv_surface_brick_pool_build_->SetView(
-                        &desc_set,
-                        "cb_instant_rdv",
-                        &cbh_dispatch_->cbv);
-                    pso_bbv_surface_brick_pool_build_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_candidate_uav.Get(),
-                        bbv_surface_brick_pool_candidate_buffer_.uav.Get());
-                    pso_bbv_surface_brick_pool_build_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_debug.Get(),
-                        bbv_surface_brick_pool_debug_buffer_.uav.Get());
-
-                    p_command_list->SetPipelineState(
-                        pso_bbv_surface_brick_pool_build_.Get());
-                    p_command_list->SetDescriptorSet(
-                        pso_bbv_surface_brick_pool_build_.Get(),
-                        &desc_set);
-                    pso_bbv_surface_brick_pool_build_->DispatchHelper(
-                        p_command_list,
-                        ((target_depth_info.atlas_resolution.x +
-                          k_bbv_surface_brick_pool_build_thread_width *
-                              k_bbv_surface_brick_pool_build_pixel_skip_stride - 1) /
-                         (k_bbv_surface_brick_pool_build_thread_width *
-                          k_bbv_surface_brick_pool_build_pixel_skip_stride)) *
-                            k_bbv_surface_brick_pool_build_thread_width,
-                        ((target_depth_info.atlas_resolution.y +
-                          k_bbv_surface_brick_pool_build_thread_height *
-                              k_bbv_surface_brick_pool_build_pixel_skip_stride - 1) /
-                         (k_bbv_surface_brick_pool_build_thread_height *
-                          k_bbv_surface_brick_pool_build_pixel_skip_stride)) *
-                            k_bbv_surface_brick_pool_build_thread_height,
-                        1);
-
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_candidate_buffer_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_debug_buffer_.buffer.Get());
-                }
-
-                bbv_surface_brick_pool_candidate_buffer_.ResourceBarrier(
-                    p_command_list,
-                    rhi::EResourceState::ShaderRead);
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                        p_command_list,
-                        "BbvSurfaceBrickPool_CandidateIndirectArg");
-
-                    bbv_surface_brick_pool_candidate_indirect_arg_.ResourceBarrier(
-                        p_command_list,
-                        rhi::EResourceState::UnorderedAccess);
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_bbv_surface_brick_pool_candidate_indirect_arg_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_candidate.Get(),
-                        bbv_surface_brick_pool_candidate_buffer_.srv.Get());
-                    pso_bbv_surface_brick_pool_candidate_indirect_arg_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_candidate_indirect_arg.Get(),
-                        bbv_surface_brick_pool_candidate_indirect_arg_.uav.Get());
-                    p_command_list->SetPipelineState(
-                        pso_bbv_surface_brick_pool_candidate_indirect_arg_.Get());
-                    p_command_list->SetDescriptorSet(
-                        pso_bbv_surface_brick_pool_candidate_indirect_arg_.Get(),
-                        &desc_set);
-                    pso_bbv_surface_brick_pool_candidate_indirect_arg_->DispatchHelper(
-                        p_command_list,
-                        1,
-                        1,
-                        1);
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_candidate_indirect_arg_.buffer.Get());
-                    bbv_surface_brick_pool_candidate_indirect_arg_.ResourceBarrier(
-                        p_command_list,
-                        rhi::EResourceState::IndirectArgument);
-                }
-
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                        p_command_list,
-                        "BbvSurfaceBrickPool_Allocate");
-
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_bbv_surface_brick_pool_allocate_->SetView(
-                        &desc_set,
-                        "cb_instant_rdv",
-                        &cbh_dispatch_->cbv);
-                    pso_bbv_surface_brick_pool_allocate_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_candidate.Get(),
-                        bbv_surface_brick_pool_candidate_buffer_.srv.Get());
-                    pso_bbv_surface_brick_pool_allocate_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_state_uav.Get(),
-                        bbv_surface_brick_pool_state_buffer_.uav.Get());
-                    pso_bbv_surface_brick_pool_allocate_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_uav.Get(),
-                        bbv_surface_brick_pool_buffer_.uav.Get());
-                    pso_bbv_surface_brick_pool_allocate_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_debug.Get(),
-                        bbv_surface_brick_pool_debug_buffer_.uav.Get());
-                    p_command_list->SetPipelineState(
-                        pso_bbv_surface_brick_pool_allocate_.Get());
-                    p_command_list->SetDescriptorSet(
-                        pso_bbv_surface_brick_pool_allocate_.Get(),
-                        &desc_set);
-                    p_command_list->DispatchIndirect(
-                        bbv_surface_brick_pool_candidate_indirect_arg_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_state_buffer_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_buffer_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_debug_buffer_.buffer.Get());
-                }
-
-                bbv_surface_brick_pool_state_buffer_.ResourceBarrier(
-                    p_command_list,
-                    rhi::EResourceState::ShaderRead);
-                {
-                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                        p_command_list,
-                        "BbvSurfaceBrickPool_Merge");
-
-                    ngl::rhi::DescriptorSetDep desc_set = {};
-                    pso_bbv_surface_brick_pool_merge_->SetView(
-                        &desc_set,
-                        "cb_instant_rdv",
-                        &cbh_dispatch_->cbv);
-                    pso_bbv_surface_brick_pool_merge_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_candidate.Get(),
-                        bbv_surface_brick_pool_candidate_buffer_.srv.Get());
-                    pso_bbv_surface_brick_pool_merge_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_state.Get(),
-                        bbv_surface_brick_pool_state_buffer_.srv.Get());
-                    pso_bbv_surface_brick_pool_merge_->SetView(
-                        &desc_set,
-                        k_shader_bind_name_bbv_surface_brick_pool_uav.Get(),
-                        bbv_surface_brick_pool_buffer_.uav.Get());
-                    p_command_list->SetPipelineState(
-                        pso_bbv_surface_brick_pool_merge_.Get());
-                    p_command_list->SetDescriptorSet(
-                        pso_bbv_surface_brick_pool_merge_.Get(),
-                        &desc_set);
-                    p_command_list->DispatchIndirect(
-                        bbv_surface_brick_pool_candidate_indirect_arg_.buffer.Get());
-                    p_command_list->ResourceUavBarrier(
-                        bbv_surface_brick_pool_buffer_.buffer.Get());
-                }
-            }
-
-            bbv_surface_brick_pool_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::ShaderRead);
-            bbv_surface_brick_pool_state_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::ShaderRead);
-
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                    p_command_list,
-                    "BbvSurfaceBrickPool_IndirectArg");
-
-                bbv_surface_brick_pool_indirect_arg_.ResourceBarrier(
-                    p_command_list,
-                    rhi::EResourceState::UnorderedAccess);
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_bbv_surface_brick_pool_indirect_arg_->SetView(
-                    &desc_set,
-                    "cb_instant_rdv",
-                    &cbh_dispatch_->cbv);
-                pso_bbv_surface_brick_pool_indirect_arg_->SetView(
-                    &desc_set,
-                    k_shader_bind_name_bbv_surface_brick_pool.Get(),
-                    bbv_surface_brick_pool_buffer_.srv.Get());
-                pso_bbv_surface_brick_pool_indirect_arg_->SetView(
-                    &desc_set,
-                    k_shader_bind_name_bbv_surface_brick_pool_indirect_arg.Get(),
-                    bbv_surface_brick_pool_indirect_arg_.uav.Get());
-                p_command_list->SetPipelineState(
-                    pso_bbv_surface_brick_pool_indirect_arg_.Get());
-                p_command_list->SetDescriptorSet(
-                    pso_bbv_surface_brick_pool_indirect_arg_.Get(),
-                    &desc_set);
-                pso_bbv_surface_brick_pool_indirect_arg_->DispatchHelper(
-                    p_command_list,
-                    1,
-                    1,
-                    1);
-                p_command_list->ResourceUavBarrier(
-                    bbv_surface_brick_pool_indirect_arg_.buffer.Get());
-                bbv_surface_brick_pool_indirect_arg_.ResourceBarrier(
-                    p_command_list,
-                    rhi::EResourceState::IndirectArgument);
-            }
-
-            if(enable_bbv_injection)
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                    p_command_list,
-                    "BbvSurfaceBrickPool_Protect");
-
-                fsp_surface_cell_mask_buffer_.ResourceBarrier(
-                    p_command_list,
-                    rhi::EResourceState::UnorderedAccess);
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_bbv_surface_brick_pool_to_fsp_mask_->SetView(
-                    &desc_set,
-                    k_shader_bind_name_bbv_surface_brick_pool.Get(),
-                    bbv_surface_brick_pool_buffer_.srv.Get());
-                pso_bbv_surface_brick_pool_to_fsp_mask_->SetView(
-                    &desc_set,
-                    "RWFspSurfaceCellMaskBuffer",
-                    fsp_surface_cell_mask_buffer_.uav.Get());
-                pso_bbv_surface_brick_pool_to_fsp_mask_->SetView(
-                    &desc_set,
-                    "cb_instant_rdv",
-                    &cbh_dispatch_->cbv);
-                p_command_list->SetPipelineState(
-                    pso_bbv_surface_brick_pool_to_fsp_mask_.Get());
-                p_command_list->SetDescriptorSet(
-                    pso_bbv_surface_brick_pool_to_fsp_mask_.Get(),
-                    &desc_set);
-                p_command_list->DispatchIndirect(
-                    bbv_surface_brick_pool_indirect_arg_.buffer.Get());
-                p_command_list->ResourceUavBarrier(
-                    fsp_surface_cell_mask_buffer_.buffer.Get());
-            }
-
-            if(enable_bbv_injection)
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                    p_command_list,
-                    "BbvSurfaceBrickPool_Inject");
-
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_bbv_surface_brick_pool_inject_->SetView(
-                    &desc_set,
-                    k_shader_bind_name_bbv_surface_brick_pool.Get(),
-                    bbv_surface_brick_pool_buffer_.srv.Get());
-                pso_bbv_surface_brick_pool_inject_->SetView(
-                    &desc_set,
-                    "RWBitmaskBrickVoxel",
-                    bbv_buffer_.uav.Get());
-                pso_bbv_surface_brick_pool_inject_->SetView(
-                    &desc_set,
-                    "cb_instant_rdv",
-                    &cbh_dispatch_->cbv);
-                p_command_list->SetPipelineState(
-                    pso_bbv_surface_brick_pool_inject_.Get());
-                p_command_list->SetDescriptorSet(
-                    pso_bbv_surface_brick_pool_inject_.Get(),
-                    &desc_set);
-                p_command_list->DispatchIndirect(
-                    bbv_surface_brick_pool_indirect_arg_.buffer.Get());
-                p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
-            }
-        };
         auto func_call_bbv_removal_carving_pass = [this](
             rhi::GraphicsCommandListDep* p_command_list,
             rhi::ConstantBufferPooledHandle cbh_injection_view_info,
             const InjectionSourceDepthBufferViewInfo& target_depth_info
-            , bool use_surface_brick_pool
         )
         {
             NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvRemovalCarving");
 
             ngl::rhi::DescriptorSetDep desc_set = {};
-            auto* pso = use_surface_brick_pool
-                ? pso_bbv_removal_carving_surface_pool_.Get()
-                : pso_bbv_removal_carving_.Get();
+            auto* pso = pso_bbv_removal_carving_.Get();
             pso->SetView(&desc_set, "TexHardwareDepth", target_depth_info.hw_depth_srv.Get());
             pso->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
             pso->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
             pso->SetView(&desc_set, "FrustumBrickList", bbv_removal_frustum_brick_list_.srv.Get());
             pso->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
-            if(use_surface_brick_pool)
-            {
-                pso->SetView(
-                    &desc_set,
-                    k_shader_bind_name_bbv_surface_brick_pool_state.Get(),
-                    bbv_surface_brick_pool_state_buffer_.srv.Get());
-                pso->SetView(
-                    &desc_set,
-                    k_shader_bind_name_bbv_surface_brick_pool.Get(),
-                    bbv_surface_brick_pool_buffer_.srv.Get());
-            }
-
-            if(use_surface_brick_pool)
-            {
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                    p_command_list,
-                    "BbvSurfaceBrickPool_Protect");
-            }
             p_command_list->SetPipelineState(pso);
             p_command_list->SetDescriptorSet(pso, &desc_set);
             p_command_list->DispatchIndirect(bbv_removal_frustum_indirect_arg_.buffer.Get());
@@ -2535,6 +2054,53 @@ namespace ngl::render::app
                 cbh_injection_view_info->buffer.Unmap();
             }
 
+            const bool use_reduced_surface_for_view =
+                use_reduced_surface && is_main_view_update;
+            if(use_reduced_surface_for_view)
+            {
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                    p_command_list,
+                    "MainViewReducedSurfaceBufferBuild");
+
+                reduced_surface_buffer_tex_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::UnorderedAccess);
+
+                ngl::rhi::DescriptorSetDep desc_set = {};
+                pso_reduced_surface_buffer_build_->SetView(
+                    &desc_set,
+                    "cb_instant_rdv",
+                    &cbh_dispatch_->cbv);
+                pso_reduced_surface_buffer_build_->SetView(
+                    &desc_set,
+                    "cb_injection_src_view_info",
+                    &cbh_injection_view_info->cbv);
+                pso_reduced_surface_buffer_build_->SetView(
+                    &desc_set,
+                    "TexHardwareDepth",
+                    target_depth_info.hw_depth_srv.Get());
+                pso_reduced_surface_buffer_build_->SetView(
+                    &desc_set,
+                    "RWReducedSurfaceBuffer",
+                    reduced_surface_buffer_tex_.uav.Get());
+
+                p_command_list->SetPipelineState(
+                    pso_reduced_surface_buffer_build_.Get());
+                p_command_list->SetDescriptorSet(
+                    pso_reduced_surface_buffer_build_.Get(),
+                    &desc_set);
+                pso_reduced_surface_buffer_build_->DispatchHelper(
+                    p_command_list,
+                    reduced_surface_buffer_tex_.texture->GetWidth(),
+                    reduced_surface_buffer_tex_.texture->GetHeight(),
+                    1);
+                p_command_list->ResourceUavBarrier(
+                    reduced_surface_buffer_tex_.texture.Get());
+                reduced_surface_buffer_tex_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::ShaderRead);
+            }
+
             // フレーム番号をサフィックスにしたラベルでマーカー発行.
             NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, (std::string("BbvPerViewProcess_") + std::to_string(i)).c_str());
             
@@ -2556,28 +2122,15 @@ namespace ngl::render::app
 
             // Depth Removal flow は Injection 後の最新bitmaskで候補抽出してからCarvingする。
             // これにより Frustum ActiveList には Empty Brick を含めず、Carving 起動数を最小化できる。
-            const bool use_surface_brick_pool_for_view =
-                use_surface_brick_pool && is_main_view_update;
-            if(use_surface_brick_pool_for_view)
-            {
-                if(target_depth_info.is_enable_injection_pass ||
-                   target_depth_info.is_enable_removal_pass)
-                {
-                    func_call_bbv_surface_brick_pool_main_view(
-                        p_command_list,
-                        cbh_injection_view_info,
-                        target_depth_info,
-                        target_depth_info.is_enable_injection_pass);
-                }
-            }
-            else if(target_depth_info.is_enable_injection_pass)
+            if(target_depth_info.is_enable_injection_pass)
             {
                 // Legacy MainView/ShadowView injection path is intentionally unchanged.
                 func_call_bbv_occupancy_injection_pass(
                     p_command_list,
                     cbh_injection_view_info,
                     target_depth_info,
-                    i == (num_depth_buffer - 1));
+                    i == (num_depth_buffer - 1),
+                    use_reduced_surface_for_view);
             }
             if(target_depth_info.is_enable_removal_pass)
             {
@@ -2586,8 +2139,7 @@ namespace ngl::render::app
                 func_call_bbv_removal_carving_pass(
                     p_command_list,
                     cbh_injection_view_info,
-                    target_depth_info,
-                    use_surface_brick_pool_for_view);
+                    target_depth_info);
             }
         }
 
@@ -2605,33 +2157,6 @@ namespace ngl::render::app
             pso_bbv_brick_count_aggregate_->DispatchHelper(p_command_list, bbv_grid_updater_.Get().total_count, 1, 1);
 
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
-        }
-
-        if(use_surface_brick_pool &&
-           InstantRasterDerivedVoxelScene::dbg_fsp_debug_readback_enable_)
-        {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(
-                p_command_list,
-                "BbvSurfaceBrickPool_ReadbackCopy");
-
-            bbv_surface_brick_pool_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::CopySrc);
-            bbv_surface_brick_pool_debug_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::CopySrc);
-            p_command_list->CopyResource(
-                bbv_surface_brick_pool_readback_buffer_.Get(),
-                bbv_surface_brick_pool_buffer_.buffer.Get());
-            p_command_list->CopyResource(
-                bbv_surface_brick_pool_debug_readback_buffer_.Get(),
-                bbv_surface_brick_pool_debug_buffer_.buffer.Get());
-            bbv_surface_brick_pool_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::ShaderRead);
-            bbv_surface_brick_pool_debug_buffer_.ResourceBarrier(
-                p_command_list,
-                rhi::EResourceState::UnorderedAccess);
         }
 
     }
@@ -2661,11 +2186,7 @@ namespace ngl::render::app
                 view_info.atlas_resolution.x,
                 view_info.atlas_resolution.y);
             p->cb_is_main_view = 1;
-            p->cb_padding0 = math::Vec2i(
-                InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_enable_
-                    ? 1
-                    : 0,
-                0);
+            p->cb_padding0 = math::Vec2i(0, 0);
             const auto frustum_planes = CalcBbvFrustumPlanes(view_info.view_mat, view_info.proj_mat);
             for (size_t plane_index = 0; plane_index < frustum_planes.size(); ++plane_index)
             {
@@ -2678,14 +2199,40 @@ namespace ngl::render::app
            (frame_count_ %
             (k_bbv_radiance_injection_frame_skip_count + 1)) == 0)
         {
-            NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "BbvRadianceInjection");
-                const auto injection_dispatch_resolution = CalcBbvRadianceInjectionDispatchResolution(math::Vec2u(
-                    static_cast<u32>(view_info.atlas_resolution.x),
-                    static_cast<u32>(view_info.atlas_resolution.y)));
-                auto& pso_bbv_radiance_injection = pso_bbv_radiance_injection_apply_short_ray_;
+                NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                    p_command_list,
+                    "BbvRadianceInjection");
+                const bool use_reduced_surface =
+                    InstantRasterDerivedVoxelScene::dbg_main_view_reduced_surface_enable_;
+                const auto injection_dispatch_resolution = use_reduced_surface
+                    ? math::Vec2u(
+                        reduced_surface_buffer_tex_.texture->GetWidth(),
+                        reduced_surface_buffer_tex_.texture->GetHeight())
+                    : CalcBbvRadianceInjectionDispatchResolution(math::Vec2u(
+                        static_cast<u32>(view_info.atlas_resolution.x),
+                        static_cast<u32>(view_info.atlas_resolution.y)));
+                auto& pso_bbv_radiance_injection = use_reduced_surface
+                    ? pso_bbv_radiance_injection_apply_reduced_surface_
+                    : pso_bbv_radiance_injection_apply_short_ray_;
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_bbv_radiance_injection->SetView(&desc_set, "TexHardwareDepth", view_info.hw_depth_srv.Get());
+                if(use_reduced_surface)
+                {
+                    reduced_surface_buffer_tex_.ResourceBarrier(
+                        p_command_list,
+                        rhi::EResourceState::ShaderRead);
+                    pso_bbv_radiance_injection->SetView(
+                        &desc_set,
+                        "TexReducedSurfaceBuffer",
+                        reduced_surface_buffer_tex_.srv.Get());
+                }
+                else
+                {
+                    pso_bbv_radiance_injection->SetView(
+                        &desc_set,
+                        "TexHardwareDepth",
+                        view_info.hw_depth_srv.Get());
+                }
                 pso_bbv_radiance_injection->SetView(&desc_set, "TexInputRadiance", view_info.hw_color_srv.Get());
                 pso_bbv_radiance_injection->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
                 pso_bbv_radiance_injection->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
@@ -3298,16 +2845,19 @@ namespace ngl::render::app
             pso_bbv_debug_visualize_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
             pso_bbv_debug_visualize_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
             pso_bbv_debug_visualize_->SetView(&desc_set, "TexHardwareDepth", hw_depth_srv.Get());
+            reduced_surface_buffer_tex_.ResourceBarrier(
+                p_command_list,
+                rhi::EResourceState::ShaderRead);
+            pso_bbv_debug_visualize_->SetView(
+                &desc_set,
+                "TexReducedSurfaceBuffer",
+                reduced_surface_buffer_tex_.srv.Get());
+            pso_bbv_debug_visualize_->SetView(
+                &desc_set,
+                "SmpReducedSurfaceBuffer",
+                global_res.default_resource_.sampler_linear_clamp.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, "BitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
-            pso_bbv_debug_visualize_->SetView(
-                &desc_set,
-                k_shader_bind_name_bbv_surface_brick_pool.Get(),
-                bbv_surface_brick_pool_buffer_.srv.Get());
-            pso_bbv_debug_visualize_->SetView(
-                &desc_set,
-                k_shader_bind_name_bbv_surface_brick_pool_state.Get(),
-                bbv_surface_brick_pool_state_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_srv.Get(), fsp_probe_atlas_tex_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_srv.Get(), fsp_irradiance_volume_sh_buffer_.srv.Get());
             pso_bbv_debug_visualize_->SetView(&desc_set, k_shader_bind_name_asspprobe_srv.Get(), assp_probe_tex_[assp_latest_filtered_frame_tex_index_].srv.Get());
@@ -3434,20 +2984,6 @@ namespace ngl::render::app
 
     void BitmaskBrickVoxelGi::UpdateFspDebugReadback()
     {
-        auto read_counter = [](rhi::RefBufferDep buffer, uint32_t element_index = 0u) -> int
-        {
-            if (buffer.Get() == nullptr)
-            {
-                return 0;
-            }
-            if (auto* mapped = buffer->MapAs<uint32_t>())
-            {
-                const int value = static_cast<int>(mapped[element_index]);
-                buffer->Unmap();
-                return value;
-            }
-            return 0;
-        };
         InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ = static_cast<int>(fsp_probe_pool_size_);
         if(auto* mapped = fsp_debug_stats_readback_buffer_->MapAs<uint32_t>())
         {
@@ -3461,23 +2997,6 @@ namespace ngl::render::app
             InstantRasterDerivedVoxelScene::dbg_fsp_visible_surface_cell_count_ = 0;
             InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_ = 0;
             InstantRasterDerivedVoxelScene::dbg_fsp_active_probe_count_ = 0;
-        }
-        InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_capacity_ =
-            static_cast<int>(k_bbv_surface_brick_pool_capacity_native);
-        if(InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_enable_)
-        {
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_unique_count_ =
-                read_counter(bbv_surface_brick_pool_readback_buffer_);
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_overflow_count_ =
-                read_counter(bbv_surface_brick_pool_debug_readback_buffer_);
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_contention_count_ =
-                read_counter(bbv_surface_brick_pool_debug_readback_buffer_, 1u);
-        }
-        else
-        {
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_unique_count_ = 0;
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_overflow_count_ = 0;
-            InstantRasterDerivedVoxelScene::dbg_bbv_surface_brick_pool_contention_count_ = 0;
         }
         InstantRasterDerivedVoxelScene::dbg_fsp_allocated_probe_count_ =
             std::max(0, InstantRasterDerivedVoxelScene::dbg_fsp_probe_pool_size_ - InstantRasterDerivedVoxelScene::dbg_fsp_free_probe_count_);

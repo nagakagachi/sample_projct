@@ -27,6 +27,8 @@ param(
     [string]$Tag = "candidate",
     [ValidateSet("startup", "gbuffer")]
     [string]$BenchmarkView = "startup",
+    [ValidateSet("default", "on", "off")]
+    [string]$MainViewReducedSurface = "default",
     [ValidateSet("Hidden", "Minimized", "Normal")]
     [string]$AppWindowStyle = "Hidden"
 )
@@ -71,6 +73,12 @@ $benchmarkArgs = @(
     "--benchmark-tag", "$Tag",
     "--benchmark-view", "$BenchmarkView"
 )
+if ($MainViewReducedSurface -ne "default") {
+    $benchmarkArgs += @(
+        "--main-view-reduced-surface",
+        $MainViewReducedSurface
+    )
+}
 
 Write-Host "[perf] Running benchmark: $appExeAbs $($benchmarkArgs -join ' ')"
 $appWorkingDir = Join-Path $repoRoot "sample_app"

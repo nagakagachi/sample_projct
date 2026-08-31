@@ -15,6 +15,33 @@ instant_rdv_util.hlsli
 // cpp/hlsl共通定義用ヘッダ.
 #include "instant_rdv_common_header.hlsli"
 
+uint2 ReducedSurfaceBufferJitterOffset(uint2 tile_coord, uint frame_index)
+{
+    // Tileごとに位相をずらしつつ、16フレームで4x4の全texelを必ず一巡する。
+    const uint tile_phase =
+        (tile_coord.x * 3u + tile_coord.y * 5u) &
+        (k_reduced_surface_buffer_downscale *
+         k_reduced_surface_buffer_downscale - 1u);
+    const uint sample_index =
+        (frame_index + tile_phase) &
+        (k_reduced_surface_buffer_downscale *
+         k_reduced_surface_buffer_downscale - 1u);
+    return uint2(
+        sample_index & (k_reduced_surface_buffer_downscale - 1u),
+        sample_index >> 2u);
+}
+
+uint2 ReducedSurfaceBufferSourceTexel(
+    uint2 sample_coord,
+    uint2 source_resolution,
+    uint frame_index)
+{
+    return min(
+        sample_coord * k_reduced_surface_buffer_downscale +
+            ReducedSurfaceBufferJitterOffset(sample_coord, frame_index),
+        source_resolution - 1u);
+}
+
 // WaveActiveBallot結果を扱う共通ヘルパー.
 // uint4(x,y,z,w) を使い、32/64/128 laneを同じ実装で扱う。
 uint first_lane_from_ballot(uint4 ballot)

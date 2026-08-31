@@ -100,6 +100,8 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_bbv_radiance_fixed_point_scale (256.0)
     // 極端な HDR 値による uint overflow を避けるための入力 clamp.
     #define k_bbv_radiance_input_clamp (64.0)
+    // MainView Surface Sampleは4x4 pixelから毎フレーム1点を選び、16フレームで全位相を巡回する。
+    #define k_reduced_surface_buffer_downscale (4)
     // BBV radiance injection は 2x2 スクリーンタイル group ごとに 1F で 1 tile を処理し、4F で全更新する。
     // dispatch も group 単位に圧縮し、未選択 tile の threadgroup は起動しない前提の固定設定。
     #define k_bbv_radiance_injection_tile_width (16)
@@ -107,10 +109,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_bbv_radiance_injection_phase_count (k_bbv_radiance_injection_tile_group_resolution * k_bbv_radiance_injection_tile_group_resolution)
     // フレーム間引き。N=0で毎フレーム実行、N>0で (N+1) フレームに1回実行。
     #define k_bbv_radiance_injection_frame_skip_count (0)
-    #define k_bbv_surface_brick_pool_build_thread_width (16)
-    #define k_bbv_surface_brick_pool_build_thread_height (8)
-    // Radianceの既存2x2 tile位相と同じ、1フレーム約1/4の画素密度。
-    #define k_bbv_surface_brick_pool_build_pixel_skip_stride (2)
     // Empty始点時の短距離フォールバック探索長（単位: Brick長）。
     // 1.0で「最大1Brick先まで」探索する。
     #define k_bbv_radiance_short_ray_length_in_brick (1.0)
@@ -123,14 +121,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
     #define k_bbv_radiance_resolve_phase_count (k_bbv_radiance_resolve_brick_group_resolution * k_bbv_radiance_resolve_brick_group_resolution * k_bbv_radiance_resolve_brick_group_resolution)
     // Depth Removal carving系1D Computeのthread group size.
     #define k_bbv_removal_carving_thread_group_size (128)
-
-    // MainView SurfaceBrickPool. 1 SurfaceBrickはBBV 1 Brickと同じ512bit maskを持つ。
-    #define k_bbv_surface_brick_pool_capacity (4096)
-    #define k_bbv_surface_brick_pool_mask_word_count (k_bbv_per_voxel_bitmask_u32_count)
-    #define k_bbv_surface_brick_pool_entry_u32_count (1 + k_bbv_surface_brick_pool_mask_word_count)
-    #define k_bbv_surface_brick_pool_state_reserved_index (0xffff)
-    #define k_bbv_surface_brick_pool_state_overflow_index (0xfffe)
-
 
     #define k_bbv_per_voxel_resolution_inv (1.0 / float(k_bbv_per_voxel_resolution))
     #define k_bbv_per_voxel_resolution_vec3i int3(k_bbv_per_voxel_resolution, k_bbv_per_voxel_resolution, k_bbv_per_voxel_resolution)
@@ -333,7 +323,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         // SpatialFilter 深度差重み影響度.
         float ss_probe_spatial_filter_depth_exp_scale NGL_CPP_MEMBER_INIT({float(SCREEN_SPACE_PROBE_SPATIAL_FILTER_DEPTH_EXP_SCALE)});
         int fsp_surface_mask_generation_enable NGL_CPP_MEMBER_INIT({1});
-        int dummy3_3 NGL_CPP_MEMBER_INIT({0});
+        int main_view_reduced_surface_enable NGL_CPP_MEMBER_INIT({0});
         int dummy3_4 NGL_CPP_MEMBER_INIT({0});
         int2 dummy3_5_6 NGL_CPP_MEMBER_INIT({});// fsp開始を16byte alignに揃えるためのパディング.
 
@@ -388,7 +378,6 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         float assp_ray_budget_scale NGL_CPP_MEMBER_INIT({1.0f});
         int assp_debug_freeze_frame_random_enable NGL_CPP_MEMBER_INIT({0});
         // 既存CBレイアウトを維持するための末尾パディング。
-        // xはSurfaceBrickPool初回State Grid clearのsentinelとして再利用する。
         int3 assp_dummy_padding1 NGL_CPP_MEMBER_INIT({});
     };
 #ifdef NGL_SHADER_CPP_INCLUDE
