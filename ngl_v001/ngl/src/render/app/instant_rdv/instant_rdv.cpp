@@ -378,7 +378,7 @@ namespace ngl::render::app
                 "Default: %.2f fine cells",
                 InstantRasterDerivedVoxelScene::dbg_bbv_occupancy_injection_fine_cells_default_);
             ImGui::Checkbox(
-                "MainView Reduced Surface Sample",
+                "MainView Reduced Surface Buffer",
                 &InstantRasterDerivedVoxelScene::dbg_main_view_reduced_surface_enable_);
             ImGui::TextDisabled(
                 "1/4 x 1/4 jittered Depth + approximate normal for Occupancy/FSP/Radiance.");
@@ -751,10 +751,10 @@ namespace ngl::render::app
                         if (ImGui::Checkbox("Depth Test", &bbv_depth_test))
                             dbg_bbv_depth_test_enable_ = bbv_depth_test ? 1 : 0;
                         ImGui::TextDisabled("ON: MainView Depth SRVで遮蔽判定、OFF: 常に表示");
-                        if(dbg_view_sub_mode_ == 7 || dbg_view_sub_mode_ == 8)
+                        if(dbg_view_sub_mode_ == 6 || dbg_view_sub_mode_ == 7)
                         {
                             ImGui::TextDisabled(
-                                "Requires MainView Reduced Surface Sample.");
+                                "Requires MainView Reduced Surface Buffer.");
                         }
                     }
                 }
@@ -1662,12 +1662,7 @@ namespace ngl::render::app
         assp_tile_info_prev_frame_tex_index_ = assp_tile_info_curr_frame_tex_index_;
         assp_tile_info_curr_frame_tex_index_ = 1 - assp_tile_info_prev_frame_tex_index_;
 
-        // 重視位置を若干補正.
-        #if 0
-            const math::Vec3 modified_important_point = important_point_ + important_dir_ * 5.0f;
-        #else
-            const math::Vec3 modified_important_point = important_point_;
-        #endif
+        const math::Vec3 modified_important_point = important_point_;
 
         {
             bbv_grid_updater_.UpdateGrid(modified_important_point);
@@ -1721,7 +1716,6 @@ namespace ngl::render::app
                 param.fsp_total_cell_count = static_cast<int>(fsp_total_cell_count_);
                 param.fsp_probe_atlas_tile_width = static_cast<int>(fsp_probe_atlas_tile_width_);
                 param.fsp_probe_atlas_tile_height = static_cast<int>(fsp_probe_atlas_tile_height_);
-                param.fsp_surface_mask_generation_enable = 1;
                 const auto& fsp_resolution =
                     fsp_grid_updaters_[0].Get().resolution;
                 const u32 fsp_surface_mask_brick_axis =

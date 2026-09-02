@@ -112,8 +112,7 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
 
     // FSP Surface候補はMainViewだけから生成する。
     if(cb_injection_src_view_info.cb_is_main_view == 0 ||
-       !has_surface ||
-       cb_instant_rdv.fsp_surface_mask_generation_enable == 0)
+       !has_surface)
     {
         return;
     }

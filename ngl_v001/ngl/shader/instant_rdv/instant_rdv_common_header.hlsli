@@ -322,7 +322,7 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
 
         // SpatialFilter 深度差重み影響度.
         float ss_probe_spatial_filter_depth_exp_scale NGL_CPP_MEMBER_INIT({float(SCREEN_SPACE_PROBE_SPATIAL_FILTER_DEPTH_EXP_SCALE)});
-        int fsp_surface_mask_generation_enable NGL_CPP_MEMBER_INIT({1});
+        int dummy3_4 NGL_CPP_MEMBER_INIT({0});
         int main_view_reduced_surface_enable NGL_CPP_MEMBER_INIT({0});
         int fsp_surface_mask_brick_axis NGL_CPP_MEMBER_INIT({0});
         int fsp_surface_mask_words_per_cascade NGL_CPP_MEMBER_INIT({0});
