@@ -16,6 +16,83 @@ fsp_pre_update_cs.hlsl
 #define PROBE_UPDATE_TEMPORAL_RATE (0.025)
 
 ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
+Texture2D<float4> TexReducedSurfaceBuffer;
+Buffer<uint> SurfaceProbeSourceTexelList;
+
+bool FspTryGetReducedSurfaceAnchor(
+    uint update_element_index,
+    uint global_cell_index,
+    uint cascade_index,
+    out float3 surface_pos_ws,
+    out float3 surface_normal_ws)
+{
+    surface_pos_ws = 0.0.xxx;
+    surface_normal_ws = 0.0.xxx;
+    if(cb_instant_rdv.main_view_reduced_surface_enable == 0)
+    {
+        return false;
+    }
+
+    uint reduced_width = 0;
+    uint reduced_height = 0;
+    TexReducedSurfaceBuffer.GetDimensions(reduced_width, reduced_height);
+    if(reduced_width == 0 || reduced_height == 0)
+    {
+        return false;
+    }
+
+    const uint2 source_resolution =
+        uint2(cb_instant_rdv.tex_main_view_depth_size);
+    if(any(source_resolution == 0u.xx))
+    {
+        return false;
+    }
+
+    const uint reduced_surface_texel_index =
+        SurfaceProbeSourceTexelList[update_element_index + 1u];
+    if(reduced_surface_texel_index >= reduced_width * reduced_height)
+    {
+        return false;
+    }
+
+    const uint2 reduced_texel = uint2(
+        reduced_surface_texel_index % reduced_width,
+        reduced_surface_texel_index / reduced_width);
+    const float4 surface_sample =
+        TexReducedSurfaceBuffer.Load(int3(reduced_texel, 0));
+    if(surface_sample.x <= 0.0)
+    {
+        return false;
+    }
+
+    const uint2 source_texel = ReducedSurfaceBufferSourceTexel(
+        reduced_texel,
+        source_resolution,
+        cb_instant_rdv.frame_count);
+    const float2 source_uv =
+        (float2(source_texel) + 0.5.xx) /
+        float2(source_resolution);
+    const float3 surface_pos_vs = CalcViewSpacePosition(
+        source_uv,
+        surface_sample.x,
+        cb_ngl_sceneview.cb_proj_mtx);
+    surface_pos_ws = mul(
+        cb_ngl_sceneview.cb_view_inv_mtx,
+        float4(surface_pos_vs, 1.0));
+
+    uint sample_global_cell_index = k_fsp_invalid_probe_index;
+    if(!FspTryGetGlobalCellIndexFromWorldPos(
+            surface_pos_ws,
+            cascade_index,
+            sample_global_cell_index) ||
+       sample_global_cell_index != global_cell_index)
+    {
+        return false;
+    }
+
+    surface_normal_ws = normalize(OctDecode(surface_sample.yz));
+    return true;
+}
 
 // free stack から 1 probe index を pop する。
 uint FspPopFreeProbeIndex()
@@ -187,6 +264,68 @@ void main_cs(
     }
 
     const FspCascadeGridParam cascade = FspGetCascadeParam(cascade_index);
+    const float3 probe_cell_center =
+        FspCalcCellCenterWs(cascade_index, local_cell_index);
+    const float relocation_offset_limit =
+        cascade.grid.cell_size *
+        cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size;
+    float3 reduced_relocation_pos_ws = 0.0.xxx;
+    if(cb_instant_rdv.main_view_reduced_surface_enable != 0)
+    {
+        float3 surface_pos_ws = 0.0.xxx;
+        float3 surface_normal_ws = 0.0.xxx;
+        if(!FspTryGetReducedSurfaceAnchor(
+            update_element_index,
+            global_cell_index,
+            cascade_index,
+            surface_pos_ws,
+            surface_normal_ws))
+        {
+            return;
+        }
+
+        const float surface_clearance =
+            max(
+                cb_instant_rdv.bbv_occupancy_injection_world_offset,
+                cb_instant_rdv.bbv.cell_size /
+                    float(k_bbv_per_voxel_resolution));
+        const float clearance_scale[4] = {1.0, 2.0, 3.0, 4.0};
+        bool found_relocation = false;
+        [unroll]
+        for(int candidate_index = 0; candidate_index < 4; ++candidate_index)
+        {
+            const float3 candidate_ws =
+                surface_pos_ws +
+                surface_normal_ws *
+                    (surface_clearance *
+                     clearance_scale[candidate_index]);
+            const float3 candidate_offset =
+                candidate_ws - probe_cell_center;
+            if(any(abs(candidate_offset) > relocation_offset_limit.xxx))
+            {
+                continue;
+            }
+            if(read_bbv_voxel_from_world_pos(
+                    BitmaskBrickVoxel,
+                    cb_instant_rdv.bbv.grid_resolution,
+                    cb_instant_rdv.bbv.grid_toroidal_offset,
+                    cb_instant_rdv.bbv.grid_min_pos,
+                    cb_instant_rdv.bbv.cell_size_inv,
+                    candidate_ws) != 0)
+            {
+                continue;
+            }
+
+            reduced_relocation_pos_ws = candidate_ws;
+            found_relocation = true;
+            break;
+        }
+        if(!found_relocation)
+        {
+            return;
+        }
+    }
+
     uint probe_index = RWFspCellProbeIndexBuffer[global_cell_index];
     const bool is_probe_lifecycle_enabled = (0 != cb_instant_rdv.fsp_probe_lifecycle_enable);
     bool is_new_probe = false;
@@ -226,73 +365,69 @@ void main_cs(
     probe_pool_data.reserved1 = 0;
     probe_pool_data.reserved2 = 0;
 
-    // Cell中心.
-    const float3 probe_cell_center = FspCalcCellCenterWs(cascade_index, local_cell_index);
-    const float3 view_origin = GetViewOriginFromInverseViewMatrix(cb_ngl_sceneview.cb_view_inv_mtx);
     #if 1
         // Probe埋まり回避.
-        const float half_cell_size = cascade.grid.cell_size * 0.5;
-        const float cascade_relocation_offset_normalize_distance = (cascade.grid.cell_size * cb_instant_rdv.fsp_relocation_offset_scale_for_cascade_cell_size);
-        const float3 prev_probe_offset = decode_uint_to_range1_vec3(probe_pool_data.probe_offset_v3) * cascade_relocation_offset_normalize_distance;
-        const float3 to_camera_vec = view_origin - probe_cell_center;
-        const float to_camera_len_sq = dot(to_camera_vec, to_camera_vec);
-        const bool has_surface_anchor = (to_camera_len_sq > 1e-6);
-        const float3 surface_view_dir_ws = (to_camera_len_sq > 1e-6) ? (-to_camera_vec * rsqrt(to_camera_len_sq)) : 0.0.xxx;
-        float3 seed_probe_offset = prev_probe_offset;
-
-        float3 probe_sample_pos_ws = probe_cell_center + seed_probe_offset;
-        bool accepted_visible_first = false;
-        if(has_surface_anchor)
+        float3 probe_sample_pos_ws = reduced_relocation_pos_ws;
+        if(cb_instant_rdv.main_view_reduced_surface_enable == 0)
         {
-            // 可視優先:
-            // - 候補は常にセル内に収まるように生成（エンコード可能範囲を維持）
-            // - 採用条件は non-solid
-            const float3 dir_to_camera_ws = -surface_view_dir_ws;
-            const float front_samples[6] = {0.95, 0.80, 0.65, 0.50, 0.35, 0.20};
-            [unroll]
-            for(int si = 0; si < 6; ++si)
+            const float3 view_origin =
+                GetViewOriginFromInverseViewMatrix(
+                    cb_ngl_sceneview.cb_view_inv_mtx);
+            const float3 prev_probe_offset =
+                decode_uint_to_range1_vec3(
+                    probe_pool_data.probe_offset_v3) *
+                relocation_offset_limit;
+            probe_sample_pos_ws =
+                probe_cell_center + prev_probe_offset;
+            const float3 to_camera_vec =
+                view_origin - probe_cell_center;
+            const float to_camera_len_sq =
+                dot(to_camera_vec, to_camera_vec);
+            if(to_camera_len_sq > 1e-6)
             {
-                const float3 candidate_ws = probe_cell_center + dir_to_camera_ws * (cascade_relocation_offset_normalize_distance * front_samples[si]);
-                const bool is_non_solid =
-                    (read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, candidate_ws) == 0);
-                if(is_non_solid)
+                const float3 dir_to_camera_ws =
+                    to_camera_vec * rsqrt(to_camera_len_sq);
+                const float front_samples[6] =
+                    {0.95, 0.80, 0.65, 0.50, 0.35, 0.20};
+                [unroll]
+                for(int sample_index = 0;
+                    sample_index < 6;
+                    ++sample_index)
                 {
-                    probe_sample_pos_ws = candidate_ws;
-                    accepted_visible_first = true;
-                    break;
+                    const float3 candidate_ws =
+                        probe_cell_center +
+                        dir_to_camera_ws *
+                            (relocation_offset_limit *
+                             front_samples[sample_index]);
+                    if(read_bbv_voxel_from_world_pos(
+                            BitmaskBrickVoxel,
+                            cb_instant_rdv.bbv.grid_resolution,
+                            cb_instant_rdv.bbv.grid_toroidal_offset,
+                            cb_instant_rdv.bbv.grid_min_pos,
+                            cb_instant_rdv.bbv.cell_size_inv,
+                            candidate_ws) == 0)
+                    {
+                        probe_sample_pos_ws = candidate_ws;
+                        break;
+                    }
                 }
             }
 
-            // 直線候補で見つからない場合は、seed位置自体が条件を満たすかを確認する。
-            if(!accepted_visible_first)
-            {
-                const float3 seed_candidate_ws = probe_cell_center + clamp(seed_probe_offset, -cascade_relocation_offset_normalize_distance.xxx, cascade_relocation_offset_normalize_distance.xxx);
-                const bool seed_non_solid =
-                    (read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, seed_candidate_ws) == 0);
-                if(seed_non_solid)
-                {
-                    probe_sample_pos_ws = seed_candidate_ws;
-                    accepted_visible_first = true;
-                }
-            }
-        }
-        if((!has_surface_anchor) || (!accepted_visible_first))
-        {
             const int fallback_relocation_count = 4;
             bool found_non_solid = false;
 
             if(read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, probe_sample_pos_ws) != 0)
             {
                 // 深度ヒント方向を優先して、セル手前側から空き位置を探す.
-                const float seed_len_sq = dot(seed_probe_offset, seed_probe_offset);
-                const float3 preferred_dir = (seed_len_sq > 1e-6) ? (seed_probe_offset * rsqrt(seed_len_sq)) : 0.0.xxx;
+                const float seed_len_sq = dot(prev_probe_offset, prev_probe_offset);
+                const float3 preferred_dir = (seed_len_sq > 1e-6) ? (prev_probe_offset * rsqrt(seed_len_sq)) : 0.0.xxx;
                 if(any(preferred_dir != 0.0.xxx))
                 {
                     const float front_bias_samples[4] = {0.95, 0.75, 0.55, 0.35};
                     [unroll]
                     for(int fi = 0; fi < 4; ++fi)
                     {
-                        probe_sample_pos_ws = probe_cell_center + preferred_dir * (cascade_relocation_offset_normalize_distance * front_bias_samples[fi]);
+                        probe_sample_pos_ws = probe_cell_center + preferred_dir * (relocation_offset_limit * front_bias_samples[fi]);
                         if(read_bbv_voxel_from_world_pos(BitmaskBrickVoxel, cb_instant_rdv.bbv.grid_resolution, cb_instant_rdv.bbv.grid_toroidal_offset, cb_instant_rdv.bbv.grid_min_pos, cb_instant_rdv.bbv.cell_size_inv, probe_sample_pos_ws) == 0)
                         {
                             found_non_solid = true;
@@ -327,8 +462,8 @@ void main_cs(
             }
         }
         // 保存前に必ずエンコード可能範囲へ正規化してクランプする。
-        const float3 normalized_probe_offset = clamp((probe_sample_pos_ws - probe_cell_center) / cascade_relocation_offset_normalize_distance, -1.0.xxx, 1.0.xxx);
-        probe_sample_pos_ws = probe_cell_center + normalized_probe_offset * cascade_relocation_offset_normalize_distance;
+        const float3 normalized_probe_offset = clamp((probe_sample_pos_ws - probe_cell_center) / relocation_offset_limit, -1.0.xxx, 1.0.xxx);
+        probe_sample_pos_ws = probe_cell_center + normalized_probe_offset * relocation_offset_limit;
         const uint encoded_probe_offset = encode_range1_vec3_to_uint(normalized_probe_offset);
         // Probe位置更新. Cellサイズの半分で正規化.
         probe_pool_data.probe_offset_v3 = encoded_probe_offset;

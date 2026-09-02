@@ -1,7 +1,7 @@
 /*
     bbv_occupancy_injection_apply_reduced_surface_cs.hlsl
 
-    MainViewの縮小Surface SampleからBBV OccupancyとFSP SurfaceCellを同時生成する。
+    MainViewの縮小Surface SampleからBBV Occupancyを生成する。
 
     Legacy (integrated_surface版) との違い:
     - 入力はフル解像度DepthではなくMainViewReducedSurfaceBufferBuildが生成した
@@ -139,28 +139,4 @@ void main_cs(uint3 dtid : SV_DispatchThreadID)
         pending_lanes &= ~same_target_lanes;
     }
 
-    if(cb_instant_rdv.fsp_surface_mask_generation_enable == 0)
-    {
-        return;
-    }
-
-    // FSP SurfaceCellMask生成 (MainViewのみバインドされるため統合実行)。
-    // FSPはオフセット前のDepthサーフェイス位置 (surface_pos_ws) を使う。
-    // オフセット後の位置ではセルがサーフェイスからずれ、ActiveProbe集合が
-    // Legacyと乖離するため。owner Cascade判定とboundary dither込みで
-    // 最大2 Cascadeのmask addressへWave集約AtomicOrする。
-    uint2 owner_mask_words = 0u.xx;
-    uint2 owner_mask_bits = 0u.xx;
-    const uint owner_count = FspGetSurfaceOwnerMaskAddresses(
-        surface_pos_ws,
-        owner_mask_words,
-        owner_mask_bits);
-    FspInjectCellMaskWave(
-        owner_count > 0u,
-        owner_mask_words.x,
-        owner_mask_bits.x);
-    FspInjectCellMaskWave(
-        owner_count > 1u,
-        owner_mask_words.y,
-        owner_mask_bits.y);
 }

@@ -1299,6 +1299,7 @@ namespace ngl::render::app
             pso_fsp_debug_stats_collect_ = CreateComputePSO("instant_rdv/fsp/fsp_debug_stats_collect_cs.hlsl");
             pso_fsp_surface_mask_clear_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_clear_cs.hlsl");
             pso_fsp_surface_mask_compact_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_compact_cs.hlsl");
+            pso_fsp_surface_detect_reduced_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_detect_reduced_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_probe_ray_request_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_request_cs.hlsl");
@@ -1520,6 +1521,22 @@ namespace ngl::render::app
                                                .heap_type = rhi::EResourceHeapType::Default},
                                            rhi::EResourceFormat::Format_R32_UINT
                                         ,   "InstantRdv_FspVisibleSurfaceList");
+        }
+        {
+            if(!fsp_visible_surface_source_texel_list_.InitializeAsTyped(
+                p_device,
+                rhi::BufferDep::Desc{
+                    .element_byte_size = sizeof(uint32_t),
+                    .element_count = fsp_visible_surface_buffer_size_ + 1,
+                    .bind_flag =
+                        rhi::ResourceBindFlag::ShaderResource |
+                        rhi::ResourceBindFlag::UnorderedAccess,
+                    .heap_type = rhi::EResourceHeapType::Default},
+                rhi::EResourceFormat::Format_R32_UINT,
+                "InstantRdv_FspVisibleSurfaceSourceTexelList"))
+            {
+                return false;
+            }
         }
         {
             if(!fsp_debug_stats_buffer_.InitializeAsTyped(
@@ -1866,7 +1883,7 @@ namespace ngl::render::app
         NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "Dispatch_Bbv_OccupancyUpdate_View");
         auto& global_res = gfx::GlobalRenderResource::Instance();
 
-        // MainViewの統合Surface Injectionが書き込むマスクを、このフレームの先頭で消去する。
+        // FSP SurfaceCellのフレーム内重複排除マスクを消去する。
         {
             NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfaceMaskClear");
 
@@ -1965,7 +1982,7 @@ namespace ngl::render::app
             pso->SetView(&desc_set, "cb_injection_src_view_info", &cbh_injection_view_info->cbv);
             pso->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
             pso->SetView(&desc_set, "RWBitmaskBrickVoxel", bbv_buffer_.uav.Get());
-            if(integrate_surface_detection)
+            if(integrate_surface_detection && !use_reduced_surface)
             {
                 pso->SetView(&desc_set, "RWFspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.uav.Get());
                 pso->SetView(&desc_set, "RWBitmaskBrickVoxelOptionData", bbv_optional_data_buffer_.uav.Get());
@@ -1985,7 +2002,7 @@ namespace ngl::render::app
                 dispatch_height,
                 1);
             p_command_list->ResourceUavBarrier(bbv_buffer_.buffer.Get());
-            if(integrate_surface_detection)
+            if(integrate_surface_detection && !use_reduced_surface)
             {
                 p_command_list->ResourceUavBarrier(fsp_surface_cell_mask_buffer_.buffer.Get());
             }
@@ -2570,26 +2587,113 @@ namespace ngl::render::app
             // Fsp Visible Surface Processing Pass.
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfaceMaskProcessing");
+                const bool use_reduced_surface =
+                    InstantRasterDerivedVoxelScene::
+                        dbg_main_view_reduced_surface_enable_;
+                if(use_reduced_surface)
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                        p_command_list,
+                        "FspReducedSurfaceDetection");
 
-                // SurfaceCellMaskはDepth InjectionまたはTouched FineVoxel列挙結果をcompactする。
-                NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspSurfaceMaskCompact");
+                    reduced_surface_buffer_tex_.ResourceBarrier(
+                        p_command_list,
+                        rhi::EResourceState::ShaderRead);
+                    fsp_surface_cell_mask_buffer_.ResourceBarrier(
+                        p_command_list,
+                        rhi::EResourceState::UnorderedAccess);
+                    fsp_visible_surface_list_.ResourceBarrier(
+                        p_command_list,
+                        rhi::EResourceState::UnorderedAccess);
+                    fsp_visible_surface_source_texel_list_.ResourceBarrier(
+                        p_command_list,
+                        rhi::EResourceState::UnorderedAccess);
 
-                fsp_surface_cell_mask_buffer_.ResourceBarrier(p_command_list, rhi::EResourceState::ShaderRead);
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_surface_detect_reduced_->SetView(
+                        &desc_set,
+                        "cb_ngl_sceneview",
+                        &scene_cbv->cbv);
+                    pso_fsp_surface_detect_reduced_->SetView(
+                        &desc_set,
+                        "cb_instant_rdv",
+                        &cbh_dispatch_->cbv);
+                    pso_fsp_surface_detect_reduced_->SetView(
+                        &desc_set,
+                        "TexReducedSurfaceBuffer",
+                        reduced_surface_buffer_tex_.srv.Get());
+                    pso_fsp_surface_detect_reduced_->SetView(
+                        &desc_set,
+                        "RWFspSurfaceCellMaskBuffer",
+                        fsp_surface_cell_mask_buffer_.uav.Get());
+                    pso_fsp_surface_detect_reduced_->SetView(
+                        &desc_set,
+                        "RWSurfaceProbeCellList",
+                        fsp_visible_surface_list_.uav.Get());
+                    pso_fsp_surface_detect_reduced_->SetView(
+                        &desc_set,
+                        "RWSurfaceProbeSourceTexelList",
+                        fsp_visible_surface_source_texel_list_.uav.Get());
 
-                ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_fsp_surface_mask_compact_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                pso_fsp_surface_mask_compact_->SetView(&desc_set, "FspSurfaceCellMaskBuffer", fsp_surface_cell_mask_buffer_.srv.Get());
-                pso_fsp_surface_mask_compact_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
+                    p_command_list->SetPipelineState(
+                        pso_fsp_surface_detect_reduced_.Get());
+                    p_command_list->SetDescriptorSet(
+                        pso_fsp_surface_detect_reduced_.Get(),
+                        &desc_set);
+                    pso_fsp_surface_detect_reduced_->DispatchHelper(
+                        p_command_list,
+                        reduced_surface_buffer_tex_.texture->GetWidth(),
+                        reduced_surface_buffer_tex_.texture->GetHeight(),
+                        1);
 
-                p_command_list->SetPipelineState(pso_fsp_surface_mask_compact_.Get());
-                p_command_list->SetDescriptorSet(pso_fsp_surface_mask_compact_.Get(), &desc_set);
-                pso_fsp_surface_mask_compact_->DispatchHelper(
+                    p_command_list->ResourceUavBarrier(
+                        fsp_surface_cell_mask_buffer_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(
+                        fsp_visible_surface_list_.buffer.Get());
+                    p_command_list->ResourceUavBarrier(
+                        fsp_visible_surface_source_texel_list_.buffer.Get());
+                }
+                else
+                {
+                    NGL_RHI_GPU_SCOPED_EVENT_MARKER(
+                        p_command_list,
+                        "FspSurfaceMaskCompact");
+
+                    fsp_surface_cell_mask_buffer_.ResourceBarrier(
+                        p_command_list,
+                        rhi::EResourceState::ShaderRead);
+
+                    ngl::rhi::DescriptorSetDep desc_set = {};
+                    pso_fsp_surface_mask_compact_->SetView(
+                        &desc_set,
+                        "cb_instant_rdv",
+                        &cbh_dispatch_->cbv);
+                    pso_fsp_surface_mask_compact_->SetView(
+                        &desc_set,
+                        "FspSurfaceCellMaskBuffer",
+                        fsp_surface_cell_mask_buffer_.srv.Get());
+                    pso_fsp_surface_mask_compact_->SetView(
+                        &desc_set,
+                        "RWSurfaceProbeCellList",
+                        fsp_visible_surface_list_.uav.Get());
+
+                    p_command_list->SetPipelineState(
+                        pso_fsp_surface_mask_compact_.Get());
+                    p_command_list->SetDescriptorSet(
+                        pso_fsp_surface_mask_compact_.Get(),
+                        &desc_set);
+                    pso_fsp_surface_mask_compact_->DispatchHelper(
+                        p_command_list,
+                        fsp_surface_mask_word_count_,
+                        1,
+                        1);
+
+                    p_command_list->ResourceUavBarrier(
+                        fsp_visible_surface_list_.buffer.Get());
+                }
+                fsp_visible_surface_list_.ResourceBarrier(
                     p_command_list,
-                    fsp_surface_mask_word_count_,
-                    1,
-                    1);
-
-                p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
+                    rhi::EResourceState::ShaderRead);
             }
             // Fsp IndirectArg生成.
             {
@@ -2619,11 +2723,25 @@ namespace ngl::render::app
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
                 pso_fsp_pre_update_->SetView(&desc_set, "BitmaskBrickVoxel", bbv_buffer_.srv.Get());
+                reduced_surface_buffer_tex_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::ShaderRead);
+                pso_fsp_pre_update_->SetView(
+                    &desc_set,
+                    "TexReducedSurfaceBuffer",
+                    reduced_surface_buffer_tex_.srv.Get());
 
                 pso_fsp_pre_update_->SetView(
                     &desc_set,
                     "SurfaceProbeCellList",
                     fsp_visible_surface_list_.srv.Get());
+                fsp_visible_surface_source_texel_list_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::ShaderRead);
+                pso_fsp_pre_update_->SetView(
+                    &desc_set,
+                    "SurfaceProbeSourceTexelList",
+                    fsp_visible_surface_source_texel_list_.srv.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspCellProbeIndexBuffer", fsp_cell_probe_index_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbePoolBuffer", fsp_probe_pool_buffer_.uav.Get());
                 pso_fsp_pre_update_->SetView(&desc_set, "RWFspProbeFreeStack", fsp_probe_free_stack_buffer_.uav.Get());

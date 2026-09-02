@@ -204,9 +204,10 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_begin_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_debug_stats_collect_ = {};
-        // FSP SurfaceCellMaskのclear -> surface injection -> compact.
+        // FSP SurfaceCell検出。
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_clear_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_detect_reduced_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_request_ = {};
@@ -268,13 +269,13 @@ namespace ngl::render::app
         ngl::u32     fsp_probe_atlas_tile_width_ = {};
         ngl::u32     fsp_probe_atlas_tile_height_ = {};
         ComputeBufferSet fsp_visible_surface_list_ = {};
+        ComputeBufferSet fsp_visible_surface_source_texel_list_ = {};
         ComputeBufferSet fsp_indirect_arg_ = {};
         ComputeBufferSet fsp_cell_probe_index_buffer_ = {};
         ComputeBufferSet fsp_probe_pool_buffer_ = {};
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
         ComputeBufferSet fsp_active_probe_list_[2] = {};
-        // FSP SurfaceCellMask用。Cascadeごとの8x8x8 Brick内16ワードへ格納する。
-        // clear -> inject -> compact の3パス内だけで使い、最終的にはglobal cell indexへ戻す。
+        // FSP SurfaceCell重複排除用。Cascadeごとの8x8x8 Brick内16ワードへ格納する。
         ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};
         ngl::u32 fsp_surface_mask_word_count_ = {};
         // FSP update multipass 用ワーク:
