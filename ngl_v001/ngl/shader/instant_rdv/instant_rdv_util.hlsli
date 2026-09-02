@@ -180,20 +180,22 @@ int3 FspLocalCellIndexToPhysicalCoord(uint local_cell_index, int3 grid_resolutio
 uint FspSurfaceMaskBrickCountPerCascade(FspCascadeGridParam cascade)
 {
     const uint brick_axis =
-        (uint(cascade.grid.grid_resolution.x) + k_fsp_surface_mask_brick_resolution - 1u) /
-        k_fsp_surface_mask_brick_resolution;
+        (uint)max(cb_instant_rdv.fsp_surface_mask_brick_axis, 0);
     return brick_axis * brick_axis * brick_axis;
 }
 
 uint FspSurfaceMaskWordsPerCascade()
 {
-    return FspSurfaceMaskBrickCountPerCascade(FspGetCascadeParam(0u)) *
-        k_fsp_surface_mask_brick_word_count;
+    return (uint)max(
+        cb_instant_rdv.fsp_surface_mask_words_per_cascade,
+        0);
 }
 
 uint FspSurfaceMaskWordCount()
 {
-    return FspSurfaceMaskWordsPerCascade() * FspCascadeCount();
+    return (uint)max(
+        cb_instant_rdv.fsp_surface_mask_word_count,
+        0);
 }
 
 bool FspGetSurfaceMaskAddressFromCell(
@@ -211,8 +213,7 @@ bool FspGetSurfaceMaskAddressFromCell(
     }
 
     const uint brick_axis =
-        (uint(cascade.grid.grid_resolution.x) + k_fsp_surface_mask_brick_resolution - 1u) /
-        k_fsp_surface_mask_brick_resolution;
+        (uint)max(cb_instant_rdv.fsp_surface_mask_brick_axis, 0);
     const uint3 brick_coord = uint3(cell_coord) / k_fsp_surface_mask_brick_resolution;
     const uint brick_index =
         brick_coord.x +
@@ -297,8 +298,7 @@ bool FspGetGlobalCellIndexFromSurfaceMaskBit(
     const uint brick_index = relative_word_index / k_fsp_surface_mask_brick_word_count;
     const uint local_word_index = relative_word_index % k_fsp_surface_mask_brick_word_count;
     const uint brick_axis =
-        (uint(cascade.grid.grid_resolution.x) + k_fsp_surface_mask_brick_resolution - 1u) /
-        k_fsp_surface_mask_brick_resolution;
+        (uint)max(cb_instant_rdv.fsp_surface_mask_brick_axis, 0);
     const uint3 brick_coord = uint3(
         brick_index % brick_axis,
         (brick_index / brick_axis) % brick_axis,
@@ -472,45 +472,15 @@ float FspCalcCascadeBoundaryDitherRate(float3 sample_pos_ws, uint cascade_index)
         coarse_global_cell_index) ? dither_rate : 0.0;
 }
 
-// Surfaceを所有するfinest cascadeを返し、境界帯だけ隣接coarse cellも返す。
-uint FspGetSurfaceOwnerCells(float3 pos_ws, out uint2 global_cell_indices)
-{
-    global_cell_indices = k_fsp_invalid_probe_index.xx;
-
-    uint owner_cascade_index = 0u;
-    uint owner_global_cell_index = k_fsp_invalid_probe_index;
-    if(!FspTryGetFinestCascadeCellFromWorldPos(
-        pos_ws,
-        owner_cascade_index,
-        owner_global_cell_index))
-    {
-        return 0u;
-    }
-
-    global_cell_indices.x = owner_global_cell_index;
-    if(FspCalcCascadeBoundaryDitherRate(pos_ws, owner_cascade_index) <= 0.0)
-    {
-        return 1u;
-    }
-
-    uint coarse_global_cell_index = k_fsp_invalid_probe_index;
-    if(!FspTryGetGlobalCellIndexFromWorldPos(
-        pos_ws,
-        owner_cascade_index + 1u,
-        coarse_global_cell_index))
-    {
-        return 1u;
-    }
-
-    global_cell_indices.y = coarse_global_cell_index;
-    return 2u;
-}
-
-uint FspGetSurfaceOwnerMaskAddresses(
+// Surface ownerのCell indexとMask addressを同じ座標変換から生成する。
+// 境界帯では隣接coarse cascadeも返す。
+uint FspGetSurfaceOwnerCellData(
     float3 pos_ws,
+    out uint2 global_cell_indices,
     out uint2 word_indices,
     out uint2 bit_masks)
 {
+    global_cell_indices = k_fsp_invalid_probe_index.xx;
     word_indices = 0u.xx;
     bit_masks = 0u.xx;
 
@@ -524,6 +494,13 @@ uint FspGetSurfaceOwnerMaskAddresses(
         return 0u;
     }
 
+    const FspCascadeGridParam owner_cascade =
+        FspGetCascadeParam(owner_cascade_index);
+    global_cell_indices.x =
+        owner_cascade.cell_offset +
+        FspPhysicalCellCoordToLocalIndex(
+            owner_physical_cell_coord,
+            owner_cascade.grid.grid_resolution);
     if(!FspGetSurfaceMaskAddressFromCell(
         owner_cascade_index,
         owner_physical_cell_coord,
@@ -532,22 +509,92 @@ uint FspGetSurfaceOwnerMaskAddresses(
     {
         return 0u;
     }
-    if(FspCalcCascadeBoundaryDitherRate(pos_ws, owner_cascade_index) <= 0.0)
+
+    const uint coarse_cascade_index = owner_cascade_index + 1u;
+    if(coarse_cascade_index >= FspCascadeCount())
     {
         return 1u;
     }
 
-    const uint coarse_cascade_index = owner_cascade_index + 1u;
-    if(coarse_cascade_index >= FspCascadeCount() ||
-       !FspTryGetSurfaceMaskAddressFromWorldPos(
-           pos_ws,
-           coarse_cascade_index,
-           word_indices.y,
-           bit_masks.y))
+    const FspCascadeGridParam coarse_cascade =
+        FspGetCascadeParam(coarse_cascade_index);
+    const float3 owner_cascade_max_pos =
+        owner_cascade.grid.grid_min_pos +
+        float3(owner_cascade.grid.grid_resolution) *
+            owner_cascade.grid.cell_size;
+    const float3 dist_to_min =
+        pos_ws - owner_cascade.grid.grid_min_pos;
+    const float3 dist_to_max =
+        owner_cascade_max_pos - pos_ws;
+    const float boundary_dist = min(
+        min(dist_to_min.x, dist_to_max.x),
+        min(
+            min(dist_to_min.y, dist_to_max.y),
+            min(dist_to_min.z, dist_to_max.z)));
+    const float dither_width = max(
+        coarse_cascade.grid.cell_size,
+        owner_cascade.grid.cell_size);
+    if(boundary_dist >= dither_width)
     {
         return 1u;
     }
+
+    const int3 coarse_linear_cell_coord = floor(
+        (pos_ws - coarse_cascade.grid.grid_min_pos) *
+        coarse_cascade.grid.cell_size_inv);
+    if(any(coarse_linear_cell_coord < 0) ||
+       any(coarse_linear_cell_coord >=
+           coarse_cascade.grid.grid_resolution))
+    {
+        return 1u;
+    }
+
+    const int3 coarse_physical_cell_coord =
+        voxel_coord_toroidal_mapping(
+            coarse_linear_cell_coord,
+            coarse_cascade.grid.grid_toroidal_offset,
+            coarse_cascade.grid.grid_resolution);
+    global_cell_indices.y =
+        coarse_cascade.cell_offset +
+        FspPhysicalCellCoordToLocalIndex(
+            coarse_physical_cell_coord,
+            coarse_cascade.grid.grid_resolution);
+    if(!FspGetSurfaceMaskAddressFromCell(
+        coarse_cascade_index,
+        coarse_physical_cell_coord,
+        word_indices.y,
+        bit_masks.y))
+    {
+        global_cell_indices.y = k_fsp_invalid_probe_index;
+        return 1u;
+    }
+
     return 2u;
+}
+
+// Surfaceを所有するfinest cascadeを返し、境界帯だけ隣接coarse cellも返す。
+uint FspGetSurfaceOwnerCells(float3 pos_ws, out uint2 global_cell_indices)
+{
+    uint2 word_indices = 0u.xx;
+    uint2 bit_masks = 0u.xx;
+    return FspGetSurfaceOwnerCellData(
+        pos_ws,
+        global_cell_indices,
+        word_indices,
+        bit_masks);
+}
+
+uint FspGetSurfaceOwnerMaskAddresses(
+    float3 pos_ws,
+    out uint2 word_indices,
+    out uint2 bit_masks)
+{
+    uint2 global_cell_indices = k_fsp_invalid_probe_index.xx;
+    return FspGetSurfaceOwnerCellData(
+        pos_ws,
+        global_cell_indices,
+        word_indices,
+        bit_masks);
 }
 
 uint2 FspProbeAtlasMapPos(uint probe_index)

@@ -324,8 +324,9 @@ https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview
         float ss_probe_spatial_filter_depth_exp_scale NGL_CPP_MEMBER_INIT({float(SCREEN_SPACE_PROBE_SPATIAL_FILTER_DEPTH_EXP_SCALE)});
         int fsp_surface_mask_generation_enable NGL_CPP_MEMBER_INIT({1});
         int main_view_reduced_surface_enable NGL_CPP_MEMBER_INIT({0});
-        int dummy3_4 NGL_CPP_MEMBER_INIT({0});
-        int2 dummy3_5_6 NGL_CPP_MEMBER_INIT({});// fsp開始を16byte alignに揃えるためのパディング.
+        int fsp_surface_mask_brick_axis NGL_CPP_MEMBER_INIT({0});
+        int fsp_surface_mask_words_per_cascade NGL_CPP_MEMBER_INIT({0});
+        int fsp_surface_mask_word_count NGL_CPP_MEMBER_INIT({0});
 
         // FSP ClipMap cascade情報.
         FspCascadeGridParam fsp_cascade[k_fsp_max_cascade_count] NGL_CPP_MEMBER_INIT({});

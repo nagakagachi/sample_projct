@@ -1722,6 +1722,20 @@ namespace ngl::render::app
                 param.fsp_probe_atlas_tile_width = static_cast<int>(fsp_probe_atlas_tile_width_);
                 param.fsp_probe_atlas_tile_height = static_cast<int>(fsp_probe_atlas_tile_height_);
                 param.fsp_surface_mask_generation_enable = 1;
+                const auto& fsp_resolution =
+                    fsp_grid_updaters_[0].Get().resolution;
+                const u32 fsp_surface_mask_brick_axis =
+                    (fsp_resolution.x +
+                     k_fsp_surface_mask_brick_resolution - 1u) /
+                    k_fsp_surface_mask_brick_resolution;
+                param.fsp_surface_mask_brick_axis =
+                    static_cast<int>(fsp_surface_mask_brick_axis);
+                param.fsp_surface_mask_words_per_cascade =
+                    static_cast<int>(
+                        fsp_surface_mask_word_count_ /
+                        std::max<u32>(fsp_cascade_count_, 1u));
+                param.fsp_surface_mask_word_count =
+                    static_cast<int>(fsp_surface_mask_word_count_);
                 param.main_view_reduced_surface_enable =
                     InstantRasterDerivedVoxelScene::
                         dbg_main_view_reduced_surface_enable_

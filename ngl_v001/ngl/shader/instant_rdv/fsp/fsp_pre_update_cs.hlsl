@@ -19,6 +19,9 @@ ConstantBuffer<SceneViewInfo> cb_ngl_sceneview;
 Texture2D<float4> TexReducedSurfaceBuffer;
 Buffer<uint> SurfaceProbeSourceTexelList;
 
+// SurfaceCell検出時に保存したReduced texelから、そのCellをActivateした
+// 実Surfaceの位置と法線を復元する。Cell中心からの再探索は行わない。
+// Cell/sourceリストの同一slot対応はFSP Reduced経路のprovenance契約。
 bool FspTryGetReducedSurfaceAnchor(
     uint update_element_index,
     uint global_cell_index,
@@ -272,6 +275,10 @@ void main_cs(
     float3 reduced_relocation_pos_ws = 0.0.xxx;
     if(cb_instant_rdv.main_view_reduced_surface_enable != 0)
     {
+        // BBVはsolid volumeではなくSurface奥側の薄い占有層なので、
+        // 非占有判定だけではSurfaceの表裏を決定できない。
+        // Activate起点のSurface anchorから法線方向へ配置することで、
+        // ActiveProbeが床下などSurface裏側へRelocationすることを防ぐ。
         float3 surface_pos_ws = 0.0.xxx;
         float3 surface_normal_ws = 0.0.xxx;
         if(!FspTryGetReducedSurfaceAnchor(
