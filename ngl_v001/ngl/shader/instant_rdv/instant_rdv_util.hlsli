@@ -89,6 +89,8 @@ StructuredBuffer<FspProbePoolData>    FspProbePoolBuffer;
 RWStructuredBuffer<FspProbePoolData>  RWFspProbePoolBuffer;
 Buffer<uint>                          FspProbeFreeStack;
 RWBuffer<uint>                        RWFspProbeFreeStack;
+// ActiveProbeListは他のcounter付きappend bufferと異なり、先頭2ワードを世代交代counterに使用する。
+// ワード2以降がProbe index listであり、Current/Previousのcounter slotは物理Bufferの世代ごとに交互利用する。
 Buffer<uint>                          FspActiveProbeListPrev;
 RWBuffer<uint>                        RWFspActiveProbeListPrev;
 Buffer<uint>                          FspActiveProbeListCurr;
@@ -132,9 +134,34 @@ RWStructuredBuffer<float4>    RWFspIrradianceVolumeSHBuffer;
 Buffer<uint>		SurfaceProbeCellList;
 RWBuffer<uint>		RWSurfaceProbeCellList;
 
-
 // instant_rdvのメインパラメータ.
 ConstantBuffer<InstantRdvParam> cb_instant_rdv;
+
+static const uint k_fsp_active_probe_counter_slot_count = 2u;
+static const uint k_fsp_active_probe_list_data_offset = 2u;
+
+uint FspActiveProbeCurrentCounterSlot()
+{
+    // frame_countはDispatch_Beginで1から始まる。各物理BufferがCurrentになるたびにslotを交互利用する。
+    return ((cb_instant_rdv.frame_count - 1u) >> 1u) &
+           (k_fsp_active_probe_counter_slot_count - 1u);
+}
+
+uint FspActiveProbePreviousCounterSlot()
+{
+    // 初回フレームのPreviousは初期化済みcounter slot 0を読む。
+    if(cb_instant_rdv.frame_count <= 1u)
+    {
+        return 0u;
+    }
+    return ((cb_instant_rdv.frame_count - 2u) >> 1u) &
+           (k_fsp_active_probe_counter_slot_count - 1u);
+}
+
+uint FspActiveProbeListAddress(uint list_index)
+{
+    return list_index + k_fsp_active_probe_list_data_offset;
+}
 
 uint BbvPhysicalVoxelCoordToMortonIndex(int3 coord, int3 resolution);
 int3 BbvMortonIndexToPhysicalVoxelCoord(uint index, int3 resolution);

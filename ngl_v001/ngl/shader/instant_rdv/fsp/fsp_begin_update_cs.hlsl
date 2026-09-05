@@ -33,10 +33,13 @@ void FspPushFreeProbeIndex(uint probe_index)
 void FspPushCurrActiveProbeIndex(uint probe_index)
 {
     uint active_list_index = 0;
-    InterlockedAdd(RWFspActiveProbeListCurr[0], 1, active_list_index);
+    InterlockedAdd(
+        RWFspActiveProbeListCurr[FspActiveProbeCurrentCounterSlot()],
+        1,
+        active_list_index);
     if(active_list_index < cb_instant_rdv.fsp_active_probe_buffer_size)
     {
-        RWFspActiveProbeListCurr[active_list_index + 1] = probe_index;
+        RWFspActiveProbeListCurr[FspActiveProbeListAddress(active_list_index)] = probe_index;
     }
 }
 
@@ -59,20 +62,24 @@ void main_cs(
 {
     if(0 == dtid.x)
     {
-        // アトミックカウンタをクリア. 0番目はアトミックカウンタ用に予約している.
+        // Currentの未使用counterだけを次回の同一物理Buffer世代用に先行クリアする。
+        // 使用中counterは他threadが生存Probeをappendするため、同じwordをresetしてはならない。
         RWSurfaceProbeCellList[0] = 0;
-        RWFspActiveProbeListCurr[0] = 0;
+        RWFspActiveProbeListCurr[
+            FspActiveProbeCurrentCounterSlot() ^ 1u] = 0;
         RWFspProbeRayRequestBuffer[0] = 0;
         RWFspProbeRayResultBuffer[0] = 0;
     }
 
-    const uint prev_active_probe_count = FspActiveProbeListPrev[0];
+    const uint prev_active_probe_count =
+        FspActiveProbeListPrev[FspActiveProbePreviousCounterSlot()];
     if(dtid.x >= prev_active_probe_count)
     {
         return;
     }
 
-    const uint probe_index = FspActiveProbeListPrev[dtid.x + 1];
+    const uint probe_index =
+        FspActiveProbeListPrev[FspActiveProbeListAddress(dtid.x)];
     if(probe_index >= cb_instant_rdv.fsp_probe_pool_size)
     {
         return;

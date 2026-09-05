@@ -209,6 +209,8 @@ namespace ngl::render::app
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_mask_compact_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_surface_detect_reduced_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_indirect_arg_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_prev_active_indirect_arg_ = {};
+        ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_generate_curr_active_indirect_arg_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_pre_update_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_ray_request_ = {};
         ngl::rhi::RhiRef<ngl::rhi::ComputePipelineStateDep> pso_fsp_probe_finalize_linear_indirect_arg_ = {};
@@ -274,6 +276,7 @@ namespace ngl::render::app
         ComputeBufferSet fsp_cell_probe_index_buffer_ = {};
         ComputeBufferSet fsp_probe_pool_buffer_ = {};
         ComputeBufferSet fsp_probe_free_stack_buffer_ = {};
+        // ActiveProbeListは各Bufferの先頭2ワードを交互counter、ワード2以降をProbe index listとして使用する。
         ComputeBufferSet fsp_active_probe_list_[2] = {};
         // FSP SurfaceCell重複排除用。Cascadeごとの8x8x8 Brick内16ワードへ格納する。
         ComputeBufferSet fsp_surface_cell_mask_buffer_ = {};

@@ -21,13 +21,15 @@ void main_cs(
     uint3 gid : SV_GroupID,
     uint gindex : SV_GroupIndex)
 {
-    const uint active_probe_count = FspActiveProbeListCurr[0];
+    const uint active_probe_count =
+        FspActiveProbeListCurr[FspActiveProbeCurrentCounterSlot()];
     if(dtid.x >= active_probe_count)
     {
         return;
     }
 
-    const uint probe_index = FspActiveProbeListCurr[dtid.x + 1];
+    const uint probe_index =
+        FspActiveProbeListCurr[FspActiveProbeListAddress(dtid.x)];
     const bool is_probe_index_valid = (probe_index < (uint)cb_instant_rdv.fsp_probe_pool_size);
 
     [unroll]

@@ -26,8 +26,11 @@ void main_cs(
     {
         RWSurfaceProbeCellList[0] = 0;
         RWFspProbeFreeStack[0] = probe_pool_size;
+        // ActiveProbeListは先頭2ワードを世代交代counterとして使用する。
         RWFspActiveProbeListPrev[0] = 0;
+        RWFspActiveProbeListPrev[1] = 0;
         RWFspActiveProbeListCurr[0] = 0;
+        RWFspActiveProbeListCurr[1] = 0;
     }
 
     if(dtid.x < cell_count)

@@ -1301,6 +1301,8 @@ namespace ngl::render::app
             pso_fsp_surface_mask_compact_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_mask_compact_cs.hlsl");
             pso_fsp_surface_detect_reduced_ = CreateComputePSO("instant_rdv/fsp/fsp_surface_detect_reduced_cs.hlsl");
             pso_fsp_generate_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_indirect_arg_cs.hlsl");
+            pso_fsp_generate_prev_active_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_prev_active_indirect_arg_cs.hlsl");
+            pso_fsp_generate_curr_active_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_generate_curr_active_indirect_arg_cs.hlsl");
             pso_fsp_pre_update_ = CreateComputePSO("instant_rdv/fsp/fsp_pre_update_cs.hlsl");
             pso_fsp_probe_ray_request_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_ray_request_cs.hlsl");
             pso_fsp_probe_finalize_linear_indirect_arg_ = CreateComputePSO("instant_rdv/fsp/fsp_probe_finalize_linear_indirect_arg_cs.hlsl");
@@ -1501,10 +1503,12 @@ namespace ngl::render::app
         for (u32 active_list_index = 0; active_list_index < 2; ++active_list_index)
         {
             const std::string resource_name = std::string("InstantRdv_FspActiveProbeList") + std::to_string(active_list_index);
+            // ActiveProbeListは先頭2ワードを世代交代するcounterに使用し、ワード2以降をProbe index listに使用する。
+            // Current/Previousの同一Dispatch内resetとappendの競合を避けるため、未使用counterを次回用に先行クリアする。
             fsp_active_probe_list_[active_list_index].InitializeAsTyped(p_device,
                                            rhi::BufferDep::Desc{
                                                .element_byte_size = sizeof(uint32_t),
-                                               .element_count     = fsp_probe_pool_size_ + 1, // 0番はcounter.
+                                               .element_count     = fsp_probe_pool_size_ + 2, // 0,1番は交互counter.
 
                                                .bind_flag = rhi::ResourceBindFlag::ShaderResource | rhi::ResourceBindFlag::UnorderedAccess,
                                                .heap_type = rhi::EResourceHeapType::Default},
@@ -2552,13 +2556,13 @@ namespace ngl::render::app
                 fsp_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "ProbeIndexList", fsp_active_probe_prev_list.srv.Get());
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "RWFspIndirectArg", fsp_indirect_arg_.uav.Get());
+                pso_fsp_generate_prev_active_indirect_arg_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                pso_fsp_generate_prev_active_indirect_arg_->SetView(&desc_set, "ProbeIndexList", fsp_active_probe_prev_list.srv.Get());
+                pso_fsp_generate_prev_active_indirect_arg_->SetView(&desc_set, "RWFspIndirectArg", fsp_indirect_arg_.uav.Get());
 
-                p_command_list->SetPipelineState(pso_fsp_generate_indirect_arg_.Get());
-                p_command_list->SetDescriptorSet(pso_fsp_generate_indirect_arg_.Get(), &desc_set);
-                pso_fsp_generate_indirect_arg_->DispatchHelper(p_command_list, 1, 1, 1);
+                p_command_list->SetPipelineState(pso_fsp_generate_prev_active_indirect_arg_.Get());
+                p_command_list->SetDescriptorSet(pso_fsp_generate_prev_active_indirect_arg_.Get(), &desc_set);
+                pso_fsp_generate_prev_active_indirect_arg_->DispatchHelper(p_command_list, 1, 1, 1);
 
                 fsp_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::IndirectArgument);
             }
@@ -2781,13 +2785,13 @@ namespace ngl::render::app
                 fsp_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::UnorderedAccess);
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "ProbeIndexList", fsp_active_probe_curr_list.srv.Get());
-                pso_fsp_generate_indirect_arg_->SetView(&desc_set, "RWFspIndirectArg", fsp_indirect_arg_.uav.Get());
+                pso_fsp_generate_curr_active_indirect_arg_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
+                pso_fsp_generate_curr_active_indirect_arg_->SetView(&desc_set, "ProbeIndexList", fsp_active_probe_curr_list.srv.Get());
+                pso_fsp_generate_curr_active_indirect_arg_->SetView(&desc_set, "RWFspIndirectArg", fsp_indirect_arg_.uav.Get());
 
-                p_command_list->SetPipelineState(pso_fsp_generate_indirect_arg_.Get());
-                p_command_list->SetDescriptorSet(pso_fsp_generate_indirect_arg_.Get(), &desc_set);
-                pso_fsp_generate_indirect_arg_->DispatchHelper(p_command_list, 1, 1, 1);
+                p_command_list->SetPipelineState(pso_fsp_generate_curr_active_indirect_arg_.Get());
+                p_command_list->SetDescriptorSet(pso_fsp_generate_curr_active_indirect_arg_.Get(), &desc_set);
+                pso_fsp_generate_curr_active_indirect_arg_->DispatchHelper(p_command_list, 1, 1, 1);
 
                 fsp_indirect_arg_.ResourceBarrier(p_command_list, rhi::EResourceState::IndirectArgument);
             }
