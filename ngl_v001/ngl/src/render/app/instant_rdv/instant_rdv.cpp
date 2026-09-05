@@ -1827,7 +1827,9 @@ namespace ngl::render::app
                 pso_fsp_clear_->SetView(&desc_set, "RWSurfaceProbeCellList", fsp_visible_surface_list_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, k_shader_bind_name_fsp_atlas_uav.Get(), fsp_probe_atlas_tex_.uav.Get());
                 pso_fsp_clear_->SetView(&desc_set, k_shader_bind_name_fsp_irradiance_volume_sh_uav.Get(), fsp_irradiance_volume_sh_buffer_.uav.Get());
-
+                fsp_probe_atlas_tex_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::UnorderedAccess);
                 p_command_list->SetPipelineState(pso_fsp_clear_.Get());
                 p_command_list->SetDescriptorSet(pso_fsp_clear_.Get(), &desc_set);
                 pso_fsp_clear_->DispatchHelper(p_command_list, std::max<u32>(fsp_total_cell_count_, fsp_probe_pool_size_ + 1), 1, 1);
@@ -1839,7 +1841,6 @@ namespace ngl::render::app
                 p_command_list->ResourceUavBarrier(fsp_active_probe_list_[1].buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_visible_surface_list_.buffer.Get());
                 p_command_list->ResourceUavBarrier(fsp_irradiance_volume_sh_buffer_.buffer.Get());
-                p_command_list->ResourceBarrier(fsp_probe_atlas_tex_.texture.Get(), rhi::EResourceState::Common, rhi::EResourceState::UnorderedAccess);
             }
 
             {
@@ -2727,6 +2728,10 @@ namespace ngl::render::app
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspPreUpdate");
 
+                fsp_probe_atlas_tex_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::UnorderedAccess);
+
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_ngl_sceneview", &scene_cbv->cbv);
                 pso_fsp_pre_update_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
@@ -2877,6 +2882,10 @@ namespace ngl::render::app
             }
             {
                 NGL_RHI_GPU_SCOPED_EVENT_MARKER(p_command_list, "FspProbeShUpdate");
+
+                fsp_probe_atlas_tex_.ResourceBarrier(
+                    p_command_list,
+                    rhi::EResourceState::ShaderRead);
 
                 ngl::rhi::DescriptorSetDep desc_set = {};
                 pso_fsp_sh_update_->SetView(&desc_set, "cb_instant_rdv", &cbh_dispatch_->cbv);
